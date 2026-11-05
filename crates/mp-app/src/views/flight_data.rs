@@ -119,6 +119,7 @@ pub struct FlightDataView {
     analysis: Option<(String, Vec<(String, String, String)>)>,
     raw_sensor: bool,
     extra: super::fd_tabs::ExtraTabs,
+    checklist: super::checklist::CheckList,
     mavlog: super::mavlog::MavlinkLog,
     logdl_open: bool,
     logdl_busy: bool,
@@ -160,6 +161,7 @@ impl Default for FlightDataView {
             analysis: None,
             raw_sensor: false,
             extra: Default::default(),
+            checklist: Default::default(),
             mavlog: Default::default(),
             logdl_open: false,
             logdl_busy: false,
@@ -489,8 +491,8 @@ impl FlightDataView {
                 0 => self.quick_ui(ui, app, cs),
                 1 => self.actions_ui(ui, app, cs),
                 2 => messages_ui(ui, app),
-                3 => preflight_ui(ui, cs),
-                4 => gauges_ui(ui, cs),
+                3 => self.checklist.ui(ui, cs),
+                4 => gauges_ui(ui, cs, app.assets),
                 5 => self.extra.transponder(ui, app),
                 6 => status_ui(ui, cs),
                 7 => servo_ui(ui, app, cs),
@@ -1508,63 +1510,106 @@ fn messages_ui(ui: &mut egui::Ui, app: &AppCtx) {
     }
 }
 
-fn preflight_ui(ui: &mut egui::Ui, cs: &CurrentState) {
-    // Checklist control (checklistDefault.xml items)
-    let vibe = cs.vibex.max(cs.vibey).max(cs.vibez);
-    let items = [
-        ("GPS Fix", cs.gpsstatus >= 3, cs.gps_fix_name().to_string()),
-        ("Satellites >= 6", cs.satcount >= 6, cs.satcount.to_string()),
-        ("Battery > 50%", cs.battery_remaining > 50, format!("{}%", cs.battery_remaining)),
-        ("hdop < 2", cs.gpshdop > 0.0 && cs.gpshdop < 2.0, format!("{:.2}", cs.gpshdop)),
-        ("EKF healthy", cs.ekfstatus < 0.5, format!("{:.2}", cs.ekfstatus)),
-        ("Vibration < 30", vibe < 30.0, format!("{vibe:.1}")),
-    ];
-    for (t, ok, v) in items {
-        ui.horizontal(|ui| {
-            let mut c = ok;
-            ui.add_enabled(false, egui::Checkbox::new(&mut c, ""));
-            theme::label(ui, t);
-            ui.label(RichText::new(v).color(if ok { Color32::from_rgb(0, 200, 0) } else { Color32::RED }));
-        });
-    }
-    theme::button(ui, "Edit");
-}
+/// One AGauge needle: value, radius (design px), colour.
+struct Needle(f32, f32, Color32);
 
-fn gauges_ui(ui: &mut egui::Ui, cs: &CurrentState) {
-    let size = (ui.available_width() / 2.0 - 6.0).min(150.0);
-    ui.horizontal_wrapped(|ui| {
-        for (label, v, min, max) in [
-            ("Speed", cs.groundspeed, 0.0, 60.0),
-            ("Alt", cs.alt, 0.0, 600.0),
-            ("VSI", cs.verticalspeed, -10.0, 10.0),
-            ("Heading", cs.yaw, 0.0, 360.0),
-        ] {
-            let (r, _) = ui.allocate_exact_size(Vec2::splat(size), Sense::hover());
-            gauge(ui.painter(), r, label, v, min, max);
+/// AGauge (150x150 design space, centre 75,75) drawn over its face image.
+#[allow(clippy::too_many_arguments)]
+fn agauge(p: &egui::Painter, r: Rect, face: egui::TextureId, cap: &str, cap_pos: (f32, f32), min: f32, max: f32, arc_start: f32, arc_sweep: f32, major_step: f32, arc_radius: f32, needles: &[Needle]) {
+    let s = r.width() / 150.0;
+    p.image(face, r, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+    let c = r.min + Vec2::splat(75.0 * s);
+    let ang = |v: f32| (arc_start + arc_sweep * ((v - min) / (max - min))).to_radians();
+    let dir = |a: f32| Vec2::new(a.cos(), a.sin());
+    let majors = ((max - min) / major_step).round() as i32;
+    let white = Color32::WHITE;
+    let font = fonts::ui_id((8.25 * s * 1.33).max(7.0));
+    for i in 0..=majors {
+        let v = min + i as f32 * major_step;
+        let a = ang(v);
+        if arc_sweep >= 360.0 && i == majors {
+            break;
         }
-    });
+        p.line_segment([c + dir(a) * 50.0 * s, c + dir(a) * 60.0 * s.max(0.1)], Stroke::new(2.0 * s.max(0.6), white));
+        if i < majors {
+            for k in 1..=9 {
+                let am = ang(v + major_step * k as f32 / 10.0);
+                p.line_segment([c + dir(am) * 55.0 * s, c + dir(am) * 60.0 * s], Stroke::new(1.0, white));
+            }
+        }
+        let label = if (v - v.round()).abs() < 1e-3 { format!("{v:.0}") } else { format!("{v:.1}") };
+        p.text(c + dir(a) * 42.0 * s, egui::Align2::CENTER_CENTER, label, font.clone(), white);
+    }
+    let _ = arc_radius;
+    p.text(r.min + Vec2::new(cap_pos.0, cap_pos.1) * s, egui::Align2::LEFT_TOP, cap, font.clone(), white);
+    for Needle(v, rad, col) in needles {
+        let a = ang(v.clamp(min, max));
+        p.line_segment([c - dir(a) * 8.0 * s, c + dir(a) * *rad * s], Stroke::new(2.5 * s.max(0.6), *col));
+    }
+    p.circle_filled(c, 5.0 * s, Color32::from_gray(90));
+    p.circle_stroke(c, 5.0 * s, Stroke::new(1.0, Color32::from_gray(200)));
 }
 
-fn gauge(p: &egui::Painter, r: Rect, label: &str, v: f32, min: f32, max: f32) {
+/// Controls/HSI: heading rose that turns under a fixed aircraft, with the nav bearing bug.
+fn hsi(p: &egui::Painter, r: Rect, heading: f32, nav: f32) {
+    let w = r.width();
     let c = r.center();
-    let rad = r.width() / 2.0 - 4.0;
-    p.circle_filled(c, rad, Color32::from_rgb(0x1f, 0x1f, 0x20));
-    p.circle_stroke(c, rad, Stroke::new(3.0, Color32::from_gray(160)));
-    let (a0, sweep) = (135.0f32, 270.0f32);
-    for i in 0..=10 {
-        let a = (a0 + sweep * i as f32 / 10.0).to_radians();
-        let d = Vec2::new(a.cos(), a.sin());
-        p.line_segment([c + d * (rad - 10.0), c + d * (rad - 2.0)], Stroke::new(2.0, Color32::WHITE));
-        if i % 2 == 0 {
-            let val = min + (max - min) * i as f32 / 10.0;
-            p.text(c + d * (rad - 20.0), egui::Align2::CENTER_CENTER, format!("{val:.0}"), fonts::ui_id(9.0), Color32::WHITE);
+    let rin = w / 3.6;
+    let rout = w / 2.2;
+    let font = fonts::ui_id((w / 14.0) * 1.33);
+    let mut a = 0;
+    while a < 360 {
+        let ang = (a as f32 - heading - 90.0).to_radians();
+        let d = Vec2::new(ang.cos(), ang.sin());
+        let len = if a % 30 == 0 { 11.0 } else if a % 10 == 0 { 7.0 } else { 4.0 };
+        p.line_segment([c + d * rin, c + d * (rin + len)], Stroke::new(1.0, Color32::WHITE));
+        if a % 30 == 0 {
+            let t = match a {
+                0 => "N".to_string(),
+                90 => "E".to_string(),
+                180 => "S".to_string(),
+                270 => "W".to_string(),
+                _ => (a / 10).to_string(),
+            };
+            let g = p.layout_no_wrap(t, font.clone(), Color32::WHITE);
+            let pos = c + d * (rout - g.size().y * 0.4);
+            p.add(egui::epaint::TextShape::new(pos - Vec2::new(g.size().x / 2.0, 0.0), g, Color32::WHITE).with_angle(ang + std::f32::consts::FRAC_PI_2));
         }
+        a += 5;
     }
-    let f = ((v - min) / (max - min)).clamp(0.0, 1.0);
-    let a = (a0 + sweep * f).to_radians();
-    p.line_segment([c, c + Vec2::new(a.cos(), a.sin()) * (rad - 12.0)], Stroke::new(3.0, Color32::RED));
-    p.circle_filled(c, 4.0, Color32::from_gray(200));
-    p.text(c + Vec2::new(0.0, rad * 0.45), egui::Align2::CENTER_CENTER, format!("{label}\n{v:.1}"), fonts::ui_id(10.0), Color32::WHITE);
+    let or = Stroke::new(2.0, Color32::from_rgb(0xff, 0x8c, 0x00));
+    let k = w / 100.0;
+    p.line_segment([c + Vec2::new(0.0, 30.0 * k), c + Vec2::new(0.0, -10.0 * k)], or);
+    p.line_segment([c + Vec2::new(-30.0 * k, 0.0), c + Vec2::new(30.0 * k, 0.0)], or);
+    p.line_segment([c + Vec2::new(-10.0 * k, 25.0 * k), c + Vec2::new(10.0 * k, 25.0 * k)], or);
+    p.line_segment([c + Vec2::new(0.0, -rout), c + Vec2::new(0.0, -rin)], Stroke::new(2.0, Color32::WHITE));
+    let bug = (nav - heading).to_radians();
+    let rot = |x: f32, y: f32| c + Vec2::new(x * bug.cos() - y * bug.sin(), x * bug.sin() + y * bug.cos());
+    let pts = [(-5.0, -rout), (-5.0, -rout + 4.0), (-3.0, -rout + 4.0), (0.0, -rout + 8.0), (3.0, -rout + 4.0), (5.0, -rout + 4.0), (5.0, -rout)];
+    p.add(egui::Shape::line(pts.iter().map(|(x, y)| rot(*x, *y)).collect(), or));
+}
+
+/// tabGauges: VSI, Speed, Alt, Heading — 2x2 when square, one row when wide
+/// (FlightData.tabPage1_Resize).
+fn gauges_ui(ui: &mut egui::Ui, cs: &CurrentState, assets: &crate::assets::Assets) {
+    let avail = ui.available_size();
+    let o = ui.available_rect_before_wrap().min;
+    let scale = avail.x / avail.y.max(1.0);
+    let (size, cells): (f32, [(f32, f32); 4]) = if scale > 0.5 && scale < 1.9 {
+        let s = (avail.x.min(avail.y) / 2.0).floor();
+        (s, [(0.0, 0.0), (s, 0.0), (0.0, s), (s, s)])
+    } else {
+        let s = (avail.x / 4.0).floor();
+        (s, [(0.0, 0.0), (s, 0.0), (2.0 * s, 0.0), (3.0 * s, 0.0)])
+    };
+    let p = ui.painter().clone();
+    let rect = |i: usize| Rect::from_min_size(o + Vec2::new(cells[i].0, cells[i].1), Vec2::splat(size));
+    agauge(&p, rect(0), assets.gauge_gvspeed.id(), "VSI", (65.0, 85.0), -10.0, 10.0, 20.0, 320.0, 2.0, 60.0, &[Needle(cs.verticalspeed, 50.0, Color32::WHITE)]);
+    agauge(&p, rect(1), assets.gauge_gspeed.id(), "Speed", (58.0, 85.0), 0.0, 60.0, 135.0, 270.0, 10.0, 70.0, &[Needle(cs.airspeed, 50.0, Color32::WHITE), Needle(cs.groundspeed, 50.0, Color32::from_rgb(0xa5, 0x2a, 0x2a))]);
+    let target = cs.alt - cs.alt_error;
+    agauge(&p, rect(2), assets.gauge_galt.id(), "Alt", (68.0, 85.0), 0.0, 9.99, 270.0, 360.0, 1.0, 60.0, &[Needle((cs.alt / 100.0).rem_euclid(10.0), 50.0, Color32::WHITE), Needle((cs.alt / 1000.0).rem_euclid(10.0), 30.0, Color32::WHITE), Needle((target / 100.0).rem_euclid(10.0), 50.0, Color32::RED)]);
+    hsi(&p, rect(3), cs.yaw, cs.nav_bearing);
+    ui.allocate_rect(Rect::from_min_size(o, avail), Sense::hover());
 }
 
 fn status_ui(ui: &mut egui::Ui, cs: &CurrentState) {

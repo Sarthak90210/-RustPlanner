@@ -12,6 +12,29 @@ pub fn set_data_dir(p: PathBuf) {
     let _ = DATA_DIR.set(p);
 }
 
+/// Move this process's top-level window to the Windows virtual desktop with id `guid`
+/// (IVirtualDesktopManager only moves windows owned by the calling process).
+#[cfg(windows)]
+pub fn move_to_virtual_desktop(cc: &eframe::CreationContext<'_>, guid: &str) -> Result<(), String> {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED};
+    use windows::Win32::UI::Shell::{IVirtualDesktopManager, VirtualDesktopManager};
+    let hex: String = guid.chars().filter(|c| c.is_ascii_hexdigit()).collect();
+    let id = windows::core::GUID::from_u128(u128::from_str_radix(&hex, 16).map_err(|e| e.to_string())?);
+    let RawWindowHandle::Win32(h) = cc.window_handle().map_err(|e| e.to_string())?.as_raw() else { return Err("not a Win32 window".into()) };
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let vdm: IVirtualDesktopManager = CoCreateInstance(&VirtualDesktopManager, None, CLSCTX_ALL).map_err(|e| e.to_string())?;
+        vdm.MoveWindowToDesktop(HWND(h.hwnd.get() as *mut _), &id).map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(not(windows))]
+pub fn move_to_virtual_desktop(_cc: &eframe::CreationContext<'_>, _guid: &str) -> Result<(), String> {
+    Ok(())
+}
+
 pub fn data_dir() -> PathBuf {
     DATA_DIR
         .get_or_init(|| {

@@ -225,6 +225,12 @@ impl MissionPlannerApp {
             .and_then(|s| eframe::get_value(s, SETTINGS_KEY))
             .unwrap_or_default();
         cc.egui_ctx.set_zoom_factor(settings.ui_scale);
+        if let Ok(guid) = std::env::var("MP_DESKTOP") {
+            if let Err(e) = platform::move_to_virtual_desktop(cc, &guid) {
+                log::warn!("virtual desktop: {e}");
+            }
+            cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+        }
         // Developer switches: MP_AUTOSIM=1 starts the simulator, MP_VIEW picks the screen.
         let mut startup = Vec::new();
         if std::env::var_os("MP_AUTOSIM").is_some() {

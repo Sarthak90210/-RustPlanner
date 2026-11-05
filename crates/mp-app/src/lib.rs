@@ -37,7 +37,9 @@ fn options() -> eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title(title_base())
             .with_inner_size([1280.0, 800.0])
-            .with_min_inner_size([360.0, 480.0]),
+            .with_min_inner_size([360.0, 480.0])
+            // MP_DESKTOP: start hidden, move to that virtual desktop, then show (see platform)
+            .with_visible(std::env::var_os("MP_DESKTOP").is_none()),
         ..Default::default()
     }
 }

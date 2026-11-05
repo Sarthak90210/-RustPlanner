@@ -1,3 +1,4 @@
+pub mod checklist;
 pub mod config;
 pub mod fd_tabs;
 pub mod flight_data;
