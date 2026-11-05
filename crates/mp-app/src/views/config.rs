@@ -848,10 +848,26 @@ fn planner(ui: &mut egui::Ui, app: &mut AppCtx, _fw: Firmware) {
                     .response
             });
         };
+        let prompt_id = egui::Id::new("speech_prompt");
         let check = |ui: &mut egui::Ui, pl: &mut BTreeMap<String, String>, key: &str, rr: Rect, text: &str, def: bool| {
             let mut b = pl.get(key).map(|v| v == "True").unwrap_or(def);
             if ui.put(rr, egui::Checkbox::new(&mut b, text)).changed() {
                 pl.insert(key.to_string(), if b { "True".into() } else { "False".into() });
+                // ConfigPlanner: ticking a speech option asks what to say
+                let ask: &[&str] = match key {
+                    "speechwaypointenabled" => &["speechwaypoint"],
+                    "speechmodeenabled" => &["speechmode"],
+                    "speechcustomenabled" => &["speechcustom"],
+                    "speechbatteryenabled" => &["speechbattery", "speechbatteryvolt", "speechbatterypercent"],
+                    "speechaltenabled" => &["speechalt", "speechaltheight"],
+                    "speecharmenabled" => &["speecharm", "speechdisarm"],
+                    "speechlowspeedenabled" => &["speechlowairspeed", "speechlowairspeedtrigger", "speechlowgroundspeed", "speechlowgroundspeedtrigger"],
+                    _ => &[],
+                };
+                if b && !ask.is_empty() {
+                    let fields: Vec<(String, String)> = ask.iter().map(|k| (k.to_string(), pl.get(*k).cloned().unwrap_or_else(|| crate::speech::default_text(k).to_string()))).collect();
+                    ui.ctx().data_mut(|d| d.insert_temp(prompt_id, fields));
+                }
             }
         };
         combo(ui, pl, "video_device", r(107.0, 8.0, 245.0, 21.0), &["None"], "None");
@@ -859,7 +875,7 @@ fn planner(ui: &mut egui::Ui, app: &mut AppCtx, _fw: Firmware) {
         for (x, t) in [(358.0, "Start"), (439.0, "Stop")] {
             let br = r(x, 6.0, 75.0, 23.0);
             if ui.put(br, |ui: &mut egui::Ui| theme::button_sized(ui, t, br.size())).clicked() {
-                app.toasts.error("Video capture: not available in this port yet");
+                app.actions.push(crate::app::AppAction::Video(t == "Start"));
             }
         }
         let pl = &mut app.settings.planner;
@@ -932,7 +948,41 @@ fn planner(ui: &mut egui::Ui, app: &mut AppCtx, _fw: Firmware) {
         combo(ui, pl, "GMapMarkerBase_InactiveDisplayStyle", r(107.0, 524.0, 138.0, 21.0), &["Normal", "Transparent", "Hidden"], "Normal");
         let vr = r(107.0, 551.0, 99.0, 20.0);
         if ui.put(vr, |ui: &mut egui::Ui| theme::button_sized(ui, "Start/Stop Vario", vr.size())).clicked() {
-            app.toasts.error("Vario: not available in this port yet");
+            let on = app.settings.planner.get("vario").map(|v| v == "True").unwrap_or(false);
+            app.settings.planner.insert("vario".into(), if on { "False".into() } else { "True".into() });
+        }
+        // "What do you want it to say?" prompt for the speech options
+        let pending: Option<Vec<(String, String)>> = ui.ctx().data(|d| d.get_temp(prompt_id));
+        if let Some(mut fields) = pending {
+            let mut done = None;
+            egui::Window::new("Notification").collapsible(false).resizable(false).show(ui.ctx(), |ui| {
+                for (k, v) in fields.iter_mut() {
+                    let label = if k.ends_with("volt") || k.ends_with("percent") || k.ends_with("height") || k.ends_with("trigger") { "Level to warn at?" } else { "What do you want it to say?" };
+                    theme::label(ui, format!("{label} ({k})"));
+                    ui.add(egui::TextEdit::singleline(v).desired_width(320.0));
+                }
+                ui.horizontal(|ui| {
+                    if theme::button(ui, "OK").clicked() {
+                        done = Some(true);
+                    }
+                    if theme::button(ui, "Cancel").clicked() {
+                        done = Some(false);
+                    }
+                });
+            });
+            match done {
+                Some(ok) => {
+                    if ok {
+                        for (k, v) in fields {
+                            app.settings.planner.insert(k, v);
+                        }
+                    }
+                    ui.ctx().data_mut(|d| d.remove::<Vec<(String, String)>>(prompt_id));
+                }
+                None => {
+                    ui.ctx().data_mut(|d| d.insert_temp(prompt_id, fields));
+                }
+            }
         }
         let pl = &mut app.settings.planner;
         check(ui, pl, "password_protect", r(340.0, 554.0, 150.0, 17.0), "Password Protect Config", false);

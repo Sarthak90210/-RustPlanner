@@ -113,7 +113,7 @@ pub struct FlightDataView {
     graph: crate::zedgraph::TuningGraph,
     tlog_name: String,
     hud_window: Option<hud::HudClick>,
-    video: Option<crate::mjpeg::Mjpeg>,
+    pub(crate) video: Option<crate::mjpeg::Mjpeg>,
     hud_prompt: Option<HudPrompt>,
     log_browse: crate::log_browse::LogBrowse,
     analysis: Option<(String, Vec<(String, String, String)>)>,
@@ -271,6 +271,14 @@ impl FlightDataView {
             self.hud_window = Some(c);
         }
         self.hud_windows(ui.ctx(), cs);
+    }
+
+    pub fn start_video(&mut self, url: &str, ctx: &egui::Context) {
+        self.video = Some(crate::mjpeg::Mjpeg::start(url, ctx));
+    }
+
+    pub fn stop_video(&mut self) {
+        self.video = None;
     }
 
     /// contextMenuStripHud
@@ -752,6 +760,12 @@ impl FlightDataView {
         let zoom = app.settings.fd_map.zoom;
         let guided = self.guided_target;
         let pois = app.settings.pois.clone();
+        // MainV2 ADSB: traffic reported by the vehicle (Planner "ADSB" option)
+        let adsb: Vec<(String, f64, f64, f32, f32)> = if app.settings.planner.get("enableadsb").map(|v| v == "True").unwrap_or(false) {
+            app.link.map(|l| l.shared.read().adsb.values().map(|v| (v.0.clone(), v.1, v.2, v.3, v.4)).collect()).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
         let pl = &app.settings.planner;
         let flag = |k: &str| pl.get(k).map(|v| v == "True").unwrap_or(true);
         let line_opts = map::LineOpts {
@@ -786,6 +800,20 @@ impl FlightDataView {
             }
             if let Some((lat, lng)) = guided {
                 map::draw_pin(painter, assets.marker_red.id(), assets.marker_shadow.id(), view.to_screen(lat, lng));
+            }
+            for (callsign, lat, lng, alt, hdg) in &adsb {
+                // GMapMarkerADSBPlane: plane silhouette rotated to the heading, label below
+                let p = view.to_screen(*lat, *lng);
+                let rot = |x: f32, y: f32| {
+                    let (s, c) = hdg.to_radians().sin_cos();
+                    p + Vec2::new(x * c - y * s, x * s + y * c)
+                };
+                let gold = Color32::from_rgb(0xff, 0xd7, 0x00);
+                for (w, (x0, y0, x1, y1)) in [(4.0, (0.0, -12.0, 0.0, 11.0)), (3.5, (-11.0, 1.0, 11.0, 1.0)), (3.0, (-5.0, 10.0, 5.0, 10.0))] {
+                    painter.line_segment([rot(x0, y0), rot(x1, y1)], Stroke::new(w + 2.0, Color32::BLACK));
+                    painter.line_segment([rot(x0, y0), rot(x1, y1)], Stroke::new(w, gold));
+                }
+                painter.text(p + Vec2::new(0.0, 14.0), egui::Align2::CENTER_TOP, format!("{callsign} {alt:.0}m"), fonts::ui_id(fonts::UI_SIZE), Color32::WHITE);
             }
             for (lat, lng, name) in &pois {
                 let p = view.to_screen(*lat, *lng);

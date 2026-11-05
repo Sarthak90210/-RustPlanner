@@ -82,6 +82,8 @@ pub struct LinkShared {
     pub log_entries: Vec<(u16, u32, u32)>,
     /// MAVLink Inspector: last message per (sysid, compid, msgid) with rate.
     pub inspector: BTreeMap<(u8, u8, u32), MsgStat>,
+    /// ADSB_VEHICLE reports by ICAO address: (callsign, lat, lng, alt m, heading deg, last seen)
+    pub adsb: BTreeMap<u32, (String, f64, f64, f32, f32, Instant)>,
 }
 
 /// One row of the MAVLink Inspector.
@@ -769,6 +771,11 @@ impl Worker {
             let now = Instant::now();
             let key = (hdr.system_id as u8, hdr.component_id, msg.message_id());
             let mut s = self.shared.write();
+            if let MavMessage::ADSB_VEHICLE(a) = &msg {
+                let cs: String = a.callsign.to_str().unwrap_or("").trim_end_matches(' ').trim().to_string();
+                s.adsb.insert(a.ICAO_address, (cs, a.lat as f64 * 1e-7, a.lon as f64 * 1e-7, a.altitude as f32 / 1000.0, a.heading as f32 / 100.0, now));
+                s.adsb.retain(|_, v| now.duration_since(v.5).as_secs() < 60);
+            }
             match s.inspector.get_mut(&key) {
                 Some(st) => {
                     let dt = now.duration_since(st.last).as_secs_f32().max(1e-3);

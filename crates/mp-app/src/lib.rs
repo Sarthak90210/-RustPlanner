@@ -15,6 +15,7 @@ pub mod mjpeg;
 pub mod platform;
 pub mod rtcm;
 pub mod sitl;
+pub mod speech;
 pub mod srtm;
 pub mod theme;
 pub mod tool_windows;

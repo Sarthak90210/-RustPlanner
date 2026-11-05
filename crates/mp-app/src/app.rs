@@ -151,6 +151,8 @@ pub enum AppAction {
     PlayTlog(std::path::PathBuf),
     /// ConfigAdvanced / temp: open the MAVLink Inspector
     OpenInspector,
+    /// Planner video Start / Stop
+    Video(bool),
     /// temp / ConfigAdvanced tool by button text
     Tool(String),
 }
@@ -185,7 +187,7 @@ pub struct MissionPlannerApp {
     toasts: Toasts,
     ports: Vec<String>,
     ports_refreshed: Instant,
-    flight_data: FlightDataView,
+    pub(crate) flight_data: FlightDataView,
     flight_plan: FlightPlanView,
     setup: SetupView,
     config: ConfigView,
@@ -194,8 +196,11 @@ pub struct MissionPlannerApp {
     show_stats: bool,
     inspector: crate::tools::Inspector,
     show_temp: bool,
+    ctx_clone: egui::Context,
     tools: crate::tool_windows::Tools,
     joystick: crate::joystick::Joystick,
+    speech: crate::speech::SpeechRules,
+    vario: Option<std::time::Instant>,
     menu_hidden: bool,
     last_title: String,
     show_conn_list: bool,
@@ -252,8 +257,11 @@ impl MissionPlannerApp {
             show_stats: false,
             inspector: crate::tools::Inspector::new(std::env::var_os("MP_INSPECTOR").is_some()),
             show_temp: std::env::var_os("MP_TEMP").is_some(),
+            ctx_clone: cc.egui_ctx.clone(),
             tools: Default::default(),
             joystick: Default::default(),
+            speech: Default::default(),
+            vario: None,
             menu_hidden: false,
             last_title: String::new(),
             show_conn_list: false,
@@ -320,6 +328,14 @@ impl MissionPlannerApp {
                     }
                 }
                 AppAction::OpenInspector => self.inspector.open = true,
+                AppAction::Video(on) => {
+                    if on {
+                        let url = self.settings.mjpeg_url.clone();
+                        self.flight_data.start_video(&url, &self.ctx_clone);
+                    } else {
+                        self.flight_data.stop_video();
+                    }
+                }
                 AppAction::Tool(name) => {
                     if !self.tools.activate(&name, self.link.as_ref(), &mut self.toasts) {
                         self.toasts.error(format!("{name}: not available in this port yet"));
@@ -777,6 +793,22 @@ impl eframe::App for MissionPlannerApp {
         self.inspector.show(&ctx, self.link.as_ref(), &mut self.toasts);
         self.tools.ui(&ctx, self.link.as_ref(), &mut self.toasts);
         self.joystick.tick(self.link.as_ref());
+        self.ctx_clone = ctx.clone();
+        if let Some(l) = &self.link {
+            let (cs, msgs) = {
+                let s = l.shared.read();
+                (s.cs.clone(), s.messages.clone())
+            };
+            self.speech.tick(&self.settings.planner, &cs, &msgs);
+            // Vario: spoken climb / sink rate every 3 s while enabled
+            if self.settings.planner.get("vario").map(|v| v == "True").unwrap_or(false) && self.vario.map(|t| t.elapsed().as_secs() >= 3).unwrap_or(true) {
+                self.vario = Some(std::time::Instant::now());
+                let v = cs.verticalspeed;
+                if v.abs() >= 0.3 {
+                    crate::speech::say(format!("{} {:.1}", if v > 0.0 { "up" } else { "down" }, v.abs()));
+                }
+            }
+        }
         let fw_name = self.link.as_ref().map(|l| format!("{:?}", l.shared.read().cs.firmware)).unwrap_or_else(|| "ArduCopter2".into());
         self.joystick.window(&ctx, &fw_name, &mut self.toasts);
         if self.joystick.enabled {

@@ -808,8 +808,30 @@ impl Vehicle {
         }
     }
 
+    /// A light aircraft orbiting 3 km from home, reported as ADSB traffic.
+    fn adsb_traffic(&mut self) {
+        let t = self.boot.elapsed().as_secs_f64();
+        let ang = t * 0.02;
+        let (lat, lng) = (SITL_HOME.lat + (3000.0 * ang.cos()) / 111_320.0, SITL_HOME.lng + (3000.0 * ang.sin()) / (111_320.0 * SITL_HOME.lat.to_radians().cos()));
+        let heading = ((ang.to_degrees() + 90.0).rem_euclid(360.0) * 100.0) as u16;
+        self.send(MavMessage::ADSB_VEHICLE(ADSB_VEHICLE_DATA {
+            ICAO_address: 0x7C6B2D,
+            lat: (lat * 1e7) as i32,
+            lon: (lng * 1e7) as i32,
+            altitude: 1_200_000,
+            heading,
+            hor_velocity: 6000,
+            squawk: 1200,
+            callsign: "VH-RSM".into(),
+            tslc: 1,
+            flags: AdsbFlags::ADSB_FLAGS_VALID_COORDS | AdsbFlags::ADSB_FLAGS_VALID_ALTITUDE | AdsbFlags::ADSB_FLAGS_VALID_HEADING | AdsbFlags::ADSB_FLAGS_VALID_CALLSIGN,
+            ..Default::default()
+        }));
+    }
+
     fn slow_telemetry(&mut self) {
         self.magcal_tick();
+        self.adsb_traffic();
         let mut base = MavModeFlag::MAV_MODE_FLAG_CUSTOM_MODE_ENABLED
             | MavModeFlag::MAV_MODE_FLAG_STABILIZE_ENABLED;
         if self.armed {
