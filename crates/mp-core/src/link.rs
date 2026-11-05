@@ -194,6 +194,9 @@ pub enum LinkCommand {
     SendRaw(Vec<u8>),
     /// Forward every received message with this id to `tx` (MAVFtp and other tools).
     Subscribe { msgid: u32, tx: Sender<MavMessage> },
+    /// Forward the raw payload (sysid, compid, bytes) of a message id, for messages the
+    /// dialect cannot decode (REMOTE_LOG_DATA_BLOCK carries plain u32 sequence numbers).
+    SubscribeRaw { msgid: u32, tx: Sender<(u8, u8, Vec<u8>)> },
     /// Make another vehicle on the link the current one (sysid selector).
     SetTarget { sysid: u8, compid: u8 },
 }
@@ -371,6 +374,7 @@ struct Worker {
     pending_cmd: Option<PendingCmd>,
     mirror: Option<(std::net::UdpSocket, std::net::SocketAddr, bool)>,
     subscribers: Vec<(u32, Sender<MavMessage>)>,
+    raw_subscribers: Vec<(u32, Sender<(u8, u8, Vec<u8>)>)>,
 }
 
 fn is_timeout(e: &io::Error) -> bool {
@@ -418,6 +422,7 @@ impl Worker {
             pending_cmd: None,
             mirror: None,
             subscribers: Vec::new(),
+            raw_subscribers: Vec::new(),
         }
     }
 
@@ -441,6 +446,11 @@ impl Worker {
                     }
                     if let Some((sock, to, _)) = &self.mirror {
                         let _ = sock.send_to(bytes, to);
+                    }
+                    if !self.raw_subscribers.is_empty() {
+                        let id = raw.message_id();
+                        let item = (raw.system_id() as u8, raw.component_id(), raw.payload().to_vec());
+                        self.raw_subscribers.retain(|(m, tx)| *m != id || tx.send(item.clone()).is_ok());
                     }
                     let hdr = MavHeader { system_id: raw.system_id(), component_id: raw.component_id(), sequence: raw.sequence() };
                     match <MavMessage as mavlink::Message>::parse(raw.version(), raw.message_id(), raw.payload()) {
@@ -633,6 +643,7 @@ impl Worker {
                 }
             }
             LinkCommand::Subscribe { msgid, tx } => self.subscribers.push((msgid, tx)),
+            LinkCommand::SubscribeRaw { msgid, tx } => self.raw_subscribers.push((msgid, tx)),
             LinkCommand::SetTarget { sysid, compid } => {
                 if sysid != self.target_sys || compid != self.target_comp {
                     self.target_sys = sysid;

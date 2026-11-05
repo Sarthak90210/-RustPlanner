@@ -62,6 +62,9 @@ pub struct MoreTools {
     flow_open: bool,
     gimbal: bool,
     serial_pass: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    remote_log: Option<(std::sync::Arc<std::sync::atomic::AtomicBool>, std::sync::Arc<std::sync::atomic::AtomicU64>, std::path::PathBuf)>,
+    combiner: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    scp_prompt: Option<String>,
 }
 
 impl MoreTools {
@@ -156,9 +159,146 @@ impl MoreTools {
                 Some(l) => self.start_serial_pass(l, toasts),
                 None => toasts.error("Please connect first"),
             },
+            "Start Remote df logger" => match link {
+                Some(l) => self.start_remote_log(l, toasts),
+                None => toasts.error("Please connect first"),
+            },
+            "sitl streamcombiner" => self.start_combiner(toasts),
+            "logdownload scp" => self.scp_prompt = Some("apsync@10.0.1.128:/home/apsync/dflogger/dataflash".into()),
+            "rip all fw" => {
+                // Firmware.getFWList -> firmware2.xml with every current firmware
+                match crate::firmware_ui::get("https://firmware.ardupilot.org/manifest.json.gz").and_then(|b| mp_core::fwupload::gunzip(&b)).and_then(|j| mp_core::fwupload::parse_manifest(&j)) {
+                    Ok(list) => {
+                        let mut xml = String::from("<?xml version=\"1.0\" encoding=\"us-ascii\"?>\n<options>\n");
+                        for f in &list {
+                            xml.push_str(&format!("    <software>\n        <url>{}</url>\n        <name>{} {}</name>\n        <desc>{}</desc>\n    </software>\n", f.url, f.vehicletype, f.platform, f.mav_type));
+                        }
+                        xml.push_str("</options>\n");
+                        let p = crate::platform::data_dir().join("firmware2.xml");
+                        match std::fs::write(&p, xml) {
+                            Ok(()) => self.text = Some(("rip all fw".into(), format!("{} firmwares listed in {}", list.len(), p.display()))),
+                            Err(e) => toasts.error(e.to_string()),
+                        }
+                    }
+                    Err(e) => toasts.error(format!("Failed to get the firmware manifest\n{e}")),
+                }
+            }
             _ => return false,
         }
         true
+    }
+
+    /// RemoteLog.StartRemoteLog: REMOTE_LOG_DATA_BLOCK into a .bin, each block acked.
+    fn start_remote_log(&mut self, l: &Link, toasts: &mut Toasts) {
+        if let Some((stop, _, p)) = self.remote_log.take() {
+            stop.store(true, std::sync::atomic::Ordering::Relaxed);
+            self.text = Some(("Remote df logger".into(), format!("Stopped. Log saved to {}", p.display())));
+            return;
+        }
+        let dir = crate::platform::data_dir().join("logs");
+        let _ = std::fs::create_dir_all(&dir);
+        let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+        let path = dir.join(format!("remote-{secs}.bin"));
+        let mut file = match std::fs::File::create(&path) {
+            Ok(f) => f,
+            Err(e) => {
+                toasts.error(e.to_string());
+                return;
+            }
+        };
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let bytes = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let (rtx, rrx) = crossbeam_channel::unbounded();
+        l.send(LinkCommand::SubscribeRaw { msgid: 184, tx: rtx });
+        let tx = l.sender();
+        let (sys, comp) = {
+            let s = l.shared.read();
+            (s.cs.sysid, s.cs.compid)
+        };
+        let status = move |seqno: u32| {
+            let _ = tx.send(LinkCommand::Send(Box::new(MavMessage::REMOTE_LOG_BLOCK_STATUS(REMOTE_LOG_BLOCK_STATUS_DATA { seqno, target_system: sys, target_component: comp, status: MavRemoteLogDataBlockStatuses::MAV_REMOTE_LOG_DATA_BLOCK_ACK }))));
+        };
+        // MAV_REMOTE_LOG_DATA_BLOCK_START
+        status(2147483646);
+        let (st, by) = (stop.clone(), bytes.clone());
+        std::thread::spawn(move || {
+            use std::io::Seek;
+            while !st.load(std::sync::atomic::Ordering::Relaxed) {
+                let Ok((_, _, p)) = rrx.recv_timeout(Duration::from_millis(500)) else { continue };
+                if p.len() < 6 {
+                    continue;
+                }
+                let seq = u32::from_le_bytes([p[0], p[1], p[2], p[3]]);
+                let mut data = p[6..].to_vec();
+                data.resize(200, 0);
+                let _ = file.seek(std::io::SeekFrom::Start(seq as u64 * 200));
+                let _ = file.write_all(&data);
+                by.fetch_add(200, std::sync::atomic::Ordering::Relaxed);
+                status(seq);
+            }
+            // MAV_REMOTE_LOG_DATA_BLOCK_STOP
+            status(2147483645);
+        });
+        self.text = Some(("Remote df logger".into(), format!("Logging to {}\nPress \"Start Remote df logger\" again to stop.", path.display())));
+        self.remote_log = Some((stop, bytes, path));
+    }
+
+    /// StreamCombiner: every SITL on TCP 5760, 5770, ... merged into one link on TCP 5750.
+    fn start_combiner(&mut self, toasts: &mut Toasts) {
+        if self.combiner.is_some() {
+            toasts.error("sitl streamcombiner is already running on TCP 5750");
+            return;
+        }
+        let listener = match std::net::TcpListener::bind("127.0.0.1:5750") {
+            Ok(l) => l,
+            Err(e) => {
+                toasts.error(format!("Failed to listen on 5750\n{e}"));
+                return;
+            }
+        };
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        self.combiner = Some(stop.clone());
+        let mut sitls: Vec<std::net::TcpStream> = (0..10)
+            .filter_map(|i| std::net::TcpStream::connect_timeout(&format!("127.0.0.1:{}", 5760 + i * 10).parse().ok()?, Duration::from_millis(200)).ok())
+            .collect();
+        let n = sitls.len();
+        std::thread::spawn(move || {
+            let _ = listener.set_nonblocking(true);
+            for s in &sitls {
+                let _ = s.set_nonblocking(true);
+            }
+            let mut clients: Vec<std::net::TcpStream> = Vec::new();
+            let mut buf = [0u8; 4096];
+            while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                if let Ok((c, _)) = listener.accept() {
+                    let _ = c.set_nonblocking(true);
+                    clients.push(c);
+                }
+                let mut idle = true;
+                for s in sitls.iter_mut() {
+                    if let Ok(k) = s.read(&mut buf) {
+                        if k > 0 {
+                            idle = false;
+                            clients.retain_mut(|c| c.write_all(&buf[..k]).is_ok());
+                        }
+                    }
+                }
+                for c in clients.iter_mut() {
+                    if let Ok(k) = c.read(&mut buf) {
+                        if k > 0 {
+                            idle = false;
+                            for s in sitls.iter_mut() {
+                                let _ = s.write_all(&buf[..k]);
+                            }
+                        }
+                    }
+                }
+                if idle {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+            }
+        });
+        self.text = Some(("sitl streamcombiner".into(), format!("Combined {n} SITL instance(s).\nConnect with TCP 127.0.0.1 port 5750.")));
     }
 
     fn map_logs(&mut self, toasts: &mut Toasts) {
@@ -299,6 +439,40 @@ impl MoreTools {
         self.cmds_ui(ctx);
         self.flow_ui(ctx, link);
         self.gimbal_ui(ctx, link);
+        if let Some((_, bytes, path)) = &self.remote_log {
+            egui::Area::new(egui::Id::new("remote_log_status")).anchor(egui::Align2::RIGHT_BOTTOM, Vec2::new(-10.0, -40.0)).show(ctx, |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    theme::label(ui, format!("Remote log {}: {} KB", path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(), bytes.load(std::sync::atomic::Ordering::Relaxed) / 1024));
+                });
+            });
+        }
+        // LogDownloadscp
+        if let Some(src) = self.scp_prompt.as_mut() {
+            let mut done = None;
+            egui::Window::new("logdownload scp").collapsible(false).resizable(false).show(ctx, |ui| {
+                theme::label(ui, "user@host:/path/to/logs");
+                ui.add(egui::TextEdit::singleline(src).desired_width(360.0));
+                ui.horizontal(|ui| {
+                    if theme::button(ui, "Download").clicked() {
+                        done = Some(true);
+                    }
+                    if theme::button(ui, "Cancel").clicked() {
+                        done = Some(false);
+                    }
+                });
+            });
+            if let Some(ok) = done {
+                let src = self.scp_prompt.take().unwrap_or_default();
+                if ok {
+                    let dir = crate::platform::data_dir().join("logs").join("scp");
+                    let _ = std::fs::create_dir_all(&dir);
+                    match std::process::Command::new("scp").arg("-r").arg(&src).arg(&dir).spawn() {
+                        Ok(_) => self.text = Some(("logdownload scp".into(), format!("Downloading {src}\ninto {}", dir.display()))),
+                        Err(e) => toasts.error(format!("Failed to run scp\n{e}")),
+                    }
+                }
+            }
+        }
     }
 
     /// FormationControl: every vehicle on the link with group actions; Follow the leader
