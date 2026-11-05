@@ -129,7 +129,9 @@ pub fn all_defaults(fw: Firmware) -> Vec<(String, f32)> {
     sec.iter()
         .filter(|(k, _)| !k.contains(':') && k.len() <= 16)
         .map(|(k, m)| {
-            let v = m.values.first().map(|(v, _)| *v as f32).or(m.range.map(|(lo, _)| lo as f32)).unwrap_or(0.0);
+            // 0 (usually "Disabled"/"None") when it is a valid value, else the first option / range start
+            let zero_ok = m.values.iter().any(|(v, _)| *v == 0) || m.range.map(|(lo, hi)| lo <= 0.0 && hi >= 0.0).unwrap_or(m.values.is_empty());
+            let v = if zero_ok { 0.0 } else { m.values.first().map(|(v, _)| *v as f32).or(m.range.map(|(lo, _)| lo as f32)).unwrap_or(0.0) };
             (k.clone(), v)
         })
         .collect()

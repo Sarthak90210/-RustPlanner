@@ -154,7 +154,11 @@ impl SetupView {
                 "RTK/GPS Inject" => return self.rtk_inject(ui, app),
                 "Terminal" => return self.terminal(ui, app),
                 "Advanced" => return advanced(ui, app),
-                "CubeID Update" | "Sik Radio" | "DroneCAN/UAVCAN" | "Joystick" | "Antenna tracker" | "Bluetooth Setup" | "ESP8266 Setup" | "Script REPL" => {
+                "Joystick" => {
+                    let fw = app.link.map(|l| format!("{:?}", l.shared.read().cs.firmware)).unwrap_or_else(|| "ArduCopter2".into());
+                    return app.joystick.setup_ui(ui, &fw, app.toasts);
+                }
+                "CubeID Update" | "Sik Radio" | "DroneCAN/UAVCAN" | "Antenna tracker" | "Bluetooth Setup" | "ESP8266 Setup" | "Script REPL" => {
                     theme::label(ui, format!("{name}: not available in this port yet"));
                     return;
                 }
@@ -587,7 +591,7 @@ fn advanced(ui: &mut egui::Ui, app: &mut AppCtx) {
             if *b == "MAVLink Inspector" {
                 app.actions.push(crate::app::AppAction::OpenInspector);
             } else {
-                app.toasts.error(format!("{b}: not available in this port yet"));
+                app.actions.push(crate::app::AppAction::Tool(b.to_string()));
             }
         }
     }
@@ -1007,8 +1011,6 @@ fn frame_type(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
     }
     p.text(g2.min + Vec2::new(200.0, 272.0), egui::Align2::LEFT_TOP, "NOTE: X and H are NOT interchangable\nthe prop rotation changes", f.clone(), Color32::WHITE);
     p.text(g2.min + Vec2::new(200.0, 356.0), egui::Align2::LEFT_TOP, "NOTE: This is the Y6B and prop rotation\nchanges from the old Y6A", f.clone(), Color32::WHITE);
-    let other = !valid.contains(&ft) || ![0, 1, 2, 3, 4, 10].contains(&ft);
-    ui.put(Rect::from_min_size(g2.min + Vec2::new(357.0, 272.0), Vec2::new(60.0, 17.0)), egui::RadioButton::new(other, "Other"));
     ui.allocate_rect(Rect::from_min_size(o, Vec2::new(787.0, 532.0)), Sense::hover());
 }
 
@@ -1026,10 +1028,10 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
     p.line_segment([o + Vec2::new(0.0, 22.0), o + Vec2::new(ui.max_rect().width(), 22.0)], egui::Stroke::new(1.0, Color32::GRAY));
     p.text(o + Vec2::new(3.0, 33.0), egui::Align2::LEFT_TOP, "Set the Compass Priority by reordering the compasses in the table below (Highest at the top)", f.clone(), Color32::WHITE);
     // myDataGridView1
-    let cols = [("Priority", 50.0), ("DevID", 70.0), ("BusType", 120.0), ("Bus", 35.0), ("Address", 55.0), ("DevType", 150.0), ("Missing", 50.0), ("External", 55.0), ("Orientation", 150.0)];
+    let cols = [("Priority", 50.0), ("DevID", 50.0), ("BusType", 60.0), ("Bus", 50.0), ("Address", 50.0), ("DevType", 150.0), ("Missing", 50.0), ("External", 50.0), ("Orientation", 100.0), ("Up", 40.0), ("Down", 40.0)];
     let grid = r(3.0, 49.0, 672.0, 209.0);
     p.rect_filled(grid, 0.0, theme::BG);
-    let mut x = grid.left();
+    let mut x = grid.left() + 41.0; // row headers
     for (h, w) in cols {
         let c = Rect::from_min_size(Pos2::new(x, grid.top()), Vec2::new(w, 21.0));
         p.rect_stroke(c, 0.0, egui::Stroke::new(1.0, Color32::from_gray(160)), egui::StrokeKind::Inside);
@@ -1041,6 +1043,8 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
         [format!("COMPASS_PRIO{}_ID", i + 1), format!("COMPASS_DEV_ID{n}"), format!("COMPASS_EXTERN{}", if i == 0 { "AL".to_string() } else { n.clone() })]
     };
     let orient_opts = mp_core::param_meta::options(fw, "COMPASS_ORIENT");
+    let prio_vals: Vec<f32> = (0..3).map(|i| params.get(&format!("COMPASS_PRIO{}_ID", i + 1)).map(|p| p.value).unwrap_or(0.0)).collect();
+    let mut swap: Option<(usize, usize)> = None;
     for i in 0..3 {
         let [prio, dev, ext] = id_names(i);
         let Some(raw) = params.get(&prio).or(params.get(&dev)).map(|p| p.value as u32) else { continue };
@@ -1063,14 +1067,52 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
             if missing { "True".into() } else { "False".into() },
             if ext_v != 0.0 { "True".into() } else { "False".into() },
             orient_opts.iter().find(|(k, _)| *k == orient).map(|(_, s)| s.clone()).unwrap_or(orient.to_string()),
+            String::new(),
+            String::new(),
         ];
-        let mut x = grid.left();
+        let hdr = Rect::from_min_size(Pos2::new(grid.left(), y), Vec2::new(41.0, 22.0));
+        p.rect_filled(hdr, 0.0, theme::BG);
+        p.rect_stroke(hdr, 0.0, egui::Stroke::new(1.0, Color32::from_gray(160)), egui::StrokeKind::Inside);
+        let mut x = grid.left() + 41.0;
         for (k, (_, w)) in cols.iter().enumerate() {
             let c = Rect::from_min_size(Pos2::new(x, y), Vec2::new(*w, 22.0));
             p.rect_filled(c, 0.0, if i % 2 == 0 { theme::CONTROL_BG } else { theme::BG });
             p.rect_stroke(c, 0.0, egui::Stroke::new(1.0, Color32::from_gray(160)), egui::StrokeKind::Inside);
-            p.with_clip_rect(c).text(c.left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, &cells[k], f.clone(), Color32::WHITE);
+            if k >= 9 {
+                // Up / Down image buttons
+                let tex = if k == 9 { app.assets.up.id() } else { app.assets.down.id() };
+                let ir = Rect::from_center_size(c.center(), Vec2::new(16.0, 16.0));
+                p.image(tex, ir, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+                if ui.interact(c, ui.scope_id().with(("cmp_mv", i, k)), Sense::click()).clicked() {
+                    if k == 9 && i > 0 {
+                        swap = Some((i, i - 1));
+                    } else if k == 10 && i < 2 {
+                        swap = Some((i, i + 1));
+                    }
+                }
+            } else {
+                p.with_clip_rect(c).text(c.left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, &cells[k], f.clone(), Color32::WHITE);
+            }
             x += w;
+        }
+    }
+    // UpdateFirst3: rewrite COMPASS_PRIOn_ID in the new order
+    if let Some((a, b)) = swap {
+        if !app.readonly && prio_vals[a] != 0.0 && prio_vals[b] != 0.0 {
+            link.send(LinkCommand::SetParam { name: format!("COMPASS_PRIO{}_ID", a + 1), value: prio_vals[b] });
+            link.send(LinkCommand::SetParam { name: format!("COMPASS_PRIO{}_ID", b + 1), value: prio_vals[a] });
+        }
+    }
+    let rm = r(560.0, 261.0, 115.0, 23.0);
+    if ui.put(rm, |ui: &mut egui::Ui| theme::button_sized(ui, "Remove Missing", rm.size())).clicked() && !app.readonly {
+        for i in 0..3 {
+            let [prio, dev, _] = id_names(i);
+            let pv = params.get(&prio).map(|p| p.value as u32).unwrap_or(0);
+            let present = (0..3).any(|j| params.get(&id_names(j)[1]).map(|p| p.value as u32) == Some(pv));
+            if pv != 0 && !present {
+                link.send(LinkCommand::SetParam { name: prio, value: 0.0 });
+            }
+            let _ = dev;
         }
     }
     p.text(o + Vec2::new(0.0, 261.0), egui::Align2::LEFT_TOP, "Do you want to disable any of the first 3 compasses?", f.clone(), Color32::WHITE);
@@ -1178,7 +1220,7 @@ fn hw_id(ui: &mut egui::Ui, link: &Link) {
             theme::label(ui, d.bus_type);
             theme::label(ui, d.bus.to_string());
             theme::label(ui, format!("0x{:02X}", d.address));
-            theme::label(ui, if n.starts_with("COMPASS") { mp_core::devid::compass_devtype(d.devtype) } else { format!("0x{:02X}", d.devtype) });
+            theme::label(ui, mp_core::devid::devtype_for(&n, d.devtype));
             ui.end_row();
         }
     });

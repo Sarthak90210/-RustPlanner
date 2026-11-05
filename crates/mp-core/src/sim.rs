@@ -143,6 +143,15 @@ impl Vehicle {
             ("COMPASS_USE", 1.0),
             ("COMPASS_DEV_ID", 97539.0),
             ("COMPASS_PRIO1_ID", 97539.0),
+            ("COMPASS_DEV_ID2", 131874.0),
+            ("COMPASS_PRIO2_ID", 131874.0),
+            ("COMPASS_DEV_ID3", 263178.0),
+            ("COMPASS_PRIO3_ID", 263178.0),
+            ("COMPASS_EXTERN2", 0.0),
+            ("COMPASS_EXTERN3", 0.0),
+            ("INS_ACC2_ID", 2753036.0),
+            ("INS_GYR2_ID", 2752780.0),
+            ("BARO2_DEVID", 65796.0),
             ("COMPASS_EXTERNAL", 1.0),
             ("COMPASS_ORIENT", 0.0),
             ("INS_ACC_ID", 2753028.0),
@@ -152,6 +161,15 @@ impl Vehicle {
         ] {
             params.insert(n.to_string(), v);
         }
+        for i in 1..=16 {
+            for (suffix, v) in [("MIN", 1100.0), ("TRIM", 1500.0), ("MAX", 1900.0), ("REVERSED", 0.0)] {
+                params.entry(format!("SERVO{i}_{suffix}")).or_insert(v);
+                params.entry(format!("RC{i}_{suffix}")).or_insert(v);
+            }
+            params.entry(format!("SERVO{i}_FUNCTION")).or_insert(0.0);
+            params.entry(format!("RC{i}_OPTION")).or_insert(0.0);
+            params.entry(format!("RC{i}_DZ")).or_insert(0.0);
+        }
         // real firmware defaults first, then the metadata fallback for everything else
         for line in include_str!("../assets/copter_defaults.parm").lines() {
             if let Some((k, v)) = line.split_once(',') {
@@ -160,7 +178,14 @@ impl Vehicle {
                 }
             }
         }
+        // parameters removed from Copter 4.x that the metadata still documents
+        const LEGACY: &[&str] = &[
+            "ACCEL_Z_", "THR_ACCEL_", "THR_ALT_", "THR_RATE_", "HLD_LAT_", "LOITER_LAT_", "RATE_RLL_", "RATE_PIT_", "RATE_YAW_", "STB_", "VEL_XY_", "POS_XY_", "POS_Z_", "VEL_Z_", "THR_MID", "CH6_", "CH7_", "CH8_", "CH9_", "CH10_", "CH11_", "CH12_", "TUNE_HIGH", "TUNE_LOW", "INS_PRODUCT_ID", "ARMING_REQUIRE", "LOIT_SPEED_MS", "WP_SPD", "WP_RADIUS_M", "PSC_NE_", "PSC_D_",
+        ];
         for (k, v) in crate::param_meta::all_defaults(crate::firmware::Firmware::ArduCopter2) {
+            if LEGACY.iter().any(|p| k.starts_with(p)) {
+                continue;
+            }
             params.entry(k).or_insert(v);
         }
         Self {
@@ -220,16 +245,19 @@ impl Vehicle {
         }));
     }
 
+    /// GCS_MAVLINK::send_banner: firmware, OS, board id and frame.
+    fn banner(&mut self) {
+        self.text(MavSeverity::MAV_SEVERITY_INFO, "ArduCopter V4.6.0 (rust-sim)");
+        self.text(MavSeverity::MAV_SEVERITY_INFO, "ChibiOS: rust-sim");
+        self.text(MavSeverity::MAV_SEVERITY_INFO, "SITL 0042001F 3331510A 34363732");
+        self.text(MavSeverity::MAV_SEVERITY_INFO, "Frame: QUAD/X");
+    }
+
     fn run(&mut self, stop: &AtomicBool) {
         let mut buf = vec![0u8; 2048];
         let mut last_fast = Instant::now();
         let mut last_slow = Instant::now();
-        self.text(
-            MavSeverity::MAV_SEVERITY_INFO,
-            "ArduCopter V4.6.0 (rust-sim)",
-        );
-        self.text(MavSeverity::MAV_SEVERITY_INFO, "ChibiOS: rust-sim");
-        self.text(MavSeverity::MAV_SEVERITY_INFO, "SITL 0042001F 3331510A 34363732");
+        self.banner();
         while !stop.load(Ordering::Relaxed) {
             if let Ok((n, _)) = self.sock.recv_from(&mut buf) {
                 let mut r = mavlink::MavlinkReader::new(&buf[..n]);
@@ -264,6 +292,8 @@ impl Vehicle {
     fn handle(&mut self, msg: MavMessage) {
         match msg {
             MavMessage::PARAM_REQUEST_LIST(_) => {
+                // ArduPilot sends its banner on a param list request
+                self.banner();
                 // stream the list over time like a real autopilot
                 self.param_queue = (0..self.params.len()).collect();
             }

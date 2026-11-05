@@ -134,6 +134,8 @@ pub enum AppAction {
     PlayTlog(std::path::PathBuf),
     /// ConfigAdvanced / temp: open the MAVLink Inspector
     OpenInspector,
+    /// temp / ConfigAdvanced tool by button text
+    Tool(String),
 }
 
 /// Shared context handed to each view.
@@ -146,6 +148,8 @@ pub struct AppCtx<'a> {
     pub sim_running: bool,
     pub assets: &'a crate::assets::Assets,
     pub readonly: bool,
+    /// MainV2.joystick
+    pub joystick: &'a mut crate::joystick::Joystick,
 }
 
 impl AppCtx<'_> {
@@ -173,6 +177,8 @@ pub struct MissionPlannerApp {
     show_stats: bool,
     inspector: crate::tools::Inspector,
     show_temp: bool,
+    tools: crate::tool_windows::Tools,
+    joystick: crate::joystick::Joystick,
     menu_hidden: bool,
     last_title: String,
     show_conn_list: bool,
@@ -229,6 +235,8 @@ impl MissionPlannerApp {
             show_stats: false,
             inspector: crate::tools::Inspector::new(std::env::var_os("MP_INSPECTOR").is_some()),
             show_temp: std::env::var_os("MP_TEMP").is_some(),
+            tools: Default::default(),
+            joystick: Default::default(),
             menu_hidden: false,
             last_title: String::new(),
             show_conn_list: false,
@@ -295,6 +303,11 @@ impl MissionPlannerApp {
                     }
                 }
                 AppAction::OpenInspector => self.inspector.open = true,
+                AppAction::Tool(name) => {
+                    if !self.tools.activate(&name, self.link.as_ref(), &mut self.toasts) {
+                        self.toasts.error(format!("{name}: not available in this port yet"));
+                    }
+                }
                 AppAction::DemoFlight => {
                     self.demo = Some(crate::demo::Demo::default());
                     self.toasts
@@ -745,6 +758,13 @@ impl eframe::App for MissionPlannerApp {
 
         self.hotkeys(&ctx, &mut actions);
         self.inspector.show(&ctx, self.link.as_ref(), &mut self.toasts);
+        self.tools.ui(&ctx, self.link.as_ref(), &mut self.toasts);
+        self.joystick.tick(self.link.as_ref());
+        let fw_name = self.link.as_ref().map(|l| format!("{:?}", l.shared.read().cs.firmware)).unwrap_or_else(|| "ArduCopter2".into());
+        self.joystick.window(&ctx, &fw_name, &mut self.toasts);
+        if self.joystick.enabled {
+            ctx.request_repaint_after(std::time::Duration::from_millis(50));
+        }
         match crate::tools::temp_window(&ctx, &mut self.show_temp, self.link.as_ref(), &mut self.toasts) {
             Some(crate::tools::TempAction::Inspector) => self.inspector.open = true,
             Some(crate::tools::TempAction::HwIds) => {
@@ -755,7 +775,11 @@ impl eframe::App for MissionPlannerApp {
                 self.settings.view = View::FlightData;
                 self.flight_data.open_log_browse();
             }
-            Some(crate::tools::TempAction::Unavailable(n)) => self.toasts.error(format!("{n}: not available in this port yet")),
+            Some(crate::tools::TempAction::Unavailable(n)) => {
+                if !self.tools.activate(n, self.link.as_ref(), &mut self.toasts) {
+                    self.toasts.error(format!("{n}: not available in this port yet"));
+                }
+            }
             None => {}
         }
         if !self.menu_hidden {
@@ -784,6 +808,7 @@ impl eframe::App for MissionPlannerApp {
                     sim,
                     assets,
                     readonly,
+                    joystick,
                     ..
                 } = self;
                 let view = settings.view;
@@ -796,6 +821,7 @@ impl eframe::App for MissionPlannerApp {
                     sim_running: sim.is_some(),
                     assets,
                     readonly: *readonly,
+                    joystick,
                 };
                 match view {
                     View::FlightData => flight_data.ui(ui, &mut app),

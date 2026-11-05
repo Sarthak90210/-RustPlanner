@@ -1,7 +1,9 @@
 pub mod config;
+pub mod fd_tabs;
 pub mod flight_data;
 pub mod flight_plan;
 pub mod help;
+pub mod mavlog;
 pub mod setup;
 pub mod simulation;
 pub mod survey_ui;

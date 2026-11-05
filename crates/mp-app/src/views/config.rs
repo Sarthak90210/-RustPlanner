@@ -242,6 +242,13 @@ pub struct ParamEditor {
     none_default: bool,
     tree_collapsed: bool,
     compare: Option<Vec<(String, f32, f32, bool)>>,
+    /// CMB_paramfiles: Tools/Frame_params/*.param from the ArduPilot repo (name, path)
+    paramfiles: std::sync::Arc<std::sync::Mutex<Option<Result<Vec<(String, String)>, String>>>>,
+    paramfiles_requested: bool,
+    paramfile_sel: usize,
+    /// presaved file fetched in the background
+    presaved: std::sync::Arc<std::sync::Mutex<Option<Result<String, String>>>>,
+    confirm_reset: bool,
     editing: Option<(String, String)>,
 }
 
@@ -324,12 +331,62 @@ impl ParamEditor {
             }
             let f = fonts::ui_id(fonts::UI_SIZE);
             ui.painter().text(o + Vec2::new(6.0, 169.0), egui::Align2::LEFT_TOP, "All Units are in raw\nformat with no scaling", f.clone(), Color32::WHITE);
-            ui.put(r(201.0, 21.0), |ui: &mut egui::Ui| egui::ComboBox::from_id_salt("CMB_paramfiles").width(102.0).selected_text("").show_ui(ui, |_| {}).response);
+            // GitHubContent.GetDirContent("ardupilot", "ardupilot", "/Tools/Frame_params/")
+            if !self.paramfiles_requested {
+                self.paramfiles_requested = true;
+                let slot = self.paramfiles.clone();
+                let ctx = ui.ctx().clone();
+                std::thread::spawn(move || {
+                    let r = crate::firmware_ui::get("https://api.github.com/repos/ardupilot/ardupilot/contents/Tools/Frame_params").and_then(|b| {
+                        let v: serde_json::Value = serde_json::from_slice(&b).map_err(|e| e.to_string())?;
+                        Ok(v.as_array()
+                            .map(|a| {
+                                a.iter()
+                                    .filter_map(|e| Some((e["name"].as_str()?.to_string(), e["path"].as_str()?.to_string())))
+                                    .filter(|(n, _)| n.ends_with(".param"))
+                                    .collect()
+                            })
+                            .unwrap_or_default())
+                    });
+                    *slot.lock().unwrap() = Some(r);
+                    ctx.request_repaint();
+                });
+            }
+            let files: Vec<(String, String)> = match &*self.paramfiles.lock().unwrap() {
+                Some(Ok(v)) => v.clone(),
+                _ => Vec::new(),
+            };
+            let sel_name = files.get(self.paramfile_sel).map(|f| f.0.clone()).unwrap_or_default();
+            ui.put(r(201.0, 21.0), |ui: &mut egui::Ui| {
+                ui.add_enabled_ui(!files.is_empty(), |ui| {
+                    egui::ComboBox::from_id_salt("CMB_paramfiles")
+                        .width(102.0)
+                        .wrap_mode(egui::TextWrapMode::Truncate)
+                        .selected_text(sel_name)
+                        .show_ui(ui, |ui| {
+                            for (i, (n, _)) in files.iter().enumerate() {
+                                ui.selectable_value(&mut self.paramfile_sel, i, n);
+                            }
+                        })
+                        .response
+                })
+                .inner
+            });
             if b(ui, r(228.0, 21.0), "Load Presaved") {
-                app.toasts.error("Load Presaved: not available in this port yet");
+                if let Some((_, path)) = files.get(self.paramfile_sel).cloned() {
+                    let slot = self.presaved.clone();
+                    let ctx = ui.ctx().clone();
+                    std::thread::spawn(move || {
+                        let r = crate::firmware_ui::get(&format!("https://raw.githubusercontent.com/ArduPilot/ardupilot/master/{path}")).map(|b| String::from_utf8_lossy(&b).into_owned());
+                        *slot.lock().unwrap() = Some(r);
+                        ctx.request_repaint();
+                    });
+                } else {
+                    app.toasts.error("Failed to load file.\nNo presaved parameter files are available");
+                }
             }
             if b(ui, r(255.0, 21.0), "Reset to Default") {
-                app.toasts.error("Reset to Default: not available in this port yet");
+                self.confirm_reset = true;
             }
             ui.painter().text(o + Vec2::new(6.0, 286.0), egui::Align2::LEFT_TOP, "Search", f.clone(), Color32::WHITE);
             ui.put(r(302.0, 20.0), egui::TextEdit::singleline(&mut self.search));
@@ -384,6 +441,48 @@ impl ParamEditor {
             rows.sort_by_key(|(k, _)| !favs.contains(k));
             self.grid(ui, link, fw, &rows, &mut app.settings.fav_params);
         });
+        // presaved file arrived: show it in ParamCompare
+        if let Some(r) = self.presaved.lock().unwrap().take() {
+            match r {
+                Ok(text) => {
+                    let diffs: Vec<(String, f32, f32, bool)> = paramfile::load(&text)
+                        .into_iter()
+                        .filter_map(|(k, v)| params.get(&k).filter(|p| p.value != v).map(|p| (k, p.value, v, true)))
+                        .collect();
+                    self.compare = Some(diffs);
+                }
+                Err(e) => app.toasts.error(format!("Failed to load file.\n{e}")),
+            }
+        }
+        if self.confirm_reset {
+            let mut answer = None;
+            egui::Modal::new(egui::Id::new("reset_params")).show(ui.ctx(), |ui| {
+                ui.set_width(260.0);
+                ui.label(egui::RichText::new("Reset").strong());
+                theme::label(ui, "Reset all parameters to default\nAre you sure!!");
+                ui.horizontal(|ui| {
+                    if theme::button(ui, "Yes").clicked() {
+                        answer = Some(true);
+                    }
+                    if theme::button(ui, "No").clicked() {
+                        answer = Some(false);
+                    }
+                });
+            });
+            if let Some(yes) = answer {
+                self.confirm_reset = false;
+                if yes && !app.readonly {
+                    // FORMAT_VERSION / SYSID_SW_MREV = 0 then reboot: the autopilot reloads defaults
+                    for n in ["FORMAT_VERSION", "SYSID_SW_MREV"] {
+                        if params.contains_key(n) {
+                            link.send(LinkCommand::SetParam { name: n.into(), value: 0.0 });
+                        }
+                    }
+                    link.send(LinkCommand::CommandLong { command: 246, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
+                    app.toasts.error("Your board is now rebooting, You will be required to reconnect to the autopilot.");
+                }
+            }
+        }
         self.compare_window(ui.ctx());
     }
 
@@ -598,7 +697,17 @@ pub fn flight_modes(ui: &mut egui::Ui, app: &mut AppCtx) {
     let simple_p = params.get("SIMPLE").map(|p| p.value as u32);
     let ss_p = params.get("SUPER_SIMPLE").map(|p| p.value as u32);
     let state_id = egui::Id::unique("fm_state");
-    let mut st: ([u32; 6], u32, u32) = ui.ctx().data(|d| d.get_temp(state_id)).unwrap_or((current, simple_p.unwrap_or(0), ss_p.unwrap_or(0)));
+    // the form re-reads the vehicle values whenever they change (refresh / write / late param load)
+    let vehicle = (current, simple_p.unwrap_or(0), ss_p.unwrap_or(0));
+    let seen_id = egui::Id::unique("fm_seen");
+    let seen: Option<([u32; 6], u32, u32)> = ui.ctx().data(|d| d.get_temp(seen_id));
+    if seen != Some(vehicle) {
+        ui.ctx().data_mut(|d| {
+            d.insert_temp(seen_id, vehicle);
+            d.remove::<([u32; 6], u32, u32)>(state_id);
+        });
+    }
+    let mut st: ([u32; 6], u32, u32) = ui.ctx().data(|d| d.get_temp(state_id)).unwrap_or(vehicle);
 
     let o = ui.max_rect().min;
     let f = fonts::ui_id(fonts::UI_SIZE);
@@ -769,7 +878,7 @@ fn planner(ui: &mut egui::Ui, app: &mut AppCtx, _fw: Firmware) {
         combo(ui, pl, "language", r(107.0, 139.0, 138.0, 21.0), &["English (en-US)"], "English (en-US)");
         let jr = r(107.0, 166.0, 99.0, 23.0);
         if ui.put(jr, |ui: &mut egui::Ui| theme::button_sized(ui, "Joystick Setup", jr.size())).clicked() {
-            app.toasts.error("Joystick: not available in this port yet");
+            app.joystick.window_open = true;
         }
         let pl = &mut app.settings.planner;
         combo(ui, pl, "distunits", r(107.0, 195.0, 138.0, 21.0), &["Meters", "Feet"], "Meters");

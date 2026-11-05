@@ -170,6 +170,11 @@ pub enum LinkCommand {
     LogErase,
     /// Telemetry log playback control.
     Playback(crate::tlog::PlaybackCommand),
+    /// SerialOutputPass / "Mavlink Mirror": forward every frame to `host:port` over UDP;
+    /// with `write` set, frames coming back are passed on to the vehicle. `None` stops it.
+    Mirror { target: Option<String>, write: bool },
+    /// Send pre-built frame bytes unchanged (MAVLink signing setup, hex injection).
+    SendRaw(Vec<u8>),
 }
 
 /// Handle to a running link (equivalent of `MainV2.comPort`).
@@ -343,6 +348,7 @@ struct Worker {
     pending_sets: HashMap<String, PendingSet>,
     mission: Option<MissionOp>,
     pending_cmd: Option<PendingCmd>,
+    mirror: Option<(std::net::UdpSocket, std::net::SocketAddr, bool)>,
 }
 
 fn is_timeout(e: &io::Error) -> bool {
@@ -358,7 +364,7 @@ fn param_name(id: &mavlink::types::CharArray<16>) -> String {
     String::from_utf8_lossy(&bytes[..end]).to_string()
 }
 
-fn now_hms() -> String {
+pub fn now_hms() -> String {
     chrono::Local::now().format("%H:%M:%S").to_string()
 }
 
@@ -388,6 +394,7 @@ impl Worker {
             pending_sets: HashMap::new(),
             mission: None,
             pending_cmd: None,
+            mirror: None,
         }
     }
 
@@ -409,6 +416,9 @@ impl Worker {
                     if let Some(t) = self.tlog.as_mut() {
                         t.write_frame(bytes);
                     }
+                    if let Some((sock, to, _)) = &self.mirror {
+                        let _ = sock.send_to(bytes, to);
+                    }
                     let hdr = MavHeader { system_id: raw.system_id(), component_id: raw.component_id(), sequence: raw.sequence() };
                     match <MavMessage as mavlink::Message>::parse(raw.version(), raw.message_id(), raw.payload()) {
                         Ok(msg) => self.handle_message(hdr, msg)?,
@@ -418,6 +428,18 @@ impl Worker {
                 Err(MessageReadError::Io(e)) if is_timeout(&e) => {}
                 Err(MessageReadError::Io(e)) => return Err(e),
                 Err(MessageReadError::Parse(e)) => log::trace!("mavlink parse: {e:?}"),
+            }
+
+            // mirror write-back: frames from the mirror client go to the vehicle
+            let mut back = Vec::new();
+            if let Some((sock, _, true)) = &self.mirror {
+                let mut b = [0u8; 2048];
+                while let Ok((n, _)) = sock.recv_from(&mut b) {
+                    back.extend_from_slice(&b[..n]);
+                }
+            }
+            if !back.is_empty() {
+                self.reader.get_mut().write_all(&back)?;
             }
 
             self.tick()?;
@@ -572,6 +594,26 @@ impl Worker {
                     target_system: self.target_sys,
                     target_component: self.target_comp,
                 }))?;
+            }
+            LinkCommand::Mirror { target, write } => {
+                self.mirror = None;
+                if let Some(t) = target {
+                    use std::net::ToSocketAddrs;
+                    let addr = t.to_socket_addrs().ok().and_then(|mut a| a.next()).ok_or_else(|| io::Error::other(format!("bad address {t}")));
+                    match addr.and_then(|a| std::net::UdpSocket::bind("0.0.0.0:0").map(|s| (s, a))) {
+                        Ok((sock, a)) => {
+                            let _ = sock.set_nonblocking(true);
+                            self.mirror = Some((sock, a, write));
+                        }
+                        Err(e) => log::warn!("mirror: {e}"),
+                    }
+                }
+            }
+            LinkCommand::SendRaw(bytes) => {
+                if let Some(t) = self.tlog.as_mut() {
+                    t.write_frame(&bytes);
+                }
+                self.reader.get_mut().write_all(&bytes)?;
             }
             LinkCommand::LogErase => self.send(MavMessage::LOG_ERASE(LOG_ERASE_DATA { target_system: self.target_sys, target_component: self.target_comp }))?,
             LinkCommand::LogDownload { id, size, path } => {

@@ -83,6 +83,7 @@ enum Inputted {
     PointCameraCoords,
     AddPoi(f64, f64),
     SendMessage,
+    JumpTag,
 }
 
 const MOUNT_MODES: &[&str] = &["RETRACT", "NEUTRAL", "MAVLINK_TARGETING", "RC_TARGETING", "GPS_POINT"];
@@ -116,6 +117,8 @@ pub struct FlightDataView {
     log_browse: crate::log_browse::LogBrowse,
     analysis: Option<(String, Vec<(String, String, String)>)>,
     raw_sensor: bool,
+    extra: super::fd_tabs::ExtraTabs,
+    mavlog: super::mavlog::MavlinkLog,
     logdl_open: bool,
     logdl_busy: bool,
     logdl_queue: Vec<(u16, u32)>,
@@ -154,6 +157,8 @@ impl Default for FlightDataView {
             log_browse: Default::default(),
             analysis: None,
             raw_sensor: false,
+            extra: Default::default(),
+            mavlog: Default::default(),
             logdl_open: false,
             logdl_busy: false,
             logdl_queue: Vec::new(),
@@ -307,12 +312,12 @@ impl FlightDataView {
                 2 => messages_ui(ui, app),
                 3 => preflight_ui(ui, cs),
                 4 => gauges_ui(ui, cs),
-                5 => transponder_ui(ui, app),
+                5 => self.extra.transponder(ui, app),
                 6 => status_ui(ui, cs),
                 7 => servo_ui(ui, app, cs),
-                8 => aux_ui(ui, app),
-                9 => scripts_ui(ui, app),
-                10 => payload_ui(ui, app),
+                8 => self.extra.aux(ui, app),
+                9 => self.extra.scripts(ui, app),
+                10 => self.extra.payload(ui, app),
                 11 => self.tlogs_ui(ui, app),
                 _ => self.dflogs_ui(ui, app),
             });
@@ -451,11 +456,17 @@ impl FlightDataView {
             .enumerate()
         {
             let rr = cell(4, r);
-            // ModifyandSet: FlowLayoutPanel with the NumericUpDown above the MyButton
+            // ModifyandSet: FlowLayoutPanel (no margins) holding a 41x20 NumericUpDown and a
+            // 68x23 MyButton; the button flows beside the number when the cell is wide enough
+            // (112px) and wraps underneath it otherwise.
             let cellr = rr.expand(3.0);
-            let top = Rect::from_min_size(cellr.min, Vec2::new(cellr.width(), 16.0));
-            let bot = Rect::from_min_max(Pos2::new(cellr.left(), cellr.top() + 17.0), cellr.max);
-            ui.put(top, egui::DragValue::new(val).speed(0.5).max_decimals(1));
+            let num = Rect::from_min_size(cellr.min, Vec2::new(41.0, 20.0));
+            let bot = if cellr.width() >= 109.0 {
+                Rect::from_min_size(Pos2::new(cellr.left() + 41.0, cellr.top()), Vec2::new(68.0, 23.0))
+            } else {
+                Rect::from_min_max(Pos2::new(cellr.left(), cellr.top() + 20.0), Pos2::new(cellr.right(), cellr.bottom()))
+            };
+            ui.put(num, egui::DragValue::new(val).speed(0.5).max_decimals(1));
             if ui.put(bot, |ui: &mut egui::Ui| theme::button_sized(ui, text, bot.size())).clicked() {
                 clicked = Some(text);
             }
@@ -523,6 +534,7 @@ impl FlightDataView {
                 self.prompt = Some(Prompt::Input { title: "Message".into(), fields: vec![("Enter Message".into(), String::new())], then: Inputted::SendMessage })
             }
             "Set Mount" => link.send(LinkCommand::CommandLong { command: 204, params: [self.mount_sel as f32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }),
+            "Joystick" => app.joystick.window_open = true,
             other => not_ported(app, other),
         }
     }
@@ -737,8 +749,12 @@ impl FlightDataView {
                         l.send(LinkCommand::CommandLong { command: mavcmd::TAKEOFF, params: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, self.guided_alt] });
                     }
                 }
-                "Jump To Tag" => not_ported(app, "Jump To Tag"),
-                "Gimbal Video" => not_ported(app, "Gimbal Video"),
+                "Jump To Tag" => {
+                    if need_link(app).is_some() {
+                        self.prompt = Some(Prompt::Input { title: "Jump To Tag".into(), fields: vec![("Tag".into(), "1".into())], then: Inputted::JumpTag });
+                    }
+                }
+                "Gimbal Video" => app.toasts.error("No gimbal video stream is configured.\nSet one up under Planner > Video."),
                 _ => {}
             }
         }
@@ -747,6 +763,7 @@ impl FlightDataView {
         self.log_browse.ui(ui.ctx());
         self.analysis_window(ui.ctx());
         self.raw_sensor_window(ui.ctx(), cs);
+        self.mavlog.ui(ui.ctx());
 
         // ---- overlays positioned as in splitContainer1.Panel2
         let p = ui.painter().with_clip_rect(mrect);
@@ -854,6 +871,12 @@ impl FlightDataView {
                         l.send(LinkCommand::CommandLong { command: mavcmd::DO_SET_ROI, params: [0.0, 0.0, 0.0, 0.0, lat as f32, lng as f32, alt as f32] });
                     }
                 }
+                Inputted::JumpTag => {
+                    if let (Some(l), Some(Ok(tag))) = (link, fields.first().map(|(_, t)| t.trim().parse::<f32>())) {
+                        // MAV_CMD_DO_JUMP_TAG
+                        l.send(LinkCommand::CommandLong { command: 601, params: [tag, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
+                    }
+                }
                 Inputted::SendMessage => {
                     if let (Some(l), Some((_, text))) = (link, fields.first()) {
                         use mp_core::mavlink::dialects::ardupilotmega::{MavMessage, MavSeverity, STATUSTEXT_DATA};
@@ -895,7 +918,7 @@ impl FlightDataView {
             }
         }
         if b(ui, r(3.0, 69.0, 80.0, 46.0), "Tlog > Kml or Graph") {
-            not_ported(app, "Tlog > Kml or Graph");
+            self.mavlog.open = true;
         }
         ui.painter().with_clip_rect(r(94.0, 0.0, 193.0, 33.0)).text(o + Vec2::new(94.0, 10.0), egui::Align2::LEFT_TOP, &self.tlog_name, f.clone(), Color32::WHITE);
         // tracklog: seek bar
@@ -1334,19 +1357,6 @@ fn gauge(p: &egui::Painter, r: Rect, label: &str, v: f32, min: f32, max: f32) {
     p.text(c + Vec2::new(0.0, rad * 0.45), egui::Align2::CENTER_CENTER, format!("{label}\n{v:.1}"), fonts::ui_id(10.0), Color32::WHITE);
 }
 
-fn transponder_ui(ui: &mut egui::Ui, app: &mut AppCtx) {
-    egui::Grid::new("xpdr").num_columns(2).show(ui, |ui| {
-        for l in ["Squawk", "Flight ID", "Mode"] {
-            theme::label(ui, l);
-            ui.add_enabled(false, egui::TextEdit::singleline(&mut String::new()).desired_width(100.0));
-            ui.end_row();
-        }
-    });
-    if theme::button(ui, "Ident").clicked() {
-        not_ported(app, "Transponder");
-    }
-}
-
 fn status_ui(ui: &mut egui::Ui, cs: &CurrentState) {
     // tabStatus: flow layout of name/value label pairs
     ui.horizontal_wrapped(|ui| {
@@ -1399,46 +1409,6 @@ fn servo_ui(ui: &mut egui::Ui, app: &mut AppCtx, cs: &CurrentState) {
 
 fn not_ported(app: &mut AppCtx, what: &str) {
     app.toasts.error(format!("{what}: not available in this port yet"));
-}
-
-fn placed_buttons(ui: &mut egui::Ui, app: &mut AppCtx, what: &str, btns: &[(f32, f32, f32, f32, &str)]) {
-    let o = ui.available_rect_before_wrap().min;
-    let mut maxx: f32 = 0.0;
-    let mut maxy: f32 = 0.0;
-    for &(x, y, w, h, t) in btns {
-        let r = Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));
-        if ui.put(r, |ui: &mut egui::Ui| theme::button_sized(ui, t, r.size())).clicked() {
-            not_ported(app, what);
-        }
-        maxx = maxx.max(x + w);
-        maxy = maxy.max(y + h);
-    }
-    ui.allocate_rect(Rect::from_min_size(o, Vec2::new(maxx, maxy)), Sense::hover());
-}
-
-fn aux_ui(ui: &mut egui::Ui, app: &mut AppCtx) {
-    placed_buttons(ui, app, "Aux Function", &[(3.0, 3.0, 75.0, 23.0, "Refresh")]);
-}
-
-fn scripts_ui(ui: &mut egui::Ui, app: &mut AppCtx) {
-    let o = ui.available_rect_before_wrap().min;
-    ui.painter().text(o + Vec2::new(19.0, 10.0), egui::Align2::LEFT_TOP, "Script Status: No Script Running", fonts::ui_id(fonts::UI_SIZE), Color32::WHITE);
-    ui.painter().text(o + Vec2::new(19.0, 29.0), egui::Align2::LEFT_TOP, "Selected Script: None", fonts::ui_id(fonts::UI_SIZE), Color32::WHITE);
-    placed_buttons(
-        ui,
-        app,
-        "Scripts",
-        &[
-            (16.0, 80.0, 71.0, 23.0, "Select Script"),
-            (92.0, 80.0, 71.0, 23.0, "Run Script"),
-            (169.0, 80.0, 80.0, 23.0, "Abort Running Script"),
-            (255.0, 79.0, 80.0, 23.0, "Edit Selected Script"),
-        ],
-    );
-}
-
-fn payload_ui(ui: &mut egui::Ui, app: &mut AppCtx) {
-    placed_buttons(ui, app, "Payload Control", &[(10.0, 134.0, 56.0, 23.0, "Reset Position"), (73.0, 134.0, 56.0, 23.0, "Video Control")]);
 }
 
 fn fmt_val(v: f64) -> String {

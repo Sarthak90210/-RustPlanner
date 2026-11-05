@@ -9,7 +9,7 @@ use mp_core::link::{Link, LinkCommand};
 use crate::theme;
 
 /// Split a `{:?}` dump of a MAVLink message into (field, value) pairs.
-fn fields(msg: &mp_core::mavlink::dialects::ardupilotmega::MavMessage) -> Vec<(String, String)> {
+pub(crate) fn fields(msg: &mp_core::mavlink::dialects::ardupilotmega::MavMessage) -> Vec<(String, String)> {
     let dbg = format!("{msg:?}");
     let Some(a) = dbg.find("{ ") else { return Vec::new() };
     let inner = dbg[a + 2..].trim_end_matches(')').trim_end().trim_end_matches('}').trim_end();
@@ -62,6 +62,9 @@ pub struct Inspector {
     gcs_traffic: bool,
     expanded: BTreeSet<(u8, u8, u32)>,
     selected: Option<(u8, u8, u32, String)>,
+    /// "Graph It" windows: (sysid, compid, msgid, field) and the sampled series
+    graphs: Vec<((u8, u8, u32, String), std::collections::VecDeque<(f64, f64)>)>,
+    start: Option<std::time::Instant>,
 }
 
 impl Inspector {
@@ -78,7 +81,8 @@ impl Inspector {
             ui.horizontal(|ui| {
                 if theme::button_sized(ui, "Graph It", Vec2::new(75.0, 23.0)).clicked() {
                     match &self.selected {
-                        Some((_, _, _, f)) => toasts.info(format!("Graph It: {f}")),
+                        Some(sel) if !self.graphs.iter().any(|g| &g.0 == sel) => self.graphs.push((sel.clone(), Default::default())),
+                        Some(_) => {}
                         None => toasts.error("Please select a field to graph"),
                     }
                 }
@@ -92,6 +96,20 @@ impl Inspector {
                 let s = link.shared.read();
                 s.inspector.iter().filter(|(k, _)| self.gcs_traffic || k.0 != 255).map(|(k, v)| (*k, v.clone())).collect()
             };
+            // sample graphed fields (numbers only)
+            let t = self.start.get_or_insert_with(std::time::Instant::now).elapsed().as_secs_f64();
+            for ((sys, comp, id, field), q) in &mut self.graphs {
+                if let Some((_, st)) = rows.iter().find(|(k, _)| *k == (*sys, *comp, *id)) {
+                    if let Some(v) = fields(&st.msg).into_iter().find(|(n, _)| n == field).and_then(|(_, v)| v.parse::<f64>().ok()) {
+                        if q.back().map(|(t0, _)| t - t0 >= 0.05).unwrap_or(true) {
+                            q.push_back((t, v));
+                        }
+                        while q.front().map(|(t0, _)| t - t0 > 20.0).unwrap_or(false) {
+                            q.pop_front();
+                        }
+                    }
+                }
+            }
             let mono = egui::FontId::monospace(11.0);
             egui::Frame::new().fill(Color32::from_rgb(0x26, 0x27, 0x28)).stroke(egui::Stroke::new(1.0, Color32::from_gray(0x80))).show(ui, |ui| {
                 egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
@@ -135,6 +153,22 @@ impl Inspector {
         });
         if !open {
             self.open = false;
+        }
+        let t = self.start.map(|s| s.elapsed().as_secs_f64()).unwrap_or(0.0);
+        let mut close = None;
+        for (i, ((_, _, id, field), q)) in self.graphs.iter().enumerate() {
+            let name = format!("{field}");
+            let mut gopen = true;
+            egui::Window::new(format!("Graph {id} {field}")).id(egui::Id::new(("inspgraph", i))).open(&mut gopen).default_size([500.0, 300.0]).show(ctx, |ui| {
+                let size = ui.available_size().max(Vec2::new(300.0, 200.0));
+                crate::zedgraph::plot(ui, size, &name, &[(name.as_str(), q)], t);
+            });
+            if !gopen {
+                close = Some(i);
+            }
+        }
+        if let Some(i) = close {
+            self.graphs.remove(i);
         }
     }
 }

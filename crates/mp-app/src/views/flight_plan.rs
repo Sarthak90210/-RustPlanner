@@ -60,6 +60,8 @@ pub struct FlightPlanView {
     survey_dialog: Option<SurveyParams>,
     grid_ui: Option<Box<super::survey_ui::GridUi>>,
     circle_dialog: Option<(f64, f64, String, String)>,
+    /// Fence Circle Around Home: radius prompt
+    fence_circle: Option<String>,
     measure: Option<(f64, f64)>,
 }
 
@@ -101,6 +103,7 @@ impl Default for FlightPlanView {
             drawing_polygon: false,
             survey_dialog: None,
             grid_ui: None,
+            fence_circle: None,
             circle_dialog: None,
             measure: None,
         }
@@ -841,7 +844,7 @@ impl FlightPlanView {
             ui.close();
         }
         if ui.button("Fence Circle Around Home").clicked() {
-            app.toasts.error("Fence Circle Around Home: not available in this port yet");
+            self.fence_circle = Some("300".into());
             ui.close();
         }
         if ui.button("Clear Mission").clicked() {
@@ -1082,6 +1085,33 @@ impl FlightPlanView {
             self.survey_dialog = None;
         }
 
+        // FENCE_CIRCLE_INCLUSION centred on home with the entered radius
+        let mut fc_done = None;
+        if let Some(radius) = self.fence_circle.as_mut() {
+            egui::Window::new("Radius").collapsible(false).resizable(false).show(ctx, |ui| {
+                theme::label(ui, "Radius (m)");
+                ui.text_edit_singleline(radius);
+                ui.horizontal(|ui| {
+                    if theme::button(ui, "OK").clicked() {
+                        fc_done = Some(radius.trim().parse::<f32>().ok());
+                    }
+                    if theme::button(ui, "Cancel").clicked() {
+                        fc_done = Some(None);
+                    }
+                });
+            });
+        }
+        if let Some(r) = fc_done {
+            self.fence_circle = None;
+            if let Some(r) = r.filter(|r| *r > 0.0) {
+                let (lat, lng) = (self.home.lat, self.home.lng);
+                if lat == 0.0 && lng == 0.0 {
+                    app.toasts.error("Home location is not set");
+                } else {
+                    self.fence_list().push(Locationwp { id: 5003, p1: r, lat, lng, frame: 0, ..Default::default() });
+                }
+            }
+        }
         let mut close_circle = false;
         let mut accept_circle = None;
         if let Some((lat, lng, radius, points)) = self.circle_dialog.as_mut() {
