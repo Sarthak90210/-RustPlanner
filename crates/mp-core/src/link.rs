@@ -84,6 +84,21 @@ pub struct LinkShared {
     pub inspector: BTreeMap<(u8, u8, u32), MsgStat>,
     /// ADSB_VEHICLE reports by ICAO address: (callsign, lat, lng, alt m, heading deg, last seen)
     pub adsb: BTreeMap<u32, (String, f64, f64, f32, f32, Instant)>,
+    /// MainV2.comPort.MAVlist: every vehicle heard on this link, by (sysid, compid)
+    pub mavs: BTreeMap<(u8, u8), MavSummary>,
+}
+
+/// What the map and the vehicle selector need about each vehicle on the link.
+#[derive(Debug, Clone)]
+pub struct MavSummary {
+    pub firmware: Firmware,
+    pub custom_mode: u32,
+    pub armed: bool,
+    pub lat: f64,
+    pub lng: f64,
+    pub alt: f32,
+    pub heading: f32,
+    pub last: Instant,
 }
 
 /// One row of the MAVLink Inspector.
@@ -177,6 +192,8 @@ pub enum LinkCommand {
     Mirror { target: Option<String>, write: bool },
     /// Send pre-built frame bytes unchanged (MAVLink signing setup, hex injection).
     SendRaw(Vec<u8>),
+    /// Make another vehicle on the link the current one (sysid selector).
+    SetTarget { sysid: u8, compid: u8 },
 }
 
 /// Handle to a running link (equivalent of `MainV2.comPort`).
@@ -611,6 +628,26 @@ impl Worker {
                     }
                 }
             }
+            LinkCommand::SetTarget { sysid, compid } => {
+                if sysid != self.target_sys || compid != self.target_comp {
+                    self.target_sys = sysid;
+                    self.target_comp = compid;
+                    {
+                        let mut s = self.shared.write();
+                        s.cs = CurrentState::default();
+                        s.cs.sysid = sysid;
+                        s.cs.compid = compid;
+                        s.params.clear();
+                        s.param_count = 0;
+                        s.params_complete = false;
+                        if let Some(m) = s.mavs.get(&(sysid, compid)) {
+                            s.cs.firmware = m.firmware;
+                        }
+                    }
+                    self.request_datastreams()?;
+                    self.start_param_fetch()?;
+                }
+            }
             LinkCommand::SendRaw(bytes) => {
                 if let Some(t) = self.tlog.as_mut() {
                     t.write_frame(&bytes);
@@ -771,6 +808,28 @@ impl Worker {
             let now = Instant::now();
             let key = (hdr.system_id as u8, hdr.component_id, msg.message_id());
             let mut s = self.shared.write();
+            if hdr.system_id != 255 {
+                match &msg {
+                    MavMessage::HEARTBEAT(hb) if hb.mavtype != MavType::MAV_TYPE_GCS && hb.autopilot != MavAutopilot::MAV_AUTOPILOT_INVALID => {
+                        let e = s.mavs.entry((hdr.system_id as u8, hdr.component_id)).or_insert(MavSummary { firmware: Firmware::default(), custom_mode: 0, armed: false, lat: 0.0, lng: 0.0, alt: 0.0, heading: 0.0, last: now });
+                        e.firmware = Firmware::from_heartbeat(hb.autopilot, hb.mavtype);
+                        e.custom_mode = hb.custom_mode;
+                        e.armed = hb.base_mode.contains(MavModeFlag::MAV_MODE_FLAG_SAFETY_ARMED);
+                        e.last = now;
+                    }
+                    MavMessage::GLOBAL_POSITION_INT(g) => {
+                        if let Some(e) = s.mavs.get_mut(&(hdr.system_id as u8, hdr.component_id)) {
+                            e.lat = g.lat as f64 * 1e-7;
+                            e.lng = g.lon as f64 * 1e-7;
+                            e.alt = g.relative_alt as f32 / 1000.0;
+                            if g.hdg != u16::MAX {
+                                e.heading = g.hdg as f32 / 100.0;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
             if let MavMessage::ADSB_VEHICLE(a) = &msg {
                 let cs: String = a.callsign.to_str().unwrap_or("").trim_end_matches(' ').trim().to_string();
                 s.adsb.insert(a.ICAO_address, (cs, a.lat as f64 * 1e-7, a.lon as f64 * 1e-7, a.altitude as f32 / 1000.0, a.heading as f32 / 100.0, now));

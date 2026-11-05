@@ -179,6 +179,9 @@ pub struct UdpTransport {
     pos: usize,
     len: usize,
     out: Vec<u8>,
+    /// listen mode: every address heard from (a swarm on one port)
+    peers: Vec<SocketAddr>,
+    listen: bool,
 }
 
 impl UdpTransport {
@@ -190,6 +193,8 @@ impl UdpTransport {
             pos: 0,
             len: 0,
             out: Vec::with_capacity(512),
+            peers: Vec::new(),
+            listen: remote.is_none(),
         }
     }
 }
@@ -203,6 +208,9 @@ impl Read for UdpTransport {
             }
             // "UDP" mode replies to the most recent sender, like Mission Planner's CommsUdp.
             self.remote = Some(from);
+            if self.listen && !self.peers.contains(&from) && self.peers.len() < 32 {
+                self.peers.push(from);
+            }
             self.pos = 0;
             self.len = n;
         }
@@ -219,8 +227,12 @@ impl Write for UdpTransport {
         Ok(buf.len())
     }
     fn flush(&mut self) -> io::Result<()> {
-        if let Some(r) = self.remote {
-            if !self.out.is_empty() {
+        if !self.out.is_empty() {
+            if self.listen && self.peers.len() > 1 {
+                for p in &self.peers {
+                    self.sock.send_to(&self.out, p)?;
+                }
+            } else if let Some(r) = self.remote {
                 self.sock.send_to(&self.out, r)?;
             }
         }

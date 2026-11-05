@@ -145,7 +145,15 @@ impl SimulationView {
         for (x, t) in [(9.0, "Copter Swarm - Single link"), (104.0, "Copter Swarm - Multilink"), (199.0, "Plane Swarm - Multilink"), (294.0, "Rover Swarm - Multilink")] {
             let r = Rect::from_min_size(g4.min + Vec2::new(x, 44.0), Vec2::new(89.0, 23.0));
             if ui.put(r, |ui: &mut egui::Ui| theme::button_sized(ui, t, r.size())).clicked() {
-                app.toasts.error(format!("{t}: not available in this port yet"));
+                use mp_core::sim::SimKind;
+                let kind = if t.starts_with("Plane") {
+                    SimKind::Plane
+                } else if t.starts_with("Rover") {
+                    SimKind::Rover
+                } else {
+                    SimKind::Copter
+                };
+                app.actions.push(crate::app::AppAction::StartSwarm(kind, 3));
             }
         }
 

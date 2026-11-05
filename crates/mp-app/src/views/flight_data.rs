@@ -760,6 +760,14 @@ impl FlightDataView {
         let zoom = app.settings.fd_map.zoom;
         let guided = self.guided_target;
         let pois = app.settings.pois.clone();
+        // the other vehicles on the link (MAVlist), drawn without heading lines
+        let others: Vec<(u8, f64, f64, f32)> = app
+            .link
+            .map(|l| {
+                let s = l.shared.read();
+                s.mavs.iter().filter(|((sys, comp), m)| (*sys, *comp) != (s.cs.sysid, s.cs.compid) && m.lat != 0.0).map(|((sys, _), m)| (*sys, m.lat, m.lng, m.heading)).collect()
+            })
+            .unwrap_or_default();
         // MainV2 ADSB: traffic reported by the vehicle (Planner "ADSB" option)
         let adsb: Vec<(String, f64, f64, f32, f32)> = if app.settings.planner.get("enableadsb").map(|v| v == "True").unwrap_or(false) {
             app.link.map(|l| l.shared.read().adsb.values().map(|v| (v.0.clone(), v.1, v.2, v.3, v.4)).collect()).unwrap_or_default()
@@ -824,6 +832,9 @@ impl FlightDataView {
                 let skip = cs.track.len().saturating_sub(track_len);
                 let t: Vec<Pos2> = cs.track.iter().skip(skip).map(|&(a, b)| view.to_screen(a, b)).collect();
                 painter.add(egui::Shape::line(t, Stroke::new(2.0, Color32::from_rgb(255, 0, 255))));
+            }
+            for (sys, lat, lng, hdg) in &others {
+                map::draw_quad(painter, view.to_screen(*lat, *lng), *hdg, *sys);
             }
             if has_pos {
                 let p = view.to_screen(cs.lat, cs.lng);

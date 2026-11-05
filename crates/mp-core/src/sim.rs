@@ -29,6 +29,25 @@ const MODE_LOITER: u32 = 5;
 const MODE_RTL: u32 = 6;
 const MODE_LAND: u32 = 9;
 
+/// Vehicle type the built-in simulator reports (heartbeat type, banner and mode numbers).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SimKind {
+    #[default]
+    Copter,
+    Plane,
+    Rover,
+}
+
+/// Options for one simulated vehicle.
+#[derive(Debug, Clone, Copy)]
+pub struct SimOptions {
+    pub gcs_port: u16,
+    pub sysid: u8,
+    pub kind: SimKind,
+    /// home offset from the SITL home, metres (north, east)
+    pub offset: (f64, f64),
+}
+
 pub struct SimHandle {
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
@@ -54,6 +73,12 @@ impl Drop for SimHandle {
 
 /// Start a simulated vehicle that sends to `127.0.0.1:gcs_port` (like SITL's `--out udp:...:14550`).
 pub fn spawn(gcs_port: u16) -> io::Result<SimHandle> {
+    spawn_with(SimOptions { gcs_port, sysid: 1, kind: SimKind::Copter, offset: (0.0, 0.0) })
+}
+
+/// Start a simulated vehicle with its own system id, type and home position (swarms).
+pub fn spawn_with(o: SimOptions) -> io::Result<SimHandle> {
+    let gcs_port = o.gcs_port;
     let sock = UdpSocket::bind("127.0.0.1:0")?;
     sock.set_read_timeout(Some(Duration::from_millis(10)))?;
     let gcs: SocketAddr = format!("127.0.0.1:{gcs_port}")
@@ -65,6 +90,7 @@ pub fn spawn(gcs_port: u16) -> io::Result<SimHandle> {
         .name("sim".into())
         .spawn(move || {
             let mut v = Vehicle::new(sock, gcs);
+            v.configure(o);
             v.run(&st);
         })?;
     Ok(SimHandle {
@@ -74,6 +100,9 @@ pub fn spawn(gcs_port: u16) -> io::Result<SimHandle> {
 }
 
 struct Vehicle {
+    sysid: u8,
+    kind: SimKind,
+    home: PointLatLngAlt,
     sock: UdpSocket,
     gcs: SocketAddr,
     seq: u8,
@@ -189,6 +218,9 @@ impl Vehicle {
             params.entry(k).or_insert(v);
         }
         Self {
+            sysid: 1,
+            kind: SimKind::Copter,
+            home: SITL_HOME,
             sock,
             gcs,
             seq: 0,
@@ -224,7 +256,7 @@ impl Vehicle {
 
     fn send(&mut self, msg: MavMessage) {
         let hdr = MavHeader {
-            system_id: 1,
+            system_id: self.sysid as u32,
             component_id: 1,
             sequence: self.seq,
         };
@@ -245,9 +277,58 @@ impl Vehicle {
         }));
     }
 
+    fn configure(&mut self, o: SimOptions) {
+        self.sysid = o.sysid;
+        self.kind = o.kind;
+        let lat = SITL_HOME.lat + (o.offset.0 / 6_378_137.0).to_degrees();
+        let lng = SITL_HOME.lng + (o.offset.1 / (6_378_137.0 * SITL_HOME.lat.to_radians().cos())).to_degrees();
+        self.home = PointLatLngAlt::new(lat, lng, SITL_HOME.alt);
+        self.pos = PointLatLngAlt::new(lat, lng, 0.0);
+        if let Some(h) = self.mission.first_mut() {
+            h.lat = lat;
+            h.lng = lng;
+        }
+        self.params.insert("SYSID_THISMAV".into(), o.sysid as f32);
+    }
+
+    /// Internal (copter) mode number as this vehicle type reports it.
+    fn wire_mode(&self) -> u32 {
+        match (self.kind, self.mode) {
+            (SimKind::Copter, m) => m,
+            (SimKind::Plane, MODE_AUTO) => 10,
+            (SimKind::Plane, MODE_GUIDED) => 15,
+            (SimKind::Plane, MODE_LOITER) => 12,
+            (SimKind::Plane, MODE_RTL | MODE_LAND) => 11,
+            (SimKind::Plane, _) => 2,
+            (SimKind::Rover, MODE_AUTO) => 10,
+            (SimKind::Rover, MODE_GUIDED) => 15,
+            (SimKind::Rover, MODE_LOITER) => 5,
+            (SimKind::Rover, MODE_RTL) => 11,
+            (SimKind::Rover, MODE_LAND) => 4,
+            (SimKind::Rover, _) => 0,
+        }
+    }
+
+    fn from_wire_mode(&self, m: u32) -> u32 {
+        match (self.kind, m) {
+            (SimKind::Copter, m) => m,
+            (_, 10) => MODE_AUTO,
+            (_, 15) => MODE_GUIDED,
+            (SimKind::Plane, 12) | (SimKind::Rover, 5) => MODE_LOITER,
+            (_, 11) => MODE_RTL,
+            (SimKind::Rover, 4) => MODE_LAND,
+            _ => MODE_STABILIZE,
+        }
+    }
+
     /// GCS_MAVLINK::send_banner: firmware, OS, board id and frame.
     fn banner(&mut self) {
-        self.text(MavSeverity::MAV_SEVERITY_INFO, "ArduCopter V4.6.0 (rust-sim)");
+        let fw = match self.kind {
+            SimKind::Copter => "ArduCopter V4.6.0 (rust-sim)",
+            SimKind::Plane => "ArduPlane V4.6.0 (rust-sim)",
+            SimKind::Rover => "ArduRover V4.6.0 (rust-sim)",
+        };
+        self.text(MavSeverity::MAV_SEVERITY_INFO, fw);
         self.text(MavSeverity::MAV_SEVERITY_INFO, "ChibiOS: rust-sim");
         self.text(MavSeverity::MAV_SEVERITY_INFO, "SITL 0042001F 3331510A 34363732");
         self.text(MavSeverity::MAV_SEVERITY_INFO, "Frame: QUAD/X");
@@ -290,6 +371,12 @@ impl Vehicle {
     }
 
     fn handle(&mut self, msg: MavMessage) {
+        // ignore traffic addressed to another vehicle of a swarm
+        if let Some(t) = <MavMessage as mavlink::Message>::target_system_id(&msg) {
+            if t != 0 && t != self.sysid {
+                return;
+            }
+        }
         match msg {
             MavMessage::PARAM_REQUEST_LIST(_) => {
                 // ArduPilot sends its banner on a param list request
@@ -397,7 +484,10 @@ impl Vehicle {
                 self.current_wp = s.seq;
                 self.target = None;
             }
-            MavMessage::SET_MODE(s) => self.set_mode(s.custom_mode),
+            MavMessage::SET_MODE(s) => {
+                let m = self.from_wire_mode(s.custom_mode);
+                self.set_mode(m)
+            }
             MavMessage::COMMAND_LONG(c) => self.command(c),
             MavMessage::LOG_REQUEST_LIST(_) => {
                 // two onboard DataFlash logs
@@ -468,8 +558,8 @@ impl Vehicle {
         }
         if mode == MODE_RTL {
             self.target = Some(PointLatLngAlt::new(
-                SITL_HOME.lat,
-                SITL_HOME.lng,
+                self.home.lat,
+                self.home.lng,
                 self.params["RTL_ALT"] as f64 / 100.0,
             ));
         }
@@ -511,7 +601,8 @@ impl Vehicle {
                 }
             }
             MAV_CMD_DO_SET_MODE => {
-                self.set_mode(c.param2 as u32);
+                let m = self.from_wire_mode(c.param2 as u32);
+                self.set_mode(m);
                 MavResult::MAV_RESULT_ACCEPTED
             }
             MAV_CMD_NAV_TAKEOFF => {
@@ -605,9 +696,9 @@ impl Vehicle {
 
     fn home_position(&mut self) {
         self.send(MavMessage::HOME_POSITION(HOME_POSITION_DATA {
-            latitude: (SITL_HOME.lat * 1e7) as i32,
-            longitude: (SITL_HOME.lng * 1e7) as i32,
-            altitude: (SITL_HOME.alt * 1000.0) as i32,
+            latitude: (self.home.lat * 1e7) as i32,
+            longitude: (self.home.lng * 1e7) as i32,
+            altitude: (self.home.alt * 1000.0) as i32,
             q: [1.0, 0.0, 0.0, 0.0],
             ..Default::default()
         }));
@@ -749,7 +840,7 @@ impl Vehicle {
             time_boot_ms: t,
             lat: (self.pos.lat * 1e7) as i32,
             lon: (self.pos.lng * 1e7) as i32,
-            alt: ((SITL_HOME.alt + self.pos.alt) * 1000.0) as i32,
+            alt: ((self.home.alt + self.pos.alt) * 1000.0) as i32,
             relative_alt: (self.pos.alt * 1000.0) as i32,
             vx: (vn * 100.0) as i16,
             vy: (ve * 100.0) as i16,
@@ -759,7 +850,7 @@ impl Vehicle {
         self.send(MavMessage::VFR_HUD(VFR_HUD_DATA {
             airspeed: self.gs,
             groundspeed: self.gs,
-            alt: (SITL_HOME.alt + self.pos.alt) as f32,
+            alt: (self.home.alt + self.pos.alt) as f32,
             climb: self.climb,
             heading: self.yaw as i16,
             throttle: if self.armed {
@@ -812,7 +903,7 @@ impl Vehicle {
     fn adsb_traffic(&mut self) {
         let t = self.boot.elapsed().as_secs_f64();
         let ang = t * 0.02;
-        let (lat, lng) = (SITL_HOME.lat + (3000.0 * ang.cos()) / 111_320.0, SITL_HOME.lng + (3000.0 * ang.sin()) / (111_320.0 * SITL_HOME.lat.to_radians().cos()));
+        let (lat, lng) = (self.home.lat + (3000.0 * ang.cos()) / 111_320.0, self.home.lng + (3000.0 * ang.sin()) / (111_320.0 * self.home.lat.to_radians().cos()));
         let heading = ((ang.to_degrees() + 90.0).rem_euclid(360.0) * 100.0) as u16;
         self.send(MavMessage::ADSB_VEHICLE(ADSB_VEHICLE_DATA {
             ICAO_address: 0x7C6B2D,
@@ -838,8 +929,12 @@ impl Vehicle {
             base |= MavModeFlag::MAV_MODE_FLAG_SAFETY_ARMED;
         }
         self.send(MavMessage::HEARTBEAT(HEARTBEAT_DATA {
-            custom_mode: self.mode,
-            mavtype: MavType::MAV_TYPE_QUADROTOR,
+            custom_mode: self.wire_mode(),
+            mavtype: match self.kind {
+                SimKind::Copter => MavType::MAV_TYPE_QUADROTOR,
+                SimKind::Plane => MavType::MAV_TYPE_FIXED_WING,
+                SimKind::Rover => MavType::MAV_TYPE_GROUND_ROVER,
+            },
             autopilot: MavAutopilot::MAV_AUTOPILOT_ARDUPILOTMEGA,
             base_mode: base,
             system_status: if self.armed {
@@ -864,7 +959,7 @@ impl Vehicle {
             time_usec: self.boot.elapsed().as_micros() as u64,
             lat: (self.pos.lat * 1e7) as i32,
             lon: (self.pos.lng * 1e7) as i32,
-            alt: ((SITL_HOME.alt + self.pos.alt) * 1000.0) as i32,
+            alt: ((self.home.alt + self.pos.alt) * 1000.0) as i32,
             eph: 121,
             epv: 200,
             vel: (self.gs * 100.0) as u16,

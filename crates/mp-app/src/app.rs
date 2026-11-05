@@ -151,6 +151,8 @@ pub enum AppAction {
     PlayTlog(std::path::PathBuf),
     /// ConfigAdvanced / temp: open the MAVLink Inspector
     OpenInspector,
+    /// SITL swarm buttons: vehicle type and count, all on the simulator port
+    StartSwarm(mp_core::sim::SimKind, u8),
     /// Planner video Start / Stop
     Video(bool),
     /// temp / ConfigAdvanced tool by button text
@@ -183,6 +185,7 @@ pub struct MissionPlannerApp {
     settings: Settings,
     link: Option<Link>,
     sim: Option<SimHandle>,
+    swarm: Vec<SimHandle>,
     tiles: TileCache,
     toasts: Toasts,
     ports: Vec<String>,
@@ -227,6 +230,9 @@ impl MissionPlannerApp {
         if std::env::var_os("MP_AUTOSIM").is_some() {
             startup.push(AppAction::StartSim);
         }
+        if std::env::var_os("MP_SWARM").is_some() {
+            startup.push(AppAction::StartSwarm(mp_core::sim::SimKind::Copter, 3));
+        }
         if std::env::var_os("MP_DEMO").is_some() {
             startup.push(AppAction::DemoFlight);
         }
@@ -243,6 +249,7 @@ impl MissionPlannerApp {
         Self {
             settings,
             link: None,
+            swarm: Vec::new(),
             sim: None,
             tiles: TileCache::new(Some(platform::tile_cache_dir())),
             toasts: Toasts::default(),
@@ -346,7 +353,24 @@ impl MissionPlannerApp {
                     self.toasts
                         .info("Demo flight: uploading mission, arming, taking off");
                 }
+                AppAction::StartSwarm(kind, n) => {
+                    self.link = None;
+                    self.sim = None;
+                    self.swarm.clear();
+                    let port = self.settings.sim_port;
+                    self.link = Some(Link::connect_with(ConnectionSpec::UdpListen { port }, Some(platform::data_dir().join("logs"))));
+                    for i in 0..n {
+                        // SITL.cs: instances laid out on a grid, 10 m apart
+                        let offset = ((i / 3) as f64 * 10.0, (i % 3) as f64 * 10.0);
+                        match sim::spawn_with(sim::SimOptions { gcs_port: port, sysid: i + 1, kind, offset }) {
+                            Ok(h) => self.swarm.push(h),
+                            Err(e) => self.toasts.error(format!("Simulator failed: {e}")),
+                        }
+                    }
+                    self.settings.view = View::FlightData;
+                }
                 AppAction::StopSim => {
+                    self.swarm.clear();
                     self.link = None;
                     if let Some(s) = self.sim.take() {
                         s.stop();
@@ -549,9 +573,25 @@ impl MissionPlannerApp {
                 let s = link.shared.read();
                 if s.status == LinkStatus::Connected {
                     let label = format!("{}-{}-{:?}", s.cs.sysid, s.cs.compid, s.cs.firmware);
+                    let mavs: Vec<(u8, u8, String)> = s.mavs.iter().map(|((a, b), m)| (*a, *b, format!("{a}-{b}-{:?}", m.firmware))).collect();
+                    drop(s);
+                    let mut pick = None;
                     child.put(egui::Rect::from_min_size(cc + Vec2::new(102.0, 27.0), Vec2::new(136.0, 21.0)), |ui: &mut egui::Ui| {
-                        egui::ComboBox::from_id_salt("sysid").width(128.0).selected_text(label).show_ui(ui, |_ui| {}).response
+                        egui::ComboBox::from_id_salt("sysid")
+                            .width(128.0)
+                            .selected_text(label.clone())
+                            .show_ui(ui, |ui| {
+                                for (a, b, n) in &mavs {
+                                    if ui.selectable_label(*n == label, n).clicked() {
+                                        pick = Some((*a, *b));
+                                    }
+                                }
+                            })
+                            .response
                     });
+                    if let Some((sysid, compid)) = pick {
+                        link.send(mp_core::link::LinkCommand::SetTarget { sysid, compid });
+                    }
                 }
             }
 
@@ -855,6 +895,7 @@ impl eframe::App for MissionPlannerApp {
                     config,
                     simulation,
                     sim,
+                    swarm,
                     assets,
                     readonly,
                     joystick,
@@ -867,7 +908,7 @@ impl eframe::App for MissionPlannerApp {
                     toasts,
                     settings,
                     actions: &mut actions,
-                    sim_running: sim.is_some(),
+                    sim_running: sim.is_some() || !swarm.is_empty(),
                     assets,
                     readonly: *readonly,
                     joystick,
