@@ -45,6 +45,10 @@ pub struct Settings {
     pub quick_fields: [String; 6],
     pub sim_port: u16,
     pub user_params: Vec<String>,
+    /// POIs shared by DATA and PLAN maps (lat, lng, name)
+    pub pois: Vec<(f64, f64, String)>,
+    /// FlightPlanner "Tracker Home"
+    pub tracker_home: Option<(f64, f64)>,
     /// ConfigPlanner settings (Settings.Instance keys)
     pub planner: std::collections::BTreeMap<String, String>,
     pub sitl_home: (f64, f64),
@@ -88,6 +92,8 @@ impl Default for Settings {
                 "DistToHome".into(),
             ],
             sim_port: 14560,
+            pois: Vec::new(),
+            tracker_home: None,
             user_params: Vec::new(),
             planner: Default::default(),
             sitl_home: (-35.363261, 149.165230),

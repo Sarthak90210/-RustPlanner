@@ -1,0 +1,91 @@
+{
+"name": "rangefinder",
+"w": 650,
+"h": 116,
+"controls": [
+{
+"name": "pictureBox3",
+"kind": "picture",
+"parent": "$this",
+"x": 11,
+"y": 35,
+"w": 75,
+"h": 75,
+"image": "sonar.jpg"
+},
+{
+"name": "CMB_sonartype",
+"kind": "mcombo",
+"parent": "$this",
+"x": 180,
+"y": 62,
+"w": 121,
+"h": 21,
+"param": "RNGFND_TYPE"
+},
+{
+"name": "groupBox1",
+"kind": "group",
+"parent": "$this",
+"x": 3,
+"y": 23,
+"w": 644,
+"h": 5
+},
+{
+"name": "label1",
+"kind": "label",
+"parent": "$this",
+"x": 7,
+"y": 5,
+"w": 114,
+"h": 20,
+"text": "RangeFinder",
+"font": 12.0
+},
+{
+"name": "label2",
+"kind": "label",
+"parent": "$this",
+"x": 337,
+"y": 50,
+"w": 78,
+"h": 18,
+"text": "Distance: ",
+"font": 12.0
+},
+{
+"name": "label4",
+"kind": "label",
+"parent": "$this",
+"x": 337,
+"y": 78,
+"w": 69,
+"h": 18,
+"text": "Voltage: ",
+"font": 12.0
+},
+{
+"name": "LBL_dist",
+"kind": "label",
+"parent": "$this",
+"x": 421,
+"y": 50,
+"w": 30,
+"h": 18,
+"text": "0.0",
+"font": 12.0
+},
+{
+"name": "LBL_volt",
+"kind": "label",
+"parent": "$this",
+"x": 421,
+"y": 78,
+"w": 30,
+"h": 18,
+"text": "0.0",
+"font": 12.0
+}
+]
+}

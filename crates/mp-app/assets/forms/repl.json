@@ -1,0 +1,39 @@
+{
+"name": "repl",
+"w": 707,
+"h": 461,
+"controls": [
+{
+"name": "TXT_terminal",
+"kind": "text",
+"parent": "$this",
+"x": 0,
+"y": 32,
+"w": 708,
+"h": 428,
+"text": "*NOTE* Please click connect above",
+"font": 10.0,
+"bold": true
+},
+{
+"name": "BUT_Connect",
+"kind": "button",
+"parent": "$this",
+"x": 3,
+"y": 3,
+"w": 87,
+"h": 23,
+"text": "Connect"
+},
+{
+"name": "BUT_disconnect",
+"kind": "button",
+"parent": "$this",
+"x": 96,
+"y": 3,
+"w": 87,
+"h": 23,
+"text": "Disconnect"
+}
+]
+}

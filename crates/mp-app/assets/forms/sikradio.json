@@ -1,0 +1,1776 @@
+{
+"name": "sikradio",
+"w": 1096,
+"h": 608,
+"controls": [
+{
+"name": "BUT_upload",
+"kind": "button",
+"parent": "$this",
+"x": 459,
+"y": 3,
+"w": 121,
+"h": 39,
+"text": "Upload Firmware (standard)",
+"hidden": true
+},
+{
+"name": "lbl_status",
+"kind": "label",
+"parent": "$this",
+"x": 9,
+"y": 518,
+"w": 442,
+"h": 28,
+"text": "NOTE: Always click \"Copy required to remote\" when modifying\nthis ensures you wont lose radio link"
+},
+{
+"name": "BUT_getcurrent",
+"kind": "button",
+"parent": "$this",
+"x": 309,
+"y": 3,
+"w": 69,
+"h": 39,
+"text": "Load Settings"
+},
+{
+"name": "BUT_savesettings",
+"kind": "button",
+"parent": "$this",
+"x": 384,
+"y": 3,
+"w": 69,
+"h": 39,
+"text": "Save Settings"
+},
+{
+"name": "BUT_Syncoptions",
+"kind": "button",
+"parent": "$this",
+"x": 457,
+"y": 518,
+"w": 102,
+"h": 29,
+"text": "Copy required to remote"
+},
+{
+"name": "groupBoxLocal",
+"kind": "group",
+"parent": "$this",
+"x": 12,
+"y": 48,
+"w": 533,
+"h": 463,
+"text": "Local"
+},
+{
+"name": "groupBoxRemote",
+"kind": "group",
+"parent": "$this",
+"x": 551,
+"y": 48,
+"w": 533,
+"h": 463,
+"text": "Remote"
+},
+{
+"name": "label10",
+"kind": "label",
+"parent": "$this",
+"x": 9,
+"y": 11,
+"w": 0,
+"h": 13
+},
+{
+"name": "linkLabel1",
+"kind": "link",
+"parent": "$this",
+"x": 836,
+"y": 11,
+"w": 63,
+"h": 13,
+"text": "Status Leds"
+},
+{
+"name": "BUT_resettodefault",
+"kind": "button",
+"parent": "$this",
+"x": 586,
+"y": 3,
+"w": 82,
+"h": 39,
+"text": "Reset to Defaults"
+},
+{
+"name": "BUT_loadcustom",
+"kind": "button",
+"parent": "$this",
+"x": 674,
+"y": 3,
+"w": 96,
+"h": 39,
+"text": "Upload Firmware (custom)"
+},
+{
+"name": "Progressbar",
+"kind": "progress",
+"parent": "$this",
+"x": 12,
+"y": 561,
+"w": 1072,
+"h": 36
+},
+{
+"name": "RTI",
+"kind": "text",
+"parent": "groupBoxRemote",
+"x": 60,
+"y": 12,
+"w": 147,
+"h": 20
+},
+{
+"name": "label9",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 12,
+"y": 15,
+"w": 42,
+"h": 13,
+"text": "Version"
+},
+{
+"name": "RTI2",
+"kind": "text",
+"parent": "groupBoxRemote",
+"x": 300,
+"y": 12,
+"w": 61,
+"h": 65
+},
+{
+"name": "lblRLBT_RSSI",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 174,
+"y": 186,
+"w": 50,
+"h": 13,
+"text": "LBT Rssi"
+},
+{
+"name": "lblRDUTY_CYCLE",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 174,
+"y": 161,
+"w": 58,
+"h": 13,
+"text": "Duty Cycle"
+},
+{
+"name": "lblRNUM_CHANNELS",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 174,
+"y": 136,
+"w": 73,
+"h": 13,
+"text": "# of Channels"
+},
+{
+"name": "lblRMAX_FREQ",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 174,
+"y": 111,
+"w": 51,
+"h": 13,
+"text": "Max Freq"
+},
+{
+"name": "RMIN_FREQ",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 266,
+"y": 82,
+"w": 80,
+"h": 21
+},
+{
+"name": "RLBT_RSSI",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 266,
+"y": 182,
+"w": 80,
+"h": 21
+},
+{
+"name": "RDUTY_CYCLE",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 266,
+"y": 157,
+"w": 80,
+"h": 21
+},
+{
+"name": "RNUM_CHANNELS",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 266,
+"y": 132,
+"w": 80,
+"h": 21
+},
+{
+"name": "RMAX_FREQ",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 266,
+"y": 107,
+"w": 80,
+"h": 21
+},
+{
+"name": "lblRMIN_FREQ",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 174,
+"y": 86,
+"w": 48,
+"h": 13,
+"text": "Min Freq"
+},
+{
+"name": "RMAX_WINDOW",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 266,
+"y": 232,
+"w": 80,
+"h": 21
+},
+{
+"name": "lblRMAX_WINDOW",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 174,
+"y": 236,
+"w": 91,
+"h": 13,
+"text": "Max Window (ms)"
+},
+{
+"name": "lblRRTSCTS",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 173,
+"y": 211,
+"w": 53,
+"h": 13,
+"text": "RTS CTS"
+},
+{
+"name": "RRTSCTS",
+"kind": "check",
+"parent": "groupBoxRemote",
+"x": 266,
+"y": 207,
+"w": 80,
+"h": 20
+},
+{
+"name": "lblRENCRYPTION_LEVEL",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 173,
+"y": 261,
+"w": 81,
+"h": 13,
+"text": "AES Encryption"
+},
+{
+"name": "RAESKEY",
+"kind": "text",
+"parent": "groupBoxRemote",
+"x": 0,
+"y": 0,
+"w": 0,
+"h": 0
+},
+{
+"name": "label38",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 174,
+"y": 286,
+"w": 49,
+"h": 13,
+"text": "AES Key"
+},
+{
+"name": "lblRMAX_DATA",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 357,
+"y": 211,
+"w": 53,
+"h": 13,
+"text": "Max Data",
+"hidden": true
+},
+{
+"name": "RMAX_DATA",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 447,
+"y": 207,
+"w": 80,
+"h": 21,
+"hidden": true
+},
+{
+"name": "RMAX_RETRIES",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 447,
+"y": 232,
+"w": 80,
+"h": 21,
+"hidden": true
+},
+{
+"name": "RGLOBAL_RETRIES",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 447,
+"y": 257,
+"w": 80,
+"h": 21,
+"hidden": true
+},
+{
+"name": "RSER_BRK_DETMS",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 447,
+"y": 282,
+"w": 80,
+"h": 21,
+"hidden": true
+},
+{
+"name": "lblRMAX_RETRIES",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 357,
+"y": 236,
+"w": 63,
+"h": 13,
+"text": "Max Retries",
+"hidden": true
+},
+{
+"name": "lblRGLOBAL_RETRIES",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 357,
+"y": 261,
+"w": 73,
+"h": 13,
+"text": "Global Retries",
+"hidden": true
+},
+{
+"name": "lblRSER_BRK_DETMS",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 357,
+"y": 286,
+"w": 84,
+"h": 13,
+"text": "Break Detection",
+"hidden": true
+},
+{
+"name": "RANT_MODE",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 447,
+"y": 82,
+"w": 80,
+"h": 21
+},
+{
+"name": "lblRANT_MODE",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 357,
+"y": 86,
+"w": 77,
+"h": 13,
+"text": "Antenna Mode"
+},
+{
+"name": "label31",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 11,
+"y": 86,
+"w": 39,
+"h": 13,
+"text": "Format"
+},
+{
+"name": "label30",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 11,
+"y": 136,
+"w": 53,
+"h": 13,
+"text": "Air Speed"
+},
+{
+"name": "label32",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 11,
+"y": 111,
+"w": 32,
+"h": 13,
+"text": "Baud"
+},
+{
+"name": "lblRNETID",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 11,
+"y": 161,
+"w": 38,
+"h": 13,
+"text": "Net ID"
+},
+{
+"name": "ROPPRESEND",
+"kind": "check",
+"parent": "groupBoxRemote",
+"x": 148,
+"y": 257,
+"w": 20,
+"h": 20
+},
+{
+"name": "lblRTXPOWER",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 11,
+"y": 186,
+"w": 52,
+"h": 13,
+"text": "Tx Power"
+},
+{
+"name": "lblRECC",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 11,
+"y": 211,
+"w": 28,
+"h": 13,
+"text": "ECC"
+},
+{
+"name": "RECC",
+"kind": "check",
+"parent": "groupBoxRemote",
+"x": 88,
+"y": 207,
+"w": 80,
+"h": 20
+},
+{
+"name": "lblRMAVLINK",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 11,
+"y": 236,
+"w": 44,
+"h": 13,
+"text": "Mavlink"
+},
+{
+"name": "RTXPOWER",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 88,
+"y": 182,
+"w": 80,
+"h": 21
+},
+{
+"name": "lblROPPRESEND",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 11,
+"y": 261,
+"w": 61,
+"h": 13,
+"text": "Op Resend"
+},
+{
+"name": "RNETID",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 88,
+"y": 157,
+"w": 80,
+"h": 21
+},
+{
+"name": "RAIR_SPEED",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 88,
+"y": 132,
+"w": 80,
+"h": 21
+},
+{
+"name": "RSERIAL_SPEED",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 88,
+"y": 107,
+"w": 80,
+"h": 21
+},
+{
+"name": "RGPI1_1R_CIN",
+"kind": "check",
+"parent": "groupBoxRemote",
+"x": 148,
+"y": 282,
+"w": 20,
+"h": 20
+},
+{
+"name": "lblRGPI1_1R_CIN",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 10,
+"y": 286,
+"w": 74,
+"h": 13,
+"text": "GPI1_1R/CIN"
+},
+{
+"name": "RFORMAT",
+"kind": "text",
+"parent": "groupBoxRemote",
+"x": 88,
+"y": 82,
+"w": 80,
+"h": 20
+},
+{
+"name": "RGPO1_1R_COUT",
+"kind": "check",
+"parent": "groupBoxRemote",
+"x": 148,
+"y": 307,
+"w": 20,
+"h": 20
+},
+{
+"name": "RMAVLINK",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 88,
+"y": 232,
+"w": 80,
+"h": 21
+},
+{
+"name": "lblRGPO1_1R_COUT",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 10,
+"y": 311,
+"w": 91,
+"h": 13,
+"text": "GPO1_1R/COUT"
+},
+{
+"name": "RNODEID",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 447,
+"y": 107,
+"w": 80,
+"h": 21,
+"hidden": true
+},
+{
+"name": "RDESTID",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 447,
+"y": 132,
+"w": 80,
+"h": 21,
+"hidden": true
+},
+{
+"name": "lblRNODEID",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 357,
+"y": 111,
+"w": 47,
+"h": 13,
+"text": "Node ID",
+"hidden": true
+},
+{
+"name": "lblRDESTID",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 357,
+"y": 136,
+"w": 43,
+"h": 13,
+"text": "Dest ID",
+"hidden": true
+},
+{
+"name": "RTX_ENCAP_METHOD",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 447,
+"y": 157,
+"w": 80,
+"h": 21,
+"hidden": true
+},
+{
+"name": "lblRTX_ENCAP_METHOD",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 357,
+"y": 161,
+"w": 57,
+"h": 13,
+"text": "TXENCAP",
+"hidden": true
+},
+{
+"name": "RRX_ENCAP_METHOD",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 447,
+"y": 182,
+"w": 80,
+"h": 21,
+"hidden": true
+},
+{
+"name": "lblRRX_ENCAP_METHOD",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 357,
+"y": 186,
+"w": 58,
+"h": 13,
+"text": "RXENCAP",
+"hidden": true
+},
+{
+"name": "RRATE_FREQBAND",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 121,
+"y": 357,
+"w": 406,
+"h": 21
+},
+{
+"name": "label46",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 10,
+"y": 361,
+"w": 81,
+"h": 13,
+"text": "Rate/FreqBand"
+},
+{
+"name": "RGPO1_3SBUSIN",
+"kind": "check",
+"parent": "groupBoxRemote",
+"x": 148,
+"y": 332,
+"w": 36,
+"h": 20
+},
+{
+"name": "lblRSBUSIN",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 10,
+"y": 336,
+"w": 88,
+"h": 13,
+"text": "GPO1_3SBUSIN"
+},
+{
+"name": "lblRSBUSOUT",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 357,
+"y": 311,
+"w": 103,
+"h": 13,
+"text": "GPO1_3SBUSOUT:"
+},
+{
+"name": "txtRCountry",
+"kind": "text",
+"parent": "groupBoxRemote",
+"x": 367,
+"y": 38,
+"w": 61,
+"h": 39
+},
+{
+"name": "label50",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 364,
+"y": 18,
+"w": 46,
+"h": 13,
+"text": "Country:"
+},
+{
+"name": "BUT_SetPPMFailSafeRemote",
+"kind": "button",
+"parent": "groupBoxRemote",
+"x": 425,
+"y": 428,
+"w": 102,
+"h": 29,
+"text": "Set PPM Fail Safe"
+},
+{
+"name": "RGPO1_3SBUSOUT",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 425,
+"y": 332,
+"w": 102,
+"h": 21
+},
+{
+"name": "lblRGPO1_3STATLED",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 10,
+"y": 386,
+"w": 97,
+"h": 13,
+"text": "GPO1_3STATLED"
+},
+{
+"name": "RGPO1_3STATLED",
+"kind": "check",
+"parent": "groupBoxRemote",
+"x": 148,
+"y": 382,
+"w": 23,
+"h": 20
+},
+{
+"name": "lblRGPO1_0TXEN485",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 174,
+"y": 386,
+"w": 95,
+"h": 13,
+"text": "GPO1_0TXEN485"
+},
+{
+"name": "RGPO1_0TXEN485",
+"kind": "check",
+"parent": "groupBoxRemote",
+"x": 275,
+"y": 382,
+"w": 23,
+"h": 20
+},
+{
+"name": "RENCRYPTION_LEVEL",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 266,
+"y": 257,
+"w": 80,
+"h": 21
+},
+{
+"name": "RGPIO1_1FUNC",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 266,
+"y": 405,
+"w": 80,
+"h": 21
+},
+{
+"name": "lblRGPIO1_1FUNC",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 174,
+"y": 408,
+"w": 80,
+"h": 13,
+"text": "GPIO1_1FUNC"
+},
+{
+"name": "lblRGPI1_2AUXIN",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 10,
+"y": 411,
+"w": 76,
+"h": 13,
+"text": "GPI1_2AUXIN"
+},
+{
+"name": "RGPI1_2AUXIN",
+"kind": "check",
+"parent": "groupBoxRemote",
+"x": 148,
+"y": 407,
+"w": 23,
+"h": 20
+},
+{
+"name": "lblRGPO1_3AUXOUT",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 10,
+"y": 436,
+"w": 93,
+"h": 13,
+"text": "GPO1_3AUXOUT"
+},
+{
+"name": "RGPO1_3AUXOUT",
+"kind": "check",
+"parent": "groupBoxRemote",
+"x": 148,
+"y": 432,
+"w": 23,
+"h": 20
+},
+{
+"name": "RFSFRAMELOSS",
+"kind": "combo",
+"parent": "groupBoxRemote",
+"x": 447,
+"y": 403,
+"w": 80,
+"h": 21
+},
+{
+"name": "lblRFSFRAMELOSS",
+"kind": "label",
+"parent": "groupBoxRemote",
+"x": 427,
+"y": 387,
+"w": 100,
+"h": 13,
+"text": "Failsafe Frame Loss"
+},
+{
+"name": "btnRemoteSaveToFile",
+"kind": "button",
+"parent": "groupBoxRemote",
+"x": 317,
+"y": 428,
+"w": 102,
+"h": 29,
+"text": "Save to File..."
+},
+{
+"name": "btnRemoteLoadFromFile",
+"kind": "button",
+"parent": "groupBoxRemote",
+"x": 209,
+"y": 428,
+"w": 102,
+"h": 29,
+"text": "Load from File..."
+},
+{
+"name": "label12",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 18,
+"y": 50,
+"w": 32,
+"h": 13,
+"text": "RSSI"
+},
+{
+"name": "RSSI",
+"kind": "text",
+"parent": "groupBoxLocal",
+"x": 59,
+"y": 38,
+"w": 250,
+"h": 39
+},
+{
+"name": "ATI",
+"kind": "text",
+"parent": "groupBoxLocal",
+"x": 59,
+"y": 12,
+"w": 147,
+"h": 20
+},
+{
+"name": "label11",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 14,
+"y": 15,
+"w": 42,
+"h": 13,
+"text": "Version"
+},
+{
+"name": "ATI3",
+"kind": "text",
+"parent": "groupBoxLocal",
+"x": 207,
+"y": 12,
+"w": 102,
+"h": 20
+},
+{
+"name": "ATI2",
+"kind": "text",
+"parent": "groupBoxLocal",
+"x": 315,
+"y": 12,
+"w": 61,
+"h": 65
+},
+{
+"name": "DUTY_CYCLE",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 274,
+"y": 157,
+"w": 80,
+"h": 21
+},
+{
+"name": "lblMAX_FREQ",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 182,
+"y": 111,
+"w": 51,
+"h": 13,
+"text": "Max Freq"
+},
+{
+"name": "lblNUM_CHANNELS",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 182,
+"y": 136,
+"w": 73,
+"h": 13,
+"text": "# of Channels"
+},
+{
+"name": "MIN_FREQ",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 274,
+"y": 82,
+"w": 80,
+"h": 21
+},
+{
+"name": "lblDUTY_CYCLE",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 182,
+"y": 161,
+"w": 58,
+"h": 13,
+"text": "Duty Cycle"
+},
+{
+"name": "LBT_RSSI",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 274,
+"y": 182,
+"w": 80,
+"h": 21
+},
+{
+"name": "lblLBT_RSSI",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 182,
+"y": 186,
+"w": 50,
+"h": 13,
+"text": "LBT Rssi"
+},
+{
+"name": "NUM_CHANNELS",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 274,
+"y": 132,
+"w": 80,
+"h": 21
+},
+{
+"name": "MAX_FREQ",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 274,
+"y": 107,
+"w": 80,
+"h": 21
+},
+{
+"name": "lblMIN_FREQ",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 182,
+"y": 86,
+"w": 48,
+"h": 13,
+"text": "Min Freq"
+},
+{
+"name": "MAX_WINDOW",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 274,
+"y": 232,
+"w": 80,
+"h": 21
+},
+{
+"name": "lblMAX_WINDOW",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 182,
+"y": 236,
+"w": 91,
+"h": 13,
+"text": "Max Window (ms)"
+},
+{
+"name": "linkLabel_lowlatency",
+"kind": "link",
+"parent": "groupBoxLocal",
+"x": 182,
+"y": 340,
+"w": 124,
+"h": 13,
+"text": "Settings for Low Latency"
+},
+{
+"name": "linkLabel_mavlink",
+"kind": "link",
+"parent": "groupBoxLocal",
+"x": 183,
+"y": 327,
+"w": 146,
+"h": 13,
+"text": "Settings for Standard Mavlink"
+},
+{
+"name": "lblRTSCTS",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 181,
+"y": 211,
+"w": 53,
+"h": 13,
+"text": "RTS CTS"
+},
+{
+"name": "RTSCTS",
+"kind": "check",
+"parent": "groupBoxLocal",
+"x": 274,
+"y": 207,
+"w": 80,
+"h": 20
+},
+{
+"name": "AESKEY",
+"kind": "text",
+"parent": "groupBoxLocal",
+"x": 0,
+"y": 0,
+"w": 0,
+"h": 0
+},
+{
+"name": "label35",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 182,
+"y": 286,
+"w": 49,
+"h": 13,
+"text": "AES Key"
+},
+{
+"name": "lblENCRYPTION_LEVEL",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 181,
+"y": 261,
+"w": 81,
+"h": 13,
+"text": "AES Encryption"
+},
+{
+"name": "lblMAX_DATA",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 360,
+"y": 211,
+"w": 53,
+"h": 13,
+"text": "Max Data",
+"hidden": true
+},
+{
+"name": "MAX_DATA",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 447,
+"y": 207,
+"w": 80,
+"h": 21,
+"hidden": true
+},
+{
+"name": "MAX_RETRIES",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 447,
+"y": 232,
+"w": 80,
+"h": 21,
+"hidden": true
+},
+{
+"name": "GLOBAL_RETRIES",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 447,
+"y": 257,
+"w": 80,
+"h": 21,
+"hidden": true
+},
+{
+"name": "SER_BRK_DETMS",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 447,
+"y": 282,
+"w": 80,
+"h": 21,
+"hidden": true
+},
+{
+"name": "lblMAX_RETRIES",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 360,
+"y": 236,
+"w": 63,
+"h": 13,
+"text": "Max Retries",
+"hidden": true
+},
+{
+"name": "lblGLOBAL_RETRIES",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 360,
+"y": 261,
+"w": 73,
+"h": 13,
+"text": "Global Retries",
+"hidden": true
+},
+{
+"name": "lblSER_BRK_DETMS",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 360,
+"y": 286,
+"w": 84,
+"h": 13,
+"text": "Break Detection",
+"hidden": true
+},
+{
+"name": "ANT_MODE",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 447,
+"y": 82,
+"w": 80,
+"h": 21
+},
+{
+"name": "lblANT_MODE",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 360,
+"y": 86,
+"w": 77,
+"h": 13,
+"text": "Antenna Mode"
+},
+{
+"name": "lblMAVLINK",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 18,
+"y": 236,
+"w": 44,
+"h": 13,
+"text": "Mavlink"
+},
+{
+"name": "OPPRESEND",
+"kind": "check",
+"parent": "groupBoxLocal",
+"x": 154,
+"y": 257,
+"w": 23,
+"h": 20
+},
+{
+"name": "lblOPPRESEND",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 18,
+"y": 261,
+"w": 61,
+"h": 13,
+"text": "Op Resend"
+},
+{
+"name": "lblECC",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 18,
+"y": 211,
+"w": 28,
+"h": 13,
+"text": "ECC"
+},
+{
+"name": "ECC",
+"kind": "check",
+"parent": "groupBoxLocal",
+"x": 96,
+"y": 207,
+"w": 80,
+"h": 20
+},
+{
+"name": "lblTXPOWER",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 18,
+"y": 186,
+"w": 52,
+"h": 13,
+"text": "Tx Power"
+},
+{
+"name": "TXPOWER",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 96,
+"y": 182,
+"w": 80,
+"h": 21
+},
+{
+"name": "lblNETID",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 18,
+"y": 161,
+"w": 38,
+"h": 13,
+"text": "Net ID"
+},
+{
+"name": "NETID",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 96,
+"y": 157,
+"w": 80,
+"h": 21
+},
+{
+"name": "label3",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 18,
+"y": 136,
+"w": 53,
+"h": 13,
+"text": "Air Speed"
+},
+{
+"name": "AIR_SPEED",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 96,
+"y": 132,
+"w": 80,
+"h": 21
+},
+{
+"name": "FORMAT",
+"kind": "text",
+"parent": "groupBoxLocal",
+"x": 96,
+"y": 82,
+"w": 80,
+"h": 20
+},
+{
+"name": "label1",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 18,
+"y": 111,
+"w": 32,
+"h": 13,
+"text": "Baud"
+},
+{
+"name": "SERIAL_SPEED",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 96,
+"y": 107,
+"w": 80,
+"h": 21
+},
+{
+"name": "label2",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 18,
+"y": 86,
+"w": 39,
+"h": 13,
+"text": "Format"
+},
+{
+"name": "MAVLINK",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 96,
+"y": 232,
+"w": 80,
+"h": 21
+},
+{
+"name": "GPI1_1R_CIN",
+"kind": "check",
+"parent": "groupBoxLocal",
+"x": 154,
+"y": 282,
+"w": 23,
+"h": 20
+},
+{
+"name": "lblGPI1_1R_CIN",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 18,
+"y": 286,
+"w": 74,
+"h": 13,
+"text": "GPI1_1R/CIN"
+},
+{
+"name": "GPO1_1R_COUT",
+"kind": "check",
+"parent": "groupBoxLocal",
+"x": 154,
+"y": 307,
+"w": 23,
+"h": 20
+},
+{
+"name": "lblGPO1_1R_COUT",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 18,
+"y": 311,
+"w": 91,
+"h": 13,
+"text": "GPO1_1R/COUT"
+},
+{
+"name": "NODEID",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 447,
+"y": 107,
+"w": 80,
+"h": 21,
+"hidden": true
+},
+{
+"name": "DESTID",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 447,
+"y": 132,
+"w": 80,
+"h": 21,
+"hidden": true
+},
+{
+"name": "lblNODEID",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 360,
+"y": 111,
+"w": 47,
+"h": 13,
+"text": "Node ID",
+"hidden": true
+},
+{
+"name": "lblDESTID",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 360,
+"y": 136,
+"w": 43,
+"h": 13,
+"text": "Dest ID",
+"hidden": true
+},
+{
+"name": "TX_ENCAP_METHOD",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 447,
+"y": 157,
+"w": 80,
+"h": 21,
+"hidden": true
+},
+{
+"name": "lblTX_ENCAP_METHOD",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 360,
+"y": 161,
+"w": 57,
+"h": 13,
+"text": "TXENCAP",
+"hidden": true
+},
+{
+"name": "RX_ENCAP_METHOD",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 447,
+"y": 182,
+"w": 80,
+"h": 21,
+"hidden": true
+},
+{
+"name": "lblRX_ENCAP_METHOD",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 360,
+"y": 186,
+"w": 58,
+"h": 13,
+"text": "RXENCAP",
+"hidden": true
+},
+{
+"name": "btnRandom",
+"kind": "button",
+"parent": "groupBoxLocal",
+"x": 242,
+"y": 282,
+"w": 113,
+"h": 24,
+"text": "Random"
+},
+{
+"name": "GPO1_3SBUSIN",
+"kind": "check",
+"parent": "groupBoxLocal",
+"x": 154,
+"y": 332,
+"w": 23,
+"h": 20
+},
+{
+"name": "lblSBUSIN",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 18,
+"y": 336,
+"w": 88,
+"h": 13,
+"text": "GPO1_3SBUSIN"
+},
+{
+"name": "lblSBUSOUT",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 360,
+"y": 311,
+"w": 103,
+"h": 13,
+"text": "GPO1_3SBUSOUT:"
+},
+{
+"name": "RATE_FREQBAND",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 128,
+"y": 357,
+"w": 399,
+"h": 21
+},
+{
+"name": "label45",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 18,
+"y": 361,
+"w": 81,
+"h": 13,
+"text": "Rate/FreqBand"
+},
+{
+"name": "txtCountry",
+"kind": "text",
+"parent": "groupBoxLocal",
+"x": 380,
+"y": 38,
+"w": 61,
+"h": 39
+},
+{
+"name": "BUT_SetPPMFailSafe",
+"kind": "button",
+"parent": "groupBoxLocal",
+"x": 425,
+"y": 428,
+"w": 102,
+"h": 29,
+"text": "Set PPM Fail Safe"
+},
+{
+"name": "label49",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 377,
+"y": 18,
+"w": 46,
+"h": 13,
+"text": "Country:"
+},
+{
+"name": "GPO1_3SBUSOUT",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 425,
+"y": 332,
+"w": 102,
+"h": 21
+},
+{
+"name": "lblGPO1_3STATLED",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 18,
+"y": 386,
+"w": 97,
+"h": 13,
+"text": "GPO1_3STATLED"
+},
+{
+"name": "GPO1_3STATLED",
+"kind": "check",
+"parent": "groupBoxLocal",
+"x": 154,
+"y": 382,
+"w": 23,
+"h": 20
+},
+{
+"name": "lblGPO1_0TXEN485",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 182,
+"y": 386,
+"w": 95,
+"h": 13,
+"text": "GPO1_0TXEN485"
+},
+{
+"name": "GPO1_0TXEN485",
+"kind": "check",
+"parent": "groupBoxLocal",
+"x": 283,
+"y": 382,
+"w": 23,
+"h": 20
+},
+{
+"name": "ENCRYPTION_LEVEL",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 274,
+"y": 257,
+"w": 80,
+"h": 21
+},
+{
+"name": "GPIO1_1FUNC",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 274,
+"y": 406,
+"w": 80,
+"h": 21
+},
+{
+"name": "lblGPIO1_1FUNC",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 182,
+"y": 411,
+"w": 80,
+"h": 13,
+"text": "GPIO1_1FUNC"
+},
+{
+"name": "lblGPI1_2AUXIN",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 18,
+"y": 411,
+"w": 76,
+"h": 13,
+"text": "GPI1_2AUXIN"
+},
+{
+"name": "GPI1_2AUXIN",
+"kind": "check",
+"parent": "groupBoxLocal",
+"x": 154,
+"y": 407,
+"w": 23,
+"h": 20
+},
+{
+"name": "lblGPO1_3AUXOUT",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 18,
+"y": 436,
+"w": 93,
+"h": 13,
+"text": "GPO1_3AUXOUT"
+},
+{
+"name": "GPO1_3AUXOUT",
+"kind": "check",
+"parent": "groupBoxLocal",
+"x": 154,
+"y": 432,
+"w": 23,
+"h": 20
+},
+{
+"name": "FSFRAMELOSS",
+"kind": "combo",
+"parent": "groupBoxLocal",
+"x": 447,
+"y": 403,
+"w": 80,
+"h": 21
+},
+{
+"name": "label54",
+"kind": "label",
+"parent": "groupBoxLocal",
+"x": 427,
+"y": 387,
+"w": 100,
+"h": 13,
+"text": "Failsafe Frame Loss"
+},
+{
+"name": "btnSaveToFile",
+"kind": "button",
+"parent": "groupBoxLocal",
+"x": 317,
+"y": 428,
+"w": 102,
+"h": 29,
+"text": "Save to File..."
+},
+{
+"name": "btnLoadFromFile",
+"kind": "button",
+"parent": "groupBoxLocal",
+"x": 209,
+"y": 428,
+"w": 102,
+"h": 29,
+"text": "Load from File..."
+}
+]
+}

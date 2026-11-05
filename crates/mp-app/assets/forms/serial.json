@@ -1,0 +1,56 @@
+{
+"name": "serial",
+"w": 600,
+"h": 400,
+"controls": [
+{
+"name": "tableLayoutPanel1",
+"kind": "panel",
+"parent": "$this",
+"x": 9,
+"y": 10,
+"w": 789,
+"h": 497
+},
+{
+"name": "myLabel4",
+"kind": "label",
+"parent": "tableLayoutPanel1",
+"x": 514,
+"y": 9,
+"w": 75,
+"h": 23,
+"text": "Options"
+},
+{
+"name": "myLabel3",
+"kind": "label",
+"parent": "tableLayoutPanel1",
+"x": 294,
+"y": 9,
+"w": 75,
+"h": 23,
+"text": "Protcol"
+},
+{
+"name": "myLabel2",
+"kind": "label",
+"parent": "tableLayoutPanel1",
+"x": 171,
+"y": 9,
+"w": 75,
+"h": 23,
+"text": "Speed"
+},
+{
+"name": "myLabel1",
+"kind": "label",
+"parent": "tableLayoutPanel1",
+"x": 38,
+"y": 9,
+"w": 75,
+"h": 23,
+"text": "Port Name"
+}
+]
+}

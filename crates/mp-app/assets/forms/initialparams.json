@@ -1,0 +1,175 @@
+{
+"name": "initialparams",
+"w": 600,
+"h": 400,
+"controls": [
+{
+"name": "textBox1",
+"kind": "text",
+"parent": "$this",
+"x": 37,
+"y": 32,
+"w": 553,
+"h": 137,
+"text": "You have to set some parameters based on battery and prop size for a new copter setup.\nPlease make sure that before entering data here and updating parameters:\n\n  -- ALL INITIAL SETUPS ARE DONE (Calibrations, frame settings, motor tests)\n  -- BATTERY VOLTAGE MONITORING IS SET AND WORKING\n\nNote: INS_GYRO_FILTER with a value other than 20 is optional and probably only for small frames/props. At first, you can keep it at 20"
+},
+{
+"name": "label1",
+"kind": "label",
+"parent": "$this",
+"x": 99,
+"y": 186,
+"w": 105,
+"h": 13,
+"text": "Airscrew size in inch:"
+},
+{
+"name": "label2",
+"kind": "label",
+"parent": "$this",
+"x": 115,
+"y": 217,
+"w": 89,
+"h": 13,
+"text": "Battery cellcount:"
+},
+{
+"name": "label3",
+"kind": "label",
+"parent": "$this",
+"x": 41,
+"y": 248,
+"w": 163,
+"h": 13,
+"text": "Battery cell fully charged voltage:"
+},
+{
+"name": "label4",
+"kind": "label",
+"parent": "$this",
+"x": 28,
+"y": 279,
+"w": 176,
+"h": 13,
+"text": "Battery cell fully discharged voltage:"
+},
+{
+"name": "cb_tmotor",
+"kind": "check",
+"parent": "$this",
+"x": 210,
+"y": 314,
+"w": 154,
+"h": 17,
+"text": "Using T-Motor Flame ESC?"
+},
+{
+"name": "t_prop",
+"kind": "text",
+"parent": "$this",
+"x": 210,
+"y": 186,
+"w": 100,
+"h": 20,
+"text": "12"
+},
+{
+"name": "t_cellcount",
+"kind": "text",
+"parent": "$this",
+"x": 210,
+"y": 218,
+"w": 100,
+"h": 20,
+"text": "4"
+},
+{
+"name": "t_cellmax",
+"kind": "text",
+"parent": "$this",
+"x": 210,
+"y": 248,
+"w": 100,
+"h": 20,
+"text": "4.2"
+},
+{
+"name": "t_cellmin",
+"kind": "text",
+"parent": "$this",
+"x": 210,
+"y": 279,
+"w": 100,
+"h": 20,
+"text": "3.3"
+},
+{
+"name": "btn_docalc",
+"kind": "button",
+"parent": "$this",
+"x": 185,
+"y": 388,
+"w": 236,
+"h": 23,
+"text": "Calculate Initial Parameters"
+},
+{
+"name": "cmb_batterytype",
+"kind": "combo",
+"parent": "$this",
+"x": 389,
+"y": 244,
+"w": 121,
+"h": 21
+},
+{
+"name": "label5",
+"kind": "label",
+"parent": "$this",
+"x": 386,
+"y": 221,
+"w": 88,
+"h": 13,
+"text": "Battery Chemistry"
+},
+{
+"name": "cb_suggested",
+"kind": "check",
+"parent": "$this",
+"x": 210,
+"y": 337,
+"w": 346,
+"h": 17,
+"text": "Add suggested settings for 4.0 and up (Battery failsafe and Fence) ?"
+},
+{
+"name": "linkLabel1",
+"kind": "link",
+"parent": "$this",
+"x": 145,
+"y": 469,
+"w": 316,
+"h": 13,
+"text": "https://ardupilot.org/copter/docs/tuning-process-instructions.html"
+},
+{
+"name": "label6",
+"kind": "label",
+"parent": "$this",
+"x": 115,
+"y": 447,
+"w": 377,
+"h": 13
+},
+{
+"name": "label7",
+"kind": "label",
+"parent": "$this",
+"x": 253,
+"y": 492,
+"w": 100,
+"h": 13,
+"text": "PLEASE READ IT !"
+}
+]
+}

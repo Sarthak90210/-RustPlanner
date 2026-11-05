@@ -13,6 +13,8 @@ use crate::app::{AppCtx, Toasts};
 use crate::views::flight_data::provider_combo;
 use crate::{fonts, map, platform, theme};
 
+mod menu;
+
 const HOME_IDX: usize = usize::MAX;
 
 /// Commands DataGridView columns: (header, width) from FlightPlanner.resx.
@@ -62,6 +64,13 @@ pub struct FlightPlanView {
     circle_dialog: Option<(f64, f64, String, String)>,
     /// Fence Circle Around Home: radius prompt
     fence_circle: Option<String>,
+    menu_prompt: Option<menu::MenuPrompt>,
+    kml_overlay: Vec<Vec<(f64, f64)>>,
+    elevation_open: bool,
+    /// Switch Docking: waypoint list docked right instead of bottom
+    waypoints_right: bool,
+    /// visible map area (min lat, min lng, max lat, max lng)
+    view_bounds: Option<(f64, f64, f64, f64)>,
     measure: Option<(f64, f64)>,
 }
 
@@ -104,6 +113,11 @@ impl Default for FlightPlanView {
             survey_dialog: None,
             grid_ui: None,
             fence_circle: None,
+            menu_prompt: None,
+            kml_overlay: Vec::new(),
+            elevation_open: false,
+            waypoints_right: false,
+            view_bounds: None,
             circle_dialog: None,
             measure: None,
         }
@@ -148,7 +162,14 @@ impl FlightPlanView {
     }
 
     fn new_wp(&self, app: &AppCtx, id: u16, lat: f64, lng: f64) -> Locationwp {
-        Locationwp { id, lat, lng, alt: app.settings.default_alt, frame: app.settings.alt_frame, ..Default::default() }
+        let mut alt = app.settings.default_alt;
+        // Verify Height: keep the default height above the ground under this WP (relative alt)
+        if self.verify_height && app.settings.alt_frame == 3 && (lat != 0.0 || lng != 0.0) {
+            if let (Some(t), Some(h)) = (crate::srtm::altitude(lat, lng), crate::srtm::altitude(self.home.lat, self.home.lng)) {
+                alt += (t - h) as f32;
+            }
+        }
+        Locationwp { id, lat, lng, alt, frame: app.settings.alt_frame, ..Default::default() }
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
@@ -170,9 +191,9 @@ impl FlightPlanView {
             }
         }
 
-        egui::Panel::bottom("panelWaypoints")
+        let wp_panel = if self.waypoints_right { egui::Panel::right("panelWaypointsR").default_size(520.0) } else { egui::Panel::bottom("panelWaypoints").default_size(166.0) };
+        wp_panel
             .resizable(!self.waypoints_collapsed)
-            .default_size(166.0)
             .min_size(40.0)
             .frame(egui::Frame::new().fill(theme::BG))
             .show(ui, |ui| self.waypoints_panel(ui, app));
@@ -189,6 +210,7 @@ impl FlightPlanView {
             self.file_browser(ui.ctx(), app);
         }
         self.auto_wp_dialogs(ui.ctx(), app);
+        self.menu_dialogs(ui.ctx(), app);
         if self.drawing_polygon {
             egui::Area::new(egui::Id::unique("poly_hint")).anchor(egui::Align2::CENTER_TOP, Vec2::new(0.0, 70.0)).show(ui.ctx(), |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
@@ -433,8 +455,20 @@ impl FlightPlanView {
                 cells.push(Rect::from_min_size(Pos2::new(x, y), Vec2::new(*w, row_h)));
                 x += w;
             }
+            // Alt Warn: altitude cell turns red when the WP is lower than this above the terrain
+            let low = self.alt_warn > 0.0 && {
+                let w = &self.items[i];
+                w.has_location()
+                    && match (crate::srtm::altitude(w.lat, w.lng), crate::srtm::altitude(self.home.lat, self.home.lng)) {
+                        (Some(t), Some(h)) => {
+                            let amsl = if w.frame == 0 { w.alt as f64 } else { h + w.alt as f64 };
+                            amsl - t < self.alt_warn as f64
+                        }
+                        _ => false,
+                    }
+            };
             for (c, r) in cells.iter().enumerate() {
-                p.rect_filled(*r, 0.0, if c == 0 { theme::BG } else { row_bg });
+                p.rect_filled(*r, 0.0, if c == 0 { theme::BG } else if c == 8 && low { Color32::RED } else { row_bg });
                 p.rect_stroke(*r, 0.0, Stroke::new(1.0, grid_line), StrokeKind::Inside);
             }
             p.text(cells[0].center(), egui::Align2::CENTER_CENTER, (i + 1).to_string(), f.clone(), Color32::WHITE);
@@ -552,7 +586,24 @@ impl FlightPlanView {
         let poly = self.polygon.clone();
         let measure = self.measure;
 
+        let kml = self.kml_overlay.clone();
+        let pois = app.settings.pois.clone();
+        let tracker = app.settings.tracker_home;
         let out = map::show(ui, &mut app.settings.fp_map, app.tiles, |_ui, view, resp, painter| {
+            for line in &kml {
+                let pts: Vec<Pos2> = line.iter().map(|&(a, b)| view.to_screen(a, b)).collect();
+                painter.add(egui::Shape::line(pts, Stroke::new(2.0, Color32::from_rgb(0xff, 0x80, 0x00))));
+            }
+            for (a, b, n) in &pois {
+                let p = view.to_screen(*a, *b);
+                map::draw_pin(painter, assets.marker_red.id(), assets.marker_shadow.id(), p);
+                painter.text(p + Vec2::new(10.0, -20.0), egui::Align2::LEFT_TOP, n, fonts::ui_id(fonts::UI_SIZE), Color32::WHITE);
+            }
+            if let Some((a, b)) = tracker {
+                let p = view.to_screen(a, b);
+                painter.circle_stroke(p, 8.0, Stroke::new(2.0, Color32::from_rgb(0x00, 0xbf, 0xff)));
+                painter.text(p + Vec2::new(10.0, -6.0), egui::Align2::LEFT_TOP, "Tracker Home", fonts::ui_id(fonts::UI_SIZE), Color32::WHITE);
+            }
             let mut screen: Vec<(usize, Pos2)> = Vec::new();
             if home.lat != 0.0 || home.lng != 0.0 {
                 screen.push((HOME_IDX, view.to_screen(home.lat, home.lng)));
@@ -656,6 +707,12 @@ impl FlightPlanView {
             }
             new_drag.is_some()
         });
+        {
+            let r = out.view.rect;
+            let (a, b) = out.view.to_latlng(r.left_bottom());
+            let (c, e) = out.view.to_latlng(r.right_top());
+            self.view_bounds = Some((a, b, c, e));
+        }
 
         if mouse.is_some() {
             self.mouse = mouse;
@@ -768,212 +825,6 @@ impl FlightPlanView {
             }
         }
         total
-    }
-
-    /// contextMenuStrip1, in Mission Planner's order.
-    fn context_menu(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
-        let Some((lat, lng, hit)) = self.ctx_pos else { return };
-        if ui.button("Delete WP").clicked() {
-            if let Some(i) = hit.or(self.selected).filter(|i| *i < self.items.len()) {
-                self.items.remove(i);
-                self.selected = None;
-            }
-            ui.close();
-        }
-        if ui.button("Insert Wp").clicked() {
-            let at = hit.or(self.selected).unwrap_or(self.items.len()).min(self.items.len());
-            let wp = self.new_wp(app, mavcmd::WAYPOINT, lat, lng);
-            self.items.insert(at, wp);
-            ui.close();
-        }
-        if ui.button("Insert Spline WP").clicked() {
-            let at = hit.or(self.selected).unwrap_or(self.items.len()).min(self.items.len());
-            let wp = self.new_wp(app, mavcmd::SPLINE_WAYPOINT, lat, lng);
-            self.items.insert(at, wp);
-            ui.close();
-        }
-        ui.menu_button("Loiter", |ui| {
-            if ui.button("Forever").clicked() {
-                let wp = self.new_wp(app, mavcmd::LOITER_UNLIM, lat, lng);
-                self.items.push(wp);
-                ui.close();
-            }
-            if ui.button("Time").clicked() {
-                let mut wp = self.new_wp(app, mavcmd::LOITER_TIME, lat, lng);
-                wp.p1 = 5.0;
-                self.items.push(wp);
-                ui.close();
-            }
-            if ui.button("Circles").clicked() {
-                let mut wp = self.new_wp(app, mavcmd::LOITER_TURNS, lat, lng);
-                wp.p1 = 1.0;
-                self.items.push(wp);
-                ui.close();
-            }
-        });
-        ui.menu_button("Jump", |ui| {
-            if ui.button("Start").clicked() {
-                self.items.push(Locationwp { id: mavcmd::DO_JUMP, p1: 1.0, p2: -1.0, frame: app.settings.alt_frame, ..Default::default() });
-                ui.close();
-            }
-            if ui.button("WP #").clicked() {
-                let target = self.selected.map(|s| s as f32 + 1.0).unwrap_or(1.0);
-                self.items.push(Locationwp { id: mavcmd::DO_JUMP, p1: target, p2: 1.0, frame: app.settings.alt_frame, ..Default::default() });
-                ui.close();
-            }
-        });
-        if ui.button("RTL").clicked() {
-            self.items.push(Locationwp { id: mavcmd::RETURN_TO_LAUNCH, frame: app.settings.alt_frame, ..Default::default() });
-            ui.close();
-        }
-        if ui.button("Land").clicked() {
-            let mut wp = self.new_wp(app, mavcmd::LAND, lat, lng);
-            wp.alt = 0.0;
-            self.items.push(wp);
-            ui.close();
-        }
-        if ui.button("Takeoff").clicked() {
-            let wp = self.new_wp(app, mavcmd::TAKEOFF, 0.0, 0.0);
-            self.items.insert(0, wp);
-            ui.close();
-        }
-        if ui.button("DO_SET_ROI").clicked() {
-            let mut wp = self.new_wp(app, mavcmd::DO_SET_ROI, lat, lng);
-            wp.alt = 0.0;
-            self.items.push(wp);
-            ui.close();
-        }
-        if ui.button("Fence Circle Around Home").clicked() {
-            self.fence_circle = Some("300".into());
-            ui.close();
-        }
-        if ui.button("Clear Mission").clicked() {
-            self.items.clear();
-            self.selected = None;
-            ui.close();
-        }
-        ui.separator();
-        ui.menu_button("Polygon", |ui| {
-            if ui.button("Draw a Polygon").clicked() {
-                self.drawing_polygon = true;
-                self.polygon.clear();
-                ui.close();
-            }
-            if ui.button("Clear Polygon").clicked() {
-                self.polygon.clear();
-                self.drawing_polygon = false;
-                ui.close();
-            }
-            if ui.button("Area").clicked() {
-                let a = mp_core::survey::area(&self.polygon);
-                app.toasts.error(format!("Area: {a:.0} m2 ({:.3} km2)", a / 1e6));
-                ui.close();
-            }
-        });
-        ui.menu_button("Geo-Fence", |ui| {
-            if ui.button("Polygon Inclusion (from polygon)").clicked() {
-                self.add_fence_polygon(5001, app);
-                ui.close();
-            }
-            if ui.button("Polygon Exclusion (from polygon)").clicked() {
-                self.add_fence_polygon(5002, app);
-                ui.close();
-            }
-            if ui.button("Circle Inclusion Here").clicked() {
-                self.fence_list().push(Locationwp { id: 5003, p1: 100.0, lat, lng, frame: 0, ..Default::default() });
-                ui.close();
-            }
-            if ui.button("Circle Exclusion Here").clicked() {
-                self.fence_list().push(Locationwp { id: 5004, p1: 100.0, lat, lng, frame: 0, ..Default::default() });
-                ui.close();
-            }
-            if ui.button("Set Return Location").clicked() {
-                self.fence_list().push(Locationwp { id: 5000, lat, lng, frame: 0, ..Default::default() });
-                ui.close();
-            }
-            if ui.button("Clear").clicked() {
-                self.fence_list().clear();
-                ui.close();
-            }
-        });
-        ui.menu_button("Rally Points", |ui| {
-            if ui.button("Set Rally Point").clicked() {
-                let alt = app.settings.default_alt;
-                self.rally_list().push(Locationwp { id: 5100, lat, lng, alt, frame: 3, ..Default::default() });
-                ui.close();
-            }
-            if ui.button("Clear Rally Points").clicked() {
-                self.rally_list().clear();
-                ui.close();
-            }
-        });
-        ui.menu_button("Auto WP", |ui| {
-            if ui.button("Create WP Circle").clicked() {
-                self.circle_dialog = Some((lat, lng, "50".into(), "8".into()));
-                ui.close();
-            }
-            if ui.button("Survey (Grid)").clicked() {
-                if self.polygon.len() < 3 {
-                    app.toasts.error("Please define a polygon.");
-                } else {
-                    self.grid_ui = Some(Box::new(super::survey_ui::GridUi::new(self.polygon.clone(), (self.home.lat, self.home.lng), app.settings.fp_map.provider)));
-                }
-                ui.close();
-            }
-            if ui.button("SimpleGrid").clicked() {
-                if self.polygon.len() < 3 {
-                    app.toasts.error("Please define a polygon.");
-                } else {
-                    self.survey_dialog = Some(SurveyParams { spacing: 30.0, ..Default::default() });
-                }
-                ui.close();
-            }
-        });
-        ui.menu_button("Map Tool", |ui| {
-            if ui.button("Measure Distance").clicked() {
-                self.measure = Some((lat, lng));
-                ui.close();
-            }
-            if ui.button("Rotate Map").clicked() {
-                app.toasts.error("Rotate Map: not available in this port yet");
-                ui.close();
-            }
-        });
-        ui.menu_button("File Load/Save", |ui| {
-            if ui.button("Save WP File").clicked() {
-                let text = mission::write_waypoint_file(&self.home, &self.items);
-                if let Some(Err(e)) = platform::save_text("Save Waypoint File", "mission.waypoints", "Waypoints", &["waypoints"], &text) {
-                    app.toasts.error(e);
-                }
-                ui.close();
-            }
-            if ui.button("Load WP File").clicked() {
-                if let Some((name, text)) = platform::open_text("Open Waypoint File", "Waypoints", &["waypoints", "txt"]) {
-                    self.load_text(&name, &text, app.toasts);
-                }
-                ui.close();
-            }
-        });
-        for sub in ["POI", "Tracker Home"] {
-            ui.menu_button(sub, |ui| {
-                ui.add_enabled(false, egui::Button::new("Not available in this port yet"));
-            });
-        }
-        if ui.button("Modify Alt").clicked() {
-            for w in &mut self.items {
-                if w.has_location() {
-                    w.alt = app.settings.default_alt;
-                }
-            }
-            ui.close();
-        }
-        ui.add_enabled(false, egui::Button::new("Enter UTM Coord"));
-        ui.add_enabled(false, egui::Button::new("Switch Docking"));
-        if ui.button("Set Home Here").clicked() {
-            self.home.lat = lat;
-            self.home.lng = lng;
-            ui.close();
-        }
     }
 
     fn load_text(&mut self, name: &str, text: &str, toasts: &mut Toasts) {

@@ -1,0 +1,66 @@
+{
+"name": "osd",
+"w": 600,
+"h": 400,
+"controls": [
+{
+"name": "panel1",
+"kind": "panel",
+"parent": "$this",
+"x": 957,
+"y": 8,
+"w": 182,
+"h": 807
+},
+{
+"name": "btnWrite",
+"kind": "button",
+"parent": "panel1",
+"x": 20,
+"y": 23,
+"w": 145,
+"h": 32,
+"text": "Write customization"
+},
+{
+"name": "cbAutoWriteOnLeave",
+"kind": "check",
+"parent": "panel1",
+"x": 24,
+"y": 63,
+"w": 125,
+"h": 17,
+"text": "Auto write on leaving"
+},
+{
+"name": "btnDiscardChanges",
+"kind": "button",
+"parent": "panel1",
+"x": 20,
+"y": 235,
+"w": 145,
+"h": 32,
+"text": "Discard all changes"
+},
+{
+"name": "btnRefreshParameters",
+"kind": "button",
+"parent": "panel1",
+"x": 20,
+"y": 197,
+"w": 145,
+"h": 32,
+"text": "Refresh"
+},
+{
+"name": "btnOsd56ItemsSetup",
+"kind": "button",
+"parent": "panel1",
+"x": 20,
+"y": 112,
+"w": 145,
+"h": 42,
+"text": "OSD / Telmetry Slots Config"
+}
+]
+}

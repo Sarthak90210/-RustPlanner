@@ -1,0 +1,300 @@
+{
+"name": "dronecan",
+"w": 600,
+"h": 400,
+"controls": [
+{
+"name": "myDataGridView1",
+"kind": "grid",
+"parent": "$this",
+"x": 7,
+"y": 89,
+"w": 788,
+"h": 229
+},
+{
+"name": "groupBox5",
+"kind": "group",
+"parent": "$this",
+"x": 0,
+"y": 26,
+"w": 796,
+"h": 5
+},
+{
+"name": "label6",
+"kind": "label",
+"parent": "$this",
+"x": 3,
+"y": 0,
+"w": 157,
+"h": 20,
+"text": "DroneCAN/UAVCAN"
+},
+{
+"name": "label1",
+"kind": "label",
+"parent": "$this",
+"x": 401,
+"y": 35,
+"w": 359,
+"h": 26
+},
+{
+"name": "but_uavcaninspector",
+"kind": "button",
+"parent": "$this",
+"x": 338,
+"y": 35,
+"w": 57,
+"h": 23,
+"text": "Inspector"
+},
+{
+"name": "tableLayoutPanel1",
+"kind": "panel",
+"parent": "$this",
+"x": 7,
+"y": 324,
+"w": 788,
+"h": 136
+},
+{
+"name": "chk_log",
+"kind": "check",
+"parent": "$this",
+"x": 753,
+"y": 3,
+"w": 44,
+"h": 17,
+"text": "Log"
+},
+{
+"name": "DGDebug",
+"kind": "grid",
+"parent": "$this",
+"x": 7,
+"y": 465,
+"w": 788,
+"h": 144
+},
+{
+"name": "chk_canonclose",
+"kind": "check",
+"parent": "$this",
+"x": 608,
+"y": 3,
+"w": 131,
+"h": 17,
+"text": "Exit SLCAN on leave?"
+},
+{
+"name": "but_filter",
+"kind": "button",
+"parent": "$this",
+"x": 290,
+"y": 35,
+"w": 42,
+"h": 23,
+"text": "Filter"
+},
+{
+"name": "but_stats",
+"kind": "button",
+"parent": "$this",
+"x": 290,
+"y": 60,
+"w": 42,
+"h": 23,
+"text": "Stats"
+},
+{
+"name": "cmb_interfacetype",
+"kind": "combo",
+"parent": "$this",
+"x": 7,
+"y": 37,
+"w": 179,
+"h": 21
+},
+{
+"name": "cmb_networkinterface",
+"kind": "combo",
+"parent": "$this",
+"x": 7,
+"y": 64,
+"w": 179,
+"h": 21,
+"hidden": true
+},
+{
+"name": "but_connect",
+"kind": "button",
+"parent": "$this",
+"x": 192,
+"y": 48,
+"w": 75,
+"h": 23,
+"text": "Connect"
+},
+{
+"name": "CHK_checkupdate",
+"kind": "check",
+"parent": "$this",
+"x": 338,
+"y": 61,
+"w": 121,
+"h": 23,
+"text": "Check for Updates"
+},
+{
+"name": "textBox1",
+"kind": "text",
+"parent": "tableLayoutPanel1",
+"x": 142,
+"y": 3,
+"w": 196,
+"h": 20
+},
+{
+"name": "label7",
+"kind": "label",
+"parent": "tableLayoutPanel1",
+"x": 3,
+"y": 108,
+"w": 133,
+"h": 28,
+"text": "Hardware version/UID"
+},
+{
+"name": "label5",
+"kind": "label",
+"parent": "tableLayoutPanel1",
+"x": 3,
+"y": 81,
+"w": 133,
+"h": 27,
+"text": "Software version/CRC64"
+},
+{
+"name": "label4",
+"kind": "label",
+"parent": "tableLayoutPanel1",
+"x": 3,
+"y": 54,
+"w": 133,
+"h": 27,
+"text": "Vendor-specific code"
+},
+{
+"name": "label3",
+"kind": "label",
+"parent": "tableLayoutPanel1",
+"x": 3,
+"y": 27,
+"w": 133,
+"h": 27,
+"text": "Mode / Health / Uptime"
+},
+{
+"name": "label2",
+"kind": "label",
+"parent": "tableLayoutPanel1",
+"x": 3,
+"y": 0,
+"w": 133,
+"h": 27,
+"text": "Node ID / Name"
+},
+{
+"name": "textBox2",
+"kind": "text",
+"parent": "tableLayoutPanel1",
+"x": 344,
+"y": 3,
+"w": 441,
+"h": 20
+},
+{
+"name": "textBox4",
+"kind": "text",
+"parent": "tableLayoutPanel1",
+"x": 142,
+"y": 30,
+"w": 196,
+"h": 20
+},
+{
+"name": "textBox5",
+"kind": "text",
+"parent": "tableLayoutPanel1",
+"x": 344,
+"y": 30,
+"w": 217,
+"h": 20
+},
+{
+"name": "textBox6",
+"kind": "text",
+"parent": "tableLayoutPanel1",
+"x": 567,
+"y": 30,
+"w": 218,
+"h": 20
+},
+{
+"name": "textBox7",
+"kind": "text",
+"parent": "tableLayoutPanel1",
+"x": 142,
+"y": 57,
+"w": 419,
+"h": 20
+},
+{
+"name": "textBox9",
+"kind": "text",
+"parent": "tableLayoutPanel1",
+"x": 567,
+"y": 57,
+"w": 218,
+"h": 20
+},
+{
+"name": "textBox10",
+"kind": "text",
+"parent": "tableLayoutPanel1",
+"x": 142,
+"y": 84,
+"w": 196,
+"h": 20
+},
+{
+"name": "textBox11",
+"kind": "text",
+"parent": "tableLayoutPanel1",
+"x": 344,
+"y": 84,
+"w": 441,
+"h": 20
+},
+{
+"name": "textBox13",
+"kind": "text",
+"parent": "tableLayoutPanel1",
+"x": 142,
+"y": 111,
+"w": 196,
+"h": 20
+},
+{
+"name": "textBox3",
+"kind": "text",
+"parent": "tableLayoutPanel1",
+"x": 344,
+"y": 111,
+"w": 441,
+"h": 20
+}
+]
+}

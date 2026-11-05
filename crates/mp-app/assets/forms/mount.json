@@ -1,0 +1,1065 @@
+{
+"name": "mount",
+"w": 674,
+"h": 620,
+"controls": [
+{
+"name": "pictureBox1",
+"kind": "picture",
+"parent": "$this",
+"x": 33,
+"y": 47,
+"w": 203,
+"h": 112,
+"image": "cameraGimalPitch1.png"
+},
+{
+"name": "pictureBox2",
+"kind": "picture",
+"parent": "$this",
+"x": 33,
+"y": 172,
+"w": 203,
+"h": 112,
+"image": "cameraGimalRoll1.png"
+},
+{
+"name": "groupBox1",
+"kind": "group",
+"parent": "$this",
+"x": 17,
+"y": 181,
+"w": 516,
+"h": 5
+},
+{
+"name": "groupBox2",
+"kind": "group",
+"parent": "$this",
+"x": 17,
+"y": 54,
+"w": 516,
+"h": 5
+},
+{
+"name": "label5",
+"kind": "label",
+"parent": "$this",
+"x": 21,
+"y": 35,
+"w": 29,
+"h": 20,
+"text": "Tilt",
+"font": 12.0
+},
+{
+"name": "label6",
+"kind": "label",
+"parent": "$this",
+"x": 20,
+"y": 163,
+"w": 36,
+"h": 20,
+"text": "Roll",
+"font": 12.0
+},
+{
+"name": "LNK_wiki",
+"kind": "link",
+"parent": "$this",
+"x": 624,
+"y": 12,
+"w": 28,
+"h": 13,
+"text": "Wiki"
+},
+{
+"name": "pictureBox3",
+"kind": "picture",
+"parent": "$this",
+"x": 33,
+"y": 296,
+"w": 203,
+"h": 112,
+"image": "cameraGimalYaw.png"
+},
+{
+"name": "groupBox3",
+"kind": "group",
+"parent": "$this",
+"x": 17,
+"y": 305,
+"w": 516,
+"h": 5
+},
+{
+"name": "label15",
+"kind": "label",
+"parent": "$this",
+"x": 20,
+"y": 287,
+"w": 37,
+"h": 20,
+"text": "Pan",
+"font": 12.0
+},
+{
+"name": "mavlinkCheckBoxRR",
+"kind": "mcheck",
+"parent": "$this",
+"x": 267,
+"y": 264,
+"w": 66,
+"h": 17,
+"text": "Reverse",
+"param": "_REV",
+"nums": [
+-1.0,
+1.0,
+1.0,
+0.0
+]
+},
+{
+"name": "mavlinkNumericUpDownRSMX",
+"kind": "mnum",
+"parent": "$this",
+"x": 276,
+"y": 238,
+"w": 59,
+"h": 20,
+"param": "_MAX",
+"nums": [
+800.0,
+2200.0,
+1.0,
+1.0
+]
+},
+{
+"name": "mavlinkNumericUpDownRSM",
+"kind": "mnum",
+"parent": "$this",
+"x": 276,
+"y": 212,
+"w": 59,
+"h": 20,
+"param": "_MIN",
+"nums": [
+800.0,
+2200.0,
+1.0,
+1.0
+]
+},
+{
+"name": "label14",
+"kind": "label",
+"parent": "$this",
+"x": 246,
+"y": 214,
+"w": 24,
+"h": 13,
+"text": "Min"
+},
+{
+"name": "label13",
+"kind": "label",
+"parent": "$this",
+"x": 246,
+"y": 242,
+"w": 27,
+"h": 13,
+"text": "Max"
+},
+{
+"name": "mavlinkNumericUpDownRAMX",
+"kind": "mnum",
+"parent": "$this",
+"x": 385,
+"y": 238,
+"w": 59,
+"h": 20,
+"param": "MNT_ANGMAX_ROL",
+"nums": [
+0.0,
+90.0,
+100.0,
+1.0
+]
+},
+{
+"name": "mavlinkNumericUpDownRAM",
+"kind": "mnum",
+"parent": "$this",
+"x": 385,
+"y": 212,
+"w": 59,
+"h": 20,
+"param": "MNT_ANGMIN_ROL",
+"nums": [
+-90.0,
+0.0,
+100.0,
+1.0
+]
+},
+{
+"name": "label12",
+"kind": "label",
+"parent": "$this",
+"x": 355,
+"y": 214,
+"w": 24,
+"h": 13,
+"text": "Min"
+},
+{
+"name": "label11",
+"kind": "label",
+"parent": "$this",
+"x": 355,
+"y": 242,
+"w": 27,
+"h": 13,
+"text": "Max"
+},
+{
+"name": "label10",
+"kind": "label",
+"parent": "$this",
+"x": 251,
+"y": 189,
+"w": 95,
+"h": 20,
+"text": "Servo Limits",
+"font": 12.0
+},
+{
+"name": "label9",
+"kind": "label",
+"parent": "$this",
+"x": 352,
+"y": 189,
+"w": 95,
+"h": 20,
+"text": "Angle Limits",
+"font": 12.0
+},
+{
+"name": "mavlinkCheckBoxPR",
+"kind": "mcheck",
+"parent": "$this",
+"x": 267,
+"y": 388,
+"w": 66,
+"h": 17,
+"text": "Reverse",
+"param": "_REV",
+"nums": [
+-1.0,
+1.0,
+1.0,
+0.0
+]
+},
+{
+"name": "mavlinkNumericUpDownPSMX",
+"kind": "mnum",
+"parent": "$this",
+"x": 276,
+"y": 362,
+"w": 59,
+"h": 20,
+"param": "_MAX",
+"nums": [
+800.0,
+2200.0,
+1.0,
+1.0
+]
+},
+{
+"name": "mavlinkNumericUpDownPSM",
+"kind": "mnum",
+"parent": "$this",
+"x": 276,
+"y": 336,
+"w": 59,
+"h": 20,
+"param": "_MIN",
+"nums": [
+800.0,
+2200.0,
+1.0,
+1.0
+]
+},
+{
+"name": "label21",
+"kind": "label",
+"parent": "$this",
+"x": 246,
+"y": 338,
+"w": 24,
+"h": 13,
+"text": "Min"
+},
+{
+"name": "label20",
+"kind": "label",
+"parent": "$this",
+"x": 246,
+"y": 366,
+"w": 27,
+"h": 13,
+"text": "Max"
+},
+{
+"name": "mavlinkNumericUpDownPAMX",
+"kind": "mnum",
+"parent": "$this",
+"x": 385,
+"y": 362,
+"w": 59,
+"h": 20,
+"param": "MNT_ANGMAX_PAN",
+"nums": [
+0.0,
+180.0,
+100.0,
+1.0
+]
+},
+{
+"name": "mavlinkNumericUpDownPAM",
+"kind": "mnum",
+"parent": "$this",
+"x": 385,
+"y": 336,
+"w": 59,
+"h": 20,
+"param": "MNT_ANGMIN_PAN",
+"nums": [
+-180.0,
+0.0,
+100.0,
+1.0
+]
+},
+{
+"name": "label19",
+"kind": "label",
+"parent": "$this",
+"x": 355,
+"y": 338,
+"w": 24,
+"h": 13,
+"text": "Min"
+},
+{
+"name": "label18",
+"kind": "label",
+"parent": "$this",
+"x": 355,
+"y": 366,
+"w": 27,
+"h": 13,
+"text": "Max"
+},
+{
+"name": "label17",
+"kind": "label",
+"parent": "$this",
+"x": 251,
+"y": 313,
+"w": 95,
+"h": 20,
+"text": "Servo Limits",
+"font": 12.0
+},
+{
+"name": "label16",
+"kind": "label",
+"parent": "$this",
+"x": 352,
+"y": 313,
+"w": 95,
+"h": 20,
+"text": "Angle Limits",
+"font": 12.0
+},
+{
+"name": "mavlinkCheckBoxTR",
+"kind": "mcheck",
+"parent": "$this",
+"x": 267,
+"y": 137,
+"w": 66,
+"h": 17,
+"text": "Reverse",
+"param": "_REV",
+"nums": [
+-1.0,
+1.0,
+1.0,
+0.0
+]
+},
+{
+"name": "mavlinkNumericUpDownTSMX",
+"kind": "mnum",
+"parent": "$this",
+"x": 276,
+"y": 111,
+"w": 59,
+"h": 20,
+"param": "_MAX",
+"nums": [
+800.0,
+2200.0,
+1.0,
+1.0
+]
+},
+{
+"name": "mavlinkNumericUpDownTSM",
+"kind": "mnum",
+"parent": "$this",
+"x": 276,
+"y": 85,
+"w": 59,
+"h": 20,
+"param": "_MIN",
+"nums": [
+800.0,
+2200.0,
+1.0,
+1.0
+]
+},
+{
+"name": "label8",
+"kind": "label",
+"parent": "$this",
+"x": 246,
+"y": 87,
+"w": 24,
+"h": 13,
+"text": "Min"
+},
+{
+"name": "label7",
+"kind": "label",
+"parent": "$this",
+"x": 246,
+"y": 115,
+"w": 27,
+"h": 13,
+"text": "Max"
+},
+{
+"name": "mavlinkNumericUpDownTAMX",
+"kind": "mnum",
+"parent": "$this",
+"x": 385,
+"y": 111,
+"w": 59,
+"h": 20,
+"param": "MNT_ANGMAX_TIL",
+"nums": [
+0.0,
+90.0,
+100.0,
+1.0
+]
+},
+{
+"name": "mavlinkNumericUpDownTAM",
+"kind": "mnum",
+"parent": "$this",
+"x": 385,
+"y": 85,
+"w": 59,
+"h": 20,
+"param": "MNT_ANGMIN_TIL",
+"nums": [
+-90.0,
+0.0,
+100.0,
+1.0
+]
+},
+{
+"name": "label4",
+"kind": "label",
+"parent": "$this",
+"x": 355,
+"y": 87,
+"w": 24,
+"h": 13,
+"text": "Min"
+},
+{
+"name": "label3",
+"kind": "label",
+"parent": "$this",
+"x": 355,
+"y": 115,
+"w": 27,
+"h": 13,
+"text": "Max"
+},
+{
+"name": "label2",
+"kind": "label",
+"parent": "$this",
+"x": 251,
+"y": 62,
+"w": 95,
+"h": 20,
+"text": "Servo Limits",
+"font": 12.0
+},
+{
+"name": "label1",
+"kind": "label",
+"parent": "$this",
+"x": 352,
+"y": 62,
+"w": 95,
+"h": 20,
+"text": "Angle Limits",
+"font": 12.0
+},
+{
+"name": "mavlinkComboBoxTilt",
+"kind": "combo",
+"parent": "$this",
+"x": 90,
+"y": 34,
+"w": 121,
+"h": 21
+},
+{
+"name": "mavlinkComboBoxRoll",
+"kind": "combo",
+"parent": "$this",
+"x": 90,
+"y": 162,
+"w": 121,
+"h": 21
+},
+{
+"name": "mavlinkComboBoxPan",
+"kind": "combo",
+"parent": "$this",
+"x": 90,
+"y": 286,
+"w": 121,
+"h": 21
+},
+{
+"name": "CMB_inputch_tilt",
+"kind": "mcombo",
+"parent": "$this",
+"x": 450,
+"y": 85,
+"w": 83,
+"h": 21,
+"param": "MNT_RC_IN_TILT"
+},
+{
+"name": "label22",
+"kind": "label",
+"parent": "$this",
+"x": 453,
+"y": 62,
+"w": 70,
+"h": 20,
+"text": "Input Ch",
+"font": 12.0
+},
+{
+"name": "CMB_inputch_roll",
+"kind": "mcombo",
+"parent": "$this",
+"x": 450,
+"y": 212,
+"w": 83,
+"h": 21,
+"param": "MNT_RC_IN_ROLL"
+},
+{
+"name": "label23",
+"kind": "label",
+"parent": "$this",
+"x": 453,
+"y": 189,
+"w": 70,
+"h": 20,
+"text": "Input Ch",
+"font": 12.0
+},
+{
+"name": "CMB_inputch_pan",
+"kind": "mcombo",
+"parent": "$this",
+"x": 450,
+"y": 336,
+"w": 83,
+"h": 21,
+"param": "MNT_RC_IN_PAN"
+},
+{
+"name": "label24",
+"kind": "label",
+"parent": "$this",
+"x": 453,
+"y": 313,
+"w": 70,
+"h": 20,
+"text": "Input Ch",
+"font": 12.0
+},
+{
+"name": "groupBox4",
+"kind": "group",
+"parent": "$this",
+"x": 551,
+"y": 97,
+"w": 119,
+"h": 97,
+"text": "Retract Angles"
+},
+{
+"name": "groupBox5",
+"kind": "group",
+"parent": "$this",
+"x": 551,
+"y": 200,
+"w": 119,
+"h": 97,
+"text": "Neutral Angles"
+},
+{
+"name": "CHK_stab_tilt",
+"kind": "mcheck",
+"parent": "$this",
+"x": 249,
+"y": 36,
+"w": 86,
+"h": 17,
+"text": "Stabalise Tilt",
+"param": "MNT_STAB_TILT",
+"nums": [
+1.0,
+0.0
+]
+},
+{
+"name": "CHK_stab_roll",
+"kind": "mcheck",
+"parent": "$this",
+"x": 249,
+"y": 164,
+"w": 90,
+"h": 17,
+"text": "Stabalise Roll",
+"param": "MNT_STAB_ROLL",
+"nums": [
+1.0,
+0.0
+]
+},
+{
+"name": "pictureBox4",
+"kind": "picture",
+"parent": "$this",
+"x": 33,
+"y": 435,
+"w": 203,
+"h": 112,
+"image": "Shutter.png"
+},
+{
+"name": "groupBox7",
+"kind": "group",
+"parent": "$this",
+"x": 17,
+"y": 444,
+"w": 516,
+"h": 5
+},
+{
+"name": "label41",
+"kind": "label",
+"parent": "$this",
+"x": 20,
+"y": 426,
+"w": 62,
+"h": 20,
+"text": "Shutter",
+"font": 12.0
+},
+{
+"name": "mavlinkNumericUpDownShutMX",
+"kind": "mnum",
+"parent": "$this",
+"x": 276,
+"y": 501,
+"w": 59,
+"h": 20,
+"param": "_MAX",
+"nums": [
+800.0,
+2200.0,
+1.0,
+1.0
+]
+},
+{
+"name": "mavlinkNumericUpDownShutM",
+"kind": "mnum",
+"parent": "$this",
+"x": 276,
+"y": 475,
+"w": 59,
+"h": 20,
+"param": "_MIN",
+"nums": [
+800.0,
+2200.0,
+1.0,
+1.0
+]
+},
+{
+"name": "label40",
+"kind": "label",
+"parent": "$this",
+"x": 246,
+"y": 477,
+"w": 24,
+"h": 13,
+"text": "Min"
+},
+{
+"name": "label39",
+"kind": "label",
+"parent": "$this",
+"x": 246,
+"y": 505,
+"w": 27,
+"h": 13,
+"text": "Max"
+},
+{
+"name": "mavlinkNumericUpDownshut_notpushed",
+"kind": "mnum",
+"parent": "$this",
+"x": 423,
+"y": 501,
+"w": 59,
+"h": 20,
+"param": "CAM_SERVO_OFF",
+"nums": [
+800.0,
+2200.0,
+1.0,
+1.0
+]
+},
+{
+"name": "mavlinkNumericUpDownshut_pushed",
+"kind": "mnum",
+"parent": "$this",
+"x": 423,
+"y": 475,
+"w": 59,
+"h": 20,
+"param": "CAM_SERVO_ON",
+"nums": [
+800.0,
+2200.0,
+1.0,
+1.0
+]
+},
+{
+"name": "label38",
+"kind": "label",
+"parent": "$this",
+"x": 374,
+"y": 477,
+"w": 43,
+"h": 13,
+"text": "Pushed"
+},
+{
+"name": "label37",
+"kind": "label",
+"parent": "$this",
+"x": 354,
+"y": 505,
+"w": 63,
+"h": 13,
+"text": "Not Pushed"
+},
+{
+"name": "label36",
+"kind": "label",
+"parent": "$this",
+"x": 251,
+"y": 452,
+"w": 95,
+"h": 20,
+"text": "Servo Limits",
+"font": 12.0
+},
+{
+"name": "label35",
+"kind": "label",
+"parent": "$this",
+"x": 402,
+"y": 452,
+"w": 62,
+"h": 20,
+"text": "Shutter",
+"font": 12.0
+},
+{
+"name": "CMB_shuttertype",
+"kind": "combo",
+"parent": "$this",
+"x": 90,
+"y": 425,
+"w": 121,
+"h": 21
+},
+{
+"name": "mavlinkNumericUpDownshut_duration",
+"kind": "mnum",
+"parent": "$this",
+"x": 423,
+"y": 527,
+"w": 59,
+"h": 20,
+"param": "CAM_DURATION",
+"nums": [
+1.0,
+200.0,
+1.0,
+1.0
+]
+},
+{
+"name": "label34",
+"kind": "label",
+"parent": "$this",
+"x": 346,
+"y": 524,
+"w": 71,
+"h": 28,
+"text": "Duration (1/10th sec)"
+},
+{
+"name": "label42",
+"kind": "label",
+"parent": "$this",
+"x": 180,
+"y": 559,
+"w": 325,
+"h": 20,
+"text": "Please set the Ch7 Option to Camera Trigger",
+"font": 12.0
+},
+{
+"name": "CMB_mnt_type",
+"kind": "mcombo",
+"parent": "$this",
+"x": 90,
+"y": 7,
+"w": 121,
+"h": 21,
+"param": "MNT_TYPE"
+},
+{
+"name": "label43",
+"kind": "label",
+"parent": "$this",
+"x": 21,
+"y": 7,
+"w": 43,
+"h": 20,
+"text": "Type",
+"font": 12.0
+},
+{
+"name": "label44",
+"kind": "label",
+"parent": "$this",
+"x": 246,
+"y": 10,
+"w": 361,
+"h": 13,
+"text": "NOTE: the gimbal type takes effect on the next reboot of the fight controller"
+},
+{
+"name": "NUD_NEUTRAL_x",
+"kind": "mnum",
+"parent": "groupBox5",
+"x": 54,
+"y": 19,
+"w": 59,
+"h": 20,
+"param": "MNT_NEUTRAL_X",
+"nums": [
+-180.0,
+180.0,
+1.0,
+1.0
+]
+},
+{
+"name": "label30",
+"kind": "label",
+"parent": "groupBox5",
+"x": 7,
+"y": 21,
+"w": 14,
+"h": 13,
+"text": "X"
+},
+{
+"name": "NUD_NEUTRAL_y",
+"kind": "mnum",
+"parent": "groupBox5",
+"x": 54,
+"y": 45,
+"w": 59,
+"h": 20,
+"param": "MNT_NEUTRAL_Y",
+"nums": [
+-180.0,
+180.0,
+1.0,
+1.0
+]
+},
+{
+"name": "label29",
+"kind": "label",
+"parent": "groupBox5",
+"x": 7,
+"y": 47,
+"w": 14,
+"h": 13,
+"text": "Y"
+},
+{
+"name": "NUD_NEUTRAL_z",
+"kind": "mnum",
+"parent": "groupBox5",
+"x": 54,
+"y": 71,
+"w": 59,
+"h": 20,
+"param": "MNT_NEUTRAL_Z",
+"nums": [
+-180.0,
+180.0,
+1.0,
+1.0
+]
+},
+{
+"name": "label28",
+"kind": "label",
+"parent": "groupBox5",
+"x": 7,
+"y": 73,
+"w": 14,
+"h": 13,
+"text": "Z"
+},
+{
+"name": "NUD_RETRACT_x",
+"kind": "mnum",
+"parent": "groupBox4",
+"x": 54,
+"y": 19,
+"w": 59,
+"h": 20,
+"param": "MNT_RETRACT_X",
+"nums": [
+-180.0,
+180.0,
+1.0,
+1.0
+]
+},
+{
+"name": "label25",
+"kind": "label",
+"parent": "groupBox4",
+"x": 7,
+"y": 21,
+"w": 14,
+"h": 13,
+"text": "X"
+},
+{
+"name": "NUD_RETRACT_y",
+"kind": "mnum",
+"parent": "groupBox4",
+"x": 54,
+"y": 45,
+"w": 59,
+"h": 20,
+"param": "MNT_RETRACT_Y",
+"nums": [
+-180.0,
+180.0,
+1.0,
+1.0
+]
+},
+{
+"name": "label26",
+"kind": "label",
+"parent": "groupBox4",
+"x": 7,
+"y": 47,
+"w": 14,
+"h": 13,
+"text": "Y"
+},
+{
+"name": "NUD_RETRACT_z",
+"kind": "mnum",
+"parent": "groupBox4",
+"x": 54,
+"y": 71,
+"w": 59,
+"h": 20,
+"param": "MNT_RETRACT_Z",
+"nums": [
+-180.0,
+180.0,
+1.0,
+1.0
+]
+},
+{
+"name": "label27",
+"kind": "label",
+"parent": "groupBox4",
+"x": 7,
+"y": 73,
+"w": 14,
+"h": 13,
+"text": "Z"
+}
+]
+}

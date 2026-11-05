@@ -1,0 +1,101 @@
+{
+"name": "cubeid",
+"w": 600,
+"h": 400,
+"controls": [
+{
+"name": "label4",
+"kind": "label",
+"parent": "$this",
+"x": 30,
+"y": 180,
+"w": 314,
+"h": 26
+},
+{
+"name": "but_upfw",
+"kind": "button",
+"parent": "$this",
+"x": 72,
+"y": 218,
+"w": 120,
+"h": 23,
+"text": "Upload Firmware"
+},
+{
+"name": "label1",
+"kind": "label",
+"parent": "$this",
+"x": 30,
+"y": 28,
+"w": 346,
+"h": 52
+},
+{
+"name": "mavpasscombo",
+"kind": "mcombo",
+"parent": "$this",
+"x": 141,
+"y": 130,
+"w": 120,
+"h": 21,
+"param": "SERIAL_PASS2"
+},
+{
+"name": "mavnumtimeout",
+"kind": "mnum",
+"parent": "$this",
+"x": 141,
+"y": 104,
+"w": 120,
+"h": 20,
+"param": "SERIAL_PASSTIMO",
+"nums": [
+0.0,
+60.0,
+1.0,
+1.0
+]
+},
+{
+"name": "label2",
+"kind": "label",
+"parent": "$this",
+"x": 30,
+"y": 133,
+"w": 88,
+"h": 13,
+"text": "SERIAL_PASS2 "
+},
+{
+"name": "label3",
+"kind": "label",
+"parent": "$this",
+"x": 30,
+"y": 106,
+"w": 106,
+"h": 13,
+"text": "SERIAL_PASSTIMO"
+},
+{
+"name": "CHK_forcebaud",
+"kind": "check",
+"parent": "$this",
+"x": 141,
+"y": 160,
+"w": 113,
+"h": 17,
+"text": "Force 57600 baud"
+},
+{
+"name": "but_customfw",
+"kind": "button",
+"parent": "$this",
+"x": 198,
+"y": 218,
+"w": 109,
+"h": 23,
+"text": "Upload Custom Firmware"
+}
+]
+}

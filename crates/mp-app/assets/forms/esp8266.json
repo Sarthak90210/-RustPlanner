@@ -1,0 +1,226 @@
+{
+"name": "esp8266",
+"w": 650,
+"h": 302,
+"controls": [
+{
+"name": "pictureBox5",
+"kind": "picture",
+"parent": "$this",
+"x": 11,
+"y": 35,
+"w": 75,
+"h": 75
+},
+{
+"name": "groupBox5",
+"kind": "group",
+"parent": "$this",
+"x": 3,
+"y": 23,
+"w": 644,
+"h": 5
+},
+{
+"name": "label6",
+"kind": "label",
+"parent": "$this",
+"x": 7,
+"y": 5,
+"w": 95,
+"h": 20,
+"text": "ESP8266",
+"font": 12.0
+},
+{
+"name": "cmb_channel",
+"kind": "combo",
+"parent": "$this",
+"x": 175,
+"y": 134,
+"w": 121,
+"h": 21,
+"text": "11"
+},
+{
+"name": "BUT_espsettings",
+"kind": "button",
+"parent": "$this",
+"x": 278,
+"y": 213,
+"w": 60,
+"h": 23,
+"text": "Save Settings"
+},
+{
+"name": "but_resetdefault",
+"kind": "button",
+"parent": "$this",
+"x": 11,
+"y": 116,
+"w": 60,
+"h": 23,
+"text": "Reset to Defaults"
+},
+{
+"name": "label2",
+"kind": "label",
+"parent": "$this",
+"x": 98,
+"y": 116,
+"w": 32,
+"h": 13,
+"text": "Baud"
+},
+{
+"name": "label5",
+"kind": "label",
+"parent": "$this",
+"x": 8,
+"y": 165,
+"w": 16,
+"h": 13,
+"text": "..."
+},
+{
+"name": "chk_mode",
+"kind": "check",
+"parent": "$this",
+"x": 96,
+"y": 34,
+"w": 82,
+"h": 17,
+"text": "Client Mode"
+},
+{
+"name": "label4",
+"kind": "label",
+"parent": "$this",
+"x": 98,
+"y": 142,
+"w": 46,
+"h": 13,
+"text": "Channel"
+},
+{
+"name": "txt_password",
+"kind": "text",
+"parent": "$this",
+"x": 175,
+"y": 81,
+"w": 121,
+"h": 20,
+"text": "1234"
+},
+{
+"name": "cmb_baud",
+"kind": "combo",
+"parent": "$this",
+"x": 175,
+"y": 107,
+"w": 121,
+"h": 21,
+"text": "921600"
+},
+{
+"name": "txt_ssid",
+"kind": "text",
+"parent": "$this",
+"x": 175,
+"y": 55,
+"w": 121,
+"h": 20,
+"text": "Ardupilot"
+},
+{
+"name": "groupBoxsta",
+"kind": "group",
+"parent": "$this",
+"x": 316,
+"y": 55,
+"w": 218,
+"h": 109,
+"text": "STA Mode"
+},
+{
+"name": "label3",
+"kind": "label",
+"parent": "$this",
+"x": 98,
+"y": 89,
+"w": 53,
+"h": 13,
+"text": "Password"
+},
+{
+"name": "label1",
+"kind": "label",
+"parent": "$this",
+"x": 98,
+"y": 61,
+"w": 32,
+"h": 13,
+"text": "SSID"
+},
+{
+"name": "txt_ip",
+"kind": "text",
+"parent": "groupBoxsta",
+"x": 83,
+"y": 18,
+"w": 121,
+"h": 20,
+"text": "1234"
+},
+{
+"name": "label7",
+"kind": "label",
+"parent": "groupBoxsta",
+"x": 6,
+"y": 26,
+"w": 17,
+"h": 13,
+"text": "IP"
+},
+{
+"name": "txt_subnet",
+"kind": "text",
+"parent": "groupBoxsta",
+"x": 83,
+"y": 70,
+"w": 121,
+"h": 20,
+"text": "1234"
+},
+{
+"name": "label8",
+"kind": "label",
+"parent": "groupBoxsta",
+"x": 6,
+"y": 78,
+"w": 41,
+"h": 13,
+"text": "Subnet"
+},
+{
+"name": "txt_gateway",
+"kind": "text",
+"parent": "groupBoxsta",
+"x": 83,
+"y": 44,
+"w": 121,
+"h": 20,
+"text": "1234"
+},
+{
+"name": "label9",
+"kind": "label",
+"parent": "groupBoxsta",
+"x": 6,
+"y": 52,
+"w": 49,
+"h": 13,
+"text": "Gateway"
+}
+]
+}

@@ -285,6 +285,50 @@ impl TileCache {
     }
 }
 
+impl TileCache {
+    /// GMap Prefetch: download every tile of `bounds` (min lat, min lng, max lat, max lng)
+    /// for zooms z0..=z1 into the disk cache in the background. Returns the tile count.
+    pub fn prefetch_area(&self, provider: Provider, bounds: (f64, f64, f64, f64), z0: u8, z1: u8) -> usize {
+        let Some(dir) = self.cache_dir.clone() else { return 0 };
+        let mut keys = Vec::new();
+        for z in z0..=z1.min(provider.max_zoom()) {
+            let (x0, y0) = latlng_to_world(bounds.2, bounds.1, z as f64);
+            let (x1, y1) = latlng_to_world(bounds.0, bounds.3, z as f64);
+            for x in (x0 / TILE) as u32..=(x1 / TILE) as u32 {
+                for y in (y0 / TILE) as u32..=(y1 / TILE) as u32 {
+                    keys.push(TileKey { provider, z, x, y });
+                    if keys.len() >= 5000 {
+                        break;
+                    }
+                }
+            }
+        }
+        let n = keys.len();
+        std::thread::spawn(move || {
+            let agent: ureq::Agent = ureq::Agent::config_builder()
+                .timeout_global(Some(std::time::Duration::from_secs(15)))
+                .user_agent(concat!("MissionPlannerRS/", env!("CARGO_PKG_VERSION")))
+                .build()
+                .into();
+            for key in keys {
+                let p = tile_path(&dir, key);
+                if p.exists() {
+                    continue;
+                }
+                if let Ok(mut resp) = agent.get(&key.provider.url(key.z, key.x, key.y)).call() {
+                    if let Ok(body) = resp.body_mut().read_to_vec() {
+                        if let Some(parent) = p.parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        let _ = std::fs::write(p, body);
+                    }
+                }
+            }
+        });
+        n
+    }
+}
+
 fn tile_path(dir: &PathBuf, key: TileKey) -> PathBuf {
     dir.join(key.provider.key())
         .join(key.z.to_string())

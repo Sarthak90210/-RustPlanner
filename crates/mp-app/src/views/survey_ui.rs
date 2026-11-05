@@ -554,7 +554,14 @@ impl GridUi {
             (382.0, 20.0, "Flight Time (est):", seconds_to_nice(route / (speed * 0.8))),
             (382.0, 33.0, "Photo every (est):", seconds_to_nice(self.spacing / speed)),
             (382.0, 46.0, "Turn Dia (at 45d):", format!("{:.0} m", turnrad * 2.0)),
-            (382.0, 59.0, "Ground Elevation:", "0-0 m".to_string()),
+            (382.0, 59.0, "Ground Elevation:", {
+                let el: Vec<f64> = self.polygon.iter().map(|p| (p.0, p.1)).chain(grid.iter().step_by(4).map(|g| (g.lat, g.lng))).filter_map(|(a, b)| crate::srtm::altitude(a, b)).collect();
+                if el.is_empty() {
+                    "0-0 m".to_string()
+                } else {
+                    format!("{:.0}-{:.0} m", el.iter().cloned().fold(f64::MAX, f64::min), el.iter().cloned().fold(f64::MIN, f64::max))
+                }
+            }),
             (559.0, 20.0, "Min Shutter Speed:", cm.map(|c| format!("1/{:.0}", (speed / (c * 0.01 / 2.0)).floor())).unwrap_or_default()),
         ] {
             t(x, y, l);

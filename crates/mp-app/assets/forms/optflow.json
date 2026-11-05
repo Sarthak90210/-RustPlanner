@@ -1,0 +1,324 @@
+{
+"name": "optflow",
+"w": 650,
+"h": 360,
+"controls": [
+{
+"name": "pictureBox2",
+"kind": "picture",
+"parent": "$this",
+"x": 11,
+"y": 35,
+"w": 75,
+"h": 75,
+"image": "opticalflow.jpg"
+},
+{
+"name": "groupBox4",
+"kind": "group",
+"parent": "$this",
+"x": 3,
+"y": 23,
+"w": 644,
+"h": 5
+},
+{
+"name": "label3",
+"kind": "label",
+"parent": "$this",
+"x": 7,
+"y": 5,
+"w": 135,
+"h": 20,
+"text": "Optical Flow  ",
+"font": 12.0
+},
+{
+"name": "CHK_enableoptflow",
+"kind": "mcheck",
+"parent": "$this",
+"x": 92,
+"y": 35,
+"w": 134,
+"h": 19,
+"text": "Enable",
+"param": "FLOW_ENABLE",
+"nums": [
+1.0,
+0.0
+]
+},
+{
+"name": "DROP_optflowtype",
+"kind": "mcombo",
+"parent": "$this",
+"x": 209,
+"y": 65,
+"w": 121,
+"h": 21,
+"param": "FLOW_TYPE"
+},
+{
+"name": "label1",
+"kind": "label",
+"parent": "$this",
+"x": 92,
+"y": 68,
+"w": 31,
+"h": 13,
+"text": "Type"
+},
+{
+"name": "label2",
+"kind": "label",
+"parent": "$this",
+"x": 92,
+"y": 94,
+"w": 82,
+"h": 13,
+"text": "Yaw Orientation"
+},
+{
+"name": "label4",
+"kind": "label",
+"parent": "$this",
+"x": 92,
+"y": 142,
+"w": 50,
+"h": 13,
+"text": "FX Scale"
+},
+{
+"name": "label5",
+"kind": "label",
+"parent": "$this",
+"x": 92,
+"y": 168,
+"w": 50,
+"h": 13,
+"text": "FY Scale"
+},
+{
+"name": "label6",
+"kind": "label",
+"parent": "$this",
+"x": 89,
+"y": 238,
+"w": 54,
+"h": 13,
+"text": "Position X"
+},
+{
+"name": "label7",
+"kind": "label",
+"parent": "$this",
+"x": 89,
+"y": 264,
+"w": 54,
+"h": 13,
+"text": "Position Y"
+},
+{
+"name": "label8",
+"kind": "label",
+"parent": "$this",
+"x": 89,
+"y": 290,
+"w": 54,
+"h": 13,
+"text": "Position Z"
+},
+{
+"name": "mavlinkNumericUpDown_yaw",
+"kind": "mnum",
+"parent": "$this",
+"x": 209,
+"y": 92,
+"w": 120,
+"h": 20,
+"param": "FLOW_ORIENT_YAW",
+"nums": [
+-179000.0,
+180000.0,
+100.0,
+1.0
+]
+},
+{
+"name": "label9",
+"kind": "label",
+"parent": "$this",
+"x": 335,
+"y": 97,
+"w": 134,
+"h": 13,
+"text": "degrees, relative to vehicle"
+},
+{
+"name": "mavlinkNumericUpDownFX",
+"kind": "mnum",
+"parent": "$this",
+"x": 209,
+"y": 140,
+"w": 120,
+"h": 20,
+"param": "FLOW_FXSCALER",
+"nums": [
+-200.0,
+200.0,
+1.0,
+1.0
+]
+},
+{
+"name": "mavlinkNumericUpDownFY",
+"kind": "mnum",
+"parent": "$this",
+"x": 209,
+"y": 166,
+"w": 120,
+"h": 20,
+"param": "FLOW_FYSCALER",
+"nums": [
+-200.0,
+200.0,
+1.0,
+1.0
+]
+},
+{
+"name": "mavlinkNumericUpDownX",
+"kind": "mnum",
+"parent": "$this",
+"x": 206,
+"y": 236,
+"w": 120,
+"h": 20,
+"param": "FLOW_POS_X",
+"nums": [
+-5.0,
+5.0,
+1.0,
+0.0
+]
+},
+{
+"name": "mavlinkNumericUpDownY",
+"kind": "mnum",
+"parent": "$this",
+"x": 206,
+"y": 262,
+"w": 120,
+"h": 20,
+"param": "FLOW_POS_Y",
+"nums": [
+-5.0,
+5.0,
+1.0,
+0.0
+]
+},
+{
+"name": "mavlinkNumericUpDownZ",
+"kind": "mnum",
+"parent": "$this",
+"x": 206,
+"y": 288,
+"w": 120,
+"h": 20,
+"param": "FLOW_POS_Z",
+"nums": [
+-5.0,
+5.0,
+1.0,
+0.0
+]
+},
+{
+"name": "label10",
+"kind": "label",
+"parent": "$this",
+"x": 330,
+"y": 238,
+"w": 73,
+"h": 13,
+"text": "metres foward"
+},
+{
+"name": "label11",
+"kind": "label",
+"parent": "$this",
+"x": 330,
+"y": 264,
+"w": 61,
+"h": 13,
+"text": "metres right"
+},
+{
+"name": "label12",
+"kind": "label",
+"parent": "$this",
+"x": 330,
+"y": 290,
+"w": 67,
+"h": 13,
+"text": "metres down"
+},
+{
+"name": "label13",
+"kind": "label",
+"parent": "$this",
+"x": 163,
+"y": 211,
+"w": 167,
+"h": 13,
+"text": "Position of Sensor, relative to IMU"
+},
+{
+"name": "label14",
+"kind": "label",
+"parent": "$this",
+"x": 204,
+"y": 121,
+"w": 80,
+"h": 13,
+"text": "Scaling Factors"
+},
+{
+"name": "label15",
+"kind": "label",
+"parent": "$this",
+"x": 88,
+"y": 330,
+"w": 81,
+"h": 13,
+"text": "Height Override"
+},
+{
+"name": "mavlinkNumericUpDownHGTOVR",
+"kind": "mnum",
+"parent": "$this",
+"x": 206,
+"y": 328,
+"w": 120,
+"h": 20,
+"param": "FLOW_HGT_OVR",
+"nums": [
+0.0,
+2.0,
+1.0,
+0.0
+]
+},
+{
+"name": "label16",
+"kind": "label",
+"parent": "$this",
+"x": 332,
+"y": 330,
+"w": 97,
+"h": 13,
+"text": "metres from ground"
+}
+]
+}

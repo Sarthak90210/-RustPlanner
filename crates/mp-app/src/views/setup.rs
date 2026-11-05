@@ -57,6 +57,8 @@ const PAGES: &[(&str, Option<usize>, bool)] = &[
 
 pub struct SetupView {
     page: usize,
+    forms: std::collections::HashMap<&'static str, crate::forms::FormState>,
+    param_compare: Option<Vec<(String, Option<f64>, f64, bool)>>,
     radio_cal: Option<RadioCal>,
     radio_done: bool,
     motor_pct: f32,
@@ -93,6 +95,8 @@ impl Default for SetupView {
     fn default() -> Self {
         Self {
             page: std::env::var("MP_PAGE").ok().and_then(|v| v.parse().ok()).unwrap_or(0),
+            forms: Default::default(),
+            param_compare: None,
             radio_cal: None,
             radio_done: false,
             motor_pct: 0.0,
@@ -158,11 +162,14 @@ impl SetupView {
                     let fw = app.link.map(|l| format!("{:?}", l.shared.read().cs.firmware)).unwrap_or_else(|| "ArduCopter2".into());
                     return app.joystick.setup_ui(ui, &fw, app.toasts);
                 }
-                "CubeID Update" | "Sik Radio" | "DroneCAN/UAVCAN" | "Antenna tracker" | "Bluetooth Setup" | "ESP8266 Setup" | "Script REPL" => {
-                    theme::label(ui, format!("{name}: not available in this port yet"));
+                _ => {}
+            }
+            if let Some(form) = form_for(name) {
+                if PAGES.iter().find(|p| p.0 == name).map(|p| p.2).unwrap_or(false) && !app.connected() {
+                    theme::label(ui, "Please Connect First");
                     return;
                 }
-                _ => {}
+                return self.form_page(ui, app, name, form);
             }
             let Some(link) = app.link.filter(|_| app.connected()) else {
                 theme::label(ui, "Please Connect First");
@@ -592,6 +599,208 @@ fn advanced(ui: &mut egui::Ui, app: &mut AppCtx) {
                 app.actions.push(crate::app::AppAction::OpenInspector);
             } else {
                 app.actions.push(crate::app::AppAction::Tool(b.to_string()));
+            }
+        }
+    }
+}
+
+// ------------------------------------------------------------------ designer-driven pages
+
+/// Setup page label -> exported form name.
+fn form_for(page: &str) -> Option<&'static str> {
+    Some(match page {
+        "Range Finder" => "rangefinder",
+        "Airspeed" => "airspeed",
+        "PX4Flow" | "Optical Flow" => "optflow",
+        "Camera Gimbal" => "mount",
+        "Parachute" => "parachute",
+        "Antenna tracker" => "tracker",
+        "Bluetooth Setup" => "bluetooth",
+        "ESP8266 Setup" => "esp8266",
+        "CubeID Update" => "cubeid",
+        "DroneCAN/UAVCAN" => "dronecan",
+        "Script REPL" => "repl",
+        "Initial Tune Parameter" => "initialparams",
+        "Compass/Motor Calib" => "compassmot",
+        "Sik Radio" => "sikradio",
+        _ => return None,
+    })
+}
+
+/// ConfigInitialParams.calc_values: suggested parameters for a prop size and battery.
+fn initial_params(prop: f64, cells: f64, cmax: f64, cmin: f64, tmotor: bool, suggested: bool, params: &std::collections::BTreeMap<String, mp_core::link::Param>, plane: bool) -> Vec<(String, f64)> {
+    let round_to = |v: f64, p: i32| -> f64 {
+        if p >= 0 {
+            let m = 10f64.powi(p);
+            (v * m).round() / m
+        } else {
+            let q = 10f64.powi(-p);
+            let v = v + 5.0 * q / 10.0;
+            (v - v.rem_euclid(q)).round()
+        }
+    };
+    let acc_y = (round_to(-900.0 * prop + 36000.0, -2)).max(8000.0);
+    let acro_yaw_p = 0.5 * acc_y / 4500.0;
+    let acc_p = round_to(-2.613267 * prop.powi(3) + 343.39216 * prop.powi(2) - 15083.7121 * prop + 235771.0, -2).max(10000.0);
+    let gyro = (289.22 * prop.powf(-0.838)).round().max(20.0);
+    let flt = (gyro / 2.0).max(10.0);
+    let mut expo = (0.15686 * prop.ln() + 0.23693).min(0.80);
+    expo = (expo * 100.0).round() / 100.0;
+    if tmotor {
+        expo = 0.2;
+    }
+    let (atc, mot) = if plane { ("Q_A", "Q_M") } else { ("ATC", "MOT") };
+    let mut out: Vec<(String, f64)> = vec![("ACRO_YAW_P".into(), acro_yaw_p)];
+    if params.contains_key(&format!("{atc}_ACCEL_P_MAX")) {
+        out.push((format!("{atc}_ACCEL_P_MAX"), acc_p));
+        out.push((format!("{atc}_ACCEL_R_MAX"), acc_p));
+        out.push((format!("{atc}_ACCEL_Y_MAX"), acc_y));
+    } else {
+        out.push((format!("{atc}_ACC_P_MAX"), acc_p / 100.0));
+        out.push((format!("{atc}_ACC_R_MAX"), acc_p / 100.0));
+        out.push((format!("{atc}_ACC_Y_MAX"), acc_y / 100.0));
+    }
+    for (k, v) in [("RAT_PIT_FLTD", flt), ("RAT_PIT_FLTE", 0.0), ("RAT_PIT_FLTT", flt), ("RAT_RLL_FLTD", flt), ("RAT_RLL_FLTE", 0.0), ("RAT_RLL_FLTT", flt), ("RAT_YAW_FLTD", 0.0), ("RAT_YAW_FLTE", 2.0), ("RAT_YAW_FLTT", flt), ("THR_MIX_MAN", 0.1)] {
+        out.push((format!("{atc}_{k}"), v));
+    }
+    out.push(("INS_ACCEL_FILTER".into(), 10.0));
+    out.push(("INS_GYRO_FILTER".into(), gyro));
+    out.push((format!("{mot}_THST_EXPO"), expo));
+    out.push((format!("{mot}_THST_HOVER"), 0.2));
+    out.push(("BATT_ARM_VOLT".into(), (cells - 1.0) * 0.1 + (cmin + 0.3) * cells));
+    out.push(("BATT_CRT_VOLT".into(), (cmin + 0.2) * cells));
+    out.push(("BATT_LOW_VOLT".into(), (cmin + 0.3) * cells));
+    out.push((format!("{mot}_BAT_VOLT_MAX"), cmax * cells));
+    out.push((format!("{mot}_BAT_VOLT_MIN"), cmin * cells));
+    if tmotor {
+        out.push((format!("{mot}_PWM_MIN"), 1100.0));
+        out.push((format!("{mot}_PWM_MAX"), 1940.0));
+    }
+    if suggested && !plane {
+        for (k, v) in [("BATT_FS_CRT_ACT", 1.0), ("BATT_FS_LOW_ACT", 2.0), ("FENCE_ACTION", 3.0), ("FENCE_ALT_MAX", 120.0), ("FENCE_ENABLE", 1.0), ("FENCE_RADIUS", 150.0), ("FENCE_TYPE", 7.0)] {
+            out.push((k.into(), v));
+        }
+    }
+    out
+}
+
+impl SetupView {
+    /// Pages rendered from the exported designer layouts, with their button handlers.
+    fn form_page(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, page: &str, form: &'static str) {
+        let st = self.forms.entry(form).or_default();
+        if form == "initialparams" && st.text.is_empty() {
+            st.items.insert("cmb_batterytype".into(), vec!["LiPo".into(), "LiPoHV".into(), "LiIon".into()]);
+            st.set("cmb_batterytype", "LiPo");
+            st.set("t_prop", "9");
+            st.set("t_cellcount", "4");
+        }
+        if form == "compassmot" {
+            if let Some(l) = app.link {
+                let s = l.shared.read();
+                if let Some(cm) = s.inspector.values().find_map(|m| match &m.msg {
+                    mp_core::mavlink::dialects::ardupilotmega::MavMessage::COMPASSMOT_STATUS(c) => Some(c.clone()),
+                    _ => None,
+                }) {
+                    st.set("lbl_status", format!("Throttle {}%  Current {:.1}A  Interference {}%  Comp {:.0},{:.0},{:.0}", cm.throttle / 10, cm.current, cm.interference, cm.CompensationX, cm.CompensationY, cm.CompensationZ));
+                }
+            }
+        }
+        let clicked = crate::forms::show(ui, app, form, st);
+        let params = app.link.map(|l| l.shared.read().params.clone()).unwrap_or_default();
+        for b in clicked {
+            match (form, b.as_str()) {
+                ("initialparams", "cmb_batterytype") => {
+                    let (mx, mn) = match st.get("cmb_batterytype") {
+                        "LiPoHV" => ("4.35", "3.3"),
+                        "LiIon" => ("4.1", "2.8"),
+                        _ => ("4.2", "3.3"),
+                    };
+                    st.set("t_cellmax", mx);
+                    st.set("t_cellmin", mn);
+                }
+                ("initialparams", "btn_docalc") => {
+                    let num = |k: &str| st.get(k).trim().parse::<f64>().unwrap_or(0.0);
+                    let (prop, cells) = (num("t_prop"), num("t_cellcount"));
+                    if prop <= 0.0 {
+                        app.toasts.error("Prop size must be larger than zero.");
+                    } else if cells < 1.0 {
+                        app.toasts.error("Battery cell count must be at least 1.");
+                    } else {
+                        let plane = app.link.map(|l| l.shared.read().cs.firmware == mp_core::firmware::Firmware::ArduPlane).unwrap_or(false);
+                        let list = initial_params(prop, cells, num("t_cellmax"), num("t_cellmin"), *st.checked.get("cb_tmotor").unwrap_or(&false), *st.checked.get("cb_suggested").unwrap_or(&false), &params, plane);
+                        self.param_compare = Some(list.into_iter().map(|(k, v)| {
+                            let cur = params.get(&k).map(|p| p.value as f64);
+                            (k, cur, v, true)
+                        }).collect());
+                    }
+                }
+                ("compassmot", "BUT_compassmot") => match app.link {
+                    // PREFLIGHT_CALIBRATION param6 = 1: compass / motor interference
+                    Some(l) => l.send(LinkCommand::CommandLong { command: 241, params: [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0] }),
+                    None => app.toasts.error("Please Connect First"),
+                },
+                ("tracker", "BUT_test_pitch") | ("tracker", "BUT_test_yaw") => match app.link {
+                    Some(l) => l.send(LinkCommand::CommandLong { command: 205, params: [if b.ends_with("pitch") { 30.0 } else { 0.0 }, 0.0, if b.ends_with("yaw") { 45.0 } else { 0.0 }, 0.0, 0.0, 0.0, 2.0] }),
+                    None => app.toasts.error("Please Connect First"),
+                },
+                ("repl", "BUT_Connect") => {
+                    st.set("textBox1", "Lua REPL\r\nConnecting over MAVLink SERIAL_CONTROL...\r\n");
+                }
+                ("repl", "BUT_disconnect") => st.set("textBox1", ""),
+                (_, other) => {
+                    let label = crate::forms::form(form).controls.iter().find(|c| c.name == other).and_then(|c| c.text.clone()).unwrap_or_default();
+                    if !label.is_empty() {
+                        app.toasts.error(format!("{page}: {label}\nNo device found. Connect the {page} hardware to a COM port first."));
+                    }
+                }
+            }
+        }
+        self.param_compare_ui(ui.ctx(), app);
+    }
+
+    /// ParamCompare dialog ("Write to FC") used by the initial parameter calculator.
+    fn param_compare_ui(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
+        let Some(list) = self.param_compare.as_mut() else { return };
+        let mut done = None;
+        egui::Window::new("Param Compare").collapsible(false).default_size([520.0, 420.0]).show(ctx, |ui| {
+            egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
+                egui::Grid::new("pcmp").num_columns(4).striped(true).show(ui, |ui| {
+                    for h in ["Command", "Value", "New Value", "Use"] {
+                        ui.label(RichText::new(h).strong().color(Color32::WHITE));
+                    }
+                    ui.end_row();
+                    for (k, cur, new, use_it) in list.iter_mut() {
+                        theme::label(ui, k.as_str());
+                        theme::label(ui, cur.map(|c| format!("{c}")).unwrap_or_else(|| "-".into()));
+                        theme::label(ui, format!("{:.4}", new).trim_end_matches('0').trim_end_matches('.').to_string());
+                        ui.checkbox(use_it, "");
+                        ui.end_row();
+                    }
+                });
+            });
+            ui.horizontal(|ui| {
+                if theme::button(ui, "Write to FC").clicked() {
+                    done = Some(true);
+                }
+                if theme::button(ui, "Cancel").clicked() {
+                    done = Some(false);
+                }
+            });
+        });
+        if let Some(write) = done {
+            let list = self.param_compare.take().unwrap_or_default();
+            if write {
+                match app.link {
+                    Some(l) if !app.readonly => {
+                        for (k, cur, v, use_it) in list {
+                            if use_it && cur.is_some() {
+                                l.send(LinkCommand::SetParam { name: k, value: v as f32 });
+                            }
+                        }
+                        app.toasts.error("Initial Parameters successfully updated.\nCheck parameters before flight!\n\nAfter test flight (land and disarm first):\n\tSet ATC_THR_MIX_MAN to 0.5\n\tSet PSC_ACCZ_P to MOT_THST_HOVER\n\tSet PSC_ACCZ_I to 2*MOT_THST_HOVER\n\nHappy flying!");
+                    }
+                    _ => app.toasts.error("Please Connect First"),
+                }
             }
         }
     }

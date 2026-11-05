@@ -1,0 +1,67 @@
+{
+"name": "compassmot",
+"w": 600,
+"h": 400,
+"controls": [
+{
+"name": "BUT_compassmot",
+"kind": "button",
+"parent": "$this",
+"x": 193,
+"y": 9,
+"w": 75,
+"h": 23,
+"text": "Start"
+},
+{
+"name": "txt_status",
+"kind": "text",
+"parent": "$this",
+"x": 55,
+"y": 38,
+"w": 353,
+"h": 111
+},
+{
+"name": "lbl_start",
+"kind": "label",
+"parent": "$this",
+"x": 274,
+"y": 14,
+"w": 29,
+"h": 13,
+"text": "Start",
+"hidden": true
+},
+{
+"name": "lbl_finish",
+"kind": "label",
+"parent": "$this",
+"x": 309,
+"y": 14,
+"w": 34,
+"h": 13,
+"text": "Finish",
+"hidden": true
+},
+{
+"name": "lbl_status",
+"kind": "label",
+"parent": "$this",
+"x": 414,
+"y": 41,
+"w": 132,
+"h": 13,
+"text": "Compass Motor Calibration"
+},
+{
+"name": "zedGraphControl1",
+"kind": "graph",
+"parent": "$this",
+"x": 3,
+"y": 168,
+"w": 627,
+"h": 229
+}
+]
+}

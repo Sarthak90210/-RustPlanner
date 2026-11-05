@@ -109,7 +109,6 @@ pub struct FlightDataView {
     armed_at: Instant,
     left_w: f32,
     prompt: Option<Prompt>,
-    pois: Vec<(f64, f64, String)>,
     camera_overlap: bool,
     graph: crate::zedgraph::TuningGraph,
     tlog_name: String,
@@ -149,7 +148,6 @@ impl Default for FlightDataView {
             armed_at: Instant::now(),
             left_w: 300.0,
             prompt: None,
-            pois: Vec::new(),
             camera_overlap: false,
             graph: Default::default(),
             tlog_name: String::new(),
@@ -580,7 +578,7 @@ impl FlightDataView {
         let assets = app.assets;
         let zoom = app.settings.fd_map.zoom;
         let guided = self.guided_target;
-        let pois = self.pois.clone();
+        let pois = app.settings.pois.clone();
         let pl = &app.settings.planner;
         let flag = |k: &str| pl.get(k).map(|v| v == "True").unwrap_or(true);
         let line_opts = map::LineOpts {
@@ -885,7 +883,7 @@ impl FlightDataView {
                 }
                 Inputted::AddPoi(lat, lng) => {
                     let name = fields.first().map(|(_, v)| v.clone()).unwrap_or_default();
-                    self.pois.push((lat, lng, name));
+                    app.settings.pois.push((lat, lng, name));
                 }
             },
         }
