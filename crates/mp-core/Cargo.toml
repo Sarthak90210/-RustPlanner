@@ -1,0 +1,18 @@
+[package]
+name = "mp-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mavlink = { version = "0.21", default-features = false, features = ["std", "dialect-ardupilotmega", "dialect-common", "format-generated-code", "mav2-message-extensions"] }
+log = "0.4"
+thiserror = "2"
+parking_lot = "0.12"
+crossbeam-channel = "0.5"
+roxmltree = "0.20"
+num-traits = "0.2"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))'.dependencies]
+serialport = { version = "4.10", default-features = false }

@@ -1,0 +1,664 @@
+//! Port of `MainV2`: main window, top menu (DATA / PLAN / SETUP / CONFIG / SIMULATION / HELP),
+//! connection controls and the active link (`MainV2.comPort`).
+
+use std::time::{Duration, Instant};
+
+use egui::{Color32, RichText, Vec2};
+use mp_core::comms::{self, ConnectionSpec};
+use mp_core::link::{Link, LinkEvent, LinkStatus};
+use mp_core::sim::{self, SimHandle};
+
+use crate::map::{MapState, TileCache};
+use crate::views::{
+    config::ConfigView, flight_data::FlightDataView, flight_plan::FlightPlanView, help,
+    setup::SetupView, simulation,
+};
+use crate::{platform, theme};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum View {
+    FlightData,
+    FlightPlan,
+    Setup,
+    Config,
+    Simulation,
+    Help,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct Settings {
+    pub view: View,
+    pub port: String,
+    pub baud: u32,
+    pub tcp_host: String,
+    pub tcp_port: u16,
+    pub udp_port: u16,
+    pub udpcl_host: String,
+    pub udpcl_port: u16,
+    pub fd_map: MapState,
+    pub fp_map: MapState,
+    pub default_alt: f32,
+    pub wp_radius: f32,
+    pub loiter_radius: f32,
+    pub alt_frame: u8,
+    pub quick_fields: [String; 6],
+    pub sim_port: u16,
+    pub ui_scale: f32,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            view: View::FlightData,
+            port: if cfg!(any(target_os = "android", target_os = "ios")) {
+                "UDP".into()
+            } else {
+                "AUTO".into()
+            },
+            baud: 115200,
+            tcp_host: "127.0.0.1".into(),
+            tcp_port: 5760,
+            udp_port: 14550,
+            udpcl_host: "127.0.0.1".into(),
+            udpcl_port: 14550,
+            fd_map: MapState::default(),
+            fp_map: MapState::default(),
+            default_alt: 100.0,
+            wp_radius: 2.0,
+            loiter_radius: 45.0,
+            alt_frame: 3,
+            quick_fields: [
+                "alt".into(),
+                "groundspeed".into(),
+                "wp_dist".into(),
+                "yaw".into(),
+                "verticalspeed".into(),
+                "DistToHome".into(),
+            ],
+            sim_port: 14560,
+            ui_scale: if cfg!(any(target_os = "android", target_os = "ios")) {
+                1.6
+            } else {
+                1.0
+            },
+        }
+    }
+}
+
+/// Mission Planner reports errors with a modal `CustomMessageBox`; informational messages
+/// only go to the log (MP shows them in the Messages tab / HUD, not as popups).
+#[derive(Default)]
+pub struct Toasts(Vec<String>);
+
+impl Toasts {
+    pub fn info(&mut self, s: impl Into<String>) {
+        log::info!("{}", s.into());
+    }
+    pub fn error(&mut self, s: impl Into<String>) {
+        let s = s.into();
+        log::warn!("{s}");
+        if !self.0.contains(&s) {
+            self.0.push(s);
+        }
+    }
+}
+
+pub enum AppAction {
+    Connect(ConnectionSpec),
+    Disconnect,
+    StartSim,
+    StopSim,
+    DemoFlight,
+}
+
+/// Shared context handed to each view.
+pub struct AppCtx<'a> {
+    pub link: Option<&'a Link>,
+    pub tiles: &'a mut TileCache,
+    pub toasts: &'a mut Toasts,
+    pub settings: &'a mut Settings,
+    pub actions: &'a mut Vec<AppAction>,
+    pub sim_running: bool,
+    pub assets: &'a crate::assets::Assets,
+}
+
+impl AppCtx<'_> {
+    pub fn connected(&self) -> bool {
+        self.link
+            .map(|l| l.status() == LinkStatus::Connected)
+            .unwrap_or(false)
+    }
+}
+
+pub struct MissionPlannerApp {
+    settings: Settings,
+    link: Option<Link>,
+    sim: Option<SimHandle>,
+    tiles: TileCache,
+    toasts: Toasts,
+    ports: Vec<String>,
+    ports_refreshed: Instant,
+    flight_data: FlightDataView,
+    flight_plan: FlightPlanView,
+    setup: SetupView,
+    config: ConfigView,
+    show_conn_options: bool,
+    show_stats: bool,
+    assets: crate::assets::Assets,
+    startup: Vec<AppAction>,
+    demo: Option<crate::demo::Demo>,
+}
+
+const SETTINGS_KEY: &str = "mp_settings";
+
+impl MissionPlannerApp {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        crate::fonts::install(&cc.egui_ctx);
+        theme::apply(&cc.egui_ctx);
+        mp_core::param_meta::warm_up();
+        let mut settings: Settings = cc
+            .storage
+            .and_then(|s| eframe::get_value(s, SETTINGS_KEY))
+            .unwrap_or_default();
+        cc.egui_ctx.set_zoom_factor(settings.ui_scale);
+        // Developer switches: MP_AUTOSIM=1 starts the simulator, MP_VIEW picks the screen.
+        let mut startup = Vec::new();
+        if std::env::var_os("MP_AUTOSIM").is_some() {
+            startup.push(AppAction::StartSim);
+        }
+        if std::env::var_os("MP_DEMO").is_some() {
+            startup.push(AppAction::DemoFlight);
+        }
+        if let Ok(v) = std::env::var("MP_VIEW") {
+            settings.view = match v.to_ascii_lowercase().as_str() {
+                "plan" => View::FlightPlan,
+                "setup" => View::Setup,
+                "config" => View::Config,
+                "sim" => View::Simulation,
+                "help" => View::Help,
+                _ => View::FlightData,
+            };
+        }
+        Self {
+            settings,
+            link: None,
+            sim: None,
+            tiles: TileCache::new(Some(platform::tile_cache_dir())),
+            toasts: Toasts::default(),
+            ports: comms::serial_ports(),
+            ports_refreshed: Instant::now(),
+            flight_data: FlightDataView::default(),
+            flight_plan: FlightPlanView::default(),
+            setup: SetupView::default(),
+            config: ConfigView::default(),
+            show_conn_options: false,
+            show_stats: false,
+            assets: crate::assets::Assets::load(&cc.egui_ctx),
+            startup,
+            demo: None,
+        }
+    }
+
+    fn connection_spec(&self) -> Option<ConnectionSpec> {
+        let s = &self.settings;
+        Some(match s.port.as_str() {
+            "TCP" => ConnectionSpec::Tcp {
+                host: s.tcp_host.clone(),
+                port: s.tcp_port,
+            },
+            "UDP" => ConnectionSpec::UdpListen { port: s.udp_port },
+            "UDPCl" => ConnectionSpec::UdpClient {
+                host: s.udpcl_host.clone(),
+                port: s.udpcl_port,
+            },
+            "AUTO" => {
+                // Mission Planner's AUTO scans serial ports; pick the last enumerated port.
+                let p = self.ports.last()?.clone();
+                ConnectionSpec::Serial {
+                    port: p,
+                    baud: s.baud,
+                }
+            }
+            p => ConnectionSpec::Serial {
+                port: p.to_string(),
+                baud: s.baud,
+            },
+        })
+    }
+
+    fn handle_actions(&mut self, actions: Vec<AppAction>) {
+        for a in actions {
+            match a {
+                AppAction::Connect(spec) => {
+                    self.link = None;
+                    self.toasts.info(format!("Connecting to {spec}"));
+                    self.link = Some(Link::connect(spec));
+                }
+                AppAction::Disconnect => {
+                    self.link = None;
+                }
+                AppAction::StartSim => {
+                    if self.sim.is_none() {
+                        let port = self.settings.sim_port;
+                        self.link = None;
+                        self.link = Some(Link::connect(ConnectionSpec::UdpListen { port }));
+                        match sim::spawn(port) {
+                            Ok(h) => {
+                                self.sim = Some(h);
+                                self.toasts.info("Simulator started");
+                            }
+                            Err(e) => self.toasts.error(format!("Simulator failed: {e}")),
+                        }
+                    }
+                }
+                AppAction::DemoFlight => {
+                    self.demo = Some(crate::demo::Demo::default());
+                    self.toasts
+                        .info("Demo flight: uploading mission, arming, taking off");
+                }
+                AppAction::StopSim => {
+                    self.link = None;
+                    if let Some(s) = self.sim.take() {
+                        s.stop();
+                    }
+                    self.toasts.info("Simulator stopped");
+                }
+            }
+        }
+    }
+
+    fn drain_events(&mut self) {
+        let Some(link) = &self.link else { return };
+        let events: Vec<LinkEvent> = link.events.try_iter().collect();
+        if let Some(d) = self.demo.as_mut() {
+            if d.tick(link, &events) {
+                self.demo = None;
+            }
+        }
+        let mut drop_link = false;
+        for e in events {
+            match &e {
+                LinkEvent::Connected => {
+                    let cs = link.shared.read().cs.clone();
+                    self.toasts
+                        .info(format!("Connected: {:?} sysid {}", cs.firmware, cs.sysid));
+                }
+                LinkEvent::Disconnected(err) => {
+                    match err {
+                        Some(e) => self.toasts.error(format!("Connection closed: {e}")),
+                        None => self.toasts.info("Disconnected"),
+                    }
+                    drop_link = true;
+                }
+                LinkEvent::ParamsLoaded(n) => self.toasts.info(format!("Got {n} parameters")),
+                LinkEvent::CommandAck {
+                    command,
+                    result,
+                    ok,
+                } => {
+                    let name = mp_core::mavcmd::cmd_name(*command);
+                    if *ok {
+                        self.toasts.info(format!("{name}: {result}"));
+                    } else {
+                        self.toasts.error(format!("{name}: {result}"));
+                    }
+                }
+                _ => {}
+            }
+            self.flight_plan.on_event(&e, &mut self.toasts);
+            self.config.on_event(&e, &mut self.toasts);
+            self.flight_data.on_event(&e);
+        }
+        if drop_link {
+            self.link = None;
+        }
+    }
+
+    fn top_bar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<AppAction>) {
+        // MainV2.MainMenu: MenuStrip on bgdark.jpg, 45x39 icons above Microsoft Sans Serif 8.25pt.
+        let bar_h = 60.0;
+        let (bar, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), bar_h), egui::Sense::hover());
+        let p = ui.painter().clone();
+        let uv = egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(bar.width() / 150.0, bar.height() / 150.0));
+        p.image(self.assets.bg.id(), bar, uv, Color32::WHITE);
+
+        let font = crate::fonts::ui_id(crate::fonts::UI_SIZE);
+        let a = &self.assets;
+        let items = [
+            (View::FlightData, "DATA", a.fd.id(), 49.0),
+            (View::FlightPlan, "PLAN", a.fp.id(), 49.0),
+            (View::Setup, "SETUP", a.setup.id(), 49.0),
+            (View::Config, "CONFIG", a.config.id(), 51.0),
+            (View::Simulation, "SIMULATION", a.sim.id(), 77.0),
+            (View::Help, "HELP", a.help.id(), 49.0),
+        ];
+        let top = bar.top() + 2.0;
+        let item = |ui: &mut egui::Ui, x: f32, w: f32, tex: egui::TextureId, label: &str, selected: bool, id: &str| -> (bool, f32) {
+            // ToolStripButton AutoSize with ImageAboveText: 39px image + 13px text + padding
+            let tw = ui.painter().layout_no_wrap(label.to_string(), font.clone(), theme::MENU_TEXT).size().x;
+            let w = w.max(tw + 6.0);
+            let r = egui::Rect::from_min_size(egui::pos2(x, top), Vec2::new(w, 56.0));
+            let resp = ui.interact(r, ui.scope_id().with(id), egui::Sense::click());
+            let p = ui.painter();
+            if selected {
+                p.rect_filled(r, 0.0, theme::CONTROL_BG);
+            } else if resp.hovered() {
+                p.rect_filled(r, 0.0, Color32::from_white_alpha(28));
+            }
+            let img = egui::Rect::from_center_size(egui::pos2(r.center().x, r.top() + 2.0 + 19.5), Vec2::new(45.0, 39.0));
+            p.image(tex, img, egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)), Color32::WHITE);
+            p.text(egui::pos2(r.center().x, r.bottom() - 2.0), egui::Align2::CENTER_BOTTOM, label, font.clone(), theme::MENU_TEXT);
+            (resp.clicked(), w)
+        };
+        let mut x = bar.left() + 6.0;
+        for (v, label, tex, w) in items {
+            let (clicked, w) = item(ui, x, w, tex, label, self.settings.view == v, label);
+            if clicked {
+                self.settings.view = v;
+            }
+            x += w;
+        }
+        let left_end = x;
+
+        // Right-aligned items: CONNECT, then the ConnectionControl, then the ArduPilot logo.
+        let status = self.link.as_ref().map(|l| l.status()).unwrap_or(LinkStatus::Disconnected);
+        let (clabel, ctex) = if status == LinkStatus::Disconnected {
+            ("CONNECT", self.assets.connect.id())
+        } else {
+            ("DISCONNECT", self.assets.disconnect.id())
+        };
+        let cw = ui.painter().layout_no_wrap(clabel.to_string(), font.clone(), theme::MENU_TEXT).size().x.max(57.0) + 6.0;
+        let mut rx = bar.right() - cw;
+        if item(ui, rx, cw, ctex, clabel, false, "connect").0 {
+            if status == LinkStatus::Disconnected {
+                match self.settings.port.as_str() {
+                    // Mission Planner asks for host/port at connect time.
+                    "TCP" | "UDP" | "UDPCl" => self.show_conn_options = true,
+                    _ => match self.connection_spec() {
+                        Some(spec) => actions.push(AppAction::Connect(spec)),
+                        None => self.toasts.error("No serial ports found"),
+                    },
+                }
+            } else {
+                actions.push(AppAction::Disconnect);
+            }
+        }
+
+        // ConnectionControl (238x47): cmb_Connection 121x21 @0,0; cmb_Baud 111x21 @127,0;
+        // "Stats..." @3,32; cmb_sysid 136x21 @102,27.
+        rx -= 238.0;
+        if rx > left_end + 10.0 {
+            if self.ports_refreshed.elapsed() > Duration::from_secs(3) {
+                self.ports = comms::serial_ports();
+                self.ports_refreshed = Instant::now();
+            }
+            let cc = egui::pos2(rx, top);
+            let enabled = status == LinkStatus::Disconnected;
+            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(egui::Rect::from_min_size(cc, Vec2::new(238.0, 47.0))));
+            {
+                let v = child.visuals_mut();
+                for w in [&mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active, &mut v.widgets.open] {
+                    w.bg_fill = Color32::BLACK;
+                    w.weak_bg_fill = Color32::BLACK;
+                }
+            }
+            let ports = self.ports.clone();
+            let settings = &mut self.settings;
+            child.add_enabled_ui(enabled, |ui| {
+                ui.put(egui::Rect::from_min_size(cc, Vec2::new(121.0, 21.0)), |ui: &mut egui::Ui| {
+                    egui::ComboBox::from_id_salt("port")
+                        .width(113.0)
+                        .selected_text(settings.port.clone())
+                        .show_ui(ui, |ui| {
+                            let mut opts: Vec<String> = Vec::new();
+                            if platform::HAS_NATIVE_DIALOGS {
+                                opts.push("AUTO".into());
+                            }
+                            opts.extend(ports.iter().cloned());
+                            opts.extend(["TCP".into(), "UDP".into(), "UDPCl".into()]);
+                            for o in opts {
+                                ui.selectable_value(&mut settings.port, o.clone(), o);
+                            }
+                        })
+                        .response
+                });
+                ui.put(egui::Rect::from_min_size(cc + Vec2::new(127.0, 0.0), Vec2::new(111.0, 21.0)), |ui: &mut egui::Ui| {
+                    egui::ComboBox::from_id_salt("baud")
+                        .width(103.0)
+                        .selected_text(settings.baud.to_string())
+                        .show_ui(ui, |ui| {
+                            for b in comms::BAUD_RATES {
+                                ui.selectable_value(&mut settings.baud, *b, b.to_string());
+                            }
+                        })
+                        .response
+                });
+            });
+            let stats = child.put(
+                egui::Rect::from_min_size(cc + Vec2::new(3.0, 32.0), Vec2::new(40.0, 13.0)),
+                egui::Label::new(RichText::new("Stats...").color(Color32::from_rgb(0, 0, 255)).underline()).sense(egui::Sense::click()),
+            );
+            if stats.clicked() {
+                self.show_stats = !self.show_stats;
+            }
+            if let Some(link) = &self.link {
+                let s = link.shared.read();
+                if s.status == LinkStatus::Connected {
+                    let label = format!("{}-{}-{:?}", s.cs.sysid, s.cs.compid, s.cs.firmware);
+                    child.put(egui::Rect::from_min_size(cc + Vec2::new(102.0, 27.0), Vec2::new(136.0, 21.0)), |ui: &mut egui::Ui| {
+                        egui::ComboBox::from_id_salt("sysid").width(128.0).selected_text(label).show_ui(ui, |_ui| {}).response
+                    });
+                }
+            }
+
+            // MenuArduPilot: logo scaled to 200x31
+            rx -= 200.0;
+            if rx > left_end + 10.0 {
+                let r = egui::Rect::from_min_size(egui::pos2(rx, bar.center().y - 15.5), Vec2::new(200.0, 31.0));
+                let resp = ui.interact(r, ui.scope_id().with("logo"), egui::Sense::click());
+                p.image(self.assets.logo.id(), r, egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)), Color32::WHITE);
+                if resp.clicked() {
+                    ui.ctx().open_url(egui::OpenUrl::new_tab("https://ardupilot.org/"));
+                }
+            }
+        }
+
+        if self.show_conn_options {
+            let mut open = true;
+            let mut go = false;
+            let title = match self.settings.port.as_str() {
+                "TCP" => "TCP Connection",
+                "UDP" => "UDP Listen",
+                _ => "UDP Client",
+            };
+            egui::Window::new(title)
+                .open(&mut open)
+                .resizable(false)
+                .collapsible(false)
+                .anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO)
+                .show(ui.ctx(), |ui| {
+                    egui::Grid::new("connopts").num_columns(2).show(ui, |ui| match self.settings.port.as_str() {
+                        "TCP" => {
+                            ui.label("Enter host name/ip (ensure remote end is already started)");
+                            ui.text_edit_singleline(&mut self.settings.tcp_host);
+                            ui.end_row();
+                            ui.label("Enter remote port");
+                            ui.add(egui::DragValue::new(&mut self.settings.tcp_port));
+                            ui.end_row();
+                        }
+                        "UDP" => {
+                            ui.label("Enter Local port (ensure remote end is already sending)");
+                            ui.add(egui::DragValue::new(&mut self.settings.udp_port));
+                            ui.end_row();
+                        }
+                        _ => {
+                            ui.label("Enter remote host");
+                            ui.text_edit_singleline(&mut self.settings.udpcl_host);
+                            ui.end_row();
+                            ui.label("Enter remote port");
+                            ui.add(egui::DragValue::new(&mut self.settings.udpcl_port));
+                            ui.end_row();
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        if theme::button(ui, "OK").clicked() {
+                            go = true;
+                        }
+                        if theme::button(ui, "Cancel").clicked() {
+                            self.show_conn_options = false;
+                        }
+                    });
+                });
+            if go {
+                if let Some(spec) = self.connection_spec() {
+                    actions.push(AppAction::Connect(spec));
+                }
+                self.show_conn_options = false;
+            }
+            if !open {
+                self.show_conn_options = false;
+            }
+        }
+
+        if self.show_stats {
+            let mut open = true;
+            egui::Window::new("Connection Stats").open(&mut open).resizable(false).collapsible(false).show(ui.ctx(), |ui| match &self.link {
+                Some(l) => {
+                    let s = l.shared.read();
+                    egui::Grid::new("stats").num_columns(2).show(ui, |ui| {
+                        ui.label("Packets Received");
+                        ui.label(s.cs.packets_received.to_string());
+                        ui.end_row();
+                        ui.label("Packets Lost");
+                        ui.label(s.cs.packets_lost.to_string());
+                        ui.end_row();
+                        ui.label("Link Quality");
+                        ui.label(format!("{:.0}%", s.cs.linkqualitygcs));
+                        ui.end_row();
+                        ui.label("Connection");
+                        ui.label(s.spec.as_ref().map(|c| c.to_string()).unwrap_or_default());
+                        ui.end_row();
+                    });
+                }
+                None => {
+                    ui.label("Not connected");
+                }
+            });
+            if !open {
+                self.show_stats = false;
+            }
+        }
+    }
+
+    /// `ProgressReporterDialogue`: title = current step, themed progress bar, Cancel.
+    fn progress_window(&self, ctx: &egui::Context) {
+        let Some(link) = &self.link else { return };
+        let p = link.shared.read().progress.clone();
+        if let Some(p) = p {
+            egui::Window::new(&p.label)
+                .id(egui::Id::unique("progress"))
+                .resizable(false)
+                .collapsible(false)
+                .anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO)
+                .fixed_size(Vec2::new(370.0, 110.0))
+                .show(ctx, |ui| {
+                    theme::label(ui, &p.label);
+                    ui.add_space(6.0);
+                    let frac = if p.total > 0 { p.done as f32 / p.total as f32 } else { 0.0 };
+                    let txt = if p.total > 0 { format!("{}/{}", p.done, p.total) } else { String::new() };
+                    theme::progress(ui, frac, Vec2::new(358.0, 23.0), &txt);
+                    ui.add_space(6.0);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                        if theme::button(ui, "Cancel").clicked() {
+                            link.shared.write().progress = None;
+                        }
+                    });
+                });
+        }
+    }
+
+    /// `CustomMessageBox`: themed modal with OK.
+    fn toasts_ui(&mut self, ctx: &egui::Context) {
+        let Some(msg) = self.toasts.0.first().cloned() else { return };
+        let mut close = false;
+        egui::Modal::new(egui::Id::unique("msgbox")).show(ctx, |ui| {
+            ui.set_min_width(300.0);
+            ui.label(RichText::new("Mission Planner").strong().color(Color32::WHITE));
+            ui.add_space(8.0);
+            theme::label(ui, &msg);
+            ui.add_space(10.0);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                if theme::button(ui, "OK").clicked() {
+                    close = true;
+                }
+            });
+        });
+        if close {
+            self.toasts.0.remove(0);
+        }
+    }
+}
+
+impl eframe::App for MissionPlannerApp {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+        self.drain_events();
+        let mut actions = std::mem::take(&mut self.startup);
+
+        egui::Panel::top("menu")
+            .frame(
+                egui::Frame::new().fill(theme::BG),
+            )
+            .show(ui, |ui| self.top_bar(ui, &mut actions));
+
+        egui::CentralPanel::default()
+            .frame(egui::Frame::new().fill(theme::BG))
+            .show(ui, |ui| {
+                let Self {
+                    settings,
+                    link,
+                    tiles,
+                    toasts,
+                    flight_data,
+                    flight_plan,
+                    setup,
+                    config,
+                    sim,
+                    assets,
+                    ..
+                } = self;
+                let view = settings.view;
+                let mut app = AppCtx {
+                    link: link.as_ref(),
+                    tiles,
+                    toasts,
+                    settings,
+                    actions: &mut actions,
+                    sim_running: sim.is_some(),
+                    assets,
+                };
+                match view {
+                    View::FlightData => flight_data.ui(ui, &mut app),
+                    View::FlightPlan => flight_plan.ui(ui, &mut app),
+                    View::Setup => setup.ui(ui, &mut app),
+                    View::Config => config.ui(ui, &mut app),
+                    View::Simulation => simulation::ui(ui, &mut app),
+                    View::Help => help::ui(ui),
+                }
+            });
+
+        self.progress_window(&ctx);
+        self.toasts_ui(&ctx);
+        self.handle_actions(actions);
+
+        if self.link.is_some() {
+            // live telemetry
+            ctx.request_repaint_after(Duration::from_millis(50));
+        }
+    }
+
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        eframe::set_value(storage, SETTINGS_KEY, &self.settings);
+    }
+}

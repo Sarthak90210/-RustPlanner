@@ -1,0 +1,222 @@
+//! Transport layer, the equivalent of `ExtLibs/Comms` (`ICommsSerial`): serial, TCP client,
+//! UDP listen ("UDP") and UDP client ("UDPCl").
+//!
+//! Every transport reads with a short timeout so the link thread can interleave reads and
+//! writes on a single thread.
+
+use std::io::{self, Read, Write};
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs, UdpSocket};
+use std::time::Duration;
+
+pub const READ_TIMEOUT: Duration = Duration::from_millis(20);
+
+/// Baud rates offered by Mission Planner's baud combo.
+pub const BAUD_RATES: &[u32] = &[
+    4800, 9600, 14400, 19200, 28800, 38400, 57600, 111100, 115200, 230400, 256000, 460800, 500000,
+    921600, 1500000, 2000000,
+];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConnectionSpec {
+    Serial {
+        port: String,
+        baud: u32,
+    },
+    Tcp {
+        host: String,
+        port: u16,
+    },
+    /// Listen on a local UDP port and reply to whoever talks to us (Mission Planner "UDP").
+    UdpListen {
+        port: u16,
+    },
+    /// Send to a remote UDP host/port (Mission Planner "UDPCl").
+    UdpClient {
+        host: String,
+        port: u16,
+    },
+}
+
+impl std::fmt::Display for ConnectionSpec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConnectionSpec::Serial { port, baud } => write!(f, "{port} @ {baud}"),
+            ConnectionSpec::Tcp { host, port } => write!(f, "tcp:{host}:{port}"),
+            ConnectionSpec::UdpListen { port } => write!(f, "udp:0.0.0.0:{port}"),
+            ConnectionSpec::UdpClient { host, port } => write!(f, "udpcl:{host}:{port}"),
+        }
+    }
+}
+
+pub trait Transport: Read + Write + Send {}
+impl<T: Read + Write + Send> Transport for T {}
+
+/// Lists serial ports (desktop only; mobile platforms have no direct serial access).
+pub fn serial_ports() -> Vec<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+    {
+        serialport::available_ports()
+            .map(|v| v.into_iter().map(|p| p.port_name).collect())
+            .unwrap_or_default()
+    }
+    #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
+    {
+        Vec::new()
+    }
+}
+
+pub fn open(spec: &ConnectionSpec) -> io::Result<Box<dyn Transport>> {
+    match spec {
+        ConnectionSpec::Serial { port, baud } => open_serial(port, *baud),
+        ConnectionSpec::Tcp { host, port } => {
+            let addr = resolve(host, *port)?;
+            let s = TcpStream::connect_timeout(&addr, Duration::from_secs(5))?;
+            s.set_nodelay(true)?;
+            s.set_read_timeout(Some(READ_TIMEOUT))?;
+            Ok(Box::new(TcpTransport(s)))
+        }
+        ConnectionSpec::UdpListen { port } => {
+            let sock = UdpSocket::bind(("0.0.0.0", *port))?;
+            sock.set_read_timeout(Some(READ_TIMEOUT))?;
+            Ok(Box::new(UdpTransport::new(sock, None)))
+        }
+        ConnectionSpec::UdpClient { host, port } => {
+            let addr = resolve(host, *port)?;
+            let sock = UdpSocket::bind(("0.0.0.0", 0))?;
+            sock.set_read_timeout(Some(READ_TIMEOUT))?;
+            Ok(Box::new(UdpTransport::new(sock, Some(addr))))
+        }
+    }
+}
+
+fn resolve(host: &str, port: u16) -> io::Result<SocketAddr> {
+    (host, port)
+        .to_socket_addrs()?
+        .next()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "host not found"))
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+fn open_serial(port: &str, baud: u32) -> io::Result<Box<dyn Transport>> {
+    let p = serialport::new(port, baud)
+        .timeout(READ_TIMEOUT)
+        .open()
+        .map_err(|e| io::Error::other(e.to_string()))?;
+    // Mission Planner toggles DTR/RTS on open; most flight controllers expect DTR high.
+    let mut p = p;
+    let _ = p.write_data_terminal_ready(true);
+    let _ = p.write_request_to_send(true);
+    Ok(Box::new(SerialTransport(p)))
+}
+
+#[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
+fn open_serial(_port: &str, _baud: u32) -> io::Result<Box<dyn Transport>> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "serial ports are not available on this platform",
+    ))
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+struct SerialTransport(Box<dyn serialport::SerialPort>);
+
+#[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+impl Read for SerialTransport {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self.0.read(buf) {
+            Ok(0) => Err(io::ErrorKind::TimedOut.into()),
+            r => r,
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+impl Write for SerialTransport {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.write(buf)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
+    }
+}
+
+struct TcpTransport(TcpStream);
+
+impl Read for TcpTransport {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self.0.read(buf) {
+            Ok(0) => Err(io::Error::new(
+                io::ErrorKind::ConnectionAborted,
+                "TCP connection closed",
+            )),
+            r => r,
+        }
+    }
+}
+
+impl Write for TcpTransport {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.write(buf)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
+    }
+}
+
+/// UDP is datagram based; buffer one datagram and hand it out to the stream-style reader.
+pub struct UdpTransport {
+    sock: UdpSocket,
+    remote: Option<SocketAddr>,
+    buf: Vec<u8>,
+    pos: usize,
+    len: usize,
+    out: Vec<u8>,
+}
+
+impl UdpTransport {
+    pub fn new(sock: UdpSocket, remote: Option<SocketAddr>) -> Self {
+        Self {
+            sock,
+            remote,
+            buf: vec![0; 65536],
+            pos: 0,
+            len: 0,
+            out: Vec::with_capacity(512),
+        }
+    }
+}
+
+impl Read for UdpTransport {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        if self.pos >= self.len {
+            let (n, from) = self.sock.recv_from(&mut self.buf)?;
+            if n == 0 {
+                return Err(io::ErrorKind::TimedOut.into());
+            }
+            // "UDP" mode replies to the most recent sender, like Mission Planner's CommsUdp.
+            self.remote = Some(from);
+            self.pos = 0;
+            self.len = n;
+        }
+        let n = out.len().min(self.len - self.pos);
+        out[..n].copy_from_slice(&self.buf[self.pos..self.pos + n]);
+        self.pos += n;
+        Ok(n)
+    }
+}
+
+impl Write for UdpTransport {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.out.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        if let Some(r) = self.remote {
+            if !self.out.is_empty() {
+                self.sock.send_to(&self.out, r)?;
+            }
+        }
+        self.out.clear();
+        Ok(())
+    }
+}
