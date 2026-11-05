@@ -192,3 +192,31 @@ fn tlog_logs_and_playback() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn mavftp_against_sim() {
+    let port = 14720;
+    let link = Link::connect(ConnectionSpec::UdpListen { port });
+    let _sim = sim::spawn(port).unwrap();
+    wait_event(&link, Duration::from_secs(10), |e| matches!(e, LinkEvent::Connected));
+
+    let mut ftp = mp_core::ftp::Ftp::new(&link);
+    ftp.reset().unwrap();
+    let root = ftp.list("/").unwrap();
+    assert!(root.iter().any(|e| e.is_dir && e.name == "APM"), "{root:?}");
+    let logs = ftp.list("/APM/LOGS").unwrap();
+    let bin = logs.iter().find(|e| e.name == "00000001.BIN").expect("log listed");
+    let data = ftp.get("/APM/LOGS/00000001.BIN", |_, _| {}).unwrap();
+    assert_eq!(data.len() as u64, bin.size);
+    assert_eq!(data, mp_core::dataflash::sample_log());
+    assert_eq!(ftp.crc32("/APM/LOGS/00000001.BIN").unwrap(), mp_core::ftp::crc32(0, &data));
+
+    let payload: Vec<u8> = (0..1000u32).map(|i| (i % 251) as u8).collect();
+    ftp.mkdir("/APM/test").unwrap();
+    ftp.put("/APM/test/a.bin", &payload, |_, _| {}).unwrap();
+    ftp.rename("/APM/test/a.bin", "/APM/test/b.bin").unwrap();
+    assert_eq!(ftp.get("/APM/test/b.bin", |_, _| {}).unwrap(), payload);
+    ftp.remove("/APM/test/b.bin").unwrap();
+    ftp.rmdir("/APM/test").unwrap();
+    assert!(ftp.list("/APM").unwrap().iter().all(|e| e.name != "test"));
+}

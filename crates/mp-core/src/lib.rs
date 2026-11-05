@@ -7,6 +7,7 @@ pub mod comms;
 pub mod dataflash;
 pub mod devid;
 pub mod firmware;
+pub mod ftp;
 pub mod fwupload;
 pub mod geo;
 pub mod link;

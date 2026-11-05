@@ -82,6 +82,7 @@ pub struct ConfigView {
     pub params: ParamEditor,
     extended: crate::views::tuning::ExtendedTuning,
     user_add: String,
+    ftp: crate::views::mavftp::MavFtpUi,
 }
 
 impl Default for ConfigView {
@@ -91,12 +92,13 @@ impl Default for ConfigView {
             Some(2) => Page::ExtendedTuning,
             Some(3) => Page::StandardParams,
             Some(4) => Page::AdvancedParams,
+            Some(6) => Page::MavFtp,
             Some(7) => Page::UserParams,
             Some(10) => Page::Planner,
             Some(0) => Page::GeoFence,
             _ => Page::FullParamList,
         };
-        Self { page, params: ParamEditor::default(), extended: Default::default(), user_add: String::new() }
+        Self { page, params: ParamEditor::default(), extended: Default::default(), user_add: String::new(), ftp: Default::default() }
     }
 }
 
@@ -128,9 +130,7 @@ impl ConfigView {
             Page::StandardParams => friendly(ui, app, &self.params, |_, m| m.map(|m| m.user == "Standard").unwrap_or(false)),
             Page::AdvancedParams => friendly(ui, app, &self.params, |_, m| m.map(|m| m.user == "Advanced").unwrap_or(false)),
             Page::OnboardOsd => friendly(ui, app, &self.params, |n, _| n.starts_with("OSD")),
-            Page::MavFtp => {
-                theme::label(ui, "MAVFtp: not available in this port yet");
-            }
+            Page::MavFtp => self.ftp.ui(ui, app),
             Page::UserParams => self.user_params(ui, app),
             Page::FullParamList => self.params.ui(ui, app, false),
             Page::Planner => planner(ui, app, fw),

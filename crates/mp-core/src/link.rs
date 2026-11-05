@@ -192,6 +192,8 @@ pub enum LinkCommand {
     Mirror { target: Option<String>, write: bool },
     /// Send pre-built frame bytes unchanged (MAVLink signing setup, hex injection).
     SendRaw(Vec<u8>),
+    /// Forward every received message with this id to `tx` (MAVFtp and other tools).
+    Subscribe { msgid: u32, tx: Sender<MavMessage> },
     /// Make another vehicle on the link the current one (sysid selector).
     SetTarget { sysid: u8, compid: u8 },
 }
@@ -368,6 +370,7 @@ struct Worker {
     mission: Option<MissionOp>,
     pending_cmd: Option<PendingCmd>,
     mirror: Option<(std::net::UdpSocket, std::net::SocketAddr, bool)>,
+    subscribers: Vec<(u32, Sender<MavMessage>)>,
 }
 
 fn is_timeout(e: &io::Error) -> bool {
@@ -414,6 +417,7 @@ impl Worker {
             mission: None,
             pending_cmd: None,
             mirror: None,
+            subscribers: Vec::new(),
         }
     }
 
@@ -628,6 +632,7 @@ impl Worker {
                     }
                 }
             }
+            LinkCommand::Subscribe { msgid, tx } => self.subscribers.push((msgid, tx)),
             LinkCommand::SetTarget { sysid, compid } => {
                 if sysid != self.target_sys || compid != self.target_comp {
                     self.target_sys = sysid;
@@ -803,6 +808,10 @@ impl Worker {
     // ---------------------------------------------------------------- incoming messages
 
     fn handle_message(&mut self, hdr: MavHeader, msg: MavMessage) -> io::Result<()> {
+        if !self.subscribers.is_empty() {
+            let id = <MavMessage as mavlink::Message>::message_id(&msg);
+            self.subscribers.retain(|(m, tx)| *m != id || tx.send(msg.clone()).is_ok());
+        }
         {
             use mavlink::Message;
             let now = Instant::now();
@@ -831,7 +840,7 @@ impl Worker {
                 }
             }
             if let MavMessage::ADSB_VEHICLE(a) = &msg {
-                let cs: String = a.callsign.to_str().unwrap_or("").trim_end_matches(' ').trim().to_string();
+                let cs: String = a.callsign.to_str().unwrap_or("").trim_end_matches('\0').trim().to_string();
                 s.adsb.insert(a.ICAO_address, (cs, a.lat as f64 * 1e-7, a.lon as f64 * 1e-7, a.altitude as f32 / 1000.0, a.heading as f32 / 100.0, now));
                 s.adsb.retain(|_, v| now.duration_since(v.5).as_secs() < 60);
             }

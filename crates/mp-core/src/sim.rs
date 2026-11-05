@@ -48,6 +48,185 @@ pub struct SimOptions {
     pub offset: (f64, f64),
 }
 
+/// The simulator's MAVLink FTP filesystem (AP_Filesystem: SD card plus @SYS / @PARAM).
+struct FtpFs {
+    files: BTreeMap<String, Vec<u8>>,
+    dirs: std::collections::BTreeSet<String>,
+    sessions: std::collections::HashMap<u8, (String, bool)>,
+}
+
+impl FtpFs {
+    fn new() -> Self {
+        let mut files = BTreeMap::new();
+        files.insert("/APM/LOGS/00000001.BIN".to_string(), crate::dataflash::sample_log());
+        files.insert("/APM/LOGS/LASTLOG.TXT".to_string(), b"1\r\n".to_vec());
+        files.insert("/APM/scripts/hello_world.lua".to_string(), b"-- example script\nfunction update()\n  gcs:send_text(6, \"hello, world\")\n  return update, 10000\nend\nreturn update()\n".to_vec());
+        files.insert("/APM/terrain/S36E149.DAT".to_string(), vec![0u8; 2048]);
+        files.insert("@SYS/uarts.txt".to_string(), b"UARTV1\nSERIAL0 OTG1  TX=   12345 RX=     678 TXBD=  9600 RXBD=  1200\nSERIAL1 UART7 TX*       0 RX*       0 TXBD=     0 RXBD=     0\n".to_vec());
+        files.insert("@SYS/threads.txt".to_string(), b"ThreadsV2\nmonitor      PRI=183 sp=0x30008000 STACK_LEFT=264\ntimer        PRI=181 sp=0x30008400 STACK_LEFT=1016\nrcin         PRI=177 sp=0x30008800 STACK_LEFT=1176\nIO           PRI= 58 sp=0x30009000 STACK_LEFT=1384\nmain         PRI=180 sp=0x2001E800 STACK_LEFT=3152\n".to_vec());
+        files.insert("@SYS/tasks.txt".to_string(), b"TasksV2\nfast_loop            MIN=  12 MAX=  55 AVG=  14 OVR=  0 SLP=  0, TOT= 3.2%\n".to_vec());
+        files.insert("@SYS/dma.txt".to_string(), b"DMAV1\n".to_vec());
+        files.insert("@SYS/timers.txt".to_string(), b"TimersV1\n".to_vec());
+        let dirs = ["/", "/APM", "/APM/LOGS", "/APM/scripts", "/APM/terrain", "@SYS", "@PARAM", "@ROMFS"].iter().map(|s| s.to_string()).collect();
+        Self { files, dirs, sessions: Default::default() }
+    }
+
+    fn norm(p: &str) -> String {
+        let p = p.trim_end_matches('\0').trim();
+        if p.is_empty() {
+            return "/".into();
+        }
+        let p = if p.starts_with('/') || p.starts_with('@') { p.to_string() } else { format!("/{p}") };
+        if p.len() > 1 { p.trim_end_matches('/').to_string() } else { p }
+    }
+
+    fn list(&self, dir: &str) -> Vec<String> {
+        let dir = Self::norm(dir);
+        let prefix = if dir == "/" { "/".to_string() } else { format!("{dir}/") };
+        let mut out = Vec::new();
+        for d in &self.dirs {
+            if d != &dir && d.starts_with(&prefix) && !d[prefix.len()..].contains('/') {
+                out.push(format!("D{}", &d[prefix.len()..]));
+            }
+        }
+        if dir == "/" {
+            for d in self.dirs.iter().filter(|d| d.starts_with('@')) {
+                out.push(format!("D{d}"));
+            }
+        }
+        for (f, b) in &self.files {
+            if f.starts_with(&prefix) && !f[prefix.len()..].contains('/') {
+                out.push(format!("F{}\t{}", &f[prefix.len()..], b.len()));
+            }
+        }
+        out
+    }
+
+    /// Handle one request payload; returns the reply payload.
+    fn handle(&mut self, req: &[u8; 251], params: &BTreeMap<String, f32>) -> [u8; 251] {
+        let seq = u16::from_le_bytes([req[0], req[1]]);
+        let (session, op, size) = (req[2], req[3], req[4] as usize);
+        let offset = u32::from_le_bytes([req[8], req[9], req[10], req[11]]);
+        let data = &req[12..12 + size.min(239)];
+        let text = String::from_utf8_lossy(data).to_string();
+        let mut rep = [0u8; 251];
+        rep[0..2].copy_from_slice(&seq.wrapping_add(1).to_le_bytes());
+        rep[2] = session;
+        rep[5] = op;
+        rep[8..12].copy_from_slice(&offset.to_le_bytes());
+        let ack = |rep: &mut [u8; 251], payload: &[u8]| {
+            rep[3] = 128;
+            rep[4] = payload.len() as u8;
+            rep[12..12 + payload.len()].copy_from_slice(payload);
+        };
+        let nak = |rep: &mut [u8; 251], code: u8| {
+            rep[3] = 129;
+            rep[4] = 1;
+            rep[12] = code;
+        };
+        match op {
+            1 => {
+                self.sessions.remove(&session);
+                ack(&mut rep, &[]);
+            }
+            2 => {
+                self.sessions.clear();
+                ack(&mut rep, &[]);
+            }
+            3 => {
+                let dir = Self::norm(&text);
+                if !self.dirs.contains(&dir) {
+                    nak(&mut rep, 10);
+                } else {
+                    let entries = self.list(&dir);
+                    let mut buf = Vec::new();
+                    for e in entries.iter().skip(offset as usize) {
+                        if buf.len() + e.len() + 1 > 239 {
+                            break;
+                        }
+                        buf.extend_from_slice(e.as_bytes());
+                        buf.push(0);
+                    }
+                    if buf.is_empty() { nak(&mut rep, 6) } else { ack(&mut rep, &buf) }
+                }
+            }
+            4 | 6 | 11 => {
+                let path = Self::norm(&text);
+                if path == "@PARAM/param.pck" && op == 4 {
+                    let mut txt = String::new();
+                    for (k, v) in params {
+                        txt.push_str(&format!("{k},{v}\n"));
+                    }
+                    self.files.insert(path.clone(), txt.into_bytes());
+                }
+                if op == 6 {
+                    self.files.insert(path.clone(), Vec::new());
+                }
+                match self.files.get(&path) {
+                    Some(b) => {
+                        let sid = (0u8..4).find(|i| !self.sessions.contains_key(i)).unwrap_or(0);
+                        self.sessions.insert(sid, (path.clone(), op != 4));
+                        rep[2] = sid;
+                        ack(&mut rep, &(b.len() as u32).to_le_bytes());
+                    }
+                    None => nak(&mut rep, 10),
+                }
+            }
+            5 | 15 => match self.sessions.get(&session).and_then(|(p, _)| self.files.get(p)) {
+                Some(b) if (offset as usize) < b.len() => {
+                    let end = (offset as usize + size.clamp(1, 239)).min(b.len());
+                    let chunk = b[offset as usize..end].to_vec();
+                    ack(&mut rep, &chunk);
+                }
+                Some(_) => nak(&mut rep, 6),
+                None => nak(&mut rep, 4),
+            },
+            7 => match self.sessions.get(&session).cloned() {
+                Some((p, true)) => {
+                    let f = self.files.entry(p).or_default();
+                    let end = offset as usize + data.len();
+                    if f.len() < end {
+                        f.resize(end, 0);
+                    }
+                    f[offset as usize..end].copy_from_slice(data);
+                    ack(&mut rep, &[]);
+                }
+                _ => nak(&mut rep, 4),
+            },
+            8 => {
+                if self.files.remove(&Self::norm(&text)).is_some() { ack(&mut rep, &[]) } else { nak(&mut rep, 10) }
+            }
+            9 => {
+                let p = Self::norm(&text);
+                if self.dirs.insert(p) { ack(&mut rep, &[]) } else { nak(&mut rep, 8) }
+            }
+            10 => {
+                let p = Self::norm(&text);
+                let busy = self.files.keys().any(|f| f.starts_with(&format!("{p}/")));
+                if busy { nak(&mut rep, 1) } else if self.dirs.remove(&p) { ack(&mut rep, &[]) } else { nak(&mut rep, 10) }
+            }
+            13 => {
+                let mut parts = data.split(|b| *b == 0);
+                let a = Self::norm(&String::from_utf8_lossy(parts.next().unwrap_or(&[])));
+                let b = Self::norm(&String::from_utf8_lossy(parts.next().unwrap_or(&[])));
+                match self.files.remove(&a) {
+                    Some(v) => {
+                        self.files.insert(b, v);
+                        ack(&mut rep, &[]);
+                    }
+                    None => nak(&mut rep, 10),
+                }
+            }
+            14 => match self.files.get(&Self::norm(&text)) {
+                Some(b) => ack(&mut rep, &crate::ftp::crc32(0, b).to_le_bytes()),
+                None => nak(&mut rep, 10),
+            },
+            _ => nak(&mut rep, 7),
+        }
+        rep
+    }
+}
+
 pub struct SimHandle {
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
@@ -100,6 +279,7 @@ pub fn spawn_with(o: SimOptions) -> io::Result<SimHandle> {
 }
 
 struct Vehicle {
+    ftp: FtpFs,
     sysid: u8,
     kind: SimKind,
     home: PointLatLngAlt,
@@ -218,6 +398,7 @@ impl Vehicle {
             params.entry(k).or_insert(v);
         }
         Self {
+            ftp: FtpFs::new(),
             sysid: 1,
             kind: SimKind::Copter,
             home: SITL_HOME,
@@ -489,6 +670,10 @@ impl Vehicle {
                 self.set_mode(m)
             }
             MavMessage::COMMAND_LONG(c) => self.command(c),
+            MavMessage::FILE_TRANSFER_PROTOCOL(f) => {
+                let rep = self.ftp.handle(&f.payload, &self.params);
+                self.send(MavMessage::FILE_TRANSFER_PROTOCOL(FILE_TRANSFER_PROTOCOL_DATA { target_network: 0, target_system: 255, target_component: 190, payload: rep }));
+            }
             MavMessage::LOG_REQUEST_LIST(_) => {
                 // two onboard DataFlash logs
                 let size = crate::dataflash::sample_log().len() as u32;
@@ -634,6 +819,8 @@ impl Vehicle {
                     242 => self.home_position(),
                     148 => self.send(MavMessage::AUTOPILOT_VERSION(AUTOPILOT_VERSION_DATA {
                         flight_sw_version: (4 << 24) | (6 << 16),
+                        // ArduPilot: MISSION_FLOAT | PARAM_FLOAT | MISSION_INT | COMMAND_INT | FTP | SET_ATTITUDE_TARGET | ... | MAVLINK2 | MISSION_FENCE | MISSION_RALLY
+                        capabilities: MavProtocolCapability::from_bits_truncate(0xFFEF),
                         ..Default::default()
                     })),
                     _ => {}
