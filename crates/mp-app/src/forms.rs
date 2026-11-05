@@ -52,7 +52,7 @@ macro_rules! forms {
 }
 
 const FORMS: &[(&str, &str)] = forms!(
-    "rangefinder", "airspeed", "optflow", "mount", "parachute", "tracker", "bluetooth", "esp8266", "cubeid", "dronecan", "repl", "initialparams", "compassmot", "serial", "sikradio", "osd", "adsb", "gpsorder", "hwosd", "georef"
+    "rangefinder", "airspeed", "optflow", "mount", "parachute", "tracker", "bluetooth", "esp8266", "cubeid", "dronecan", "repl", "initialparams", "compassmot", "serial", "sikradio", "osd", "adsb", "gpsorder", "hwosd", "georef", "fwdisabled", "paramloading", "secureap", "tradheli", "trackerui"
 );
 
 const IMAGES: &[(&str, &[u8])] = &[
@@ -119,6 +119,8 @@ pub struct FormState {
     pub items: HashMap<String, Vec<String>>,
     pub progress: HashMap<String, f32>,
     pub disabled: std::collections::HashSet<String>,
+    /// Track bar ranges (default 0..100).
+    pub ranges: HashMap<String, (f64, f64)>,
 }
 
 impl FormState {
@@ -315,6 +317,7 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
                 }
             }
             "button" => {
+                let text = st.text.get(&c.name).cloned().unwrap_or(text);
                 let resp = ui.put(r, |ui: &mut egui::Ui| ui.add_enabled_ui(enabled, |ui| theme::button_sized(ui, &text, r.size())).inner);
                 if resp.clicked() {
                     clicked.push(c.name.clone());
@@ -328,9 +331,11 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
                 });
             }
             "track" => {
-                let mut v = st.text.get(&c.name).and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0);
-                if theme::htrackbar(ui, r, &mut v, 0.0, 100.0, 10).changed() {
-                    st.text.insert(c.name.clone(), v.to_string());
+                let (lo, hi) = st.ranges.get(&c.name).copied().unwrap_or((0.0, 100.0));
+                let mut v = st.text.get(&c.name).and_then(|s| s.parse::<f64>().ok()).unwrap_or(lo.max(0.0).min(hi));
+                if enabled && theme::htrackbar(ui, r, &mut v, lo, hi, 10).changed() {
+                    st.text.insert(c.name.clone(), format!("{}", v.round()));
+                    clicked.push(c.name.clone());
                 }
             }
             "grid" | "list" | "graph" => {

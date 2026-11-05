@@ -261,3 +261,22 @@ fn swarm_three_vehicles_one_link() {
         std::thread::sleep(Duration::from_millis(100));
     }
 }
+
+#[test]
+fn lua_repl_against_sim() {
+    let port = 14750;
+    let link = Link::connect(ConnectionSpec::UdpListen { port });
+    let _sim = sim::spawn(port).unwrap();
+    wait_event(&link, Duration::from_secs(10), |e| matches!(e, LinkEvent::Connected));
+    let repl = mp_core::repl::Repl::start(&link);
+    repl.write(b"print(1+2*3)\n");
+    let mut text = String::new();
+    let end = std::time::Instant::now() + Duration::from_secs(15);
+    while std::time::Instant::now() < end && !text.contains("> 7\n") {
+        if let Ok(s) = repl.output.recv_timeout(Duration::from_millis(200)) {
+            text.push_str(&s);
+        }
+    }
+    assert!(text.contains("Hello World!!"), "{text:?}");
+    assert!(text.contains("> 7\n"), "{text:?}");
+}

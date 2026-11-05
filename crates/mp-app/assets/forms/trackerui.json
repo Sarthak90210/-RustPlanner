@@ -1,0 +1,396 @@
+{
+"name": "trackerui",
+"w": 587,
+"h": 386,
+"controls": [
+{
+"name": "CMB_interface",
+"kind": "combo",
+"parent": "$this",
+"x": 83,
+"y": 10,
+"w": 121,
+"h": 21,
+"text": "Maestro"
+},
+{
+"name": "label1",
+"kind": "label",
+"parent": "$this",
+"x": 13,
+"y": 13,
+"w": 49,
+"h": 13,
+"text": "Interface"
+},
+{
+"name": "CMB_serialport",
+"kind": "combo",
+"parent": "$this",
+"x": 210,
+"y": 10,
+"w": 121,
+"h": 21
+},
+{
+"name": "BUT_connect",
+"kind": "button",
+"parent": "$this",
+"x": 476,
+"y": 9,
+"w": 75,
+"h": 23,
+"text": "Connect"
+},
+{
+"name": "CMB_baudrate",
+"kind": "combo",
+"parent": "$this",
+"x": 337,
+"y": 9,
+"w": 121,
+"h": 21
+},
+{
+"name": "TRK_pantrim",
+"kind": "track",
+"parent": "$this",
+"x": 153,
+"y": 96,
+"w": 375,
+"h": 45
+},
+{
+"name": "TXT_panrange",
+"kind": "text",
+"parent": "$this",
+"x": 83,
+"y": 81,
+"w": 64,
+"h": 20,
+"text": "360"
+},
+{
+"name": "label3",
+"kind": "label",
+"parent": "$this",
+"x": 326,
+"y": 80,
+"w": 27,
+"h": 13,
+"text": "Trim"
+},
+{
+"name": "label4",
+"kind": "label",
+"parent": "$this",
+"x": 83,
+"y": 65,
+"w": 39,
+"h": 13,
+"text": "Range"
+},
+{
+"name": "TRK_tilttrim",
+"kind": "track",
+"parent": "$this",
+"x": 153,
+"y": 258,
+"w": 375,
+"h": 45
+},
+{
+"name": "TXT_tiltrange",
+"kind": "text",
+"parent": "$this",
+"x": 83,
+"y": 244,
+"w": 64,
+"h": 20,
+"text": "90"
+},
+{
+"name": "label6",
+"kind": "label",
+"parent": "$this",
+"x": 326,
+"y": 242,
+"w": 27,
+"h": 13,
+"text": "Trim"
+},
+{
+"name": "label5",
+"kind": "label",
+"parent": "$this",
+"x": 83,
+"y": 228,
+"w": 39,
+"h": 13,
+"text": "Range"
+},
+{
+"name": "label2",
+"kind": "label",
+"parent": "$this",
+"x": 12,
+"y": 65,
+"w": 26,
+"h": 13,
+"text": "Pan"
+},
+{
+"name": "label7",
+"kind": "label",
+"parent": "$this",
+"x": 12,
+"y": 228,
+"w": 21,
+"h": 13,
+"text": "Tilt"
+},
+{
+"name": "CHK_revpan",
+"kind": "check",
+"parent": "$this",
+"x": 534,
+"y": 98,
+"w": 46,
+"h": 17,
+"text": "Rev"
+},
+{
+"name": "CHK_revtilt",
+"kind": "check",
+"parent": "$this",
+"x": 534,
+"y": 260,
+"w": 46,
+"h": 17,
+"text": "Rev"
+},
+{
+"name": "TXT_pwmrangepan",
+"kind": "text",
+"parent": "$this",
+"x": 83,
+"y": 107,
+"w": 64,
+"h": 20,
+"text": "1000"
+},
+{
+"name": "TXT_pwmrangetilt",
+"kind": "text",
+"parent": "$this",
+"x": 83,
+"y": 270,
+"w": 64,
+"h": 20,
+"text": "1000"
+},
+{
+"name": "label8",
+"kind": "label",
+"parent": "$this",
+"x": 8,
+"y": 110,
+"w": 69,
+"h": 13,
+"text": "PWM Range"
+},
+{
+"name": "label9",
+"kind": "label",
+"parent": "$this",
+"x": 8,
+"y": 273,
+"w": 69,
+"h": 13,
+"text": "PWM Range"
+},
+{
+"name": "label11",
+"kind": "label",
+"parent": "$this",
+"x": 45,
+"y": 84,
+"w": 34,
+"h": 13,
+"text": "Angle"
+},
+{
+"name": "label10",
+"kind": "label",
+"parent": "$this",
+"x": 45,
+"y": 247,
+"w": 34,
+"h": 13,
+"text": "Angle"
+},
+{
+"name": "label12",
+"kind": "label",
+"parent": "$this",
+"x": 94,
+"y": 40,
+"w": 393,
+"h": 13,
+"text": "Misusing this interface can cause servo damage, use with caution!!!",
+"font": 8.25,
+"bold": true
+},
+{
+"name": "LBL_pantrim",
+"kind": "label",
+"parent": "$this",
+"x": 326,
+"y": 128,
+"w": 34,
+"h": 13,
+"text": "Angle"
+},
+{
+"name": "LBL_tilttrim",
+"kind": "label",
+"parent": "$this",
+"x": 326,
+"y": 291,
+"w": 34,
+"h": 13,
+"text": "Angle"
+},
+{
+"name": "BUT_find",
+"kind": "button",
+"parent": "$this",
+"x": 497,
+"y": 51,
+"w": 83,
+"h": 28,
+"text": "Find Trim Pan (Sik Radio)",
+"hidden": true
+},
+{
+"name": "TXT_centerpan",
+"kind": "text",
+"parent": "$this",
+"x": 83,
+"y": 133,
+"w": 64,
+"h": 20,
+"text": "1500"
+},
+{
+"name": "TXT_centertilt",
+"kind": "text",
+"parent": "$this",
+"x": 83,
+"y": 296,
+"w": 64,
+"h": 20,
+"text": "1500"
+},
+{
+"name": "label13",
+"kind": "label",
+"parent": "$this",
+"x": 9,
+"y": 136,
+"w": 68,
+"h": 13,
+"text": "Center PWM"
+},
+{
+"name": "label14",
+"kind": "label",
+"parent": "$this",
+"x": 9,
+"y": 299,
+"w": 68,
+"h": 13,
+"text": "Center PWM"
+},
+{
+"name": "TXT_panaccel",
+"kind": "text",
+"parent": "$this",
+"x": 83,
+"y": 185,
+"w": 64,
+"h": 20,
+"text": "5"
+},
+{
+"name": "TXT_panspeed",
+"kind": "text",
+"parent": "$this",
+"x": 83,
+"y": 159,
+"w": 64,
+"h": 20,
+"text": "100"
+},
+{
+"name": "label15",
+"kind": "label",
+"parent": "$this",
+"x": 39,
+"y": 162,
+"w": 38,
+"h": 13,
+"text": "Speed"
+},
+{
+"name": "label16",
+"kind": "label",
+"parent": "$this",
+"x": 9,
+"y": 188,
+"w": 66,
+"h": 13,
+"text": "Acceleration"
+},
+{
+"name": "TXT_tiltaccel",
+"kind": "text",
+"parent": "$this",
+"x": 83,
+"y": 348,
+"w": 64,
+"h": 20,
+"text": "5"
+},
+{
+"name": "TXT_tiltspeed",
+"kind": "text",
+"parent": "$this",
+"x": 83,
+"y": 322,
+"w": 64,
+"h": 20,
+"text": "100"
+},
+{
+"name": "label18",
+"kind": "label",
+"parent": "$this",
+"x": 39,
+"y": 325,
+"w": 38,
+"h": 13,
+"text": "Speed"
+},
+{
+"name": "label17",
+"kind": "label",
+"parent": "$this",
+"x": 9,
+"y": 351,
+"w": 66,
+"h": 13,
+"text": "Acceleration"
+}
+]
+}

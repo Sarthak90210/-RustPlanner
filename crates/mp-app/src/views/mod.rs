@@ -1,5 +1,6 @@
 pub mod checklist;
 pub mod config;
+pub mod device_pages;
 pub mod fd_tabs;
 pub mod flight_data;
 pub mod flight_plan;
@@ -8,6 +9,7 @@ pub mod mavftp;
 pub mod mavlog;
 pub mod osd_editor;
 pub mod setup;
+pub mod setup_pages;
 pub mod simulation;
 pub mod survey_ui;
 pub mod tuning;

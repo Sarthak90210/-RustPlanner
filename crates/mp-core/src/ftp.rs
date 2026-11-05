@@ -244,6 +244,29 @@ impl Ftp {
         result
     }
 
+    /// Write `bytes` at `at` into an existing file (OpenFileWO), creating it when missing.
+    pub fn write_at(&mut self, path: &str, bytes: &[u8], at: u32) -> Result<(), String> {
+        let (p, n) = Self::path_bytes(path);
+        let open = match self.request(Op::OpenFileWO, 0, 0, &p, n) {
+            Ok(o) => o,
+            Err(_) => self.request(Op::CreateFile, 0, 0, &p, n)?,
+        };
+        let session = open.session;
+        let mut off = 0usize;
+        let result = loop {
+            if off >= bytes.len() {
+                break Ok(());
+            }
+            let chunk = &bytes[off..(off + DATA_LEN).min(bytes.len())];
+            if let Err(e) = self.request(Op::WriteFile, session, at + off as u32, chunk, chunk.len() as u8) {
+                break Err(e);
+            }
+            off += chunk.len();
+        };
+        let _ = self.request(Op::TerminateSession, session, 0, &[], 0);
+        result
+    }
+
     pub fn remove(&mut self, path: &str) -> Result<(), String> {
         let (p, n) = Self::path_bytes(path);
         self.request(Op::RemoveFile, 0, 0, &p, n).map(|_| ())

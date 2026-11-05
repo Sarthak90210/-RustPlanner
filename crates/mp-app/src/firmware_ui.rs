@@ -150,16 +150,35 @@ impl FirmwareInstaller {
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
-        if app.connected() {
-            // ConfigFirmwareDisabled
-            theme::label(ui, "Install Firmware is not available while connected.\nPlease disconnect first.");
-            return;
-        }
+        self.ui_impl(ui, app, false)
+    }
+
+    /// "Install Firmware Legacy" (ConfigFirmware): the older tile layout with the
+    /// licence text, firmware history and the same download / upload path.
+    pub fn ui_legacy(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
+        self.ui_impl(ui, app, true)
+    }
+
+    fn ui_impl(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, legacy: bool) {
         self.ensure_manifest(ui.ctx());
         let o = ui.max_rect().min;
         let f = fonts::ui_id(fonts::UI_SIZE);
         let a = app.assets;
-        let tiles: [(&str, (f32, f32), egui::TextureId, &'static str); 12] = [
+        let legacy_tiles: [(&str, (f32, f32), egui::TextureId, &'static str); 12] = [
+            ("Rover", (30.0, 0.0), a.fw_rover.id(), "GROUND_ROVER"),
+            ("Plane", (186.0, 0.0), a.fw_plane.id(), "FIXED_WING"),
+            ("Quad", (342.0, 0.0), a.fw_quad.id(), "Copter"),
+            ("Hexa", (498.0, 0.0), a.fw_hexa.id(), "Copter"),
+            ("OctaQuad", (654.0, 0.0), a.fw_octaquad.id(), "Copter"),
+            ("Sub", (810.0, 0.0), a.fw_sub.id(), "SUBMARINE"),
+            ("Antenna Tracker", (30.0, 176.0), a.fw_tracker.id(), "ANTENNA_TRACKER"),
+            ("Heli", (186.0, 176.0), a.fw_heli.id(), "HELICOPTER"),
+            ("Tri", (342.0, 176.0), a.fw_tri.id(), "Copter"),
+            ("Y6", (498.0, 176.0), a.fw_y6.id(), "Copter"),
+            ("Octa", (654.0, 176.0), a.fw_octa.id(), "Copter"),
+            ("Cube", (810.0, 176.0), a.fw_cube.id(), "Copter"),
+        ];
+        let manifest_tiles: [(&str, (f32, f32), egui::TextureId, &'static str); 12] = [
             ("Rover", (3.0, 3.0), a.fw_rover.id(), "GROUND_ROVER"),
             ("Plane", (159.0, 3.0), a.fw_plane.id(), "FIXED_WING"),
             ("Quad", (315.0, 3.0), a.fw_quad.id(), "Copter"),
@@ -173,6 +192,7 @@ impl FirmwareInstaller {
             ("Octa", (627.0, 159.0), a.fw_octa.id(), "Copter"),
             ("Cube", (783.0, 159.0), a.fw_cube.id(), "Copter"),
         ];
+        let tiles = if legacy { legacy_tiles } else { manifest_tiles };
         let busy = self.status.lock().busy;
         for (name, (x, y), tex, mav) in tiles {
             let r = Rect::from_min_size(o + Vec2::new(x, y), Vec2::splat(150.0));
@@ -197,6 +217,11 @@ impl FirmwareInstaller {
         }
         // progress / status / links
         let st = self.status.lock().clone();
+        if legacy {
+            self.legacy_footer(ui, app, o, &st);
+            self.dialogs(ui);
+            return;
+        }
         let pr = Rect::from_min_size(o + Vec2::new(3.0, 315.0), Vec2::new(940.0, 23.0));
         ui.put(pr, |ui: &mut egui::Ui| {
             theme::progress(ui, st.progress, pr.size(), "");
@@ -215,7 +240,8 @@ impl FirmwareInstaller {
             self.choices = self.pick("", true);
         }
         if link(ui, 522.0, 96.0, "Bootloader Update") || link(ui, 624.0, 88.0, "Force Bootloader") {
-            app.toasts.error("Bootloader update: connect the vehicle and use MAV_CMD_FLASH_BOOTLOADER (not available from this page in this port yet)");
+            // ConfigFirmwareManifest: the bootloader is updated from the connected page
+            app.toasts.error("Connect to the autopilot, then use Install Firmware > Bootloader Update.\nThe new bootloader is flashed by the running firmware (MAV_CMD_FLASH_BOOTLOADER).");
         }
         if link(ui, 736.0, 110.0, "Load custom firmware") {
             if let Some(path) = custom_file() {
@@ -229,7 +255,54 @@ impl FirmwareInstaller {
             self.beta = !self.beta;
         }
         ui.allocate_rect(Rect::from_min_size(o, Vec2::new(946.0, 380.0)), Sense::hover());
+        self.dialogs(ui);
+    }
 
+    /// ConfigFirmware's lower half: hint, licence, links, history combo, progress, status.
+    fn legacy_footer(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, o: Pos2, st: &FwStatus) {
+        let f = fonts::ui_id(fonts::UI_SIZE);
+        let p = ui.painter().clone();
+        let at = |x: f32, y: f32| o + Vec2::new(x, y);
+        p.text(at(397.0, 330.0), egui::Align2::LEFT_TOP, "Please click the images above for \"Flight versions\"", f.clone(), Color32::WHITE);
+        if ui.put(Rect::from_min_size(at(348.0, 349.0), Vec2::new(383.0, 13.0)), egui::Link::new("Ardupilot is free software. Click here to read the licence")).clicked() {
+            ui.ctx().open_url(egui::OpenUrl::new_tab("https://ardupilot.org/copter/docs/common-license-gpl.html"));
+        }
+        if ui.put(Rect::from_min_size(at(708.0, 0.0), Vec2::new(96.0, 13.0)), egui::Link::new("Copter motor setup")).clicked() {
+            ui.ctx().open_url(egui::OpenUrl::new_tab("https://ardupilot.org/copter/docs/connect-escs-and-motors.html"));
+        }
+        let link = |ui: &mut egui::Ui, x: f32, y: f32, w: f32, t: &str| ui.put(Rect::from_min_size(at(x, y), Vec2::new(w, 13.0)), egui::Link::new(t)).clicked();
+        if link(ui, 738.0, 373.0, 102.0, "Download firmwares") {
+            ui.ctx().open_url(egui::OpenUrl::new_tab("https://firmware.ardupilot.org/"));
+        }
+        if link(ui, 862.0, 373.0, 110.0, "Load custom firmware") {
+            if let Some(path) = custom_file() {
+                match std::fs::read(&path) {
+                    Ok(b) => self.flash(None, Some(b), ui.ctx()),
+                    Err(e) => app.toasts.error(e.to_string()),
+                }
+            }
+        }
+        if link(ui, 630.0, 393.0, 76.0, if self.beta { "Stable firmwares" } else { "Beta firmwares" }) {
+            self.beta = !self.beta;
+        }
+        if link(ui, 738.0, 393.0, 88.0, "Force Bootloader") {
+            app.toasts.error("Connect to the autopilot, then use Install Firmware > Bootloader Update.");
+        }
+        // CMB_history_label -> every firmware in the manifest
+        if link(ui, 862.0, 393.0, 113.0, "Pick previous firmware") {
+            self.choices = self.pick("", true);
+        }
+        let pr = Rect::from_min_size(at(3.0, 417.0), Vec2::new(980.0, 23.0));
+        ui.put(pr, |ui: &mut egui::Ui| {
+            theme::progress(ui, st.progress, pr.size(), "");
+            ui.allocate_response(Vec2::ZERO, Sense::hover())
+        });
+        p.text(at(3.0, 443.0), egui::Align2::LEFT_TOP, &st.text, f.clone(), if st.error.is_some() { Color32::RED } else { Color32::WHITE });
+        p.text(at(862.0, 443.0), egui::Align2::LEFT_TOP, "Images by Max Levine", f, Color32::WHITE);
+        ui.allocate_rect(Rect::from_min_size(o, Vec2::new(986.0, 462.0)), Sense::hover());
+    }
+
+    fn dialogs(&mut self, ui: &mut egui::Ui) {
         // CustomMessageBox: AreYouSureYouWantToUpload
         if let Some((label, mav)) = self.confirm.clone() {
             let mut close = false;

@@ -12,48 +12,86 @@ use crate::theme::{self, BsvItem};
 use crate::views::config;
 
 /// (label, parent, needs a connection) — order and labels from InitialSetup.cs.
-const PAGES: &[(&str, Option<usize>, bool)] = &[
-    ("Install Firmware", None, false),            // 0
-    ("Mandatory Hardware", None, true),           // 1
-    ("Frame Type", Some(1), true),                // 2
-    ("Accel Calibration", Some(1), true),         // 3
-    ("Compass", Some(1), true),                   // 4
-    ("Radio Calibration", Some(1), true),         // 5
-    ("Servo Output", Some(1), true),              // 6
-    ("Serial Ports", Some(1), true),              // 7
-    ("ESC Calibration", Some(1), true),           // 8
-    ("Flight Modes", Some(1), true),              // 9
-    ("FailSafe", Some(1), true),                  // 10
-    ("Initial Tune Parameter", Some(1), true),    // 11
-    ("HW ID", Some(1), true),                     // 12
-    ("Optional Hardware", None, false),           // 13
-    ("RTK/GPS Inject", Some(13), false),          // 14
-    ("CubeID Update", Some(13), false),           // 15
-    ("Sik Radio", Some(13), false),               // 16
-    ("ADSB", Some(13), true),                     // 17
-    ("CAN GPS Order", Some(13), true),            // 18
-    ("Battery Monitor", Some(13), true),          // 19
-    ("Battery Monitor 2", Some(13), true),        // 20
-    ("CAN", Some(13), true),                      // 21
-    ("DroneCAN/UAVCAN", Some(13), false),         // 22
-    ("Joystick", Some(13), false),                // 23
-    ("Compass/Motor Calib", Some(13), true),      // 24
-    ("Range Finder", Some(13), true),             // 25
-    ("Airspeed", Some(13), true),                 // 26
-    ("PX4Flow", Some(13), true),                  // 27
-    ("Optical Flow", Some(13), true),             // 28
-    ("OSD", Some(13), true),                      // 29
-    ("Camera Gimbal", Some(13), true),            // 30
-    ("Antenna tracker", Some(13), false),         // 31
-    ("Motor Test", Some(13), true),               // 32
-    ("Bluetooth Setup", Some(13), false),         // 33
-    ("Parachute", Some(13), true),                // 34
-    ("ESP8266 Setup", Some(13), false),           // 35
-    ("FFT Setup", Some(13), true),                // 36
-    ("Advanced", None, false),                    // 37
-    ("Terminal", Some(37), false),                // 38
-    ("Script REPL", Some(37), true),              // 39
+/// When a page is listed (InitialSetup.HardwareConfig_Load conditions).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Vis {
+    Always,
+    /// isConnected
+    Conn,
+    /// isConnected && gotAllParams
+    Params,
+    /// isDisConnected
+    Disc,
+    /// connected, parameters still arriving (ConfigParamLoading)
+    Loading,
+    /// MAV_TYPE_HELICOPTER
+    Heli,
+    /// ArduTracker firmware
+    Tracker,
+}
+
+// BackstageView draws each parent's children in the order they were added, so ADSB
+// (added after Sik Radio with parent "Mandatory Hardware") sits at the end of that group.
+const PAGES: &[(&str, Option<usize>, Vis)] = &[
+    ("Loading", None, Vis::Loading),                  // 0
+    ("Install Firmware", None, Vis::Always),          // 1
+    ("Install Firmware Legacy", None, Vis::Disc),     // 2
+    ("Secure", None, Vis::Disc),                      // 3
+    ("Mandatory Hardware", None, Vis::Params),        // 4
+    ("Heli Setup", Some(4), Vis::Heli),               // 5
+    ("Frame Type", Some(4), Vis::Params),             // 6
+    ("Accel Calibration", Some(4), Vis::Params),      // 7
+    ("Compass", Some(4), Vis::Params),                // 8
+    ("Radio Calibration", Some(4), Vis::Params),      // 9
+    ("Servo Output", Some(4), Vis::Params),           // 10
+    ("Serial Ports", Some(4), Vis::Params),           // 11
+    ("ESC Calibration", Some(4), Vis::Params),        // 12
+    ("Flight Modes", Some(4), Vis::Params),           // 13
+    ("FailSafe", Some(4), Vis::Params),               // 14
+    ("Initial Tune Parameter", Some(4), Vis::Params), // 15
+    ("HW ID", Some(4), Vis::Params),                  // 16
+    ("ADSB", Some(4), Vis::Params),                   // 17
+    ("Optional Hardware", None, Vis::Always),         // 18
+    ("RTK/GPS Inject", Some(18), Vis::Always),        // 19
+    ("CubeID Update", Some(18), Vis::Conn),           // 20
+    ("Sik Radio", Some(18), Vis::Always),             // 21
+    ("CAN GPS Order", Some(18), Vis::Params),         // 22
+    ("Battery Monitor", Some(18), Vis::Params),       // 23
+    ("Battery Monitor 2", Some(18), Vis::Params),     // 24
+    ("DroneCAN/UAVCAN", Some(18), Vis::Always),       // 25
+    ("Joystick", Some(18), Vis::Always),              // 26
+    ("Compass/Motor Calib", Some(18), Vis::Params),   // 27
+    ("Range Finder", Some(18), Vis::Params),          // 28
+    ("Airspeed", Some(18), Vis::Params),              // 29
+    ("PX4Flow", Some(18), Vis::Always),               // 30
+    ("Optical Flow", Some(18), Vis::Params),          // 31
+    ("OSD", Some(18), Vis::Params),                   // 32
+    ("Camera Gimbal", Some(18), Vis::Params),         // 33
+    ("Antenna tracker", Some(18), Vis::Tracker),      // 34
+    ("Motor Test", Some(18), Vis::Params),            // 35
+    ("Bluetooth Setup", Some(18), Vis::Always),       // 36
+    ("Parachute", Some(18), Vis::Params),             // 37
+    ("ESP8266 Setup", Some(18), Vis::Params),         // 38
+    ("Antenna Tracker", Some(18), Vis::Always),       // 39
+    ("FFT Setup", Some(18), Vis::Params),             // 40
+    ("Advanced", None, Vis::Always),                  // 41
+    ("Terminal", Some(41), Vis::Always),              // 42
+    ("Script REPL", Some(41), Vis::Conn),             // 43
 ];
+
+fn page_visible(v: Vis, app: &AppCtx) -> bool {
+    let link = app.link.filter(|_| app.connected());
+    let all = link.map(crate::views::setup_pages::got_all_params).unwrap_or(false);
+    match v {
+        Vis::Always => true,
+        Vis::Conn => link.is_some(),
+        Vis::Params => all,
+        Vis::Disc => link.is_none(),
+        Vis::Loading => link.is_some() && !all,
+        Vis::Heli => all && link.map(|l| l.shared.read().cs.mavtype == 4).unwrap_or(false),
+        Vis::Tracker => link.map(|l| l.shared.read().cs.firmware == mp_core::firmware::Firmware::ArduTracker).unwrap_or(false),
+    }
+}
 
 pub struct SetupView {
     page: usize,
@@ -82,6 +120,8 @@ pub struct SetupView {
     term_baud: u32,
     term_input: String,
     firmware: crate::firmware_ui::FirmwareInstaller,
+    extra: crate::views::setup_pages::ExtraPages,
+    dev: crate::views::device_pages::DevicePages,
 }
 
 struct Terminal {
@@ -125,6 +165,8 @@ impl Default for SetupView {
             term_baud: 115200,
             term_input: String::new(),
             firmware: Default::default(),
+            extra: Default::default(),
+            dev: Default::default(),
         }
     }
 }
@@ -143,15 +185,14 @@ impl SetupView {
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
-        let connected = app.connected();
         // map visible pages to BackstageView items (parents keep their indices)
-        let visible: Vec<usize> = (0..PAGES.len()).filter(|i| connected || !PAGES[*i].2).collect();
+        let visible: Vec<usize> = (0..PAGES.len()).filter(|i| page_visible(PAGES[*i].2, app)).collect();
         let items: Vec<BsvItem> = visible
             .iter()
             .map(|i| BsvItem { label: PAGES[*i].0.to_string(), parent: PAGES[*i].1.and_then(|p| visible.iter().position(|v| *v == p)) })
             .collect();
         // a page that is hidden while disconnected stays selected and returns on reconnect
-        let shown = if visible.contains(&self.page) { self.page } else { 0 };
+        let shown = if visible.contains(&self.page) { self.page } else { visible.first().copied().unwrap_or(1) };
         let before = visible.iter().position(|v| *v == shown).unwrap_or(0);
         let mut sel = before;
         egui::Panel::left("setup_bsv")
@@ -165,7 +206,12 @@ impl SetupView {
         let name = PAGES[if sel != before { self.page } else { shown }].0;
         egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::bg()).inner_margin(6)).show(ui, |ui| {
             match name {
+                "Install Firmware" if app.connected() => return self.extra.fw_disabled(ui, app),
                 "Install Firmware" => return self.firmware.ui(ui, app),
+                "Install Firmware Legacy" => return self.firmware.ui_legacy(ui, app),
+                "Secure" => return self.extra.secure(ui, app),
+                "Loading" => return self.extra.param_loading(ui, app),
+                "Antenna Tracker" => return self.extra.tracker(ui, app),
                 "RTK/GPS Inject" => return self.rtk_inject(ui, app),
                 "Terminal" => return self.terminal(ui, app),
                 "Advanced" => return advanced(ui, app),
@@ -176,7 +222,7 @@ impl SetupView {
                 _ => {}
             }
             if let Some(form) = form_for(name) {
-                if PAGES.iter().find(|p| p.0 == name).map(|p| p.2).unwrap_or(false) && !app.connected() {
+                if PAGES.iter().find(|p| p.0 == name).map(|p| matches!(p.2, Vis::Conn | Vis::Params)).unwrap_or(false) && !app.connected() {
                     theme::label(ui, "Please Connect First");
                     return;
                 }
@@ -188,6 +234,7 @@ impl SetupView {
             };
             let fr = |ui: &mut egui::Ui, app: &mut AppCtx, pre: &'static [&'static str]| config::friendly(ui, app, &Default::default(), |n, _| pre.iter().any(|p| n.starts_with(p)));
             match name {
+                "Heli Setup" => self.extra.heli(ui, app, link),
                 "Frame Type" => frame_type(ui, app, link),
                 "Accel Calibration" => accel(ui, self, link),
                 "Compass" => compass(ui, app, link),
@@ -205,7 +252,6 @@ impl SetupView {
                 "CAN GPS Order" => self.gps_order_page(ui, app, link),
                 "Battery Monitor" => battery_monitor(ui, app, link, "BATT_"),
                 "Battery Monitor 2" => battery_monitor(ui, app, link, "BATT2_"),
-                "CAN" => fr(ui, app, &["CAN_"]),
                 "Compass/Motor Calib" => fr(ui, app, &["COMPASS_MOT"]),
                 "Range Finder" => fr(ui, app, &["RNGFND"]),
                 "Airspeed" => fr(ui, app, &["ARSPD"]),
@@ -903,6 +949,7 @@ impl SetupView {
                 ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
             }
         }
+        self.dev.pre(ui.ctx(), form, st, app);
         let clicked = crate::forms::show(ui, app, form, st);
         let params = app.link.map(|l| l.shared.read().params.clone()).unwrap_or_default();
         for b in clicked {
@@ -942,16 +989,14 @@ impl SetupView {
                     None => app.toasts.error("Please Connect First"),
                 },
                 ("sikradio", b) if self.sik_button(b, app, st) => {}
-                ("repl", "BUT_Connect") => {
-                    st.set("textBox1", "Lua REPL\r\nConnecting over MAVLink SERIAL_CONTROL...\r\n");
-                }
-                ("repl", "BUT_disconnect") => st.set("textBox1", ""),
-                (_, other) => {
+                (f, b) if self.dev.button(f, b, st, app) => {}
+                ("dronecan", other) => {
                     let label = crate::forms::form(form).controls.iter().find(|c| c.name == other).and_then(|c| c.text.clone()).unwrap_or_default();
                     if !label.is_empty() {
-                        app.toasts.error(format!("{page}: {label}\nNo device found. Connect the {page} hardware to a COM port first."));
+                        app.toasts.error(format!("{page}: {label}\nNo DroneCAN interface. Connect to an autopilot with CAN, then press Connect (SLCAN over MAVLink)."));
                     }
                 }
+                _ => {}
             }
         }
         self.forms.insert(form, st_owned);

@@ -1,0 +1,241 @@
+{
+"name": "firmwarelegacy",
+"w": 986,
+"h": 462,
+"controls": [
+{
+"name": "pictureBoxAPM",
+"kind": "picture",
+"parent": "$this",
+"x": 186,
+"y": 0,
+"w": 150,
+"h": 150,
+"image": "APM_airframes_001.png"
+},
+{
+"name": "pictureBoxQuad",
+"kind": "picture",
+"parent": "$this",
+"x": 342,
+"y": 0,
+"w": 150,
+"h": 150
+},
+{
+"name": "pictureBoxHexa",
+"kind": "picture",
+"parent": "$this",
+"x": 498,
+"y": 0,
+"w": 150,
+"h": 150
+},
+{
+"name": "pictureBoxTri",
+"kind": "picture",
+"parent": "$this",
+"x": 342,
+"y": 176,
+"w": 150,
+"h": 150
+},
+{
+"name": "pictureBoxY6",
+"kind": "picture",
+"parent": "$this",
+"x": 498,
+"y": 176,
+"w": 150,
+"h": 150,
+"image": "y6a.png"
+},
+{
+"name": "pictureBoxHeli",
+"kind": "picture",
+"parent": "$this",
+"x": 186,
+"y": 176,
+"w": 150,
+"h": 150,
+"image": "APM_airframes_08.png"
+},
+{
+"name": "pictureBoxOcta",
+"kind": "picture",
+"parent": "$this",
+"x": 654,
+"y": 176,
+"w": 150,
+"h": 150
+},
+{
+"name": "pictureBoxOctaQuad",
+"kind": "picture",
+"parent": "$this",
+"x": 654,
+"y": 0,
+"w": 150,
+"h": 150,
+"image": "x8.png"
+},
+{
+"name": "progress",
+"kind": "progress",
+"parent": "$this",
+"x": 3,
+"y": 417,
+"w": 980,
+"h": 23
+},
+{
+"name": "lbl_status",
+"kind": "label",
+"parent": "$this",
+"x": 3,
+"y": 443,
+"w": 37,
+"h": 13,
+"text": "Status"
+},
+{
+"name": "label2",
+"kind": "label",
+"parent": "$this",
+"x": 862,
+"y": 443,
+"w": 113,
+"h": 13,
+"text": "Images by Max Levine"
+},
+{
+"name": "label1",
+"kind": "label",
+"parent": "$this",
+"x": 397,
+"y": 330,
+"w": 246,
+"h": 13,
+"text": "Please click the images above for \"Flight versions\""
+},
+{
+"name": "CMB_history",
+"kind": "combo",
+"parent": "$this",
+"x": 856,
+"y": 389,
+"w": 121,
+"h": 21,
+"hidden": true
+},
+{
+"name": "pictureBoxRover",
+"kind": "picture",
+"parent": "$this",
+"x": 30,
+"y": 0,
+"w": 150,
+"h": 150,
+"image": "rover_11.png"
+},
+{
+"name": "CMB_history_label",
+"kind": "label",
+"parent": "$this",
+"x": 862,
+"y": 393,
+"w": 113,
+"h": 13,
+"text": "Pick previous firmware"
+},
+{
+"name": "lbl_Custom_firmware_label",
+"kind": "label",
+"parent": "$this",
+"x": 862,
+"y": 373,
+"w": 110,
+"h": 13,
+"text": "Load custom firmware"
+},
+{
+"name": "lbl_devfw",
+"kind": "label",
+"parent": "$this",
+"x": 630,
+"y": 393,
+"w": 76,
+"h": 13,
+"text": "Beta firmwares"
+},
+{
+"name": "lbl_dlfw",
+"kind": "label",
+"parent": "$this",
+"x": 738,
+"y": 373,
+"w": 102,
+"h": 13,
+"text": "Download firmwares"
+},
+{
+"name": "lbl_px4bl",
+"kind": "label",
+"parent": "$this",
+"x": 738,
+"y": 393,
+"w": 88,
+"h": 13,
+"text": "Force Bootloader"
+},
+{
+"name": "pictureAntennaTracker",
+"kind": "picture",
+"parent": "$this",
+"x": 30,
+"y": 176,
+"w": 150,
+"h": 150
+},
+{
+"name": "lbl_licence",
+"kind": "label",
+"parent": "$this",
+"x": 348,
+"y": 349,
+"w": 383,
+"h": 13,
+"text": "Ardupilot is free software. Click here to read the Open Source Firmware License."
+},
+{
+"name": "linkLabel1",
+"kind": "link",
+"parent": "$this",
+"x": 708,
+"y": 0,
+"w": 96,
+"h": 13,
+"text": "Copter motor setup"
+},
+{
+"name": "pictureBoxSub",
+"kind": "picture",
+"parent": "$this",
+"x": 810,
+"y": 0,
+"w": 150,
+"h": 150,
+"image": "sub.png"
+},
+{
+"name": "imageLabel1",
+"kind": "picture",
+"parent": "$this",
+"x": 810,
+"y": 176,
+"w": 150,
+"h": 167,
+"image": "pixhawk2cube.jpg"
+}
+]
+}

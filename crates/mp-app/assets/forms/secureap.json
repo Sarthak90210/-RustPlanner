@@ -1,0 +1,94 @@
+{
+"name": "secureap",
+"w": 600,
+"h": 400,
+"controls": [
+{
+"name": "groupBox4",
+"kind": "group",
+"parent": "$this",
+"x": 59,
+"y": 64,
+"w": 335,
+"h": 120,
+"text": "Files"
+},
+{
+"name": "groupBox5",
+"kind": "group",
+"parent": "$this",
+"x": 59,
+"y": 3,
+"w": 335,
+"h": 55,
+"text": "Do Only Once"
+},
+{
+"name": "but_generatekey",
+"kind": "button",
+"parent": "groupBox5",
+"x": 6,
+"y": 19,
+"w": 75,
+"h": 23,
+"text": "Generate Key"
+},
+{
+"name": "but_firmware",
+"kind": "button",
+"parent": "groupBox4",
+"x": 6,
+"y": 77,
+"w": 75,
+"h": 23,
+"text": "Firmware"
+},
+{
+"name": "but_bootloader",
+"kind": "button",
+"parent": "groupBox4",
+"x": 6,
+"y": 48,
+"w": 75,
+"h": 23,
+"text": "BootLoader"
+},
+{
+"name": "but_privkey",
+"kind": "button",
+"parent": "groupBox4",
+"x": 6,
+"y": 19,
+"w": 75,
+"h": 23,
+"text": "Private Key"
+},
+{
+"name": "txt_pubkey",
+"kind": "text",
+"parent": "groupBox4",
+"x": 88,
+"y": 21,
+"w": 230,
+"h": 20
+},
+{
+"name": "txt_bl",
+"kind": "text",
+"parent": "groupBox4",
+"x": 88,
+"y": 51,
+"w": 230,
+"h": 20
+},
+{
+"name": "txt_fwapj",
+"kind": "text",
+"parent": "groupBox4",
+"x": 87,
+"y": 80,
+"w": 230,
+"h": 20
+}
+]
+}

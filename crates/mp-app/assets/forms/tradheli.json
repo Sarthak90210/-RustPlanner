@@ -1,0 +1,835 @@
+{
+ "name": "tradheli",
+ "w": 600,
+ "h": 400,
+ "controls": [
+  {
+   "name": "flowLayoutPanel1",
+   "kind": "panel",
+   "parent": "$this",
+   "x": 0,
+   "y": 0,
+   "w": 635,
+   "h": 399
+  },
+  {
+   "name": "groupBoxmisc",
+   "kind": "group",
+   "parent": "flowLayoutPanel1",
+   "x": 3,
+   "y": 371,
+   "w": 200,
+   "h": 100,
+   "text": "Misc Settings",
+   "hidden": true
+  },
+  {
+   "name": "groupBoxgover",
+   "kind": "group",
+   "parent": "flowLayoutPanel1",
+   "x": 415,
+   "y": 265,
+   "w": 200,
+   "h": 100,
+   "text": "Governor Settings",
+   "hidden": true
+  },
+  {
+   "name": "groupBoxthrot",
+   "kind": "group",
+   "parent": "flowLayoutPanel1",
+   "x": 209,
+   "y": 265,
+   "w": 200,
+   "h": 100,
+   "text": "Throttle Settings",
+   "hidden": true
+  },
+  {
+   "name": "groupBoxswash",
+   "kind": "group",
+   "parent": "flowLayoutPanel1",
+   "x": 3,
+   "y": 265,
+   "w": 200,
+   "h": 100,
+   "text": "Swashplate Setup",
+   "hidden": true
+  },
+  {
+   "name": "groupBoxservo",
+   "kind": "group",
+   "parent": "flowLayoutPanel1",
+   "x": 3,
+   "y": 3,
+   "w": 444,
+   "h": 256,
+   "text": "Servo Setup"
+  },
+  {
+   "name": "tableLayoutPanel1",
+   "kind": "panel",
+   "parent": "groupBoxmisc",
+   "x": 3,
+   "y": 16,
+   "w": 194,
+   "h": 81,
+   "hidden": true
+  },
+  {
+   "name": "tableLayoutPanel2",
+   "kind": "panel",
+   "parent": "groupBoxgover",
+   "x": 3,
+   "y": 16,
+   "w": 194,
+   "h": 81,
+   "hidden": true
+  },
+  {
+   "name": "tableLayoutPanel3",
+   "kind": "panel",
+   "parent": "groupBoxthrot",
+   "x": 3,
+   "y": 16,
+   "w": 194,
+   "h": 81,
+   "hidden": true
+  },
+  {
+   "name": "tableLayoutPanel5",
+   "kind": "panel",
+   "parent": "groupBoxswash",
+   "x": 3,
+   "y": 16,
+   "w": 194,
+   "h": 81,
+   "hidden": true
+  },
+  {
+   "name": "mavlinkCheckBoxrev1",
+   "kind": "mcheck",
+   "parent": "tableLayoutPanel4",
+   "x": 380,
+   "y": 24,
+   "w": 15,
+   "h": 14,
+   "param": "SERVO1_REVERSED",
+   "nums": [
+    1,
+    0
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDowntrim8",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 324,
+   "y": 213,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO8_TRIM",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDownmax8",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 268,
+   "y": 213,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO8_MAX",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDownmin8",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 212,
+   "y": 213,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO8_MIN",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDowntrim7",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 324,
+   "y": 186,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO7_TRIM",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDownmax7",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 268,
+   "y": 186,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO7_MAX",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDownmin7",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 212,
+   "y": 186,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO7_MIN",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDowntrim6",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 324,
+   "y": 159,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO6_TRIM",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDownmax6",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 268,
+   "y": 159,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO6_MAX",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDownmin6",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 212,
+   "y": 159,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO6_MIN",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDownmin2",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 212,
+   "y": 51,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO2_MIN",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDownmin1",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 212,
+   "y": 24,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO1_MIN",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkComboBoxfunc8",
+   "kind": "mcombo",
+   "parent": "tableLayoutPanel4",
+   "x": 46,
+   "y": 213,
+   "w": 160,
+   "h": 21,
+   "param": "SERVO8_FUNCTION"
+  },
+  {
+   "name": "mavlinkComboBoxfunc7",
+   "kind": "mcombo",
+   "parent": "tableLayoutPanel4",
+   "x": 46,
+   "y": 186,
+   "w": 160,
+   "h": 21,
+   "param": "SERVO7_FUNCTION"
+  },
+  {
+   "name": "mavlinkComboBoxfunc6",
+   "kind": "mcombo",
+   "parent": "tableLayoutPanel4",
+   "x": 46,
+   "y": 159,
+   "w": 160,
+   "h": 21,
+   "param": "SERVO6_FUNCTION"
+  },
+  {
+   "name": "mavlinkComboBoxfunc5",
+   "kind": "mcombo",
+   "parent": "tableLayoutPanel4",
+   "x": 46,
+   "y": 132,
+   "w": 160,
+   "h": 21,
+   "param": "SERVO5_FUNCTION"
+  },
+  {
+   "name": "mavlinkComboBoxfunc4",
+   "kind": "mcombo",
+   "parent": "tableLayoutPanel4",
+   "x": 46,
+   "y": 105,
+   "w": 160,
+   "h": 21,
+   "param": "SERVO4_FUNCTION"
+  },
+  {
+   "name": "mavlinkComboBoxfunc3",
+   "kind": "mcombo",
+   "parent": "tableLayoutPanel4",
+   "x": 46,
+   "y": 78,
+   "w": 160,
+   "h": 21,
+   "param": "SERVO3_FUNCTION"
+  },
+  {
+   "name": "mavlinkComboBoxfunc2",
+   "kind": "mcombo",
+   "parent": "tableLayoutPanel4",
+   "x": 46,
+   "y": 51,
+   "w": 160,
+   "h": 21,
+   "param": "SERVO2_FUNCTION"
+  },
+  {
+   "name": "mavlinkComboBoxfunc1",
+   "kind": "mcombo",
+   "parent": "tableLayoutPanel4",
+   "x": 46,
+   "y": 24,
+   "w": 160,
+   "h": 21,
+   "param": "SERVO1_FUNCTION"
+  },
+  {
+   "name": "label12",
+   "kind": "label",
+   "parent": "tableLayoutPanel4",
+   "x": 4,
+   "y": 214,
+   "w": 13,
+   "h": 13,
+   "text": "8"
+  },
+  {
+   "name": "label11",
+   "kind": "label",
+   "parent": "tableLayoutPanel4",
+   "x": 4,
+   "y": 187,
+   "w": 13,
+   "h": 13,
+   "text": "7"
+  },
+  {
+   "name": "label10",
+   "kind": "label",
+   "parent": "tableLayoutPanel4",
+   "x": 4,
+   "y": 160,
+   "w": 13,
+   "h": 13,
+   "text": "6"
+  },
+  {
+   "name": "label9",
+   "kind": "label",
+   "parent": "tableLayoutPanel4",
+   "x": 4,
+   "y": 133,
+   "w": 13,
+   "h": 13,
+   "text": "5"
+  },
+  {
+   "name": "label14",
+   "kind": "label",
+   "parent": "tableLayoutPanel4",
+   "x": 4,
+   "y": 106,
+   "w": 13,
+   "h": 13,
+   "text": "4"
+  },
+  {
+   "name": "label8",
+   "kind": "label",
+   "parent": "tableLayoutPanel4",
+   "x": 4,
+   "y": 79,
+   "w": 13,
+   "h": 13,
+   "text": "3"
+  },
+  {
+   "name": "label2",
+   "kind": "label",
+   "parent": "tableLayoutPanel4",
+   "x": 47,
+   "y": 4,
+   "w": 48,
+   "h": 13,
+   "text": "Function"
+  },
+  {
+   "name": "label1",
+   "kind": "label",
+   "parent": "tableLayoutPanel4",
+   "x": 4,
+   "y": 4,
+   "w": 35,
+   "h": 13,
+   "text": "Servo"
+  },
+  {
+   "name": "label3",
+   "kind": "label",
+   "parent": "tableLayoutPanel4",
+   "x": 213,
+   "y": 4,
+   "w": 24,
+   "h": 13,
+   "text": "Min"
+  },
+  {
+   "name": "label4",
+   "kind": "label",
+   "parent": "tableLayoutPanel4",
+   "x": 269,
+   "y": 4,
+   "w": 27,
+   "h": 13,
+   "text": "Max"
+  },
+  {
+   "name": "label5",
+   "kind": "label",
+   "parent": "tableLayoutPanel4",
+   "x": 325,
+   "y": 4,
+   "w": 27,
+   "h": 13,
+   "text": "Trim"
+  },
+  {
+   "name": "label6",
+   "kind": "label",
+   "parent": "tableLayoutPanel4",
+   "x": 381,
+   "y": 4,
+   "w": 53,
+   "h": 13,
+   "text": "Reversed"
+  },
+  {
+   "name": "label7",
+   "kind": "label",
+   "parent": "tableLayoutPanel4",
+   "x": 4,
+   "y": 25,
+   "w": 13,
+   "h": 13,
+   "text": "1"
+  },
+  {
+   "name": "label13",
+   "kind": "label",
+   "parent": "tableLayoutPanel4",
+   "x": 4,
+   "y": 52,
+   "w": 13,
+   "h": 13,
+   "text": "2"
+  },
+  {
+   "name": "mavlinkNumericUpDownmax1",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 268,
+   "y": 24,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO1_MAX",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDowntrim1",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 324,
+   "y": 24,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO1_TRIM",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDownmax2",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 268,
+   "y": 51,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO2_MAX",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDowntrim2",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 324,
+   "y": 51,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO2_TRIM",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDownmin3",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 212,
+   "y": 78,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO3_MIN",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDownmax3",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 268,
+   "y": 78,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO3_MAX",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDowntrim3",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 324,
+   "y": 78,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO3_TRIM",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDownmin4",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 212,
+   "y": 105,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO4_MIN",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDownmax4",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 268,
+   "y": 105,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO4_MAX",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDowntrim4",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 324,
+   "y": 105,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO4_TRIM",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDownmin5",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 212,
+   "y": 132,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO5_MIN",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDownmax5",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 268,
+   "y": 132,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO5_MAX",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkNumericUpDowntrim5",
+   "kind": "mnum",
+   "parent": "tableLayoutPanel4",
+   "x": 324,
+   "y": 132,
+   "w": 50,
+   "h": 20,
+   "param": "SERVO5_TRIM",
+   "nums": [
+    800,
+    2200,
+    1,
+    1
+   ]
+  },
+  {
+   "name": "mavlinkCheckBoxrev2",
+   "kind": "mcheck",
+   "parent": "tableLayoutPanel4",
+   "x": 380,
+   "y": 51,
+   "w": 15,
+   "h": 14,
+   "param": "SERVO2_REVERSED",
+   "nums": [
+    1,
+    0
+   ]
+  },
+  {
+   "name": "mavlinkCheckBoxrev3",
+   "kind": "mcheck",
+   "parent": "tableLayoutPanel4",
+   "x": 380,
+   "y": 78,
+   "w": 15,
+   "h": 14,
+   "param": "SERVO3_REVERSED",
+   "nums": [
+    1,
+    0
+   ]
+  },
+  {
+   "name": "mavlinkCheckBoxrev4",
+   "kind": "mcheck",
+   "parent": "tableLayoutPanel4",
+   "x": 380,
+   "y": 105,
+   "w": 15,
+   "h": 14,
+   "param": "SERVO4_REVERSED",
+   "nums": [
+    1,
+    0
+   ]
+  },
+  {
+   "name": "mavlinkCheckBoxrev5",
+   "kind": "mcheck",
+   "parent": "tableLayoutPanel4",
+   "x": 380,
+   "y": 132,
+   "w": 15,
+   "h": 14,
+   "param": "SERVO5_REVERSED",
+   "nums": [
+    1,
+    0
+   ]
+  },
+  {
+   "name": "mavlinkCheckBoxrev6",
+   "kind": "mcheck",
+   "parent": "tableLayoutPanel4",
+   "x": 380,
+   "y": 159,
+   "w": 15,
+   "h": 14,
+   "param": "SERVO6_REVERSED",
+   "nums": [
+    1,
+    0
+   ]
+  },
+  {
+   "name": "mavlinkCheckBoxrev7",
+   "kind": "mcheck",
+   "parent": "tableLayoutPanel4",
+   "x": 380,
+   "y": 186,
+   "w": 15,
+   "h": 14,
+   "param": "SERVO7_REVERSED",
+   "nums": [
+    1,
+    0
+   ]
+  },
+  {
+   "name": "mavlinkCheckBoxrev8",
+   "kind": "mcheck",
+   "parent": "tableLayoutPanel4",
+   "x": 380,
+   "y": 213,
+   "w": 15,
+   "h": 14,
+   "param": "SERVO8_REVERSED",
+   "nums": [
+    1,
+    0
+   ]
+  },
+  {
+   "name": "tableLayoutPanel4",
+   "kind": "panel",
+   "parent": "groupBoxservo",
+   "x": 3,
+   "y": 16,
+   "w": 438,
+   "h": 237
+  }
+ ]
+}

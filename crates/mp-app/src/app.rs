@@ -56,6 +56,8 @@ pub struct Settings {
     pub pois: Vec<(f64, f64, String)>,
     /// FlightPlanner "Tracker Home"
     pub tracker_home: Option<(f64, f64)>,
+    /// Antenna TrackerUI fields (Settings "Tracker_*")
+    pub tracker_ui: std::collections::BTreeMap<String, String>,
     /// ConfigPlanner settings (Settings.Instance keys)
     pub planner: std::collections::BTreeMap<String, String>,
     /// contextMenuStripHud options
@@ -113,6 +115,7 @@ impl Default for Settings {
             sim_port: 14560,
             pois: Vec::new(),
             tracker_home: None,
+            tracker_ui: Default::default(),
             user_params: Vec::new(),
             planner: Default::default(),
             hud: Default::default(),

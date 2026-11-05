@@ -1,0 +1,27 @@
+{
+ "name": "paramloading",
+ "w": 600,
+ "h": 400,
+ "controls": [
+  {
+   "name": "label1",
+   "kind": "label",
+   "parent": "$this",
+   "x": 140,
+   "y": 131,
+   "w": 218,
+   "h": 60,
+   "text": "Paramaters are still loading. Many screens will not work untill all Parameters are loaded. "
+  },
+  {
+   "name": "but_forceparams",
+   "kind": "button",
+   "parent": "$this",
+   "x": 209,
+   "y": 194,
+   "w": 75,
+   "h": 23,
+   "text": "Retry Now"
+  }
+ ]
+}

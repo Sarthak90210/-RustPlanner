@@ -1,0 +1,38 @@
+{
+"name": "fwdisabled",
+"w": 486,
+"h": 236,
+"controls": [
+{
+"name": "label1",
+"kind": "label",
+"parent": "$this",
+"x": 31,
+"y": 29,
+"w": 411,
+"h": 72,
+"text": "You cannot load new firmware while connected via MAVLink. \n\nPlease press the Disconnect button at top right to end the current MAVLink session and enable the firmware loading screen.",
+"font": 9.75
+},
+{
+"name": "but_bootloaderupdate",
+"kind": "button",
+"parent": "$this",
+"x": 34,
+"y": 150,
+"w": 116,
+"h": 23,
+"text": "Bootloader Update"
+},
+{
+"name": "label2",
+"kind": "label",
+"parent": "$this",
+"x": 156,
+"y": 155,
+"w": 313,
+"h": 13,
+"text": "Update the bootloader on your hardware to the newest available."
+}
+]
+}

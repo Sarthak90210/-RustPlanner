@@ -53,6 +53,8 @@ struct FtpFs {
     files: BTreeMap<String, Vec<u8>>,
     dirs: std::collections::BTreeSet<String>,
     sessions: std::collections::HashMap<u8, (String, bool)>,
+    /// AP_Scripting REPL: bytes of /repl/in already executed
+    repl_done: Option<usize>,
 }
 
 impl FtpFs {
@@ -68,7 +70,7 @@ impl FtpFs {
         files.insert("@SYS/dma.txt".to_string(), b"DMAV1\n".to_vec());
         files.insert("@SYS/timers.txt".to_string(), b"TimersV1\n".to_vec());
         let dirs = ["/", "/APM", "/APM/LOGS", "/APM/scripts", "/APM/terrain", "@SYS", "@PARAM", "@ROMFS"].iter().map(|s| s.to_string()).collect();
-        Self { files, dirs, sessions: Default::default() }
+        Self { files, dirs, sessions: Default::default(), repl_done: None }
     }
 
     fn norm(p: &str) -> String {
@@ -102,6 +104,43 @@ impl FtpFs {
             }
         }
         out
+    }
+
+    /// MAV_CMD_SCRIPTING REPL_START / REPL_STOP: the REPL reads /repl/in and writes /repl/out.
+    fn repl(&mut self, start: bool) {
+        if start {
+            self.dirs.insert("/repl".into());
+            self.files.insert("/repl/out".into(), b"> ".to_vec());
+            self.files.remove("/repl/in");
+            self.repl_done = Some(0);
+        } else {
+            self.repl_done = None;
+            self.files.remove("/repl/in");
+            self.files.remove("/repl/out");
+            self.dirs.remove("/repl");
+        }
+    }
+
+    /// Run any complete new lines written to /repl/in (a tiny Lua subset).
+    fn repl_step(&mut self) {
+        let Some(done) = self.repl_done else { return };
+        let input = self.files.get("/repl/in").cloned().unwrap_or_default();
+        if input.len() <= done {
+            return;
+        }
+        let Some(end) = input[done..].iter().rposition(|b| *b == b'\n').map(|i| done + i + 1) else { return };
+        let mut out = String::new();
+        for line in String::from_utf8_lossy(&input[done..end]).lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            let expr = line.strip_prefix("print(").and_then(|l| l.strip_suffix(')')).or_else(|| line.strip_prefix("return ")).unwrap_or(line);
+            out.push_str(&repl_eval(expr));
+            out.push_str("\n> ");
+        }
+        self.files.entry("/repl/out".into()).or_default().extend_from_slice(out.as_bytes());
+        self.repl_done = Some(end);
     }
 
     /// Handle one request payload; returns the reply payload.
@@ -223,6 +262,35 @@ impl FtpFs {
             _ => nak(&mut rep, 7),
         }
         rep
+    }
+}
+
+/// Evaluate a REPL expression: string literals, numbers and + - * / arithmetic.
+fn repl_eval(expr: &str) -> String {
+    let e = expr.trim();
+    if (e.starts_with('"') && e.ends_with('"') && e.len() >= 2) || (e.starts_with('\'') && e.ends_with('\'') && e.len() >= 2) {
+        return e[1..e.len() - 1].to_string();
+    }
+    fn num(s: &str) -> Option<f64> {
+        let s = s.trim();
+        for op in ['+', '-'] {
+            if let Some(i) = s.rfind(op).filter(|i| *i > 0) {
+                let (a, b) = (num(&s[..i])?, num(&s[i + 1..])?);
+                return Some(if op == '+' { a + b } else { a - b });
+            }
+        }
+        for op in ['*', '/'] {
+            if let Some(i) = s.rfind(op).filter(|i| *i > 0) {
+                let (a, b) = (num(&s[..i])?, num(&s[i + 1..])?);
+                return Some(if op == '*' { a * b } else { a / b });
+            }
+        }
+        s.trim_matches(|c| c == '(' || c == ')').parse().ok()
+    }
+    match num(e) {
+        Some(v) if v.fract() == 0.0 && v.abs() < 1e15 => format!("{}", v as i64),
+        Some(v) => format!("{v}"),
+        None => format!("[string \"{e}\"]:1: attempt to call a nil value"),
     }
 }
 
@@ -674,6 +742,7 @@ impl Vehicle {
             MavMessage::COMMAND_LONG(c) => self.command(c),
             MavMessage::FILE_TRANSFER_PROTOCOL(f) => {
                 let rep = self.ftp.handle(&f.payload, &self.params, &self.param_defaults);
+                self.ftp.repl_step();
                 self.send(MavMessage::FILE_TRANSFER_PROTOCOL(FILE_TRANSFER_PROTOCOL_DATA { target_network: 0, target_system: 255, target_component: 190, payload: rep }));
             }
             MavMessage::LOG_REQUEST_LIST(_) => {
@@ -835,6 +904,11 @@ impl Vehicle {
                 self.ack(c.command, MavResult::MAV_RESULT_ACCEPTED);
                 self.ask_accel_pos();
                 return;
+            }
+            MAV_CMD_SCRIPTING => {
+                // MAV_SCRIPTING_CMD_REPL_START = 0, REPL_STOP = 1
+                self.ftp.repl(c.param1 < 0.5);
+                MavResult::MAV_RESULT_ACCEPTED
             }
             MAV_CMD_DO_START_MAG_CAL => {
                 self.magcal = Some(0);
