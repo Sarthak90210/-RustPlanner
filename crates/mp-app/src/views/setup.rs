@@ -62,6 +62,9 @@ pub struct SetupView {
     uarts: std::sync::Arc<std::sync::Mutex<Option<std::collections::BTreeMap<u32, String>>>>,
     uarts_requested: bool,
     serial_bitmask: Option<(String, u32)>,
+    /// Sikradio background job result and the settings last read from the radio
+    sik_done: std::sync::Arc<std::sync::Mutex<Option<SikDone>>>,
+    sik_loaded: Option<mp_core::sik::SikSettings>,
     radio_cal: Option<RadioCal>,
     radio_done: bool,
     motor_pct: f32,
@@ -103,6 +106,8 @@ impl Default for SetupView {
             uarts: Default::default(),
             uarts_requested: false,
             serial_bitmask: None,
+            sik_done: Default::default(),
+            sik_loaded: None,
             radio_cal: None,
             radio_done: false,
             motor_pct: 0.0,
@@ -633,6 +638,186 @@ fn form_for(page: &str) -> Option<&'static str> {
     })
 }
 
+enum SikDone {
+    Busy(String),
+    Loaded(mp_core::sik::SikSettings),
+    Log(String),
+    Err(String),
+}
+
+/// Sikradio combo choices per register (values as the radio reports them).
+fn sik_choices(name: &str) -> Vec<&'static str> {
+    match name.trim_start_matches('R') {
+        "SERIAL_SPEED" => vec!["1", "2", "4", "9", "19", "38", "57", "115", "230", "460", "1000"],
+        "AIR_SPEED" => vec!["4", "8", "16", "19", "24", "32", "48", "64", "96", "128", "192", "250"],
+        "TXPOWER" => vec!["1", "2", "5", "8", "11", "14", "17", "20", "27", "30"],
+        "MAVLINK" => vec!["0", "1", "2"],
+        "MAX_WINDOW" => vec!["20", "33", "50", "80", "131"],
+        "NUM_CHANNELS" => vec!["1", "2", "5", "10", "20", "30", "40", "50"],
+        "DUTY_CYCLE" => vec!["10", "20", "30", "40", "50", "60", "70", "80", "90", "100"],
+        "LBT_RSSI" => vec!["0", "25", "50", "100", "150", "200"],
+        "MIN_FREQ" => vec!["414000", "433050", "868000", "902000", "915000"],
+        "MAX_FREQ" => vec!["434790", "464000", "869000", "915000", "928000"],
+        "ENCRYPTION_LEVEL" => vec!["0", "1"],
+        "ANT_MODE" => vec!["0", "1", "2", "3"],
+        "RATE_FREQBAND" => vec!["0", "1", "2"],
+        _ => Vec::new(),
+    }
+}
+
+impl SetupView {
+    fn sik_busy(&self) -> bool {
+        matches!(&*self.sik_done.lock().unwrap(), Some(SikDone::Busy(_)))
+    }
+
+    /// Run `job` against the radio on the selected COM port, in the background.
+    fn sik_run(&self, app: &mut AppCtx, label: &str, job: impl FnOnce(&mut mp_core::sik::Sik) -> Result<SikDone, String> + Send + 'static) {
+        if self.sik_busy() {
+            return;
+        }
+        if app.connected() {
+            app.toasts.error("Please disconnect from the autopilot first.\nThe radio is configured on its own COM port.");
+            return;
+        }
+        let (port, baud) = (app.settings.port.clone(), app.settings.baud);
+        if port.is_empty() || port == "AUTO" || port == "TCP" || port == "UDP" || port == "UDPCl" {
+            app.toasts.error("Select the radio's COM port and baud rate (top right) first.");
+            return;
+        }
+        *self.sik_done.lock().unwrap() = Some(SikDone::Busy(label.to_string()));
+        let slot = self.sik_done.clone();
+        std::thread::spawn(move || {
+            let r = mp_core::sik::Sik::open(&port, baud)
+                .map_err(|e| format!("{port}: {e}"))
+                .and_then(|mut sik| {
+                    if !sik.enter_command_mode(std::time::Duration::from_millis(1100)).map_err(|e| e.to_string())? {
+                        return Err("Failed to enter command mode".into());
+                    }
+                    let r = job(&mut sik);
+                    let _ = sik.exit();
+                    r
+                });
+            *slot.lock().unwrap() = Some(r.unwrap_or_else(SikDone::Err));
+        });
+    }
+
+    fn sik_poll(&mut self, st: &mut crate::forms::FormState, app: &mut AppCtx) {
+        let done = {
+            let mut g = self.sik_done.lock().unwrap();
+            match &*g {
+                Some(SikDone::Busy(l)) => {
+                    st.set("lbl_status", l.clone());
+                    None
+                }
+                _ => g.take(),
+            }
+        };
+        match done {
+            Some(SikDone::Loaded(cfg)) => {
+                st.set("ATI", cfg.version.clone());
+                st.set("ATI2", cfg.board.clone());
+                st.set("ATI3", cfg.freq.clone());
+                st.set("RSSI", cfg.rssi.clone());
+                st.set("RTI", cfg.remote_version.clone());
+                for (prefix, list) in [("", &cfg.local), ("R", &cfg.remote)] {
+                    for p in list.iter() {
+                        let key = format!("{prefix}{}", p.name);
+                        let mut items: Vec<String> = sik_choices(&key).iter().map(|s| s.to_string()).collect();
+                        if !items.contains(&p.value) {
+                            items.push(p.value.clone());
+                        }
+                        st.items.insert(key.clone(), items);
+                        st.checked.insert(key.clone(), p.value != "0");
+                        st.set(&key, p.value.clone());
+                    }
+                }
+                st.set("lbl_status", "Done");
+                self.sik_loaded = Some(cfg);
+            }
+            Some(SikDone::Log(l)) => st.set("lbl_status", l),
+            Some(SikDone::Err(e)) => {
+                st.set("lbl_status", "Error");
+                app.toasts.error(e);
+            }
+            _ => {}
+        }
+    }
+
+    /// Current form values that differ from what was read: (local, remote).
+    fn sik_changes(&self, st: &crate::forms::FormState) -> (Vec<mp_core::sik::SikParam>, Vec<mp_core::sik::SikParam>) {
+        let Some(cfg) = &self.sik_loaded else { return (Vec::new(), Vec::new()) };
+        let pick = |prefix: &str, list: &[mp_core::sik::SikParam]| -> Vec<mp_core::sik::SikParam> {
+            list.iter()
+                .filter_map(|p| {
+                    let key = format!("{prefix}{}", p.name);
+                    let v = match st.checked.get(&key) {
+                        Some(on) if matches!(p.value.as_str(), "0" | "1") && !st.items.get(&key).map(|i| i.len() > 2).unwrap_or(false) => if *on { "1".to_string() } else { "0".to_string() },
+                        _ => st.get(&key).to_string(),
+                    };
+                    (!v.is_empty() && v != p.value).then(|| mp_core::sik::SikParam { value: v, ..p.clone() })
+                })
+                .collect()
+        };
+        (pick("", &cfg.local), pick("R", &cfg.remote))
+    }
+
+    /// Sikradio button handlers; true when `b` was one of them.
+    fn sik_button(&mut self, b: &str, app: &mut AppCtx, st: &mut crate::forms::FormState) -> bool {
+        match b {
+            "BUT_getcurrent" => self.sik_run(app, "Doing Command ATI & RTI", |s| s.load().map(SikDone::Loaded).map_err(|e| e.to_string())),
+            "BUT_savesettings" => {
+                if self.sik_loaded.is_none() {
+                    app.toasts.error("Please Load Settings first");
+                } else {
+                    let (local, remote) = self.sik_changes(st);
+                    self.sik_run(app, "Saving settings", move |s| s.save(&local, &remote).map(|l| SikDone::Log(format!("Saved: {}", l.join("; ")))).map_err(|e| e.to_string()));
+                }
+            }
+            "BUT_resettodefault" => self.sik_run(app, "Resetting to defaults", |s| s.reset_defaults().map(|_| SikDone::Log("Reset to defaults - reload settings".into())).map_err(|e| e.to_string())),
+            "BUT_SetPPMFailSafe" | "BUT_SetPPMFailSafeRemote" => {
+                let c = if b.ends_with("Remote") { "RT&R" } else { "AT&R" };
+                self.sik_run(app, "Setting PPM fail safe", move |s| s.cmd(c).map(|r| SikDone::Log(format!("{c} {r}"))).map_err(|e| e.to_string()));
+            }
+            "BUT_Syncoptions" => {
+                // the settings both radios must share for a link
+                for k in ["AIR_SPEED", "NETID", "ECC", "MAVLINK", "MIN_FREQ", "MAX_FREQ", "NUM_CHANNELS", "MAX_WINDOW", "AESKEY"] {
+                    let v = st.get(k).to_string();
+                    st.set(&format!("R{k}"), v);
+                    if let Some(c) = st.checked.get(k).copied() {
+                        st.checked.insert(format!("R{k}"), c);
+                    }
+                }
+            }
+            "btnRandom" => {
+                let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
+                let key: String = (0..32).map(|i| format!("{:X}", ((seed >> (i % 16 * 4)) as u64).wrapping_mul(6364136223846793005u64.wrapping_add(i as u64)) >> 60)).collect();
+                st.set("AESKEY", key);
+            }
+            "btnSaveToFile" | "btnRemoteSaveToFile" => {
+                let prefix = if b.starts_with("btnRemote") { "R" } else { "" };
+                let list = self.sik_loaded.as_ref().map(|c| if prefix == "R" { c.remote.clone() } else { c.local.clone() }).unwrap_or_default();
+                let text: String = list.iter().map(|p| format!("{}={}\r\n", p.name, st.get(&format!("{prefix}{}", p.name)))).collect();
+                if let Some(Err(e)) = crate::platform::save_text("Save to File...", "sikradio.txt", "Text", &["txt"], &text) {
+                    app.toasts.error(e);
+                }
+            }
+            "btnLoadFromFile" | "btnRemoteLoadFromFile" => {
+                let prefix = if b.starts_with("btnRemote") { "R" } else { "" };
+                if let Some((_, text)) = crate::platform::open_text("Load from File...", "Text", &["txt"]) {
+                    for l in text.lines() {
+                        if let Some((k, v)) = l.split_once('=') {
+                            st.set(&format!("{prefix}{}", k.trim()), v.trim().to_string());
+                            st.checked.insert(format!("{prefix}{}", k.trim()), v.trim() != "0");
+                        }
+                    }
+                }
+            }
+            _ => return false,
+        }
+        true
+    }
+}
+
 /// ConfigInitialParams.calc_values: suggested parameters for a prop size and battery.
 fn initial_params(prop: f64, cells: f64, cmax: f64, cmin: f64, tmotor: bool, suggested: bool, params: &std::collections::BTreeMap<String, mp_core::link::Param>, plane: bool) -> Vec<(String, f64)> {
     let round_to = |v: f64, p: i32| -> f64 {
@@ -693,7 +878,8 @@ fn initial_params(prop: f64, cells: f64, cmax: f64, cmin: f64, tmotor: bool, sug
 impl SetupView {
     /// Pages rendered from the exported designer layouts, with their button handlers.
     fn form_page(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, page: &str, form: &'static str) {
-        let st = self.forms.entry(form).or_default();
+        let mut st_owned = self.forms.remove(form).unwrap_or_default();
+        let st = &mut st_owned;
         if form == "initialparams" && st.text.is_empty() {
             st.items.insert("cmb_batterytype".into(), vec!["LiPo".into(), "LiPoHV".into(), "LiIon".into()]);
             st.set("cmb_batterytype", "LiPo");
@@ -709,6 +895,12 @@ impl SetupView {
                 }) {
                     st.set("lbl_status", format!("Throttle {}%  Current {:.1}A  Interference {}%  Comp {:.0},{:.0},{:.0}", cm.throttle / 10, cm.current, cm.interference, cm.CompensationX, cm.CompensationY, cm.CompensationZ));
                 }
+            }
+        }
+        if form == "sikradio" {
+            self.sik_poll(st, app);
+            if self.sik_busy() {
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
             }
         }
         let clicked = crate::forms::show(ui, app, form, st);
@@ -749,6 +941,7 @@ impl SetupView {
                     Some(l) => l.send(LinkCommand::CommandLong { command: 205, params: [if b.ends_with("pitch") { 30.0 } else { 0.0 }, 0.0, if b.ends_with("yaw") { 45.0 } else { 0.0 }, 0.0, 0.0, 0.0, 2.0] }),
                     None => app.toasts.error("Please Connect First"),
                 },
+                ("sikradio", b) if self.sik_button(b, app, st) => {}
                 ("repl", "BUT_Connect") => {
                     st.set("textBox1", "Lua REPL\r\nConnecting over MAVLink SERIAL_CONTROL...\r\n");
                 }
@@ -761,6 +954,7 @@ impl SetupView {
                 }
             }
         }
+        self.forms.insert(form, st_owned);
         self.param_compare_ui(ui.ctx(), app);
     }
 

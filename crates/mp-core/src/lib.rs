@@ -16,6 +16,7 @@ pub mod mission;
 pub mod param_meta;
 pub mod parampck;
 pub mod paramfile;
+pub mod sik;
 pub mod sim;
 pub mod state;
 pub mod survey;

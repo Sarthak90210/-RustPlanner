@@ -117,6 +117,11 @@ fn open_serial(port: &str, baud: u32) -> io::Result<Box<dyn Transport>> {
     Ok(Box::new(SerialTransport(p)))
 }
 
+/// Open a serial port as a raw transport (SiK radio AT commands, NMEA, terminals).
+pub fn open_serial_port(port: &str, baud: u32) -> io::Result<Box<dyn Transport>> {
+    open_serial(port, baud)
+}
+
 #[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
 fn open_serial(_port: &str, _baud: u32) -> io::Result<Box<dyn Transport>> {
     Err(io::Error::new(
