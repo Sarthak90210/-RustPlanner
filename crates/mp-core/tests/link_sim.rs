@@ -219,4 +219,12 @@ fn mavftp_against_sim() {
     ftp.remove("/APM/test/b.bin").unwrap();
     ftp.rmdir("/APM/test").unwrap();
     assert!(ftp.list("/APM").unwrap().iter().all(|e| e.name != "test"));
+
+    // packed parameter list with defaults (MAVLinkInterface.getParamList over FTP)
+    let pck = ftp.get("@PARAM/param.pck?withdefaults=1", |_, _| {}).unwrap();
+    let list = mp_core::parampck::unpack(&pck).expect("valid param.pck");
+    assert!(list.len() > 500, "{} params", list.len());
+    let rtl = list.iter().find(|(n, _, _)| n == "RTL_ALT").expect("RTL_ALT present");
+    assert_eq!(rtl.1, 1500.0);
+    assert_eq!(rtl.2, Some(1500.0));
 }

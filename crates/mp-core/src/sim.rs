@@ -73,6 +73,8 @@ impl FtpFs {
 
     fn norm(p: &str) -> String {
         let p = p.trim_end_matches('\0').trim();
+        // AP_Filesystem_Param query string ("?withdefaults=1")
+        let p = p.split('?').next().unwrap_or(p);
         if p.is_empty() {
             return "/".into();
         }
@@ -103,7 +105,7 @@ impl FtpFs {
     }
 
     /// Handle one request payload; returns the reply payload.
-    fn handle(&mut self, req: &[u8; 251], params: &BTreeMap<String, f32>) -> [u8; 251] {
+    fn handle(&mut self, req: &[u8; 251], params: &BTreeMap<String, f32>, defaults: &BTreeMap<String, f32>) -> [u8; 251] {
         let seq = u16::from_le_bytes([req[0], req[1]]);
         let (session, op, size) = (req[2], req[3], req[4] as usize);
         let offset = u32::from_le_bytes([req[8], req[9], req[10], req[11]]);
@@ -153,11 +155,8 @@ impl FtpFs {
             4 | 6 | 11 => {
                 let path = Self::norm(&text);
                 if path == "@PARAM/param.pck" && op == 4 {
-                    let mut txt = String::new();
-                    for (k, v) in params {
-                        txt.push_str(&format!("{k},{v}\n"));
-                    }
-                    self.files.insert(path.clone(), txt.into_bytes());
+                    let list: Vec<(String, f32, f32)> = params.iter().map(|(k, v)| (k.clone(), *v, defaults.get(k).copied().unwrap_or(*v))).collect();
+                    self.files.insert(path.clone(), crate::parampck::pack(&list));
                 }
                 if op == 6 {
                     self.files.insert(path.clone(), Vec::new());
@@ -288,6 +287,8 @@ struct Vehicle {
     seq: u8,
     boot: Instant,
     params: BTreeMap<String, f32>,
+    /// values at boot: the firmware defaults reported in param.pck
+    param_defaults: BTreeMap<String, f32>,
     mission: Vec<Locationwp>,
     upload: Option<(u16, Vec<Locationwp>, MavMissionType)>,
     fence: Vec<Locationwp>,
@@ -399,6 +400,7 @@ impl Vehicle {
         }
         Self {
             ftp: FtpFs::new(),
+            param_defaults: params.clone(),
             sysid: 1,
             kind: SimKind::Copter,
             home: SITL_HOME,
@@ -671,7 +673,7 @@ impl Vehicle {
             }
             MavMessage::COMMAND_LONG(c) => self.command(c),
             MavMessage::FILE_TRANSFER_PROTOCOL(f) => {
-                let rep = self.ftp.handle(&f.payload, &self.params);
+                let rep = self.ftp.handle(&f.payload, &self.params, &self.param_defaults);
                 self.send(MavMessage::FILE_TRANSFER_PROTOCOL(FILE_TRANSFER_PROTOCOL_DATA { target_network: 0, target_system: 255, target_component: 190, payload: rep }));
             }
             MavMessage::LOG_REQUEST_LIST(_) => {

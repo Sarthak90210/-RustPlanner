@@ -59,6 +59,9 @@ pub struct SetupView {
     page: usize,
     forms: std::collections::HashMap<&'static str, crate::forms::FormState>,
     param_compare: Option<Vec<(String, Option<f64>, f64, bool)>>,
+    uarts: std::sync::Arc<std::sync::Mutex<Option<std::collections::BTreeMap<u32, String>>>>,
+    uarts_requested: bool,
+    serial_bitmask: Option<(String, u32)>,
     radio_cal: Option<RadioCal>,
     radio_done: bool,
     motor_pct: f32,
@@ -97,6 +100,9 @@ impl Default for SetupView {
             page: std::env::var("MP_PAGE").ok().and_then(|v| v.parse().ok()).unwrap_or(0),
             forms: Default::default(),
             param_compare: None,
+            uarts: Default::default(),
+            uarts_requested: false,
+            serial_bitmask: None,
             radio_cal: None,
             radio_done: false,
             motor_pct: 0.0,
@@ -182,7 +188,7 @@ impl SetupView {
                 "Compass" => compass(ui, app, link),
                 "Radio Calibration" => self.radio(ui, app, link),
                 "Servo Output" => servo_output(ui, app),
-                "Serial Ports" => fr(ui, app, &["SERIAL"]),
+                "Serial Ports" => self.serial_ports(ui, app, link),
                 "ESC Calibration" => esc_cal(ui, app, link),
                 "Flight Modes" => config::flight_modes(ui, app),
                 "FailSafe" => failsafe(ui, app, link),
@@ -801,6 +807,131 @@ impl SetupView {
                     }
                     _ => app.toasts.error("Please Connect First"),
                 }
+            }
+        }
+    }
+}
+
+impl SetupView {
+    /// ConfigSerial: one row per SERIALn (152 / 114 / 132 / 307 px columns): port name with
+    /// the board's UART name from @SYS/uarts.txt, baud, protocol, options summary, Set Bitmask.
+    fn serial_ports(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
+        // _gotUARTNames: fetch @SYS/uarts.txt once over MAVFtp
+        if !self.uarts_requested {
+            self.uarts_requested = true;
+            let mut ftp = mp_core::ftp::Ftp::new(link);
+            let slot = self.uarts.clone();
+            std::thread::spawn(move || {
+                let names: std::collections::BTreeMap<u32, String> = ftp
+                    .get("@SYS/uarts.txt", |_, _| {})
+                    .map(|b| {
+                        String::from_utf8_lossy(&b)
+                            .lines()
+                            .filter_map(|l| {
+                                let mut it = l.split_whitespace();
+                                let port = it.next()?;
+                                let n: u32 = port.strip_prefix("SERIAL")?.parse().ok()?;
+                                Some((n, it.next().unwrap_or("").to_string()))
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                *slot.lock().unwrap() = Some(names);
+            });
+        }
+        let uarts = self.uarts.lock().unwrap().clone().unwrap_or_default();
+        let (params, fw) = {
+            let s = link.shared.read();
+            (s.params.clone(), s.cs.firmware)
+        };
+        let o = ui.max_rect().min;
+        let p = ui.painter().clone();
+        let f = crate::fonts::ui_id(crate::fonts::UI_SIZE);
+        let bold = crate::fonts::bold_id(crate::fonts::UI_SIZE);
+        let row_h = 44.0;
+        let cols = [152.0f32, 114.0, 132.0, 307.0];
+        let mut y = 0.0;
+        for i in 0..10u32 {
+            let port = format!("SERIAL{i}");
+            let baud = format!("{port}_BAUD");
+            if !params.contains_key(&baud) {
+                continue;
+            }
+            let x0 = o.x;
+            let cell = |c: usize| {
+                let x: f32 = cols[..c].iter().sum();
+                Rect::from_min_size(Pos2::new(x0 + x, o.y + y), Vec2::new(cols[c], row_h))
+            };
+            let name = uarts.get(&i).cloned().unwrap_or_default();
+            let lr = cell(0);
+            p.text(lr.center(), egui::Align2::CENTER_CENTER, format!("SERIAL PORT {i}\n{name}"), bold.clone(), Color32::WHITE);
+            for (c, pname) in [(1usize, baud.clone()), (2, format!("{port}_PROTOCOL"))] {
+                if params.contains_key(&pname) {
+                    let r = cell(c);
+                    let cr = Rect::from_min_size(Pos2::new(r.left() + 3.0, r.center().y - 11.0), Vec2::new(r.width() - 6.0, 22.0));
+                    ui.scope_builder(egui::UiBuilder::new().max_rect(cr), |ui| config::param_control(ui, link, fw, &pname, params[&pname].value, cr.width() - 8.0));
+                }
+            }
+            let opt = format!("{port}_OPTIONS");
+            if let Some(pv) = params.get(&opt) {
+                let bits = mp_core::param_meta::get(fw, &opt).map(|m| m.bitmask.clone()).unwrap_or_default();
+                let v = pv.value as u32;
+                let names: Vec<String> = bits.iter().filter(|(b, _)| v & (1 << b) != 0).map(|(_, n)| n.clone()).collect();
+                let summary = if names.is_empty() { "".to_string() } else { names.join(", ") };
+                let r = cell(3);
+                let g = p.layout(summary, f.clone(), Color32::WHITE, 300.0 - 90.0);
+                p.galley(Pos2::new(r.left() + 3.0, r.center().y - g.size().y / 2.0), g, Color32::WHITE);
+                let br = Rect::from_min_size(Pos2::new(r.right() - 85.0, r.center().y - 12.0), Vec2::new(82.0, 24.0));
+                if ui.put(br, |ui: &mut egui::Ui| theme::button_sized(ui, "Set Bitmask", br.size())).clicked() {
+                    self.serial_bitmask = Some((opt.clone(), v));
+                }
+            }
+            y += row_h;
+        }
+        if y == 0.0 {
+            theme::label(ui, "No serial port parameters on this vehicle");
+        }
+        p.text(o + Vec2::new(0.0, y + 8.0), egui::Align2::LEFT_TOP, "Note: changes to serial port settings require a reboot of the autopilot.", f.clone(), Color32::WHITE);
+        ui.allocate_rect(Rect::from_min_size(o, Vec2::new(cols.iter().sum(), y + 30.0)), Sense::hover());
+
+        // MavlinkCheckBoxBitMask popup
+        if let Some((name, mut v)) = self.serial_bitmask.clone() {
+            let bits = mp_core::param_meta::get(fw, &name).map(|m| m.bitmask.clone()).unwrap_or_default();
+            let mut done = None;
+            egui::Window::new(name.as_str()).collapsible(false).resizable(false).show(ui.ctx(), |ui| {
+                egui::Grid::new("serial_bits").num_columns(2).show(ui, |ui| {
+                    for (k, (b, n)) in bits.iter().enumerate() {
+                        let mut on = v & (1 << b) != 0;
+                        if ui.checkbox(&mut on, n.as_str()).changed() {
+                            if on {
+                                v |= 1 << b;
+                            } else {
+                                v &= !(1 << b);
+                            }
+                        }
+                        if k % 2 == 1 {
+                            ui.end_row();
+                        }
+                    }
+                });
+                ui.horizontal(|ui| {
+                    if theme::button(ui, "OK").clicked() {
+                        done = Some(true);
+                    }
+                    if theme::button(ui, "Cancel").clicked() {
+                        done = Some(false);
+                    }
+                });
+            });
+            match done {
+                Some(true) => {
+                    if !app.readonly {
+                        link.send(LinkCommand::SetParam { name, value: v as f32 });
+                    }
+                    self.serial_bitmask = None;
+                }
+                Some(false) => self.serial_bitmask = None,
+                None => self.serial_bitmask = Some((name, v)),
             }
         }
     }

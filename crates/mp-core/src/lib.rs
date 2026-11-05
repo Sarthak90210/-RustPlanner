@@ -14,6 +14,7 @@ pub mod link;
 pub mod mavcmd;
 pub mod mission;
 pub mod param_meta;
+pub mod parampck;
 pub mod paramfile;
 pub mod sim;
 pub mod state;

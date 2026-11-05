@@ -249,6 +249,9 @@ pub struct ParamEditor {
     /// presaved file fetched in the background
     presaved: std::sync::Arc<std::sync::Mutex<Option<Result<String, String>>>>,
     confirm_reset: bool,
+    /// parameter defaults from @PARAM/param.pck?withdefaults=1 (MAVFtp)
+    defaults: std::sync::Arc<std::sync::Mutex<Option<BTreeMap<String, f32>>>>,
+    defaults_requested: bool,
     editing: Option<(String, String)>,
 }
 
@@ -277,6 +280,26 @@ impl ParamEditor {
             let s = link.shared.read();
             (s.params.clone(), s.cs.firmware)
         };
+
+        // MAVLinkInterface.getParamList: the packed list with defaults over MAVFtp
+        if !self.defaults_requested && link.shared.read().autopilot_version.map(|(_, c)| c & 32 != 0).unwrap_or(false) {
+            self.defaults_requested = true;
+            let mut ftp = mp_core::ftp::Ftp::new(link);
+            let slot = self.defaults.clone();
+            let ctx = ui.ctx().clone();
+            std::thread::spawn(move || {
+                if let Ok(b) = ftp.get("@PARAM/param.pck?withdefaults=1", |_, _| {}) {
+                    if let Some(list) = mp_core::parampck::unpack(&b) {
+                        let map: BTreeMap<String, f32> = list.into_iter().filter_map(|(n, _, d)| d.map(|d| (n, d))).collect();
+                        if !map.is_empty() {
+                            *slot.lock().unwrap() = Some(map);
+                            ctx.request_repaint();
+                        }
+                    }
+                }
+            });
+        }
+        let defaults = self.defaults.lock().unwrap().clone();
 
         // tableLayoutPanel1: Dock Right, 122px
         egui::Panel::right("raw_buttons").exact_size(122.0).resizable(false).frame(egui::Frame::new().fill(theme::BG)).show(ui, |ui| {
@@ -391,7 +414,10 @@ impl ParamEditor {
             ui.painter().text(o + Vec2::new(6.0, 286.0), egui::Align2::LEFT_TOP, "Search", f.clone(), Color32::WHITE);
             ui.put(r(302.0, 20.0), egui::TextEdit::singleline(&mut self.search));
             ui.put(Rect::from_min_size(o + Vec2::new(6.0, 328.0), Vec2::new(90.0, 17.0)), egui::Checkbox::new(&mut self.modified_only, "Modified"));
-            ui.put(Rect::from_min_size(o + Vec2::new(6.0, 351.0), Vec2::new(100.0, 17.0)), egui::Checkbox::new(&mut self.none_default, "None Default"));
+            // chk_none_default is only shown when the vehicle reported defaults
+            if defaults.is_some() {
+                ui.put(Rect::from_min_size(o + Vec2::new(6.0, 351.0), Vec2::new(100.0, 17.0)), egui::Checkbox::new(&mut self.none_default, "None Default"));
+            }
             b(ui, r(384.0, 22.0), "Refresh Table");
         });
 
@@ -429,6 +455,7 @@ impl ParamEditor {
                 .iter()
                 .filter(|(k, _)| !show_tree || self.selected_group.as_ref().map(|g| group_of(k) == *g).unwrap_or(true))
                 .filter(|(k, _)| !self.modified_only || self.edits.contains_key(*k))
+                .filter(|(k, p)| !self.none_default || defaults.as_ref().and_then(|d| d.get(*k)).map(|d| *d != p.value).unwrap_or(false))
                 .filter(|(k, _)| {
                     q.is_empty()
                         || k.to_lowercase().contains(&q)
@@ -439,7 +466,7 @@ impl ParamEditor {
             let mut rows = rows;
             let favs = app.settings.fav_params.clone();
             rows.sort_by_key(|(k, _)| !favs.contains(k));
-            self.grid(ui, link, fw, &rows, &mut app.settings.fav_params);
+            self.grid(ui, link, fw, &rows, &mut app.settings.fav_params, defaults.as_ref());
         });
         // presaved file arrived: show it in ParamCompare
         if let Some(r) = self.presaved.lock().unwrap().take() {
@@ -526,13 +553,14 @@ impl ParamEditor {
     }
 
     /// The Params DataGridView: Name 130 | Value 70 | Default 70 | Units 60 | Options 150 | Desc | Fav 30
-    fn grid(&mut self, ui: &mut egui::Ui, _link: &Link, fw: Firmware, rows: &[(String, f32)], favs: &mut Vec<String>) {
-        let widths = [130.0f32, 70.0, 70.0, 60.0, 150.0, 0.0, 30.0];
+    fn grid(&mut self, ui: &mut egui::Ui, _link: &Link, fw: Firmware, rows: &[(String, f32)], favs: &mut Vec<String>, defaults: Option<&BTreeMap<String, f32>>) {
+        // Default_value.Visible = has_defaults
+        let widths = [130.0f32, 70.0, if defaults.is_some() { 70.0 } else { -1.0 }, 60.0, 150.0, 0.0, 30.0];
         let headers = ["Name", "Value", "Default", "Units", "Options", "Desc", "Fav"];
         let avail = ui.available_width();
-        let fixed: f32 = widths.iter().sum();
+        let fixed: f32 = widths.iter().map(|w| w.max(0.0)).sum();
         let desc_w = (avail - fixed - 14.0).max(150.0);
-        let col_w: Vec<f32> = widths.iter().map(|w| if *w == 0.0 { desc_w } else { *w }).collect();
+        let col_w: Vec<f32> = widths.iter().map(|w| if *w == 0.0 { desc_w } else { w.max(0.0) }).collect();
         let (hdr_h, row_h) = (21.0, 22.0);
         let f = fonts::ui_id(fonts::UI_SIZE);
         let line = Color32::from_rgb(0xa0, 0xa0, 0xa0);
@@ -541,6 +569,9 @@ impl ParamEditor {
         let (hr, _) = ui.allocate_exact_size(Vec2::new(col_w.iter().sum(), hdr_h), Sense::hover());
         let mut x = hr.left();
         for (i, w) in col_w.iter().enumerate() {
+            if *w <= 0.0 {
+                continue;
+            }
             let r = Rect::from_min_size(Pos2::new(x, hr.top()), Vec2::new(*w, hdr_h));
             ui.painter().rect_filled(r, 0.0, theme::BG);
             ui.painter().rect_stroke(r, 0.0, Stroke::new(1.0, line), StrokeKind::Inside);
@@ -561,7 +592,7 @@ impl ParamEditor {
                     x += w;
                 }
                 let edited = self.edits.get(name).copied();
-                for (c, r) in cells.iter().enumerate() {
+                for (c, r) in cells.iter().enumerate().filter(|(_, r)| r.width() > 0.0) {
                     // edited values are highlighted green, as Mission Planner does
                     let fill = if c == 1 && edited.is_some() { Color32::from_rgb(0, 128, 0) } else { bg };
                     ui.painter().rect_filled(*r, 0.0, fill);
@@ -633,7 +664,9 @@ impl ParamEditor {
                         self.edits.insert(name.clone(), v);
                     }
                 }
-                txt(ui, cells[2], "");
+                if let Some(d) = defaults.and_then(|d| d.get(name)) {
+                    txt(ui, cells[2], &paramfile::format_value(*d));
+                }
                 txt(ui, cells[3], meta.map(|m| m.units.as_str()).unwrap_or(""));
                 if let Some(m) = meta {
                     let opts = if let Some((lo, hi)) = m.range {
