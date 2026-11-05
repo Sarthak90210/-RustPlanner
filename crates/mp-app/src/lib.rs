@@ -11,6 +11,7 @@ pub mod hud;
 pub mod joystick;
 pub mod log_browse;
 pub mod map;
+pub mod mjpeg;
 pub mod platform;
 pub mod rtcm;
 pub mod sitl;

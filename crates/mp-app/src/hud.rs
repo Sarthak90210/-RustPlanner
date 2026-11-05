@@ -17,6 +17,25 @@ pub struct HudInput<'a> {
     pub mode_changed_secs: f64,
     /// When the vehicle last armed ("ARMED" shows for 8 s).
     pub armed_secs: f64,
+    pub opts: &'a HudOptions,
+    /// Video frame drawn behind the HUD (MJPEG source).
+    pub video: Option<egui::TextureId>,
+}
+
+/// contextMenuStripHud settings.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct HudOptions {
+    /// Russian HUD: the horizon stays level and the aircraft symbol rolls.
+    pub russian: bool,
+    /// Ground Color: gradient top / bottom (None = theme colours).
+    pub ground: Option<[u8; 6]>,
+    /// Battery Cell Voltage: cells in the pack (0 = show pack voltage).
+    pub cells: u32,
+    /// User Items: CurrentState fields listed on the HUD.
+    pub items: Vec<String>,
+    /// Show icons instead of the battery / GPS text prefixes.
+    pub icons: bool,
 }
 
 // theme / HUD.cs colours
@@ -138,13 +157,18 @@ pub enum HudClick {
 
 /// Draws the HUD; returns which status item was clicked (HUD.cs ekfhitzone / vibehitzone /
 /// prearmhitzone).
-pub fn show(ui: &mut Ui, input: &HudInput, size: Vec2) -> Option<HudClick> {
+pub fn show(ui: &mut Ui, input: &HudInput, size: Vec2) -> (Option<HudClick>, egui::Response) {
     let (resp, painter) = ui.allocate_painter(size, Sense::click());
+    let click = clicked_zone(&resp, input, painter);
+    (click, resp)
+}
+
+fn clicked_zone(resp: &egui::Response, input: &HudInput, painter: egui::Painter) -> Option<HudClick> {
     let rect = resp.rect;
     let painter = painter.with_clip_rect(rect);
     painter.rect_filled(rect, 0.0, Color32::BLACK);
     let cs = input.cs;
-    let hud = Hud { painter, ctx: ui.ctx(), w: rect.width() as i32, h: rect.height() as i32, o: rect.min };
+    let hud = Hud { painter, ctx: &resp.ctx, w: rect.width() as i32, h: rect.height() as i32, o: rect.min };
     draw(&hud, cs, input);
 
     let pos = resp.interact_pointer_pos().filter(|_| resp.clicked())?;
@@ -187,14 +211,23 @@ fn draw(g: &Hud, cs: &CurrentState, input: &HudInput) {
     let center = at(wf / 2.0, hf / 2.0);
 
     // ---- sky / ground (rotated by -roll)
-    let hz = Xf::rot(center, -roll);
+    let opts = input.opts;
+    let hz = Xf::rot(center, if opts.russian { 0.0 } else { -roll });
+    let (g1, g2) = match opts.ground {
+        Some(c) => (Color32::from_rgb(c[0], c[1], c[2]), Color32::from_rgb(c[3], c[4], c[5])),
+        None => (GROUND1, GROUND2),
+    };
     let sky_h = halfheight * 2.0 + pitchoffset;
-    if sky_h != 0.0 {
-        g.grad_rect(hz, -halfwidth * 2.0, -halfheight * 2.0, wf * 2.0, sky_h, SKY1, SKY2);
-    }
     let gnd_h = halfheight * 2.0 - pitchoffset;
-    if gnd_h != 0.0 {
-        g.grad_rect(hz, -halfwidth * 2.0, pitchoffset, wf * 2.0, gnd_h, GROUND1, GROUND2);
+    if let Some(v) = input.video {
+        g.painter.image(v, Rect::from_min_size(o, Vec2::new(wf, hf)), Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+    } else {
+        if sky_h != 0.0 {
+            g.grad_rect(hz, -halfwidth * 2.0, -halfheight * 2.0, wf * 2.0, sky_h, SKY1, SKY2);
+        }
+        if gnd_h != 0.0 {
+            g.grad_rect(hz, -halfwidth * 2.0, pitchoffset, wf * 2.0, gnd_h, g1, g2);
+        }
     }
     g.line(hz, -halfwidth * 2.0, pitchoffset, halfwidth * 2.0, pitchoffset, 2.0, white);
 
@@ -244,7 +277,8 @@ fn draw(g: &Hud, cs: &CurrentState, input: &HudInput) {
             .collect();
         gc.painter.add(Shape::line(pts, Stroke::new(2.0, white)));
 
-        // plane wings
+        // plane wings (rolling with the aircraft on the Russian HUD)
+        let c0 = if opts.russian { Xf::rot(center, roll) } else { c0 };
         let red200 = Color32::from_rgba_unmultiplied(255, 0, 0, 200);
         let (l, rr) = (-halfwidth / 2.0, halfwidth / 2.0);
         gc.line(c0, l - (w / 2 / 5) as f32, 0.0, l, 0.0, 4.0, red200);
@@ -462,14 +496,25 @@ fn draw(g: &Hud, cs: &CurrentState, input: &HudInput) {
     let ypos = [hf - 2.0 * yto - ybo - 4.0, hf - yto - ybo - 4.0];
 
     let batt_col = if cs.battery_remaining > 0 && cs.battery_remaining < 15 { RED } else { white };
-    g.text(
-        base,
-        &format!("Bat1 {:.2}v {:.1} A {}%", cs.battery_voltage, cs.current, cs.battery_remaining),
-        fontsize,
-        batt_col,
-        xpos,
-        ypos[1],
-    );
+    let volts = if opts.cells > 0 { cs.battery_voltage / opts.cells as f32 } else { cs.battery_voltage };
+    let bat_text = if opts.icons {
+        // battery glyph in place of the "Bat1" prefix
+        let bx = xpos;
+        let by = ypos[1] + 2.0;
+        g.rect_outline(base, bx, by, fontsize * 1.6, fontsize * 0.8, 1.5, batt_col);
+        g.fill_rect(base, bx + fontsize * 1.6, by + fontsize * 0.2, fontsize * 0.2, fontsize * 0.4, batt_col);
+        g.fill_rect(base, bx + 2.0, by + 2.0, (fontsize * 1.6 - 4.0) * (cs.battery_remaining.clamp(0, 100) as f32 / 100.0), fontsize * 0.8 - 4.0, batt_col);
+        format!("       {:.2}v {:.1} A {}%", volts, cs.current, cs.battery_remaining)
+    } else {
+        format!("Bat1 {:.2}v {:.1} A {}%", volts, cs.current, cs.battery_remaining)
+    };
+    g.text(base, &bat_text, fontsize, batt_col, xpos, ypos[1]);
+    // User Items, listed down the left side under the speed tape
+    for (k, name) in opts.items.iter().enumerate() {
+        if let Some(v) = cs.field(name) {
+            g.text(base, &format!("{name}: {v:.2}"), fontsize, white, xpos, hf * 0.62 + k as f32 * (fontsize + 4.0));
+        }
+    }
 
     let (gps, gcol) = match cs.gpsstatus {
         0 => ("GPS: No GPS".to_string(), RED),

@@ -51,6 +51,13 @@ pub struct Settings {
     pub tracker_home: Option<(f64, f64)>,
     /// ConfigPlanner settings (Settings.Instance keys)
     pub planner: std::collections::BTreeMap<String, String>,
+    /// contextMenuStripHud options
+    pub hud: crate::hud::HudOptions,
+    /// Set Aspect Ratio: 16:9 instead of 4:3
+    pub hud_wide: bool,
+    /// Swap With Map
+    pub hud_swap: bool,
+    pub mjpeg_url: String,
     pub sitl_home: (f64, f64),
     pub sitl_heading: f32,
     pub sitl_version: usize,
@@ -96,6 +103,10 @@ impl Default for Settings {
             tracker_home: None,
             user_params: Vec::new(),
             planner: Default::default(),
+            hud: Default::default(),
+            hud_wide: false,
+            hud_swap: false,
+            mjpeg_url: "http://127.0.0.1:8080/?action=stream".into(),
             sitl_home: (-35.363261, 149.165230),
             sitl_heading: 0.0,
             sitl_version: 2,

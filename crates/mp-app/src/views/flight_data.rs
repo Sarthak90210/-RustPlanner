@@ -113,6 +113,8 @@ pub struct FlightDataView {
     graph: crate::zedgraph::TuningGraph,
     tlog_name: String,
     hud_window: Option<hud::HudClick>,
+    video: Option<crate::mjpeg::Mjpeg>,
+    hud_prompt: Option<HudPrompt>,
     log_browse: crate::log_browse::LogBrowse,
     analysis: Option<(String, Vec<(String, String, String)>)>,
     raw_sensor: bool,
@@ -152,6 +154,8 @@ impl Default for FlightDataView {
             graph: Default::default(),
             tlog_name: String::new(),
             hud_window: None,
+            video: None,
+            hud_prompt: None,
             log_browse: Default::default(),
             analysis: None,
             raw_sensor: false,
@@ -196,7 +200,8 @@ impl FlightDataView {
         if narrow {
             // phone: HUD, map, tabs stacked
             let w = ui.available_width();
-            self.hud_ui(ui, &cs, connected, Vec2::new(w, (w * 0.75).round()));
+            let aspect = if app.settings.hud_wide { 0.5625 } else { 0.75 };
+            self.hud_ui(ui, app, &cs, connected, Vec2::new(w, (w * aspect).round()));
             egui::Panel::bottom("fd_tabs")
                 .resizable(true)
                 .default_size(ui.available_height() * 0.45)
@@ -215,32 +220,200 @@ impl FlightDataView {
             .show(ui, |ui| {
                 let w = ui.available_width();
                 // SubMainLeft: HUD keeps a 4:3 aspect
-                let hud_h = (w * 0.75).round().min(ui.available_height() - 120.0);
-                self.hud_ui(ui, &cs, connected, Vec2::new(w, hud_h));
+                let aspect = if app.settings.hud_wide { 0.5625 } else { 0.75 };
+                let hud_h = (w * aspect).round().min(ui.available_height() - 120.0);
+                if app.settings.hud_swap {
+                    ui.allocate_ui(Vec2::new(w, hud_h), |ui| {
+                        ui.set_min_size(Vec2::new(w, hud_h));
+                        self.map_area(ui, app, &cs);
+                    });
+                } else {
+                    self.hud_ui(ui, app, &cs, connected, Vec2::new(w, hud_h));
+                }
                 ui.add_space(4.0); // splitter
                 self.tabs_ui(ui, app, &cs);
             });
         self.left_w = r.response.rect.width();
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(theme::BG).inner_margin(egui::Margin { left: 4, right: 1, top: 4, bottom: 1 }))
-            .show(ui, |ui| self.map_area(ui, app, &cs));
+            .show(ui, |ui| {
+                if app.settings.hud_swap {
+                    let size = ui.available_size();
+                    self.hud_ui(ui, app, &cs, connected, size);
+                } else {
+                    self.map_area(ui, app, &cs);
+                }
+            });
     }
 
-    fn hud_ui(&mut self, ui: &mut egui::Ui, cs: &CurrentState, connected: bool, size: Vec2) {
-        let click = hud::show(
+    fn hud_ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, cs: &CurrentState, connected: bool, size: Vec2) {
+        let video = self.video.as_mut().and_then(|v| v.texture(ui.ctx()));
+        if let Some(e) = self.video.as_ref().and_then(|v| v.error.lock().unwrap().take()) {
+            app.toasts.error(format!("Video source failed\n{e}"));
+            self.video = None;
+        }
+        let opts = app.settings.hud.clone();
+        let (click, resp) = hud::show(
             ui,
             &hud::HudInput {
                 cs,
                 connected,
                 mode_changed_secs: self.mode_changed.elapsed().as_secs_f64(),
                 armed_secs: self.armed_at.elapsed().as_secs_f64(),
+                opts: &opts,
+                video,
             },
             size,
         );
+        resp.context_menu(|ui| self.hud_menu(ui, app));
+        self.hud_prompt_ui(ui.ctx(), app, cs);
         if let Some(c) = click {
             self.hud_window = Some(c);
         }
         self.hud_windows(ui.ctx(), cs);
+    }
+
+    /// contextMenuStripHud
+    fn hud_menu(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
+        ui.menu_button("Video", |ui| {
+            let rec = self.video.as_ref().map(|v| v.recording()).unwrap_or(false);
+            if ui.add_enabled(self.video.is_some() && !rec, egui::Button::new("Record Hud to AVI")).clicked() {
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                if let Some(p) = rfd::FileDialog::new().add_filter("AVI", &["avi"]).set_file_name("hud.avi").save_file() {
+                    if let Some(v) = &self.video {
+                        if let Err(e) = v.record(Some(p)) {
+                            app.toasts.error(e.to_string());
+                        }
+                    }
+                }
+                ui.close();
+            }
+            if ui.add_enabled(rec, egui::Button::new("Stop Record")).clicked() {
+                if let Some(v) = &self.video {
+                    let _ = v.record(None);
+                }
+                ui.close();
+            }
+            if ui.button("Set MJPEG source").clicked() {
+                self.hud_prompt = Some(HudPrompt::Mjpeg(app.settings.mjpeg_url.clone()));
+                ui.close();
+            }
+            if ui.button("Start Camera").clicked() {
+                if self.video.is_none() {
+                    self.video = Some(crate::mjpeg::Mjpeg::start(&app.settings.mjpeg_url, ui.ctx()));
+                }
+                ui.close();
+            }
+            for t in ["Set GStreamer Source", "HereLink Video"] {
+                if ui.button(t).clicked() {
+                    app.toasts.error("GStreamer was not found on this system.\nInstall GStreamer, or use \"Set MJPEG source\" for an HTTP MJPEG stream.");
+                    ui.close();
+                }
+            }
+            if ui.button("GStreamer Stop").clicked() {
+                self.video = None;
+                ui.close();
+            }
+        });
+        if ui.button(if app.settings.hud_wide { "Set Aspect Ratio (4:3)" } else { "Set Aspect Ratio" }).clicked() {
+            app.settings.hud_wide = !app.settings.hud_wide;
+            ui.close();
+        }
+        if ui.button("User Items").clicked() {
+            self.hud_prompt = Some(HudPrompt::UserItems);
+            ui.close();
+        }
+        if ui.checkbox(&mut app.settings.hud.russian, "Russian Hud").clicked() {
+            ui.close();
+        }
+        if ui.button("Swap With Map").clicked() {
+            app.settings.hud_swap = !app.settings.hud_swap;
+            ui.close();
+        }
+        if ui.button("Ground Color").clicked() {
+            let c = app.settings.hud.ground.unwrap_or([0x9b, 0xb8, 0x24, 0x41, 0x4f, 0x07]);
+            self.hud_prompt = Some(HudPrompt::Ground([c[0], c[1], c[2]], [c[3], c[4], c[5]]));
+            ui.close();
+        }
+        if ui.button("Battery Cell Voltage").clicked() {
+            self.hud_prompt = Some(HudPrompt::Cells(app.settings.hud.cells.to_string()));
+            ui.close();
+        }
+        if ui.checkbox(&mut app.settings.hud.icons, "Show icons").clicked() {
+            ui.close();
+        }
+    }
+
+    fn hud_prompt_ui(&mut self, ctx: &egui::Context, app: &mut AppCtx, cs: &CurrentState) {
+        let Some(p) = self.hud_prompt.as_mut() else { return };
+        let mut done = None;
+        let title = match p {
+            HudPrompt::Mjpeg(_) => "MJPEG source",
+            HudPrompt::Cells(_) => "Battery Cell Voltage",
+            HudPrompt::Ground(..) => "Ground Color",
+            HudPrompt::UserItems => "User Items",
+        };
+        egui::Window::new(title).collapsible(false).resizable(false).show(ctx, |ui| {
+            match p {
+                HudPrompt::Mjpeg(u) => {
+                    theme::label(ui, "Enter MJPEG url");
+                    ui.add(egui::TextEdit::singleline(u).desired_width(320.0));
+                }
+                HudPrompt::Cells(c) => {
+                    theme::label(ui, "Number of cells (0 shows the pack voltage)");
+                    ui.text_edit_singleline(c);
+                }
+                HudPrompt::Ground(a, b) => {
+                    ui.horizontal(|ui| {
+                        theme::label(ui, "Top");
+                        ui.color_edit_button_srgb(a);
+                        theme::label(ui, "Bottom");
+                        ui.color_edit_button_srgb(b);
+                    });
+                }
+                HudPrompt::UserItems => {
+                    egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
+                        egui::Grid::new("hud_items").num_columns(4).show(ui, |ui| {
+                            for (k, (n, _)) in cs.fields().into_iter().enumerate() {
+                                let mut on = app.settings.hud.items.iter().any(|s| s == n);
+                                if ui.checkbox(&mut on, n).changed() {
+                                    if on {
+                                        app.settings.hud.items.push(n.to_string());
+                                    } else {
+                                        app.settings.hud.items.retain(|s| s != n);
+                                    }
+                                }
+                                if k % 4 == 3 {
+                                    ui.end_row();
+                                }
+                            }
+                        });
+                    });
+                }
+            }
+            ui.horizontal(|ui| {
+                if theme::button(ui, "OK").clicked() {
+                    done = Some(true);
+                }
+                if theme::button(ui, "Cancel").clicked() {
+                    done = Some(false);
+                }
+            });
+        });
+        let Some(ok) = done else { return };
+        let p = self.hud_prompt.take().unwrap();
+        if !ok {
+            return;
+        }
+        match p {
+            HudPrompt::Mjpeg(u) => {
+                app.settings.mjpeg_url = u.clone();
+                self.video = Some(crate::mjpeg::Mjpeg::start(&u, ctx));
+            }
+            HudPrompt::Cells(c) => app.settings.hud.cells = c.trim().parse().unwrap_or(0),
+            HudPrompt::Ground(a, b) => app.settings.hud.ground = Some([a[0], a[1], a[2], b[0], b[1], b[2]]),
+            HudPrompt::UserItems => {}
+        }
     }
 
     /// EKF Status / Vibration / PreArm windows opened from the HUD.
@@ -1403,6 +1576,13 @@ fn servo_ui(ui: &mut egui::Ui, app: &mut AppCtx, cs: &CurrentState) {
             }
         });
     }
+}
+
+enum HudPrompt {
+    Mjpeg(String),
+    Cells(String),
+    Ground([u8; 3], [u8; 3]),
+    UserItems,
 }
 
 fn not_ported(app: &mut AppCtx, what: &str) {
