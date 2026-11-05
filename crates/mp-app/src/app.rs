@@ -42,7 +42,14 @@ pub struct Settings {
     pub wp_radius: f32,
     pub loiter_radius: f32,
     pub alt_frame: u8,
-    pub quick_fields: [String; 6],
+    pub quick_fields: Vec<String>,
+    /// tableLayoutPanelQuick rows / columns (Set View Count)
+    pub quick_rows: usize,
+    pub quick_cols: usize,
+    /// FlightData tabs hidden with Customize, and tabControlactions.Multiline
+    pub fd_hidden_tabs: Vec<String>,
+    pub fd_tabs_multiline: bool,
+    pub quick_undocked: bool,
     pub sim_port: u16,
     pub user_params: Vec<String>,
     /// POIs shared by DATA and PLAN maps (lat, lng, name)
@@ -90,7 +97,7 @@ impl Default for Settings {
             wp_radius: 2.0,
             loiter_radius: 45.0,
             alt_frame: 3,
-            quick_fields: [
+            quick_fields: vec![
                 "alt".into(),
                 "groundspeed".into(),
                 "wp_dist".into(),
@@ -98,6 +105,11 @@ impl Default for Settings {
                 "verticalspeed".into(),
                 "DistToHome".into(),
             ],
+            quick_rows: 3,
+            quick_cols: 2,
+            fd_hidden_tabs: Vec::new(),
+            fd_tabs_multiline: false,
+            quick_undocked: false,
             sim_port: 14560,
             pois: Vec::new(),
             tracker_home: None,
@@ -850,6 +862,7 @@ impl eframe::App for MissionPlannerApp {
             theme::set_palette(&ctx, theme::palette_for(&want.0));
             self.applied_theme = want;
         }
+        crate::units::set_from(&self.settings.planner);
         self.joystick.tick(self.link.as_ref());
         self.ctx_clone = ctx.clone();
         if let Some(l) = &self.link {

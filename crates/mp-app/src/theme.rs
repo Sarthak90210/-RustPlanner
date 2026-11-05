@@ -376,6 +376,46 @@ pub fn tab_strip(ui: &mut Ui, id: &str, labels: &[&str], selected: &mut usize) {
     ui.ctx().data_mut(|d| d.insert_temp(first_id, first));
 }
 
+/// TabControl with Multiline = true: tabs wrap onto extra rows instead of scrolling.
+/// Returns the strip rect (for its context menu).
+pub fn tab_strip_multiline(ui: &mut Ui, id: &str, labels: &[&str], selected: &mut usize) -> Rect {
+    let font = fonts::ui_id(fonts::UI_SIZE);
+    let h = 21.0;
+    let full = ui.available_width();
+    let widths: Vec<f32> = labels.iter().map(|l| ui.painter().layout_no_wrap(l.to_string(), font.clone(), Color32::BLACK).size().x + 12.0).collect();
+    let mut rows: Vec<Vec<usize>> = vec![Vec::new()];
+    let mut x = 0.0;
+    for (i, w) in widths.iter().enumerate() {
+        if x + w > full - 4.0 && !rows.last().unwrap().is_empty() {
+            rows.push(Vec::new());
+            x = 0.0;
+        }
+        rows.last_mut().unwrap().push(i);
+        x += w;
+    }
+    let (strip, _) = ui.allocate_exact_size(Vec2::new(full, h * rows.len() as f32 + 2.0), Sense::hover());
+    let p = ui.painter().with_clip_rect(strip);
+    let border = Color32::from_rgb(0xd9, 0xd9, 0xd9);
+    for (ri, row) in rows.iter().enumerate() {
+        let mut x = strip.left() + 2.0;
+        let top = strip.top() + ri as f32 * h;
+        for &i in row {
+            let r = Rect::from_min_size(Pos2::new(x, top), Vec2::new(widths[i], h));
+            let resp = ui.interact(r, ui.scope_id().with(id).with(("ml", i)), Sense::click());
+            let sel = i == *selected;
+            let fill = if sel { Color32::WHITE } else if resp.hovered() { Color32::from_rgb(0xe5, 0xf1, 0xfb) } else { Color32::from_rgb(0xf0, 0xf0, 0xf0) };
+            p.rect_filled(r, 0.0, fill);
+            p.rect_stroke(r, 0.0, Stroke::new(1.0, border), StrokeKind::Inside);
+            p.text(r.center(), egui::Align2::CENTER_CENTER, labels[i], font.clone(), Color32::BLACK);
+            if resp.clicked() {
+                *selected = i;
+            }
+            x += widths[i];
+        }
+    }
+    strip
+}
+
 // ------------------------------------------------------------------ BackstageView
 
 pub struct BsvItem {

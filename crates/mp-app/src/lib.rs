@@ -20,6 +20,7 @@ pub mod srtm;
 pub mod theme;
 pub mod tool_windows;
 pub mod tools;
+pub mod units;
 pub mod views;
 pub mod zedgraph;
 

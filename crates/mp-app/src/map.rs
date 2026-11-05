@@ -15,6 +15,13 @@ const MAX_TEXTURES: usize = 600;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Provider {
+    GoogleSatellite,
+    GoogleMap,
+    GoogleHybrid,
+    GoogleTerrain,
+    BingSatellite,
+    BingMap,
+    BingHybrid,
     EsriWorldImagery,
     OpenStreetMap,
     EsriWorldStreet,
@@ -25,7 +32,14 @@ pub enum Provider {
 }
 
 impl Provider {
-    pub const ALL: [Provider; 6] = [
+    pub const ALL: [Provider; 13] = [
+        Provider::GoogleSatellite,
+        Provider::GoogleMap,
+        Provider::GoogleHybrid,
+        Provider::GoogleTerrain,
+        Provider::BingSatellite,
+        Provider::BingMap,
+        Provider::BingHybrid,
         Provider::EsriWorldImagery,
         Provider::OpenStreetMap,
         Provider::EsriWorldStreet,
@@ -36,6 +50,13 @@ impl Provider {
 
     pub fn name(&self) -> &'static str {
         match self {
+            Provider::GoogleSatellite => "GoogleSatelliteMap",
+            Provider::GoogleMap => "GoogleMap",
+            Provider::GoogleHybrid => "GoogleHybridMap",
+            Provider::GoogleTerrain => "GoogleTerrainMap",
+            Provider::BingSatellite => "BingSatelliteMap",
+            Provider::BingMap => "BingMap",
+            Provider::BingHybrid => "BingHybridMap",
             Provider::EsriWorldImagery => "EsriWorldImagery",
             Provider::OpenStreetMap => "OpenStreetMap",
             Provider::EsriWorldStreet => "EsriWorldStreetMap",
@@ -47,6 +68,13 @@ impl Provider {
 
     fn key(&self) -> &'static str {
         match self {
+            Provider::GoogleSatellite => "google_sat",
+            Provider::GoogleMap => "google_map",
+            Provider::GoogleHybrid => "google_hyb",
+            Provider::GoogleTerrain => "google_ter",
+            Provider::BingSatellite => "bing_sat",
+            Provider::BingMap => "bing_map",
+            Provider::BingHybrid => "bing_hyb",
             Provider::EsriWorldImagery => "esri_img",
             Provider::OpenStreetMap => "osm",
             Provider::EsriWorldStreet => "esri_street",
@@ -67,6 +95,9 @@ impl Provider {
     pub fn attribution(&self) -> &'static str {
         match self {
             Provider::OpenStreetMap => "© OpenStreetMap contributors",
+            Provider::GoogleSatellite | Provider::GoogleMap | Provider::GoogleHybrid | Provider::GoogleTerrain => "©Google - Map data ©Google",
+            Provider::BingSatellite | Provider::BingMap | Provider::BingHybrid => "© Microsoft Corporation",
+            Provider::Custom => "Custom",
             Provider::OpenTopoMap => {
                 "© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)"
             }
@@ -75,7 +106,25 @@ impl Provider {
     }
 
     fn url(&self, z: u8, x: u32, y: u32) -> String {
+        let s = (x + y) % 4;
+        // Bing quadkey
+        let quad = || -> String {
+            (1..=z)
+                .rev()
+                .map(|i| {
+                    let m = 1u32 << (i - 1);
+                    char::from(b'0' + ((x & m != 0) as u8) + 2 * ((y & m != 0) as u8))
+                })
+                .collect()
+        };
         match self {
+            Provider::GoogleSatellite => format!("https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"),
+            Provider::GoogleMap => format!("https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"),
+            Provider::GoogleHybrid => format!("https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"),
+            Provider::GoogleTerrain => format!("https://mt{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}"),
+            Provider::BingSatellite => format!("https://ecn.t{s}.tiles.virtualearth.net/tiles/a{}.jpeg?g=1", quad()),
+            Provider::BingMap => format!("https://ecn.t{s}.tiles.virtualearth.net/tiles/r{}.png?g=1", quad()),
+            Provider::BingHybrid => format!("https://ecn.t{s}.tiles.virtualearth.net/tiles/h{}.jpeg?g=1", quad()),
             Provider::EsriWorldImagery => format!(
                 "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
             ),
@@ -169,7 +218,8 @@ impl Default for MapState {
             lat: -35.363261,
             lng: 149.165230,
             zoom: 16.0,
-            provider: Provider::EsriWorldImagery,
+            // MainV2 default map: GoogleSatelliteMap
+            provider: Provider::GoogleSatellite,
         }
     }
 }
@@ -689,4 +739,13 @@ pub fn draw_quad(painter: &egui::Painter, p: Pos2, heading: f32, sysid: u8) {
     let body = [t(-3.0, -5.0), t(2.0, -5.0), t(2.0, 3.0), t(-3.0, 3.0)];
     painter.add(egui::Shape::convex_polygon(body.to_vec(), green, egui::Stroke::NONE));
     painter.text(p + Vec2::new(-8.0, -8.0), egui::Align2::LEFT_TOP, sysid.to_string(), egui::FontId::monospace(15.0 * 1.33), Color32::RED);
+}
+
+#[cfg(test)]
+mod provider_tests {
+    #[test]
+    fn bing_quadkey() {
+        // Bing Maps docs: tile (3, 5) at level 3 -> quadkey 213
+        assert!(super::Provider::BingSatellite.url(3, 3, 5).contains("/a213.jpeg"));
+    }
 }

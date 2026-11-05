@@ -373,13 +373,13 @@ fn draw(g: &Hud, cs: &CurrentState, input: &HudInput) {
     let sb_top = halfheight - (h / 2 / 2) as f32;
     let sb_w = (w / 10) as f32;
     let sb_h = (h / 2) as f32;
-    let speedunit = "m/s";
+    let speedunit = crate::units::speed_unit();
     {
         g.rect_outline(base, 0.0, sb_top, sb_w, sb_h, 2.0, white);
         g.fill_rect(base, 0.0, sb_top, sb_w, sb_h, SOLID);
         let tr = Xf::at(at(0.0, (h / 2) as f32));
         let viewrange = 26.0;
-        let speed = if cs.airspeed == 0.0 { cs.groundspeed } else { cs.airspeed };
+        let speed = crate::units::speed(if cs.airspeed == 0.0 { cs.groundspeed } else { cs.airspeed });
         let space = sb_h / viewrange;
         let start = (speed - viewrange / 2.0).trunc();
         let end = (speed + viewrange / 2.0).trunc() as i64;
@@ -397,20 +397,20 @@ fn draw(g: &Hud, cs: &CurrentState, input: &HudInput) {
         g.poly(tr, &arrow, 2.0, Color32::BLACK);
         g.text(tr, &format!("{:.0}{speedunit}", speed), 10.0, ALICEBLUE, 0.0, -9.0);
         let sb_bottom = sb_top + sb_h;
-        g.text(base, &format!("AS {:.1}{speedunit}", cs.airspeed), fontsize, white, 1.0, sb_bottom + 5.0);
-        g.text(base, &format!("GS {:.1}{speedunit}", cs.groundspeed), fontsize, white, 1.0, sb_bottom + fontsize + 2.0 + 10.0);
+        g.text(base, &format!("AS {:.1}{speedunit}", crate::units::speed(cs.airspeed)), fontsize, white, 1.0, sb_bottom + 5.0);
+        g.text(base, &format!("GS {:.1}{speedunit}", crate::units::speed(cs.groundspeed)), fontsize, white, 1.0, sb_bottom + fontsize + 2.0 + 10.0);
     }
 
     // ---- right scroller (altitude) + VSI
     let rl = wf - sb_w;
-    let altunit = "m";
+    let altunit = crate::units::alt_unit();
     {
         g.rect_outline(base, rl, sb_top, sb_w, sb_h, 2.0, white);
         g.fill_rect(base, rl, sb_top, sb_w, sb_h, SOLID);
         let tr = Xf::at(at(0.0, (h / 2) as f32));
         let viewrange = 26i64;
         let space = sb_h / viewrange as f32;
-        let alt = cs.alt;
+        let alt = crate::units::alt(cs.alt);
         let start = alt as i64 - viewrange / 2;
         let mut a = start;
         while (a as f32) <= alt + (viewrange / 2) as f32 {
@@ -460,10 +460,11 @@ fn draw(g: &Hud, cs: &CurrentState, input: &HudInput) {
         // mode, wp dist
         let mode_col = if input.mode_changed_secs < 2.0 { RED } else { white };
         g.text(base, &cs.mode, fontsize, mode_col, rl - 30.0, sb_bottom + 5.0);
-        let (dist, unit) = if cs.wp_dist >= 1000.0 {
-            (format!("{}", (cs.wp_dist / 1000.0 * 10.0).round() / 10.0), "k")
+        let wpd = crate::units::dist(cs.wp_dist);
+        let (dist, unit) = if wpd >= 1000.0 {
+            (format!("{}", (wpd / 1000.0 * 10.0).round() / 10.0), "k")
         } else {
-            (format!("{}", cs.wp_dist as i32), "m")
+            (format!("{}", wpd as i32), crate::units::dist_unit())
         };
         g.text(base, &format!("{dist}{unit}>{}", cs.wpno), fontsize, white, rl - 30.0, sb_bottom + fontsize + 2.0 + 10.0);
 

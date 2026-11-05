@@ -113,6 +113,8 @@ pub struct FlightDataView {
     graph: crate::zedgraph::TuningGraph,
     tlog_name: String,
     hud_window: Option<hud::HudClick>,
+    quick_count: Option<(String, String)>,
+    tabs_customize: bool,
     pub(crate) video: Option<crate::mjpeg::Mjpeg>,
     hud_prompt: Option<HudPrompt>,
     log_browse: crate::log_browse::LogBrowse,
@@ -155,6 +157,8 @@ impl Default for FlightDataView {
             graph: Default::default(),
             tlog_name: String::new(),
             hud_window: None,
+            quick_count: None,
+            tabs_customize: false,
             video: None,
             hud_prompt: None,
             log_browse: Default::default(),
@@ -483,7 +487,47 @@ impl FlightDataView {
     // ------------------------------------------------------------------ tabControlactions
 
     fn tabs_ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, cs: &CurrentState) {
-        theme::tab_strip(ui, "tabControlactions", &TABS, &mut self.tab);
+        // Customize: only the tabs that were not hidden; self.tab stays an index into TABS
+        let visible: Vec<usize> = (0..TABS.len()).filter(|i| !app.settings.fd_hidden_tabs.iter().any(|h| h == TABS[*i])).collect();
+        let visible = if visible.is_empty() { vec![0] } else { visible };
+        let labels: Vec<&str> = visible.iter().map(|i| TABS[*i]).collect();
+        let mut sel = visible.iter().position(|i| *i == self.tab).unwrap_or(0);
+        let strip_top = ui.available_rect_before_wrap().min;
+        let strip = if app.settings.fd_tabs_multiline {
+            theme::tab_strip_multiline(ui, "tabControlactions", &labels, &mut sel)
+        } else {
+            theme::tab_strip(ui, "tabControlactions", &labels, &mut sel);
+            Rect::from_min_max(strip_top, egui::pos2(ui.available_rect_before_wrap().right(), ui.available_rect_before_wrap().top()))
+        };
+        self.tab = visible[sel.min(visible.len() - 1)];
+        // contextMenuStripactionstab: Customize / MultiLine
+        ui.interact(strip, ui.scope_id().with("tabs_ctx"), Sense::click()).context_menu(|ui| {
+            if ui.button("Customize").clicked() {
+                self.tabs_customize = true;
+                ui.close();
+            }
+            if ui.checkbox(&mut app.settings.fd_tabs_multiline, "MultiLine").clicked() {
+                ui.close();
+            }
+        });
+        if self.tabs_customize {
+            let mut open = true;
+            egui::Window::new("Customize").open(&mut open).collapsible(false).resizable(false).show(ui.ctx(), |ui| {
+                for t in TABS {
+                    let mut on = !app.settings.fd_hidden_tabs.iter().any(|h| h == t);
+                    if ui.checkbox(&mut on, t).changed() {
+                        if on {
+                            app.settings.fd_hidden_tabs.retain(|h| h != t);
+                        } else {
+                            app.settings.fd_hidden_tabs.push(t.to_string());
+                        }
+                    }
+                }
+            });
+            if !open {
+                self.tabs_customize = false;
+            }
+        }
         let rect = ui.available_rect_before_wrap();
         ui.painter().rect_filled(rect, 0.0, theme::bg());
         ui.scope_builder(egui::UiBuilder::new().max_rect(rect.shrink(3.0)), |ui| {
@@ -506,22 +550,89 @@ impl FlightDataView {
     }
 
     fn quick_ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, cs: &CurrentState) {
-        // tableLayoutPanelQuick: 2 columns x 3 rows, Dock = Fill
+        if app.settings.quick_undocked {
+            theme::label(ui, "Quick view is undocked (right-click it to dock)");
+            let mut open = true;
+            egui::Window::new("Quick").open(&mut open).default_size([300.0, 240.0]).show(ui.ctx(), |ui| self.quick_grid(ui, app, cs));
+            if !open {
+                app.settings.quick_undocked = false;
+            }
+        } else {
+            self.quick_grid(ui, app, cs);
+        }
+        self.quick_dialogs(ui.ctx(), app, cs);
+        self.quick_ui_picker(ui, app, cs);
+    }
+
+    /// tableLayoutPanelQuick: quick_cols x quick_rows tiles, Dock = Fill.
+    fn quick_grid(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, cs: &CurrentState) {
+        let (rows, cols) = (app.settings.quick_rows.clamp(1, 10), app.settings.quick_cols.clamp(1, 6));
+        let defaults = ["alt", "groundspeed", "wp_dist", "yaw", "verticalspeed", "DistToHome"];
+        while app.settings.quick_fields.len() < rows * cols {
+            let k = app.settings.quick_fields.len();
+            app.settings.quick_fields.push(defaults[k % defaults.len()].to_string());
+        }
         let area = ui.available_rect_before_wrap();
-        let h = area.height().max(150.0) / 3.0;
-        let w = area.width() / 2.0;
-        for i in 0..6 {
-            let (col, row) = (i % 2, i / 2);
+        let h = area.height().max(50.0 * rows as f32) / rows as f32;
+        let w = area.width() / cols as f32;
+        for i in 0..rows * cols {
+            let (col, row) = (i % cols, i / cols);
             let r = Rect::from_min_size(area.min + Vec2::new(col as f32 * w, row as f32 * h), Vec2::new(w, h)).shrink(3.0);
             let name = app.settings.quick_fields[i].clone();
-            let val = cs.field(&name).unwrap_or(0.0);
+            let val = crate::units::field(&name, cs.field(&name).unwrap_or(0.0)).0;
             let resp = ui.interact(r, ui.scope_id().with(("qv", i)), Sense::click());
-            quick_view(ui.painter(), r, &quick_label(&name), val, QUICK_COLORS[i]);
-            if resp.double_clicked() || resp.secondary_clicked() {
+            quick_view(ui.painter(), r, &quick_label(&name), val, QUICK_COLORS[i % QUICK_COLORS.len()]);
+            if resp.double_clicked() {
                 self.quick_edit = Some(i);
             }
+            // contextMenuStripQuickView
+            resp.context_menu(|ui| {
+                if ui.button("Set View Count").clicked() {
+                    self.quick_count = Some((app.settings.quick_cols.to_string(), app.settings.quick_rows.to_string()));
+                    ui.close();
+                }
+                if ui.button(if app.settings.quick_undocked { "Dock" } else { "Undock" }).clicked() {
+                    app.settings.quick_undocked = !app.settings.quick_undocked;
+                    ui.close();
+                }
+            });
         }
-        ui.allocate_rect(Rect::from_min_size(area.min, Vec2::new(area.width(), h * 3.0)), Sense::hover());
+        ui.allocate_rect(Rect::from_min_size(area.min, Vec2::new(area.width(), h * rows as f32)), Sense::hover());
+    }
+
+    fn quick_dialogs(&mut self, ctx: &egui::Context, app: &mut AppCtx, cs: &CurrentState) {
+        if let Some((c, r)) = self.quick_count.as_mut() {
+            let mut done = None;
+            egui::Window::new("Set View Count").collapsible(false).resizable(false).show(ctx, |ui| {
+                theme::label(ui, "Enter number of columns to have.");
+                ui.text_edit_singleline(c);
+                theme::label(ui, "Enter number of rows to have.");
+                ui.text_edit_singleline(r);
+                ui.horizontal(|ui| {
+                    if theme::button(ui, "OK").clicked() {
+                        done = Some(true);
+                    }
+                    if theme::button(ui, "Cancel").clicked() {
+                        done = Some(false);
+                    }
+                });
+            });
+            if let Some(ok) = done {
+                if ok {
+                    if let (Ok(c), Ok(r)) = (c.trim().parse::<usize>(), r.trim().parse::<usize>()) {
+                        if c * r >= 1 && c * r <= 30 {
+                            app.settings.quick_cols = c;
+                            app.settings.quick_rows = r;
+                        }
+                    }
+                }
+                self.quick_count = None;
+            }
+        }
+        let _ = cs;
+    }
+
+    fn quick_ui_picker(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, cs: &CurrentState) {
 
         if let Some(i) = self.quick_edit {
             let mut open = true;
@@ -1454,14 +1565,18 @@ fn quick_view(p: &egui::Painter, r: Rect, desc: &str, number: f64, color: Color3
 }
 
 fn quick_label(name: &str) -> String {
+    use crate::units::{alt_unit, dist_unit, speed_unit};
     match name {
-        "alt" => "Altitude (m)".into(),
-        "groundspeed" => "GroundSpeed (m/s)".into(),
-        "wp_dist" => "Dist to WP (m)".into(),
+        "alt" => format!("Altitude ({})", alt_unit()),
+        "groundspeed" => format!("GroundSpeed ({})", speed_unit()),
+        "wp_dist" => format!("Dist to WP ({})", dist_unit()),
         "yaw" => "Yaw (deg)".into(),
-        "verticalspeed" => "Vertical Speed (m/s)".into(),
-        "DistToHome" => "DistToMAV (m)".into(),
-        n => n.to_string(),
+        "verticalspeed" => format!("Vertical Speed ({})", speed_unit()),
+        "DistToHome" => format!("DistToMAV ({})", dist_unit()),
+        n => match crate::units::field(n, 0.0).1 {
+            Some(u) => format!("{n} ({u})"),
+            None => n.to_string(),
+        },
     }
 }
 
