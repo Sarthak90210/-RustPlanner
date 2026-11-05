@@ -1,0 +1,113 @@
+{
+"name": "adsb",
+"w": 654,
+"h": 230,
+"controls": [
+{
+"name": "tableLayoutPanel1",
+"kind": "panel",
+"parent": "$this",
+"x": 12,
+"y": 67,
+"w": 628,
+"h": 154
+},
+{
+"name": "BUT_writePIDS",
+"kind": "button",
+"parent": "$this",
+"x": 12,
+"y": 11,
+"w": 103,
+"h": 19,
+"text": "Write Params"
+},
+{
+"name": "BUT_rerequestparams",
+"kind": "button",
+"parent": "$this",
+"x": 121,
+"y": 11,
+"w": 103,
+"h": 19,
+"text": "Refresh Params"
+},
+{
+"name": "BUT_Find",
+"kind": "button",
+"parent": "$this",
+"x": 230,
+"y": 11,
+"w": 103,
+"h": 19,
+"text": "Find"
+},
+{
+"name": "panel1",
+"kind": "panel",
+"parent": "$this",
+"x": 12,
+"y": 36,
+"w": 628,
+"h": 25
+},
+{
+"name": "label1",
+"kind": "label",
+"parent": "panel1",
+"x": 310,
+"y": 5,
+"w": 99,
+"h": 13,
+"text": "Aircraft Registration"
+},
+{
+"name": "txt_flid",
+"kind": "text",
+"parent": "panel1",
+"x": 109,
+"y": 2,
+"w": 86,
+"h": 20
+},
+{
+"name": "but_saveacreg",
+"kind": "button",
+"parent": "panel1",
+"x": 521,
+"y": 3,
+"w": 103,
+"h": 19,
+"text": "Save"
+},
+{
+"name": "txt_acreg",
+"kind": "text",
+"parent": "panel1",
+"x": 415,
+"y": 3,
+"w": 100,
+"h": 20
+},
+{
+"name": "but_saveflid",
+"kind": "button",
+"parent": "panel1",
+"x": 201,
+"y": 2,
+"w": 103,
+"h": 19,
+"text": "Save"
+},
+{
+"name": "label2",
+"kind": "label",
+"parent": "panel1",
+"x": 5,
+"y": 4,
+"w": 98,
+"h": 13,
+"text": "Flight Identification:"
+}
+]
+}

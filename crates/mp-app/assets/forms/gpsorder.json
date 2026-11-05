@@ -1,0 +1,45 @@
+{
+"name": "gpsorder",
+"w": 600,
+"h": 400,
+"controls": [
+{
+"name": "myDataGridView1",
+"kind": "grid",
+"parent": "$this",
+"x": 3,
+"y": 49,
+"w": 524,
+"h": 209
+},
+{
+"name": "label1",
+"kind": "label",
+"parent": "$this",
+"x": 3,
+"y": 33,
+"w": 142,
+"h": 13,
+"text": "Set the GPS order if required\r\n"
+},
+{
+"name": "groupBox5",
+"kind": "group",
+"parent": "$this",
+"x": -1,
+"y": 18,
+"w": 747,
+"h": 10
+},
+{
+"name": "label6",
+"kind": "label",
+"parent": "$this",
+"x": 3,
+"y": 0,
+"w": 583,
+"h": 22,
+"text": "UAVCAN GPS Order"
+}
+]
+}

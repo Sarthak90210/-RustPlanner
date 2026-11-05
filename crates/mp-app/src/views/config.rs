@@ -83,6 +83,8 @@ pub struct ConfigView {
     extended: crate::views::tuning::ExtendedTuning,
     user_add: String,
     ftp: crate::views::mavftp::MavFtpUi,
+    osd: crate::views::osd_editor::OsdEditor,
+    last_page: Option<Page>,
 }
 
 impl Default for ConfigView {
@@ -98,7 +100,7 @@ impl Default for ConfigView {
             Some(0) => Page::GeoFence,
             _ => Page::FullParamList,
         };
-        Self { page, params: ParamEditor::default(), extended: Default::default(), user_add: String::new(), ftp: Default::default() }
+        Self { page, params: ParamEditor::default(), extended: Default::default(), user_add: String::new(), ftp: Default::default(), osd: Default::default(), last_page: None }
     }
 }
 
@@ -123,13 +125,18 @@ impl ConfigView {
             self.page = list[idx];
         }
         let page = if idx != before { self.page } else { shown };
+        // cbAutoWriteOnLeave
+        if self.last_page == Some(Page::OnboardOsd) && page != Page::OnboardOsd {
+            self.osd.leave(app);
+        }
+        self.last_page = Some(page);
         egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::bg()).inner_margin(6)).show(ui, |ui| match page {
             Page::GeoFence => crate::views::tuning::geofence(ui, app),
             Page::BasicTuning => crate::views::tuning::basic_tuning(ui, app),
             Page::ExtendedTuning => self.extended.ui(ui, app),
             Page::StandardParams => friendly(ui, app, &self.params, |_, m| m.map(|m| m.user == "Standard").unwrap_or(false)),
             Page::AdvancedParams => friendly(ui, app, &self.params, |_, m| m.map(|m| m.user == "Advanced").unwrap_or(false)),
-            Page::OnboardOsd => friendly(ui, app, &self.params, |n, _| n.starts_with("OSD")),
+            Page::OnboardOsd => self.osd.ui(ui, app),
             Page::MavFtp => self.ftp.ui(ui, app),
             Page::UserParams => self.user_params(ui, app),
             Page::FullParamList => self.params.ui(ui, app, false),

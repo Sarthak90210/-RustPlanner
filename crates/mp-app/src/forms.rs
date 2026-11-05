@@ -52,7 +52,7 @@ macro_rules! forms {
 }
 
 const FORMS: &[(&str, &str)] = forms!(
-    "rangefinder", "airspeed", "optflow", "mount", "parachute", "tracker", "bluetooth", "esp8266", "cubeid", "dronecan", "repl", "initialparams", "compassmot", "serial", "sikradio", "osd"
+    "rangefinder", "airspeed", "optflow", "mount", "parachute", "tracker", "bluetooth", "esp8266", "cubeid", "dronecan", "repl", "initialparams", "compassmot", "serial", "sikradio", "osd", "adsb", "gpsorder", "hwosd"
 );
 
 const IMAGES: &[(&str, &[u8])] = &[
@@ -64,6 +64,7 @@ const IMAGES: &[(&str, &[u8])] = &[
     ("cameraGimalYaw.png", include_bytes!("../assets/forms/cameraGimalYaw.png")),
     ("opticalflow.jpg", include_bytes!("../assets/forms/opticalflow.jpg")),
     ("sonar.jpg", include_bytes!("../assets/forms/sonar.jpg")),
+    ("MinimOSD.jpg", include_bytes!("../assets/forms/MinimOSD.jpg")),
 ];
 
 pub fn form(name: &str) -> &'static Form {
@@ -173,6 +174,15 @@ fn font_for(c: &Ctl) -> egui::FontId {
 
 /// Draw `name` at the top left of the available area. Returns the buttons clicked this frame.
 pub fn show(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState) -> Vec<String> {
+    show_impl(ui, app, name, st, None)
+}
+
+/// Like [`show`] but reserves only `height` px, so page code can lay out below the header.
+pub fn show_fixed(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState, height: f32) -> Vec<String> {
+    show_impl(ui, app, name, st, Some(height))
+}
+
+fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState, alloc_h: Option<f32>) -> Vec<String> {
     let f = form(name);
     let o = ui.available_rect_before_wrap().min;
     let p = ui.painter().clone();
@@ -334,6 +344,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState)
             _ => {}
         }
     }
-    ui.allocate_rect(Rect::from_min_size(o, Vec2::new(f.w, maxy.max(f.h.min(maxy + 10.0)))), Sense::hover());
+    let h = alloc_h.unwrap_or(maxy.max(f.h.min(maxy + 10.0)));
+    ui.allocate_rect(Rect::from_min_size(o, Vec2::new(f.w, h)), Sense::hover());
     clicked
 }

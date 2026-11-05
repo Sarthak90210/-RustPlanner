@@ -6,6 +6,7 @@ pub mod flight_plan;
 pub mod help;
 pub mod mavftp;
 pub mod mavlog;
+pub mod osd_editor;
 pub mod setup;
 pub mod simulation;
 pub mod survey_ui;

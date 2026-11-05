@@ -201,8 +201,8 @@ impl SetupView {
                     matches!(n, "MOT_THST_EXPO" | "MOT_SPIN_ARM" | "MOT_SPIN_MIN" | "MOT_BAT_VOLT_MAX" | "MOT_BAT_VOLT_MIN" | "INS_GYRO_FILTER" | "INS_ACCEL_FILTER" | "ATC_ACCEL_P_MAX" | "ATC_ACCEL_R_MAX" | "ATC_ACCEL_Y_MAX" | "ATC_THR_MIX_MAN")
                 }),
                 "HW ID" => hw_id(ui, link),
-                "ADSB" => fr(ui, app, &["ADSB_"]),
-                "CAN GPS Order" => fr(ui, app, &["GPS_CAN", "GPS1_CAN", "GPS2_CAN"]),
+                "ADSB" => self.adsb_page(ui, app, link),
+                "CAN GPS Order" => self.gps_order_page(ui, app, link),
                 "Battery Monitor" => battery_monitor(ui, app, link, "BATT_"),
                 "Battery Monitor 2" => battery_monitor(ui, app, link, "BATT2_"),
                 "CAN" => fr(ui, app, &["CAN_"]),
@@ -210,11 +210,11 @@ impl SetupView {
                 "Range Finder" => fr(ui, app, &["RNGFND"]),
                 "Airspeed" => fr(ui, app, &["ARSPD"]),
                 "PX4Flow" | "Optical Flow" => fr(ui, app, &["FLOW"]),
-                "OSD" => fr(ui, app, &["OSD"]),
+                "OSD" => self.hw_osd_page(ui, app, link),
                 "Camera Gimbal" => fr(ui, app, &["MNT"]),
                 "Motor Test" => self.motor_test(ui, link),
                 "Parachute" => fr(ui, app, &["CHUTE"]),
-                "FFT Setup" => fr(ui, app, &["FFT_"]),
+                "FFT Setup" => self.fft_page(ui, app),
                 _ => {
                     theme::label(ui, name);
                 }
@@ -1128,6 +1128,145 @@ impl SetupView {
                 None => self.serial_bitmask = Some((name, v)),
             }
         }
+    }
+}
+
+impl SetupView {
+    /// ConfigADSB: Write / Refresh / Find buttons, flight id and registration row, then the
+    /// ADSB_* parameters as friendly-param controls.
+    fn adsb_page(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
+        let mut st = self.forms.remove("adsb").unwrap_or_default();
+        let clicked = crate::forms::show_fixed(ui, app, "adsb", &mut st, 67.0);
+        for b in clicked {
+            match b.as_str() {
+                "BUT_rerequestparams" => link.send(LinkCommand::RequestParams),
+                "BUT_writePIDS" => app.toasts.error("Parameters are written as they are changed."),
+                "BUT_Find" => st.set("_find_open", "1"),
+                // MP's flight id / registration save buttons are commented out (ConfigADSB.cs:673)
+                _ => {}
+            }
+        }
+        if st.get("_find_open") == "1" {
+            let mut q = st.get("_find").to_string();
+            let mut done = None;
+            egui::Window::new("Search For").collapsible(false).resizable(false).show(ui.ctx(), |ui| {
+                theme::label(ui, "Enter a single word to search for");
+                ui.text_edit_singleline(&mut q);
+                ui.horizontal(|ui| {
+                    if theme::button(ui, "OK").clicked() {
+                        done = Some(true);
+                    }
+                    if theme::button(ui, "Cancel").clicked() {
+                        done = Some(false);
+                    }
+                });
+            });
+            st.set("_find", q.clone());
+            if let Some(ok) = done {
+                st.set("_find_open", "");
+                if !ok {
+                    st.set("_find", "");
+                }
+            }
+        }
+        let q = st.get("_find").to_lowercase();
+        self.forms.insert("adsb", st);
+        config::friendly(ui, app, &Default::default(), move |n, m| {
+            n.starts_with("ADSB_") && (q.is_empty() || n.to_lowercase().contains(&q) || m.map(|m| m.description.to_lowercase().contains(&q) || m.display_name.to_lowercase().contains(&q)).unwrap_or(false))
+        });
+    }
+
+    /// ConfigGPSOrder: GPS override / detected node ids with Override 1 / Override 2 buttons.
+    fn gps_order_page(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
+        let params = link.shared.read().params.clone();
+        let mut st = self.forms.remove("gpsorder").unwrap_or_default();
+        st.set("myDataGridView1", "");
+        let o = ui.max_rect().min;
+        crate::forms::show(ui, app, "gpsorder", &mut st);
+        self.forms.insert("gpsorder", st);
+        if !params.contains_key("GPS1_CAN_OVRIDE") {
+            ui.painter().text(o + Vec2::new(8.0, 60.0), egui::Align2::LEFT_TOP, "This vehicle has no DroneCAN GPS override parameters (GPS1_CAN_OVRIDE)", crate::fonts::ui_id(crate::fonts::UI_SIZE), Color32::WHITE);
+            return;
+        }
+        let v = |n: &str| params.get(n).map(|p| p.value as i64).unwrap_or(0);
+        let mut rows = Vec::new();
+        if v("GPS1_CAN_OVRIDE") != 0 {
+            rows.push((1, v("GPS1_CAN_OVRIDE"), "GPS Override 1"));
+        }
+        if v("GPS2_CAN_OVRIDE") != 0 {
+            rows.push((2, v("GPS2_CAN_OVRIDE"), "GPS Override 2"));
+        }
+        if v("GPS_CAN_NODEID1") != 0 {
+            rows.push((98, v("GPS_CAN_NODEID1"), "GPS Detect 1"));
+        }
+        if v("GPS_CAN_NODEID2") != 0 {
+            rows.push((99, v("GPS_CAN_NODEID2"), "GPS Detect 2"));
+        }
+        let p = ui.painter().clone();
+        let f = crate::fonts::ui_id(crate::fonts::UI_SIZE);
+        let cols = [("Order", 60.0f32), ("NodeID", 80.0), ("Name", 140.0), ("GPS1", 110.0), ("GPS2", 110.0)];
+        let mut x = o.x + 3.0;
+        for (h, w) in cols {
+            let r = Rect::from_min_size(Pos2::new(x, o.y + 49.0), Vec2::new(w, 21.0));
+            p.rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(160)), egui::StrokeKind::Inside);
+            p.text(r.left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, h, f.clone(), Color32::WHITE);
+            x += w;
+        }
+        for (i, (order, node, name)) in rows.iter().enumerate() {
+            let y = o.y + 70.0 + i as f32 * 22.0;
+            let mut x = o.x + 3.0;
+            for (k, (_, w)) in cols.iter().enumerate() {
+                let r = Rect::from_min_size(Pos2::new(x, y), Vec2::new(*w, 22.0));
+                p.rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(160)), egui::StrokeKind::Inside);
+                match k {
+                    0 => {
+                        p.text(r.left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, order.to_string(), f.clone(), Color32::WHITE);
+                    }
+                    1 => {
+                        p.text(r.left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, node.to_string(), f.clone(), Color32::WHITE);
+                    }
+                    2 => {
+                        p.text(r.left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, *name, f.clone(), Color32::WHITE);
+                    }
+                    _ => {
+                        let label = if k == 3 { "Override 1" } else { "Override 2" };
+                        let br = r.shrink(1.0);
+                        if ui.put(br, |ui: &mut egui::Ui| theme::button_sized(ui, label, br.size())).clicked() && !app.readonly {
+                            link.send(LinkCommand::SetParam { name: if k == 3 { "GPS1_CAN_OVRIDE".into() } else { "GPS2_CAN_OVRIDE".into() }, value: *node as f32 });
+                        }
+                    }
+                }
+                x += w;
+            }
+        }
+    }
+
+    /// ConfigHWOSD: MinimOSD picture and "Enable Telemetry" (streams the SRn rates the OSD needs).
+    fn hw_osd_page(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
+        let mut st = self.forms.remove("hwosd").unwrap_or_default();
+        let clicked = crate::forms::show(ui, app, "hwosd", &mut st);
+        self.forms.insert("hwosd", st);
+        if clicked.iter().any(|b| b == "BUT_osdrates") && !app.readonly {
+            for sr in ["SR0", "SR1", "SR3"] {
+                for s in ["EXT_STAT", "EXTRA1", "EXTRA2", "EXTRA3", "POSITION", "RAW_CTRL", "RAW_SENS", "RC_CHAN"] {
+                    let n = format!("{sr}_{s}");
+                    if link.shared.read().params.contains_key(&n) {
+                        link.send(LinkCommand::SetParam { name: n, value: 2.0 });
+                    }
+                }
+            }
+            app.toasts.error("Set telemetry rates to 2hz");
+        }
+    }
+
+    /// ConfigFFT: the FFT_* parameters with the FFT button (opens the log FFT tool).
+    fn fft_page(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
+        let o = ui.max_rect().min;
+        let br = Rect::from_min_size(o + Vec2::new(629.0, 13.0), Vec2::new(75.0, 23.0));
+        if ui.put(br, |ui: &mut egui::Ui| theme::button_sized(ui, "FFT", br.size())).clicked() {
+            app.actions.push(crate::app::AppAction::Tool("FFT".into()));
+        }
+        config::friendly(ui, app, &Default::default(), |n, _| n.starts_with("FFT_") || n == "INS_LOG_BAT_CNT" || n == "INS_LOG_BAT_MASK" || n == "INS_LOG_BAT_OPT");
     }
 }
 
