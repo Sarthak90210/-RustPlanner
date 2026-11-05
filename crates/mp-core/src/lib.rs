@@ -10,6 +10,7 @@ pub mod firmware;
 pub mod ftp;
 pub mod fwupload;
 pub mod geo;
+pub mod georef;
 pub mod link;
 pub mod mavcmd;
 pub mod mission;

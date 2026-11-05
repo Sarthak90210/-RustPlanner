@@ -123,6 +123,7 @@ pub struct FlightDataView {
     extra: super::fd_tabs::ExtraTabs,
     checklist: super::checklist::CheckList,
     mavlog: super::mavlog::MavlinkLog,
+    pub(crate) georef: crate::georef_ui::GeorefWindow,
     logdl_open: bool,
     logdl_busy: bool,
     logdl_queue: Vec<(u16, u32)>,
@@ -167,6 +168,7 @@ impl Default for FlightDataView {
             extra: Default::default(),
             checklist: Default::default(),
             mavlog: Default::default(),
+            georef: Default::default(),
             logdl_open: false,
             logdl_busy: false,
             logdl_queue: Vec::new(),
@@ -1087,6 +1089,7 @@ impl FlightDataView {
         self.analysis_window(ui.ctx());
         self.raw_sensor_window(ui.ctx(), cs);
         self.mavlog.ui(ui.ctx());
+        self.georef.ui(ui.ctx(), app);
 
         // ---- overlays positioned as in splitContainer1.Panel2
         let p = ui.painter().with_clip_rect(mrect);
@@ -1307,7 +1310,7 @@ impl FlightDataView {
     /// DataFlash log tools on a picked .bin.
     fn dflog_action(&mut self, what: &str, app: &mut AppCtx) {
         if what == "Geo Reference Images" {
-            not_ported(app, what);
+            self.georef.open = true;
             return;
         }
         let Some(path) = crate::log_browse::pick_bin() else { return };

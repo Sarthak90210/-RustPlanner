@@ -1,0 +1,408 @@
+{
+"name": "georef",
+"w": 1085,
+"h": 595,
+"controls": [
+{
+"name": "BUT_browselog",
+"kind": "button",
+"parent": "$this",
+"x": 507,
+"y": 7,
+"w": 75,
+"h": 29,
+"text": "Browse Log"
+},
+{
+"name": "BUT_browsedir",
+"kind": "button",
+"parent": "$this",
+"x": 507,
+"y": 42,
+"w": 75,
+"h": 28,
+"text": "Browse Pictures"
+},
+{
+"name": "TXT_logfile",
+"kind": "text",
+"parent": "$this",
+"x": 12,
+"y": 12,
+"w": 434,
+"h": 20
+},
+{
+"name": "TXT_jpgdir",
+"kind": "text",
+"parent": "$this",
+"x": 12,
+"y": 47,
+"w": 434,
+"h": 20
+},
+{
+"name": "BUT_doit",
+"kind": "button",
+"parent": "$this",
+"x": 123,
+"y": 305,
+"w": 84,
+"h": 40,
+"text": "Pre-process"
+},
+{
+"name": "TXT_outputlog",
+"kind": "text",
+"parent": "$this",
+"x": 12,
+"y": 351,
+"w": 601,
+"h": 230
+},
+{
+"name": "BUT_Geotagimages",
+"kind": "button",
+"parent": "$this",
+"x": 390,
+"y": 305,
+"w": 83,
+"h": 40,
+"text": "GeoTag Images"
+},
+{
+"name": "BUT_networklinkgeoref",
+"kind": "button",
+"parent": "$this",
+"x": 254,
+"y": 305,
+"w": 88,
+"h": 40,
+"text": "Location Kml"
+},
+{
+"name": "label11",
+"kind": "label",
+"parent": "$this",
+"x": 216,
+"y": 319,
+"w": 26,
+"h": 17,
+"text": ">>",
+"font": 10.0,
+"bold": true
+},
+{
+"name": "label12",
+"kind": "label",
+"parent": "$this",
+"x": 354,
+"y": 317,
+"w": 26,
+"h": 17,
+"text": ">>",
+"font": 10.0,
+"bold": true
+},
+{
+"name": "RDIO_TimeOffset",
+"kind": "radio",
+"parent": "$this",
+"x": 87,
+"y": 90,
+"w": 77,
+"h": 17,
+"text": "Time offset"
+},
+{
+"name": "RDIO_CAMMsgSynchro",
+"kind": "radio",
+"parent": "$this",
+"x": 261,
+"y": 90,
+"w": 94,
+"h": 17,
+"text": "CAM Message"
+},
+{
+"name": "PANEL_TIME_OFFSET",
+"kind": "panel",
+"parent": "$this",
+"x": 16,
+"y": 128,
+"w": 375,
+"h": 55
+},
+{
+"name": "panel3",
+"kind": "panel",
+"parent": "$this",
+"x": 16,
+"y": 189,
+"w": 597,
+"h": 96
+},
+{
+"name": "PANEL_SHUTTER_LAG",
+"kind": "panel",
+"parent": "$this",
+"x": 390,
+"y": 128,
+"w": 223,
+"h": 55
+},
+{
+"name": "chk_cammsg",
+"kind": "check",
+"parent": "$this",
+"x": 87,
+"y": 108,
+"w": 120,
+"h": 17,
+"text": "Use Cam Messages"
+},
+{
+"name": "RDIO_trigmsg",
+"kind": "radio",
+"parent": "$this",
+"x": 487,
+"y": 90,
+"w": 104,
+"h": 17,
+"text": "Trigger Message"
+},
+{
+"name": "pictureBox1",
+"kind": "picture",
+"parent": "$this",
+"x": 636,
+"y": 277,
+"w": 437,
+"h": 306
+},
+{
+"name": "chk_camusegpsalt",
+"kind": "check",
+"parent": "$this",
+"x": 261,
+"y": 108,
+"w": 82,
+"h": 17,
+"text": "Use GPSAlt"
+},
+{
+"name": "chk_trigusergpsalt",
+"kind": "check",
+"parent": "$this",
+"x": 487,
+"y": 108,
+"w": 82,
+"h": 17,
+"text": "Use GPSAlt"
+},
+{
+"name": "label27",
+"kind": "label",
+"parent": "PANEL_SHUTTER_LAG",
+"x": 40,
+"y": 22,
+"w": 80,
+"h": 13,
+"text": "Shutter lag (ms)"
+},
+{
+"name": "TXT_shutterLag",
+"kind": "text",
+"parent": "PANEL_SHUTTER_LAG",
+"x": 128,
+"y": 19,
+"w": 68,
+"h": 20,
+"text": "0"
+},
+{
+"name": "label7",
+"kind": "label",
+"parent": "panel3",
+"x": 318,
+"y": 10,
+"w": 38,
+"h": 13,
+"text": "Dir fov"
+},
+{
+"name": "num_hfov",
+"kind": "num",
+"parent": "panel3",
+"x": 430,
+"y": 25,
+"w": 42,
+"h": 20
+},
+{
+"name": "num_camerarotation",
+"kind": "num",
+"parent": "panel3",
+"x": 377,
+"y": 25,
+"w": 42,
+"h": 20
+},
+{
+"name": "num_vfov",
+"kind": "num",
+"parent": "panel3",
+"x": 321,
+"y": 26,
+"w": 42,
+"h": 20
+},
+{
+"name": "label9",
+"kind": "label",
+"parent": "panel3",
+"x": 374,
+"y": 9,
+"w": 47,
+"h": 13,
+"text": "Rotation"
+},
+{
+"name": "label8",
+"kind": "label",
+"parent": "panel3",
+"x": 427,
+"y": 9,
+"w": 51,
+"h": 13,
+"text": "Cross fov"
+},
+{
+"name": "CHECK_AMSLAlt_Use",
+"kind": "check",
+"parent": "panel3",
+"x": 149,
+"y": 63,
+"w": 92,
+"h": 17,
+"text": "Use AMSL Alt"
+},
+{
+"name": "txt_basealt",
+"kind": "text",
+"parent": "panel3",
+"x": 336,
+"y": 61,
+"w": 100,
+"h": 20,
+"text": "0"
+},
+{
+"name": "label28",
+"kind": "label",
+"parent": "panel3",
+"x": 266,
+"y": 63,
+"w": 64,
+"h": 13,
+"text": "Rel Alt base"
+},
+{
+"name": "chk_usegps2",
+"kind": "check",
+"parent": "panel3",
+"x": 442,
+"y": 63,
+"w": 76,
+"h": 17,
+"text": "Use GPS2"
+},
+{
+"name": "num_dropfromstart",
+"kind": "num",
+"parent": "panel3",
+"x": 34,
+"y": 25,
+"w": 53,
+"h": 20
+},
+{
+"name": "lbldrpstart",
+"kind": "label",
+"parent": "panel3",
+"x": 31,
+"y": 10,
+"w": 96,
+"h": 13,
+"text": "Drop image at start"
+},
+{
+"name": "num_dropend",
+"kind": "num",
+"parent": "panel3",
+"x": 34,
+"y": 64,
+"w": 53,
+"h": 20
+},
+{
+"name": "label2",
+"kind": "label",
+"parent": "panel3",
+"x": 31,
+"y": 48,
+"w": 94,
+"h": 13,
+"text": "Drop image at end"
+},
+{
+"name": "num_minshutter",
+"kind": "num",
+"parent": "panel3",
+"x": 143,
+"y": 25,
+"w": 53,
+"h": 20
+},
+{
+"name": "label3",
+"kind": "label",
+"parent": "panel3",
+"x": 140,
+"y": 10,
+"w": 107,
+"h": 13,
+"text": "Min Shutter (s) (CAM)"
+},
+{
+"name": "label1",
+"kind": "label",
+"parent": "PANEL_TIME_OFFSET",
+"x": 31,
+"y": 24,
+"w": 78,
+"h": 13,
+"text": "Seconds offset"
+},
+{
+"name": "TXT_offsetseconds",
+"kind": "text",
+"parent": "PANEL_TIME_OFFSET",
+"x": 115,
+"y": 21,
+"w": 100,
+"h": 20,
+"text": "0"
+},
+{
+"name": "BUT_estoffset",
+"kind": "button",
+"parent": "PANEL_TIME_OFFSET",
+"x": 240,
+"y": 18,
+"w": 75,
+"h": 23,
+"text": "Estimate Offset"
+}
+]
+}

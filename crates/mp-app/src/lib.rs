@@ -5,6 +5,7 @@ pub mod app;
 pub mod assets;
 pub mod firmware_ui;
 pub mod fonts;
+pub mod georef_ui;
 pub mod forms;
 mod demo;
 pub mod hud;

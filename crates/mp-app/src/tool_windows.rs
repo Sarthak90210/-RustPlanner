@@ -382,7 +382,7 @@ impl Tools {
                 let el = t.elapsed();
                 self.text = Some(("structtest".into(), format!("{n} records decoded in {:.1} ms ({:.0} records/s)", el.as_secs_f64() * 1e3, n as f64 / el.as_secs_f64())));
             }
-            "Geo ref images" => self.text = Some(("Geo ref images".into(), "Geo ref images has moved to the dataflash tab: DATA > DataFlash Logs > Geo ref images".into())),
+            "Geo ref images" => return false,
             "driver clean" => self.text = Some(("driver clean".into(), "No Mission Planner drivers are installed by this build; nothing to remove.".into())),
             "Param gen" => {
                 let dir = crate::platform::data_dir();

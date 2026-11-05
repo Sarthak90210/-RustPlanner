@@ -898,6 +898,7 @@ impl eframe::App for MissionPlannerApp {
                 self.settings.view = View::FlightData;
                 self.flight_data.open_log_browse();
             }
+            Some(crate::tools::TempAction::Unavailable("Geo ref images")) => self.flight_data.georef.open = true,
             Some(crate::tools::TempAction::Unavailable(n)) => {
                 if !self.tools.activate(n, self.link.as_ref(), &mut self.toasts) && !self.more_tools.activate(n, self.link.as_ref(), &mut self.toasts, &mut self.settings) {
                     self.toasts.error(format!("{n}: not available in this port yet"));
