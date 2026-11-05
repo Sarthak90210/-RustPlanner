@@ -195,16 +195,16 @@ impl FlightPlanView {
         wp_panel
             .resizable(!self.waypoints_collapsed)
             .min_size(40.0)
-            .frame(egui::Frame::new().fill(theme::BG))
+            .frame(egui::Frame::new().fill(theme::bg()))
             .show(ui, |ui| self.waypoints_panel(ui, app));
 
         egui::Panel::right("panelAction")
             .resizable(false)
             .exact_size(131.0)
-            .frame(egui::Frame::new().fill(theme::BG))
+            .frame(egui::Frame::new().fill(theme::bg()))
             .show(ui, |ui| self.action_panel(ui, app));
 
-        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::BG)).show(ui, |ui| self.map_ui(ui, app));
+        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| self.map_ui(ui, app));
 
         if self.browser_open {
             self.file_browser(ui.ctx(), app);
@@ -439,7 +439,7 @@ impl FlightPlanView {
         let p = ui.painter().clone();
         let f = fonts::ui_id(fonts::UI_SIZE);
         let grid_line = Color32::from_rgb(0xa0, 0xa0, 0xa0);
-        p.rect_filled(area, 0.0, theme::BG);
+        p.rect_filled(area, 0.0, theme::bg());
 
         let mut x = area.left();
         for (i, (_, w)) in COLS.iter().enumerate() {
@@ -459,9 +459,9 @@ impl FlightPlanView {
             let row_bg = if self.selected == Some(i) {
                 Color32::from_rgb(0x33, 0x99, 0xff)
             } else if i % 2 == 1 {
-                theme::BG
+                theme::bg()
             } else {
-                theme::CONTROL_BG
+                theme::control_bg()
             };
             let mut cells = Vec::with_capacity(COLS.len());
             let mut x = area.left();
@@ -482,7 +482,7 @@ impl FlightPlanView {
                     }
             };
             for (c, r) in cells.iter().enumerate() {
-                p.rect_filled(*r, 0.0, if c == 0 { theme::BG } else if c == 8 && low { Color32::RED } else { row_bg });
+                p.rect_filled(*r, 0.0, if c == 0 { theme::bg() } else if c == 8 && low { Color32::RED } else { row_bg });
                 p.rect_stroke(*r, 0.0, Stroke::new(1.0, grid_line), StrokeKind::Inside);
             }
             p.text(cells[0].center(), egui::Align2::CENTER_CENTER, (i + 1).to_string(), f.clone(), Color32::WHITE);
@@ -784,7 +784,7 @@ impl FlightPlanView {
         ] {
             let g = p.layout_no_wrap(t, f.clone(), Color32::WHITE);
             let r = Rect::from_min_size(o + Vec2::new(3.0, y), g.size());
-            p.rect_filled(r, 0.0, theme::BG);
+            p.rect_filled(r, 0.0, theme::bg());
             p.galley(r.min, g, Color32::WHITE);
         }
         ui.put(Rect::from_min_size(o + Vec2::new(w - 177.0, 3.0), Vec2::new(121.0, 21.0)), |ui: &mut egui::Ui| {

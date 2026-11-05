@@ -178,7 +178,7 @@ impl MavFtpUi {
         }
 
         // statusStrip1 (22 px) docked bottom
-        egui::Panel::bottom("ftp_status").exact_size(22.0).frame(egui::Frame::new().fill(theme::CONTROL_BG)).show(ui, |ui| {
+        egui::Panel::bottom("ftp_status").exact_size(22.0).frame(egui::Frame::new().fill(theme::control_bg())).show(ui, |ui| {
             ui.horizontal_centered(|ui| {
                 theme::label(ui, &status);
                 if let Some((a, b)) = progress {
@@ -189,19 +189,19 @@ impl MavFtpUi {
         });
         // splitContainer1.Panel1: treeView1
         let mut open_dir: Option<String> = None;
-        egui::Panel::left("ftp_tree").resizable(true).default_size(208.0).frame(egui::Frame::new().fill(theme::CONTROL_BG).inner_margin(3)).show(ui, |ui| {
+        egui::Panel::left("ftp_tree").resizable(true).default_size(208.0).frame(egui::Frame::new().fill(theme::control_bg()).inner_margin(3)).show(ui, |ui| {
             egui::ScrollArea::vertical().id_salt("ftptree").auto_shrink([false, false]).show(ui, |ui| {
                 self.tree_node(ui, "/", 0, &mut open_dir);
             });
         });
         // splitContainer1.Panel2: listView1 (details)
         let mut action: Option<&'static str> = None;
-        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::BG)).show(ui, |ui| {
+        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| {
             let cols = [("Name", 220.0), ("Type", 90.0), ("Size", 90.0), ("Date modified", 120.0)];
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 for (h, w) in cols {
-                    cell(ui, w, h, None, theme::CONTROL_BG);
+                    cell(ui, w, h, None, theme::control_bg());
                 }
             });
             ui.separator();

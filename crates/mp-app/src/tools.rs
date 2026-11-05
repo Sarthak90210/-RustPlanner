@@ -257,7 +257,7 @@ pub fn temp_window(ctx: &egui::Context, open: &mut bool, link: Option<&Link>, to
         return None;
     }
     let mut act = None;
-    let frame = egui::Frame::window(&ctx.global_style()).fill(theme::BG);
+    let frame = egui::Frame::window(&ctx.global_style()).fill(theme::bg());
     egui::Window::new("temp").open(open).collapsible(false).resizable(false).frame(frame).fixed_size([1044.0, 628.0]).show(ctx, |ui| {
         let (full, _) = ui.allocate_exact_size(Vec2::new(1044.0, 628.0), egui::Sense::hover());
         let o = full.min + Vec2::new(12.0, 12.0);

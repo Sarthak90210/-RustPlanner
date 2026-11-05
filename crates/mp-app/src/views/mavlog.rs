@@ -91,7 +91,7 @@ impl MavlinkLog {
             // splitContainer1: treeView1 (153) | zg1
             let tree = r(12.0, 74.0, 153.0, 293.0);
             let graph = r(169.0, 74.0, 703.0, 293.0);
-            ui.painter().rect_filled(tree, 0.0, theme::CONTROL_BG);
+            ui.painter().rect_filled(tree, 0.0, theme::control_bg());
             ui.scope_builder(egui::UiBuilder::new().max_rect(tree), |ui| {
                 egui::ScrollArea::vertical().id_salt("mavlog_tree").show(ui, |ui| {
                     if self.graph.is_empty() {

@@ -94,7 +94,7 @@ impl ExtraTabs {
             let clicked = ui.put(rr, |ui: &mut egui::Ui| {
                 let resp = theme::button_sized(ui, "", rr.size());
                 let font = if self.xpdr_state == i { fonts::bold_id(fonts::UI_SIZE) } else { f.clone() };
-                ui.painter().text(rr.center(), egui::Align2::CENTER_CENTER, t, font, theme::BUT_TEXT);
+                ui.painter().text(rr.center(), egui::Align2::CENTER_CENTER, t, font, theme::but_text());
                 resp
             });
             if clicked.clicked() {
@@ -130,7 +130,7 @@ impl ExtraTabs {
             }))
             .unwrap_or(0);
         let fr = r(196.0, 6.0, 87.0, 103.0);
-        p.rect_filled(fr, 0.0, theme::CONTROL_BG);
+        p.rect_filled(fr, 0.0, theme::control_bg());
         for (i, t) in FAULTS.iter().enumerate() {
             let mut on = faults & (1 << i) != 0;
             ui.put(Rect::from_min_size(fr.min + Vec2::new(2.0, 2.0 + i as f32 * 16.0), Vec2::new(85.0, 16.0)), egui::Checkbox::new(&mut on, *t));
@@ -142,7 +142,7 @@ impl ExtraTabs {
             }
         }
         let mr = r(289.0, 6.0, 130.0, 131.0);
-        p.rect_filled(mr, 0.0, theme::CONTROL_BG);
+        p.rect_filled(mr, 0.0, theme::control_bg());
         for (i, t) in MODES.iter().enumerate() {
             let rr = Rect::from_min_size(mr.min + Vec2::new(2.0, 2.0 + i as f32 * 16.0), Vec2::new(126.0, 16.0));
             if ui.put(rr, egui::Checkbox::new(&mut self.modes[i], *t)).changed() {

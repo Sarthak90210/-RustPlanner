@@ -431,12 +431,12 @@ impl GridUi {
         let grid = self.grid();
         let mut result = GridResult::Open;
         let mut open = true;
-        let frame = egui::Frame::window(&ctx.global_style()).fill(theme::BG).inner_margin(0.0);
+        let frame = egui::Frame::window(&ctx.global_style()).fill(theme::bg()).inner_margin(0.0);
         egui::Window::new("Survey (Grid)").open(&mut open).collapsible(false).resizable(false).frame(frame).fixed_size([1008.0, 645.0]).show(ctx, |ui| {
             let (full, _) = ui.allocate_exact_size(Vec2::new(1008.0, 645.0), egui::Sense::hover());
             let o = full.min;
             let p = ui.painter().clone();
-            p.rect_filled(full, 0.0, theme::BG);
+            p.rect_filled(full, 0.0, theme::bg());
             self.map_area(ui, app, o, &grid);
             self.stats(&p, o, &grid);
             if let Some(r) = self.tabs(ui, app, o, &p, &grid) {

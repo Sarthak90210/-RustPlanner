@@ -19,7 +19,7 @@ pub fn group_box(p: &egui::Painter, r: Rect, title: &str) {
     let g = p.layout_no_wrap(title.to_string(), f, Color32::WHITE);
     p.rect_stroke(Rect::from_min_max(r.min + Vec2::new(0.0, 6.0), r.max), 3.0, Stroke::new(1.0, Color32::from_rgb(0xd5, 0xdf, 0xe5)), StrokeKind::Inside);
     let tr = Rect::from_min_size(r.min + Vec2::new(6.0, 0.0), g.size() + Vec2::new(4.0, 0.0));
-    p.rect_filled(tr, 0.0, theme::BG);
+    p.rect_filled(tr, 0.0, theme::bg());
     p.galley(tr.min + Vec2::new(2.0, 0.0), g, Color32::WHITE);
 }
 
@@ -126,7 +126,7 @@ pub fn basic_tuning(ui: &mut egui::Ui, app: &mut AppCtx) {
         });
     });
     let ir = Rect::from_min_size(o + Vec2::new(4.0, 227.0), Vec2::new(556.0, 58.0));
-    p.rect_filled(ir, 0.0, theme::CONTROL_BG);
+    p.rect_filled(ir, 0.0, theme::control_bg());
     p.rect_stroke(ir, 0.0, Stroke::new(1.0, Color32::from_gray(0x80)), StrokeKind::Inside);
     let g = p.layout(info.clone(), f, Color32::WHITE, 550.0);
     p.galley(ir.min + Vec2::new(3.0, 3.0), g, Color32::WHITE);

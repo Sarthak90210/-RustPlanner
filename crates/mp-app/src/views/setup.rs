@@ -158,7 +158,7 @@ impl SetupView {
             self.page = visible[sel];
         }
         let name = PAGES[if sel != before { self.page } else { shown }].0;
-        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::BG).inner_margin(6)).show(ui, |ui| {
+        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::bg()).inner_margin(6)).show(ui, |ui| {
             match name {
                 "Install Firmware" => return self.firmware.ui(ui, app),
                 "RTK/GPS Inject" => return self.rtk_inject(ui, app),
@@ -468,13 +468,13 @@ impl SetupView {
 fn rc_bar(p: &egui::Painter, r: Rect, label: &str, value: u16, minmax: Option<(u16, u16)>, vertical: bool) {
     let (lo, hi) = (800.0f32, 2200.0f32);
     let f = ((value as f32 - lo) / (hi - lo)).clamp(0.0, 1.0);
-    p.rect_filled(r, 0.0, theme::CONTROL_BG);
+    p.rect_filled(r, 0.0, theme::control_bg());
     let fill = if vertical {
         Rect::from_min_max(egui::pos2(r.left(), r.bottom() - r.height() * f), r.max)
     } else {
         Rect::from_min_size(r.min, Vec2::new(r.width() * f, r.height()))
     };
-    p.rect_filled(fill, 0.0, theme::GREEN);
+    p.rect_filled(fill, 0.0, theme::green());
     p.rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(120)), egui::StrokeKind::Inside);
     let font = crate::fonts::ui_id(crate::fonts::UI_SIZE);
     if let Some((mn, mx)) = minmax.filter(|(a, b)| b > a) {
@@ -1133,7 +1133,7 @@ fn battery_monitor(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link, prefix: &st
     p.rect_filled(body, 4.0, Color32::from_gray(0x50));
     p.rect_stroke(body, 4.0, egui::Stroke::new(2.0, Color32::from_gray(0xc0)), egui::StrokeKind::Inside);
     p.rect_filled(Rect::from_min_size(body.right_top() + Vec2::new(0.0, 12.0), Vec2::new(6.0, 16.0)), 1.0, Color32::from_gray(0xc0));
-    p.rect_filled(Rect::from_min_size(body.min + Vec2::new(5.0, 5.0), Vec2::new(40.0, 30.0)), 2.0, theme::GREEN);
+    p.rect_filled(Rect::from_min_size(body.min + Vec2::new(5.0, 5.0), Vec2::new(40.0, 30.0)), 2.0, theme::green());
 
     txt(106.0, 45.0, "Monitor");
     let mon = pv("MONITOR").unwrap_or(0.0) as i32;
@@ -1303,7 +1303,7 @@ fn frame_type(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
         let r = Rect::from_min_size(g3.min + Vec2::new(6.0 + i as f32 * 80.0, 18.0), Vec2::new(74.0, 74.0));
         let resp = ui.interact(r, ui.scope_id().with(("fc", i)), Sense::click());
         if fc == *val {
-            p.rect_filled(r, 0.0, theme::GREEN.gamma_multiply(0.35));
+            p.rect_filled(r, 0.0, theme::green().gamma_multiply(0.35));
         }
         if let Some(t) = tex {
             p.image(*t, Rect::from_min_max(r.min + Vec2::new(8.0, 2.0), r.max - Vec2::new(8.0, 16.0)), uv, Color32::WHITE);
@@ -1370,7 +1370,7 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
     // myDataGridView1
     let cols = [("Priority", 50.0), ("DevID", 50.0), ("BusType", 60.0), ("Bus", 50.0), ("Address", 50.0), ("DevType", 150.0), ("Missing", 50.0), ("External", 50.0), ("Orientation", 100.0), ("Up", 40.0), ("Down", 40.0)];
     let grid = r(3.0, 49.0, 672.0, 209.0);
-    p.rect_filled(grid, 0.0, theme::BG);
+    p.rect_filled(grid, 0.0, theme::bg());
     let mut x = grid.left() + 41.0; // row headers
     for (h, w) in cols {
         let c = Rect::from_min_size(Pos2::new(x, grid.top()), Vec2::new(w, 21.0));
@@ -1411,12 +1411,12 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
             String::new(),
         ];
         let hdr = Rect::from_min_size(Pos2::new(grid.left(), y), Vec2::new(41.0, 22.0));
-        p.rect_filled(hdr, 0.0, theme::BG);
+        p.rect_filled(hdr, 0.0, theme::bg());
         p.rect_stroke(hdr, 0.0, egui::Stroke::new(1.0, Color32::from_gray(160)), egui::StrokeKind::Inside);
         let mut x = grid.left() + 41.0;
         for (k, (_, w)) in cols.iter().enumerate() {
             let c = Rect::from_min_size(Pos2::new(x, y), Vec2::new(*w, 22.0));
-            p.rect_filled(c, 0.0, if i % 2 == 0 { theme::CONTROL_BG } else { theme::BG });
+            p.rect_filled(c, 0.0, if i % 2 == 0 { theme::control_bg() } else { theme::bg() });
             p.rect_stroke(c, 0.0, egui::Stroke::new(1.0, Color32::from_gray(160)), egui::StrokeKind::Inside);
             if k >= 9 {
                 // Up / Down image buttons
@@ -1592,8 +1592,8 @@ fn servo_output(ui: &mut egui::Ui, app: &mut AppCtx) {
                 let pwm = cs.ch_out.get(ch - 1).copied().unwrap_or(0);
                 let (br, _) = ui.allocate_exact_size(Vec2::new(200.0, 20.0), Sense::hover());
                 let frac = ((pwm as f32 - 800.0) / 1400.0).clamp(0.0, 1.0);
-                ui.painter().rect_filled(br, 0.0, theme::CONTROL_BG);
-                ui.painter().rect_filled(Rect::from_min_size(br.min, Vec2::new(br.width() * frac, br.height())), 0.0, theme::GREEN);
+                ui.painter().rect_filled(br, 0.0, theme::control_bg());
+                ui.painter().rect_filled(Rect::from_min_size(br.min, Vec2::new(br.width() * frac, br.height())), 0.0, theme::green());
                 ui.painter().text(br.center(), egui::Align2::CENTER_CENTER, pwm.to_string(), f.clone(), Color32::WHITE);
                 let rev = format!("{pre}REVERSED");
                 let mut b = params.get(&rev).map(|p| p.value != 0.0).unwrap_or(false);

@@ -10,40 +10,194 @@ use egui::{
 use crate::fonts;
 
 // ThemeManager colours (BurntKermit.mpsystheme)
-pub const BG: Color32 = Color32::from_rgb(0x26, 0x27, 0x28);
-pub const CONTROL_BG: Color32 = Color32::from_rgb(0x43, 0x44, 0x45);
-pub const TEXT: Color32 = Color32::WHITE;
-pub const BUT_TOP: Color32 = Color32::from_rgb(0x94, 0xc1, 0x1f);
-pub const BUT_BOT: Color32 = Color32::from_rgb(0xcd, 0xe2, 0x96);
-pub const BUT_TEXT: Color32 = Color32::from_rgb(0x40, 0x57, 0x04);
-pub const BUT_OUTLINE: Color32 = Color32::from_rgb(0x79, 0x94, 0x29);
-pub const MOUSE_OVER: Color32 = Color32::from_rgba_unmultiplied_const(0x2b, 0x3a, 0x03, 73);
-pub const MOUSE_DOWN: Color32 = Color32::from_rgba_unmultiplied_const(0x2b, 0x3a, 0x03, 150);
-pub const NOT_ENABLED: Color32 = Color32::from_rgba_unmultiplied_const(0x2b, 0x3a, 0x03, 150);
-pub const BANNER1: Color32 = Color32::from_rgb(0x40, 0x57, 0x04);
-pub const BANNER2: Color32 = Color32::from_rgb(0x94, 0xc1, 0x1f);
-pub const PROGRESS_TOP: Color32 = Color32::from_rgb(0x66, 0x8b, 0x1a);
-pub const PROGRESS_BOT: Color32 = Color32::from_rgb(0x7c, 0xa4, 0x28);
-pub const PROGRESS_OUTLINE: Color32 = Color32::from_rgb(0x96, 0xae, 0x70);
 /// SystemColors.ControlLight: menu item text.
 pub const MENU_TEXT: Color32 = Color32::from_rgb(0xe3, 0xe3, 0xe3);
 pub const WHITE_SMOKE: Color32 = Color32::from_rgb(0xf5, 0xf5, 0xf5);
 pub const DARK_GRAY: Color32 = Color32::from_rgb(0xa9, 0xa9, 0xa9);
-pub const GREEN: Color32 = BUT_TOP;
-pub const GREEN_LIGHT: Color32 = BUT_BOT;
+
+/// ThemeManager colours (one `.mpsystheme`), swapped at runtime by the Planner theme setting.
+#[derive(Debug, Clone, Copy)]
+pub struct Palette {
+    pub bg: Color32,
+    pub control_bg: Color32,
+    pub text: Color32,
+    pub textbox_bg: Color32,
+    pub but_text: Color32,
+    pub but_top: Color32,
+    pub but_bot: Color32,
+    pub but_outline: Color32,
+    pub progress_top: Color32,
+    pub progress_bot: Color32,
+    pub progress_outline: Color32,
+    pub banner1: Color32,
+    pub banner2: Color32,
+    pub not_enabled: Color32,
+    pub mouse_over: Color32,
+    pub mouse_down: Color32,
+}
+
+impl Palette {
+    pub const BURNT_KERMIT: Palette = Palette {
+        bg: Color32::from_rgb(0x26, 0x27, 0x28),
+        control_bg: Color32::from_rgb(0x43, 0x44, 0x45),
+        text: Color32::WHITE,
+        textbox_bg: Color32::from_rgb(0x43, 0x44, 0x45),
+        but_text: Color32::from_rgb(0x40, 0x57, 0x04),
+        but_top: Color32::from_rgb(0x94, 0xc1, 0x1f),
+        but_bot: Color32::from_rgb(0xcd, 0xe2, 0x96),
+        but_outline: Color32::from_rgb(0x79, 0x94, 0x29),
+        progress_top: Color32::from_rgb(0x66, 0x8b, 0x1a),
+        progress_bot: Color32::from_rgb(0x7c, 0xa4, 0x28),
+        progress_outline: Color32::from_rgb(0x96, 0xae, 0x70),
+        banner1: Color32::from_rgb(0x40, 0x57, 0x04),
+        banner2: Color32::from_rgb(0x94, 0xc1, 0x1f),
+        not_enabled: Color32::from_rgba_unmultiplied_const(0x2b, 0x3a, 0x03, 150),
+        mouse_over: Color32::from_rgba_unmultiplied_const(0x2b, 0x3a, 0x03, 73),
+        mouse_down: Color32::from_rgba_unmultiplied_const(0x2b, 0x3a, 0x03, 150),
+    };
+
+    /// The editable entries (ThemeColor strColorItemName, strVariableName).
+    pub const ITEMS: [(&'static str, &'static str); 15] = [
+        ("Background", "BGColor"),
+        ("Control Background", "ControlBGColor"),
+        ("Text", "TextColor"),
+        ("TextBox Background", "BGColorTextBox"),
+        ("Button Text", "ButtonTextColor"),
+        ("Button Background top", "ButBG"),
+        ("Button Background bottom", "ButBGBot"),
+        ("ProgressBar Top", "ProgressBarColorTop"),
+        ("ProgressBar Bottom", "ProgressBarColorBot"),
+        ("ProgressBar Outline", "ProgressBarOutlineColor"),
+        ("BannerColor1", "BannerColor1"),
+        ("BannerColor2", "BannerColor2"),
+        ("Disabled Button", "ColorNotEnabled"),
+        ("Mouse Over", "ColorMouseOver"),
+        ("Mouse Down", "ColorMouseDown"),
+    ];
+
+    pub fn get_mut(&mut self, var: &str) -> Option<&mut Color32> {
+        Some(match var {
+            "BGColor" => &mut self.bg,
+            "ControlBGColor" => &mut self.control_bg,
+            "TextColor" => &mut self.text,
+            "BGColorTextBox" => &mut self.textbox_bg,
+            "ButtonTextColor" => &mut self.but_text,
+            "ButBG" => &mut self.but_top,
+            "ButBGBot" => &mut self.but_bot,
+            "ProgressBarColorTop" => &mut self.progress_top,
+            "ProgressBarColorBot" => &mut self.progress_bot,
+            "ProgressBarOutlineColor" => &mut self.progress_outline,
+            "BannerColor1" => &mut self.banner1,
+            "BannerColor2" => &mut self.banner2,
+            "ColorNotEnabled" => &mut self.not_enabled,
+            "ColorMouseOver" => &mut self.mouse_over,
+            "ColorMouseDown" => &mut self.mouse_down,
+            _ => return None,
+        })
+    }
+
+    /// Parse a ThemeColorTable (.mpsystheme) over the BurntKermit defaults.
+    pub fn from_mpsystheme(xml: &str) -> Palette {
+        let mut p = Palette::BURNT_KERMIT;
+        let Ok(doc) = roxmltree::Document::parse(xml.trim_start_matches('\u{feff}')) else { return p };
+        for c in doc.descendants().filter(|n| n.has_tag_name("ThemeColor")) {
+            let var = c.children().find(|n| n.has_tag_name("strVariableName")).and_then(|n| n.text()).unwrap_or("");
+            let web = c.children().find(|n| n.has_tag_name("clrColor")).and_then(|n| n.attribute("Web")).unwrap_or("");
+            if let (Some(slot), Some(col)) = (p.get_mut(var), parse_web(web)) {
+                // the overlay colours keep their translucency
+                let a = slot.a();
+                *slot = if a < 255 { Color32::from_rgba_unmultiplied(col.r(), col.g(), col.b(), a) } else { col };
+            }
+        }
+        // MyButton border: a darker shade of the bottom gradient colour
+        p.but_outline = Color32::from_rgb((p.but_top.r() as u16 * 4 / 5) as u8, (p.but_top.g() as u16 * 4 / 5) as u8, (p.but_top.b() as u16 * 4 / 5) as u8);
+        p
+    }
+
+    pub fn to_mpsystheme(&self, name: &str) -> String {
+        let mut p = *self;
+        let mut s = format!("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<ThemeColorTable xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n  <colors>\n");
+        for (label, var) in Palette::ITEMS {
+            let c = *p.get_mut(var).unwrap();
+            s.push_str(&format!("    <ThemeColor>\n      <strColorItemName>{label}</strColorItemName>\n      <clrColor Web=\"#{:02X}{:02X}{:02X}\" />\n      <strVariableName>{var}</strVariableName>\n    </ThemeColor>\n", c.r(), c.g(), c.b()));
+        }
+        s.push_str(&format!("  </colors>\n  <strThemeName>{name}</strThemeName>\n</ThemeColorTable>\n"));
+        s
+    }
+}
+
+/// .NET Color web names used by the theme files.
+fn parse_web(w: &str) -> Option<Color32> {
+    if let Some(h) = w.strip_prefix('#') {
+        let v = u32::from_str_radix(h, 16).ok()?;
+        return Some(Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8));
+    }
+    Some(match w {
+        "White" => Color32::WHITE,
+        "Black" => Color32::BLACK,
+        "Green" => Color32::from_rgb(0, 128, 0),
+        "Blue" => Color32::from_rgb(0, 0, 255),
+        "LightBlue" => Color32::from_rgb(0xad, 0xd8, 0xe6),
+        "LightGray" => Color32::from_rgb(0xd3, 0xd3, 0xd3),
+        "WhiteSmoke" => Color32::from_rgb(0xf5, 0xf5, 0xf5),
+        "Gray" => Color32::GRAY,
+        "Red" => Color32::RED,
+        "Yellow" => Color32::YELLOW,
+        _ => return None,
+    })
+}
+
+static PALETTE: std::sync::RwLock<Palette> = std::sync::RwLock::new(Palette::BURNT_KERMIT);
+
+pub fn palette() -> Palette {
+    *PALETTE.read().unwrap()
+}
+
+/// ThemeManager.LoadTheme + ApplyThemeTo: switch palette and restyle egui.
+pub fn set_palette(ctx: &egui::Context, p: Palette) {
+    *PALETTE.write().unwrap() = p;
+    apply(ctx);
+}
+
+/// Planner theme names -> palette ("Custom" reads custom.mpsystheme from the data folder).
+pub fn palette_for(name: &str) -> Palette {
+    match name {
+        "HighContrast" => Palette::from_mpsystheme(include_str!("../assets/HighContrast.mpsystheme")),
+        "Custom" => std::fs::read_to_string(crate::platform::data_dir().join("custom.mpsystheme")).map(|s| Palette::from_mpsystheme(&s)).unwrap_or(Palette::BURNT_KERMIT),
+        _ => Palette::BURNT_KERMIT,
+    }
+}
+
+pub fn bg() -> Color32 { palette().bg }
+pub fn control_bg() -> Color32 { palette().control_bg }
+pub fn text() -> Color32 { palette().text }
+pub fn but_top() -> Color32 { palette().but_top }
+pub fn but_bot() -> Color32 { palette().but_bot }
+pub fn but_text() -> Color32 { palette().but_text }
+pub fn but_outline() -> Color32 { palette().but_outline }
+pub fn mouse_over() -> Color32 { palette().mouse_over }
+pub fn mouse_down() -> Color32 { palette().mouse_down }
+pub fn not_enabled() -> Color32 { palette().not_enabled }
+pub fn banner1() -> Color32 { palette().banner1 }
+pub fn banner2() -> Color32 { palette().banner2 }
+pub fn progress_top() -> Color32 { palette().progress_top }
+pub fn progress_bot() -> Color32 { palette().progress_bot }
+pub fn progress_outline() -> Color32 { palette().progress_outline }
+pub fn green() -> Color32 { palette().but_top }
+pub fn green_light() -> Color32 { palette().but_bot }
 
 pub fn apply(ctx: &egui::Context) {
     ctx.set_theme(egui::Theme::Dark);
     let mut v = Visuals::dark();
-    v.panel_fill = BG;
-    v.window_fill = BG;
+    v.panel_fill = bg();
+    v.window_fill = bg();
     v.window_stroke = Stroke::new(1.0, DARK_GRAY);
     v.window_corner_radius = CornerRadius::ZERO;
     v.menu_corner_radius = CornerRadius::ZERO;
-    v.extreme_bg_color = CONTROL_BG;
-    v.text_edit_bg_color = Some(CONTROL_BG);
-    v.faint_bg_color = BG;
-    v.override_text_color = Some(TEXT);
+    v.extreme_bg_color = control_bg();
+    v.text_edit_bg_color = Some(control_bg());
+    v.faint_bg_color = bg();
+    v.override_text_color = Some(text());
     v.selection.bg_fill = Color32::from_rgb(0x33, 0x99, 0xff);
     v.selection.stroke = Stroke::new(1.0, Color32::WHITE);
     v.hyperlink_color = Color32::from_rgb(0x66, 0xb2, 0xff);
@@ -53,22 +207,22 @@ pub fn apply(ctx: &egui::Context) {
         w.corner_radius = r;
         w.expansion = 0.0;
     }
-    v.widgets.noninteractive.bg_fill = BG;
-    v.widgets.noninteractive.weak_bg_fill = BG;
+    v.widgets.noninteractive.bg_fill = bg();
+    v.widgets.noninteractive.weak_bg_fill = bg();
     v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(0x55, 0x56, 0x57));
-    v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, TEXT);
-    v.widgets.inactive.bg_fill = CONTROL_BG;
-    v.widgets.inactive.weak_bg_fill = CONTROL_BG;
+    v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, text());
+    v.widgets.inactive.bg_fill = control_bg();
+    v.widgets.inactive.weak_bg_fill = control_bg();
     v.widgets.inactive.bg_stroke = Stroke::new(1.0, border);
-    v.widgets.inactive.fg_stroke = Stroke::new(1.0, TEXT);
-    v.widgets.hovered.bg_fill = CONTROL_BG;
-    v.widgets.hovered.weak_bg_fill = CONTROL_BG;
+    v.widgets.inactive.fg_stroke = Stroke::new(1.0, text());
+    v.widgets.hovered.bg_fill = control_bg();
+    v.widgets.hovered.weak_bg_fill = control_bg();
     v.widgets.hovered.bg_stroke = Stroke::new(1.0, Color32::from_rgb(0x33, 0x99, 0xff));
-    v.widgets.hovered.fg_stroke = Stroke::new(1.0, TEXT);
-    v.widgets.active.bg_fill = CONTROL_BG;
-    v.widgets.active.weak_bg_fill = CONTROL_BG;
+    v.widgets.hovered.fg_stroke = Stroke::new(1.0, text());
+    v.widgets.active.bg_fill = control_bg();
+    v.widgets.active.weak_bg_fill = control_bg();
     v.widgets.active.bg_stroke = Stroke::new(1.0, Color32::from_rgb(0x33, 0x99, 0xff));
-    v.widgets.active.fg_stroke = Stroke::new(1.0, TEXT);
+    v.widgets.active.fg_stroke = Stroke::new(1.0, text());
     v.widgets.open = v.widgets.active;
     ctx.set_visuals(v);
     ctx.global_style_mut(|s| {
@@ -123,23 +277,23 @@ pub fn button_sized(ui: &mut Ui, text: &str, size: Vec2) -> Response {
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
     if ui.is_rect_visible(rect) {
         let p = ui.painter();
-        vgradient(p, rect, BUT_TOP, BUT_BOT);
-        p.rect_stroke(rect.shrink(0.5), CornerRadius::same(1), Stroke::new(1.0, BUT_OUTLINE), StrokeKind::Inside);
+        vgradient(p, rect, but_top(), but_bot());
+        p.rect_stroke(rect.shrink(0.5), CornerRadius::same(1), Stroke::new(1.0, but_outline()), StrokeKind::Inside);
         if !ui.is_enabled() {
-            p.rect_filled(rect, 0.0, NOT_ENABLED);
+            p.rect_filled(rect, 0.0, not_enabled());
         } else if resp.is_pointer_button_down_on() {
-            p.rect_filled(rect, 0.0, MOUSE_DOWN);
+            p.rect_filled(rect, 0.0, mouse_down());
         } else if resp.hovered() {
-            p.rect_filled(rect, 0.0, MOUSE_OVER);
+            p.rect_filled(rect, 0.0, mouse_over());
         }
-        centered_text(p, rect, text, fonts::ui_id(fonts::UI_SIZE), BUT_TEXT);
+        centered_text(p, rect, text, fonts::ui_id(fonts::UI_SIZE), but_text());
     }
     resp
 }
 
 /// MyButton sized to its text (WinForms default 75x23 minimum).
 pub fn button(ui: &mut Ui, text: &str) -> Response {
-    let w = ui.painter().layout_no_wrap(text.to_string(), fonts::ui_id(fonts::UI_SIZE), TEXT).size().x + 16.0;
+    let w = ui.painter().layout_no_wrap(text.to_string(), fonts::ui_id(fonts::UI_SIZE), self::text()).size().x + 16.0;
     button_sized(ui, text, Vec2::new(w.max(75.0), 23.0))
 }
 
@@ -240,7 +394,7 @@ pub fn backstage(ui: &mut Ui, items: &[BsvItem], selected: &mut usize) {
     let p = ui.painter();
     p.rect_filled(rect, 0.0, Color32::BLACK);
     let grad = Rect::from_min_max(Pos2::new(rect.right() - 20.0, rect.top()), rect.right_bottom());
-    hgradient(p, grad, Color32::BLACK, BG);
+    hgradient(p, grad, Color32::BLACK, bg());
     p.line_segment([rect.right_top() - Vec2::new(1.0, 0.0), rect.right_bottom() - Vec2::new(1.0, 0.0)], Stroke::new(1.0, DARK_GRAY));
 
     let sel_parent = items.get(*selected).and_then(|i| i.parent).unwrap_or(*selected);
@@ -264,14 +418,14 @@ pub fn backstage(ui: &mut Ui, items: &[BsvItem], selected: &mut usize) {
         let resp = ui.interact(r, ui.scope_id().with("bsv").with(i), Sense::click());
         let p = ui.painter();
         if i == *selected {
-            hgradient(p, r, BANNER2, BANNER1);
-            p.line_segment([r.left_top(), r.right_top()], Stroke::new(1.0, BANNER1));
-            p.line_segment([r.left_bottom() - Vec2::new(0.0, 1.0), r.right_bottom() - Vec2::new(0.0, 1.0)], Stroke::new(1.0, BANNER1));
+            hgradient(p, r, banner2(), banner1());
+            p.line_segment([r.left_top(), r.right_top()], Stroke::new(1.0, banner1()));
+            p.line_segment([r.left_bottom() - Vec2::new(0.0, 1.0), r.right_bottom() - Vec2::new(0.0, 1.0)], Stroke::new(1.0, banner1()));
             p.text(r.left_top() + Vec2::new(5.0, 6.0), egui::Align2::LEFT_TOP, &label, font.clone(), Color32::WHITE);
             p.line_segment([r.right_top() - Vec2::new(1.0, 0.0), r.right_bottom() - Vec2::new(1.0, 1.0)], Stroke::new(1.0, DARK_GRAY));
             let mid = r.center().y;
             let pts = vec![Pos2::new(r.right(), mid + 8.0), Pos2::new(r.right() - 8.0, mid), Pos2::new(r.right(), mid - 8.0)];
-            p.add(Shape::convex_polygon(pts.clone(), BG, Stroke::NONE));
+            p.add(Shape::convex_polygon(pts.clone(), bg(), Stroke::NONE));
             p.add(Shape::closed_line(pts, Stroke::new(1.0, DARK_GRAY)));
         } else {
             if resp.hovered() {
@@ -344,16 +498,31 @@ pub fn htrackbar(ui: &mut Ui, rect: Rect, value: &mut f64, min: f64, max: f64, t
 
 /// WinForms Label: plain white text at the UI font.
 pub fn label(ui: &mut Ui, text: impl Into<String>) -> Response {
-    ui.add(egui::Label::new(egui::RichText::new(text.into()).color(TEXT)).selectable(false))
+    ui.add(egui::Label::new(egui::RichText::new(text.into()).color(self::text())).selectable(false))
 }
 
 /// HorizontalProgressBar2 styling from the theme.
 pub fn progress(ui: &mut Ui, frac: f32, size: Vec2, text: &str) {
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
     let p = ui.painter();
-    p.rect_filled(rect, 0.0, BG);
+    p.rect_filled(rect, 0.0, bg());
     let fill = Rect::from_min_size(rect.min, Vec2::new(rect.width() * frac.clamp(0.0, 1.0), rect.height()));
-    vgradient(p, fill, PROGRESS_TOP, PROGRESS_BOT);
-    p.rect_stroke(rect, 0.0, Stroke::new(1.0, PROGRESS_OUTLINE), StrokeKind::Inside);
-    p.text(rect.center(), egui::Align2::CENTER_CENTER, text, fonts::ui_id(fonts::UI_SIZE), TEXT);
+    vgradient(p, fill, progress_top(), progress_bot());
+    p.rect_stroke(rect, 0.0, Stroke::new(1.0, progress_outline()), StrokeKind::Inside);
+    p.text(rect.center(), egui::Align2::CENTER_CENTER, text, fonts::ui_id(fonts::UI_SIZE), self::text());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn high_contrast_theme_parses() {
+        let p = Palette::from_mpsystheme(include_str!("../assets/HighContrast.mpsystheme"));
+        assert_eq!(p.bg, Color32::from_rgb(0xee, 0xee, 0xee));
+        assert_eq!(p.text, Color32::BLACK);
+        assert_eq!(p.but_top, Color32::from_rgb(0xff, 0xff, 0x99));
+        let back = Palette::from_mpsystheme(&p.to_mpsystheme("Custom"));
+        assert_eq!(back.control_bg, p.control_bg);
+    }
 }

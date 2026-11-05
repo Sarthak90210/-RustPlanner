@@ -207,9 +207,9 @@ impl FlightDataView {
             egui::Panel::bottom("fd_tabs")
                 .resizable(true)
                 .default_size(ui.available_height() * 0.45)
-                .frame(egui::Frame::new().fill(theme::BG))
+                .frame(egui::Frame::new().fill(theme::bg()))
                 .show(ui, |ui| self.tabs_ui(ui, app, &cs));
-            egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::BG)).show(ui, |ui| self.map_area(ui, app, &cs));
+            egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| self.map_area(ui, app, &cs));
             return;
         }
 
@@ -218,7 +218,7 @@ impl FlightDataView {
             .resizable(true)
             .default_size(self.left_w)
             .size_range(200.0..=ui.available_width() * 0.7)
-            .frame(egui::Frame::new().fill(theme::BG))
+            .frame(egui::Frame::new().fill(theme::bg()))
             .show(ui, |ui| {
                 let w = ui.available_width();
                 // SubMainLeft: HUD keeps a 4:3 aspect
@@ -237,7 +237,7 @@ impl FlightDataView {
             });
         self.left_w = r.response.rect.width();
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(theme::BG).inner_margin(egui::Margin { left: 4, right: 1, top: 4, bottom: 1 }))
+            .frame(egui::Frame::new().fill(theme::bg()).inner_margin(egui::Margin { left: 4, right: 1, top: 4, bottom: 1 }))
             .show(ui, |ui| {
                 if app.settings.hud_swap {
                     let size = ui.available_size();
@@ -440,9 +440,9 @@ impl FlightDataView {
                 for (n, v) in [("velocity_variance", cs.ekf_velv), ("pos_horiz_variance", cs.ekf_posh), ("pos_vert_variance", cs.ekf_posv), ("compass_variance", cs.ekf_compass), ("terrain_alt_variance", cs.ekf_terrain)] {
                     ui.horizontal(|ui| {
                         ui.add_sized(Vec2::new(130.0, 18.0), egui::Label::new(RichText::new(n).color(Color32::WHITE)));
-                        let col = if v > 0.8 { Color32::RED } else if v > 0.5 { Color32::from_rgb(255, 165, 0) } else { theme::GREEN };
+                        let col = if v > 0.8 { Color32::RED } else if v > 0.5 { Color32::from_rgb(255, 165, 0) } else { theme::green() };
                         let (r, _) = ui.allocate_exact_size(Vec2::new(200.0, 16.0), Sense::hover());
-                        ui.painter().rect_filled(r, 0.0, theme::CONTROL_BG);
+                        ui.painter().rect_filled(r, 0.0, theme::control_bg());
                         ui.painter().rect_filled(Rect::from_min_size(r.min, Vec2::new(r.width() * v.clamp(0.0, 1.0), r.height())), 0.0, col);
                         theme::label(ui, format!("{v:.2}"));
                     });
@@ -453,7 +453,7 @@ impl FlightDataView {
                     for (i, n) in names.iter().enumerate() {
                         let on = cs.ekfflags & (1 << i) != 0;
                         theme::label(ui, *n);
-                        ui.label(RichText::new(if on { "True" } else { "False" }).color(if on { theme::GREEN } else { Color32::GRAY }));
+                        ui.label(RichText::new(if on { "True" } else { "False" }).color(if on { theme::green() } else { Color32::GRAY }));
                         ui.end_row();
                     }
                 });
@@ -462,9 +462,9 @@ impl FlightDataView {
                 for (n, v) in [("Vibe X", cs.vibex), ("Vibe Y", cs.vibey), ("Vibe Z", cs.vibez)] {
                     ui.horizontal(|ui| {
                         ui.add_sized(Vec2::new(60.0, 18.0), egui::Label::new(RichText::new(n).color(Color32::WHITE)));
-                        let col = if v > 60.0 { Color32::RED } else if v > 30.0 { Color32::from_rgb(255, 165, 0) } else { theme::GREEN };
+                        let col = if v > 60.0 { Color32::RED } else if v > 30.0 { Color32::from_rgb(255, 165, 0) } else { theme::green() };
                         let (r, _) = ui.allocate_exact_size(Vec2::new(220.0, 16.0), Sense::hover());
-                        ui.painter().rect_filled(r, 0.0, theme::CONTROL_BG);
+                        ui.painter().rect_filled(r, 0.0, theme::control_bg());
                         ui.painter().rect_filled(Rect::from_min_size(r.min, Vec2::new(r.width() * (v / 90.0).clamp(0.0, 1.0), r.height())), 0.0, col);
                         theme::label(ui, format!("{v:.1}"));
                     });
@@ -485,7 +485,7 @@ impl FlightDataView {
     fn tabs_ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, cs: &CurrentState) {
         theme::tab_strip(ui, "tabControlactions", &TABS, &mut self.tab);
         let rect = ui.available_rect_before_wrap();
-        ui.painter().rect_filled(rect, 0.0, theme::BG);
+        ui.painter().rect_filled(rect, 0.0, theme::bg());
         ui.scope_builder(egui::UiBuilder::new().max_rect(rect.shrink(3.0)), |ui| {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| match self.tab {
                 0 => self.quick_ui(ui, app, cs),
@@ -724,10 +724,10 @@ impl FlightDataView {
 
     fn map_area(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, cs: &CurrentState) {
         // panel1 (25px) along the bottom: coords1, Tuning, Auto Pan
-        egui::Panel::bottom("fd_panel1").exact_size(25.0).frame(egui::Frame::new().fill(theme::BG)).show(ui, |ui| {
+        egui::Panel::bottom("fd_panel1").exact_size(25.0).frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| {
             let o = ui.max_rect().min;
             let coords = Rect::from_min_size(o + Vec2::new(7.0, 2.0), Vec2::new(247.0, 21.0));
-            ui.painter().rect_filled(coords, 0.0, theme::CONTROL_BG);
+            ui.painter().rect_filled(coords, 0.0, theme::control_bg());
             ui.painter().rect_stroke(coords, 0.0, Stroke::new(1.0, Color32::from_rgb(0x7a, 0x7a, 0x7a)), StrokeKind::Inside);
             ui.painter().text(
                 coords.left_center() + Vec2::new(4.0, 0.0),
@@ -1369,7 +1369,7 @@ impl FlightDataView {
                 ui.vertical(|ui| {
                     theme::label(ui, "Output:");
                     let (rr, _) = ui.allocate_exact_size(Vec2::new(451.0, 356.0), Sense::hover());
-                    ui.painter().rect_filled(rr, 0.0, theme::CONTROL_BG);
+                    ui.painter().rect_filled(rr, 0.0, theme::control_bg());
                     ui.scope_builder(egui::UiBuilder::new().max_rect(rr.shrink(3.0)), |ui| {
                         egui::ScrollArea::vertical().id_salt("logout").stick_to_bottom(true).show(ui, |ui| {
                             for l in &self.logdl_output {
@@ -1501,7 +1501,7 @@ fn distance_bar(p: &egui::Painter, r: Rect, cs: &CurrentState, mission: &[Locati
 fn messages_ui(ui: &mut egui::Ui, app: &AppCtx) {
     // txt_messagebox: RichTextBox on ControlBGColor
     let r = ui.available_rect_before_wrap();
-    ui.painter().rect_filled(r, 0.0, theme::CONTROL_BG);
+    ui.painter().rect_filled(r, 0.0, theme::control_bg());
     if let Some(l) = app.link {
         let s = l.shared.read();
         for m in s.messages.iter().rev() {

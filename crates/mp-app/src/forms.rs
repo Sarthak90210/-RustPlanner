@@ -324,7 +324,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState)
                 }
             }
             "grid" | "list" | "graph" => {
-                p.rect_filled(r, 0.0, if c.kind == "graph" { Color32::from_rgb(0x37, 0x37, 0x38) } else { theme::CONTROL_BG });
+                p.rect_filled(r, 0.0, if c.kind == "graph" { Color32::from_rgb(0x37, 0x37, 0x38) } else { theme::control_bg() });
                 p.rect_stroke(r, 0.0, Stroke::new(1.0, Color32::from_gray(0x80)), StrokeKind::Inside);
                 if let Some(t) = st.text.get(&c.name) {
                     let g = p.layout(t.clone(), egui::FontId::monospace(11.0), Color32::WHITE, r.width() - 6.0);

@@ -12,7 +12,7 @@ pub fn ui(ui: &mut egui::Ui) {
     // richTextBox1 (106,80 348x161), anchored on all sides
     let full = ui.max_rect();
     let rtb = Rect::from_min_max(o + Vec2::new(106.0, 80.0), egui::pos2(full.right() - 124.0, full.bottom() - 98.0).max(o + Vec2::new(454.0, 241.0)));
-    ui.painter().rect_filled(rtb, 0.0, theme::CONTROL_BG);
+    ui.painter().rect_filled(rtb, 0.0, theme::control_bg());
     ui.scope_builder(egui::UiBuilder::new().max_rect(rtb.shrink(3.0)), |ui| {
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             ui.label(RichText::new(CHANGELOG.trim_start_matches('\u{feff}')).font(fonts::ui_id(fonts::UI_SIZE)).color(Color32::from_rgb(0xf5, 0xf5, 0xf5)));

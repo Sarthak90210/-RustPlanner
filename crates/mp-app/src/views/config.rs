@@ -123,7 +123,7 @@ impl ConfigView {
             self.page = list[idx];
         }
         let page = if idx != before { self.page } else { shown };
-        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::BG).inner_margin(6)).show(ui, |ui| match page {
+        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::bg()).inner_margin(6)).show(ui, |ui| match page {
             Page::GeoFence => crate::views::tuning::geofence(ui, app),
             Page::BasicTuning => crate::views::tuning::basic_tuning(ui, app),
             Page::ExtendedTuning => self.extended.ui(ui, app),
@@ -302,7 +302,7 @@ impl ParamEditor {
         let defaults = self.defaults.lock().unwrap().clone();
 
         // tableLayoutPanel1: Dock Right, 122px
-        egui::Panel::right("raw_buttons").exact_size(122.0).resizable(false).frame(egui::Frame::new().fill(theme::BG)).show(ui, |ui| {
+        egui::Panel::right("raw_buttons").exact_size(122.0).resizable(false).frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| {
             let o = ui.max_rect().min;
             let r = |y: f32, h: f32| Rect::from_min_size(o + Vec2::new(6.0, y), Vec2::new(110.0, h));
             let b = |ui: &mut egui::Ui, rr: Rect, t: &str| ui.put(rr, |ui: &mut egui::Ui| theme::button_sized(ui, t, rr.size())).clicked();
@@ -428,7 +428,7 @@ impl ParamEditor {
             for k in params.keys() {
                 *groups.entry(group_of(k)).or_default() += 1;
             }
-            egui::Panel::left("raw_tree").resizable(true).default_size(180.0).frame(egui::Frame::new().fill(theme::CONTROL_BG)).show(ui, |ui| {
+            egui::Panel::left("raw_tree").resizable(true).default_size(180.0).frame(egui::Frame::new().fill(theme::control_bg())).show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     if ui.selectable_label(self.selected_group.is_none(), RichText::new("All").color(Color32::WHITE)).clicked() {
                         self.selected_group = None;
@@ -442,14 +442,14 @@ impl ParamEditor {
                 });
             });
         }
-        egui::Panel::left("raw_collapse").exact_size(18.0).resizable(false).frame(egui::Frame::new().fill(theme::BG)).show(ui, |ui| {
+        egui::Panel::left("raw_collapse").exact_size(18.0).resizable(false).frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| {
             let r = Rect::from_min_size(ui.max_rect().min, Vec2::new(18.0, 18.0));
             if ui.put(r, |ui: &mut egui::Ui| theme::button_sized(ui, if show_tree { "<" } else { ">" }, r.size())).clicked() {
                 self.tree_collapsed = !self.tree_collapsed;
             }
         });
 
-        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::BG)).show(ui, |ui| {
+        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| {
             let q = self.search.to_lowercase();
             let rows: Vec<(String, f32)> = params
                 .iter()
@@ -573,7 +573,7 @@ impl ParamEditor {
                 continue;
             }
             let r = Rect::from_min_size(Pos2::new(x, hr.top()), Vec2::new(*w, hdr_h));
-            ui.painter().rect_filled(r, 0.0, theme::BG);
+            ui.painter().rect_filled(r, 0.0, theme::bg());
             ui.painter().rect_stroke(r, 0.0, Stroke::new(1.0, line), StrokeKind::Inside);
             ui.painter().text(r.left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, headers[i], f.clone(), Color32::WHITE);
             x += w;
@@ -584,7 +584,7 @@ impl ParamEditor {
                 let (name, value) = &rows[i];
                 let meta = param_meta::get(fw, name);
                 let (rr, _) = ui.allocate_exact_size(Vec2::new(col_w.iter().sum(), row_h), Sense::hover());
-                let bg = if i % 2 == 1 { theme::BG } else { theme::CONTROL_BG };
+                let bg = if i % 2 == 1 { theme::bg() } else { theme::control_bg() };
                 let mut cells = Vec::new();
                 let mut x = rr.left();
                 for w in &col_w {
@@ -957,10 +957,53 @@ fn planner(ui: &mut egui::Ui, app: &mut AppCtx, _fw: Firmware) {
                 pl.insert("logdirectory".into(), d.display().to_string());
             }
         }
-        combo(ui, pl, "theme", r(107.0, 421.0, 138.0, 21.0), &["BurntKermit", "HighContrast"], "BurntKermit");
+        combo(ui, pl, "theme", r(107.0, 421.0, 138.0, 21.0), &["BurntKermit", "HighContrast", "Custom"], "BurntKermit");
         let tr = r(249.0, 421.0, 75.0, 20.0);
         if ui.put(tr, |ui: &mut egui::Ui| theme::button_sized(ui, "Custom", tr.size())).clicked() {
-            app.toasts.error("Theme editor: not available in this port yet");
+            // ThemeManager.CustomColor: edit the current palette, saved as custom.mpsystheme
+            let cur = app.settings.planner.get("theme").cloned().unwrap_or_else(|| "BurntKermit".into());
+            ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("theme_edit"), theme::palette_for(&cur)));
+        }
+        // Custom theme editor window
+        let edit_id = egui::Id::new("theme_edit");
+        if let Some(mut pal) = ui.ctx().data(|d| d.get_temp::<theme::Palette>(edit_id)) {
+            let mut done = None;
+            egui::Window::new("Custom Theme").collapsible(false).resizable(false).show(ui.ctx(), |ui| {
+                egui::Grid::new("theme_colors").num_columns(2).show(ui, |ui| {
+                    for (label, var) in theme::Palette::ITEMS {
+                        theme::label(ui, label);
+                        if let Some(c) = pal.get_mut(var) {
+                            let mut rgb = [c.r(), c.g(), c.b()];
+                            if ui.color_edit_button_srgb(&mut rgb).changed() {
+                                *c = Color32::from_rgba_unmultiplied(rgb[0], rgb[1], rgb[2], c.a());
+                            }
+                        }
+                        ui.end_row();
+                    }
+                });
+                ui.horizontal(|ui| {
+                    if theme::button(ui, "Save").clicked() {
+                        done = Some(true);
+                    }
+                    if theme::button(ui, "Cancel").clicked() {
+                        done = Some(false);
+                    }
+                });
+            });
+            match done {
+                Some(save) => {
+                    if save {
+                        let _ = std::fs::write(platform::data_dir().join("custom.mpsystheme"), pal.to_mpsystheme("Custom"));
+                        let rev = app.settings.planner.get("theme_rev").and_then(|v| v.parse::<u32>().ok()).unwrap_or(0) + 1;
+                        app.settings.planner.insert("theme".into(), "Custom".into());
+                        app.settings.planner.insert("theme_rev".into(), rev.to_string());
+                    }
+                    ui.ctx().data_mut(|d| d.remove::<theme::Palette>(edit_id));
+                }
+                None => {
+                    ui.ctx().data_mut(|d| d.insert_temp(edit_id, pal));
+                }
+            }
         }
         let pl = &mut app.settings.planner;
         combo(ui, pl, "displayview", r(107.0, 448.0, 138.0, 21.0), &["Basic", "Advanced", "Custom"], "Advanced");

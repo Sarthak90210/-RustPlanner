@@ -109,8 +109,8 @@ impl LogBrowse {
         egui::Window::new(title).id(egui::Id::unique("logbrowse")).open(&mut open).default_size(Vec2::new(1200.0, 560.0)).resizable(true).show(ctx, |ui| {
             ui.set_min_size(Vec2::new(900.0, 480.0));
             // splitContainerAllTree: tree on the right (130px) with txt_info
-            egui::Panel::right("lb_tree").exact_size(150.0).resizable(true).frame(egui::Frame::new().fill(theme::CONTROL_BG)).show(ui, |ui| self.tree(ui));
-            egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::BG)).show(ui, |ui| {
+            egui::Panel::right("lb_tree").exact_size(150.0).resizable(true).frame(egui::Frame::new().fill(theme::control_bg())).show(ui, |ui| self.tree(ui));
+            egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| {
                 let full = ui.available_rect_before_wrap();
                 let top_h = (full.height() * 0.52).max(150.0);
                 let top = Rect::from_min_size(full.min, Vec2::new(full.width(), top_h));
@@ -352,7 +352,7 @@ impl LogBrowse {
                     if !self.show_params && name == "PARM" {
                         continue;
                     }
-                    let bg = if i % 2 == 0 { theme::CONTROL_BG } else { theme::BG };
+                    let bg = if i % 2 == 0 { theme::control_bg() } else { theme::bg() };
                     let (row, _) = ui.allocate_exact_size(Vec2::new(ui.available_width().max(1000.0), 18.0), Sense::hover());
                     ui.painter().rect_filled(row, 0.0, bg);
                     let mut s = format!("{i:>7}  {name:<5}");

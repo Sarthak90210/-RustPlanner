@@ -199,6 +199,8 @@ pub struct MissionPlannerApp {
     show_stats: bool,
     inspector: crate::tools::Inspector,
     show_temp: bool,
+    /// (theme name, revision) currently applied by ThemeManager
+    applied_theme: (String, String),
     ctx_clone: egui::Context,
     tools: crate::tool_windows::Tools,
     joystick: crate::joystick::Joystick,
@@ -270,6 +272,7 @@ impl MissionPlannerApp {
             show_stats: false,
             inspector: crate::tools::Inspector::new(std::env::var_os("MP_INSPECTOR").is_some()),
             show_temp: std::env::var_os("MP_TEMP").is_some(),
+            applied_theme: (String::new(), String::new()),
             ctx_clone: cc.egui_ctx.clone(),
             tools: Default::default(),
             joystick: Default::default(),
@@ -475,7 +478,7 @@ impl MissionPlannerApp {
             let resp = ui.interact(r, ui.scope_id().with(id), egui::Sense::click());
             let p = ui.painter();
             if selected {
-                p.rect_filled(r, 0.0, theme::CONTROL_BG);
+                p.rect_filled(r, 0.0, theme::control_bg());
             } else if resp.hovered() {
                 p.rect_filled(r, 0.0, Color32::from_white_alpha(28));
             }
@@ -838,6 +841,15 @@ impl eframe::App for MissionPlannerApp {
         self.hotkeys(&ctx, &mut actions);
         self.inspector.show(&ctx, self.link.as_ref(), &mut self.toasts);
         self.tools.ui(&ctx, self.link.as_ref(), &mut self.toasts);
+        // ThemeManager.LoadTheme(CMB_theme.Text)
+        let want = (
+            self.settings.planner.get("theme").cloned().unwrap_or_else(|| "BurntKermit".into()),
+            self.settings.planner.get("theme_rev").cloned().unwrap_or_default(),
+        );
+        if want != self.applied_theme {
+            theme::set_palette(&ctx, theme::palette_for(&want.0));
+            self.applied_theme = want;
+        }
         self.joystick.tick(self.link.as_ref());
         self.ctx_clone = ctx.clone();
         if let Some(l) = &self.link {
@@ -878,17 +890,17 @@ impl eframe::App for MissionPlannerApp {
             None => {}
         }
         if !self.menu_hidden {
-            egui::Panel::top("menu").frame(egui::Frame::new().fill(theme::BG)).show(ui, |ui| self.top_bar(ui, &mut actions));
+            egui::Panel::top("menu").frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| self.top_bar(ui, &mut actions));
         } else {
             // AutoHide: the menu reappears when the pointer reaches the top edge
             let near_top = ctx.input(|i| i.pointer.hover_pos().map(|p| p.y < 6.0).unwrap_or(false));
             if near_top {
-                egui::Panel::top("menu").frame(egui::Frame::new().fill(theme::BG)).show(ui, |ui| self.top_bar(ui, &mut actions));
+                egui::Panel::top("menu").frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| self.top_bar(ui, &mut actions));
             }
         }
 
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(theme::BG))
+            .frame(egui::Frame::new().fill(theme::bg()))
             .show(ui, |ui| {
                 let Self {
                     settings,
