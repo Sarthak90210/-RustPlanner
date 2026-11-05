@@ -255,7 +255,21 @@ impl FlightPlanView {
         });
         p.text(at(px + 4.0, py + 46.0), egui::Align2::LEFT_TOP, "Status", f.clone(), white);
         if put_button(ui, r(px + 3.0, py + 68.0, 115.0, 23.0), "Inject Custom Map") {
-            app.toasts.error("Inject Custom Map: not available in this port yet");
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            if let Some(dir) = rfd::FileDialog::new().set_title("Inject Custom Map").pick_folder() {
+                let counts = map::inject_custom_tiles(&platform::tile_cache_dir(), &dir);
+                let total: usize = counts.values().sum();
+                let mut msg = String::from("Number of tiles loaded per zoom : \n");
+                for (z, n) in &counts {
+                    msg.push_str(&format!("\nZoom {z} : {n}"));
+                }
+                msg.push_str(&format!("\n\n{total} tile{} loaded !", if total == 1 { "" } else { "s" }));
+                if total > 0 {
+                    app.settings.fp_map.provider = map::Provider::Custom;
+                    app.settings.fd_map.provider = map::Provider::Custom;
+                }
+                app.toasts.error(msg);
+            }
         }
         ui.put(r(px + 3.0, py + 97.0, 115.0, 23.0), |ui: &mut egui::Ui| {
             theme::progress(ui, 0.0, Vec2::new(115.0, 23.0), "");

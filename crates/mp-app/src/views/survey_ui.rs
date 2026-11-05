@@ -743,7 +743,22 @@ impl GridUi {
                 }
                 let r = ui.scope_builder(egui::UiBuilder::new().max_rect(at(g.x + 58.0, g.y + 149.0, 110.0, 23.0)), |ui| theme::button_sized(ui, "Load Sample Photo", Vec2::new(110.0, 23.0))).inner;
                 if r.clicked() {
-                    self.error = Some("Load Sample Photo: EXIF reading is not available in this port yet".into());
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    if let Some(path) = rfd::FileDialog::new().add_filter("*.jpg", &["jpg", "jpeg", "JPG"]).pick_file() {
+                        match std::fs::read(&path).ok().and_then(|b| read_exif(&b)) {
+                            Some(x) => {
+                                if let Some((w, h)) = x.size {
+                                    self.imgw = w.to_string();
+                                    self.imgh = h.to_string();
+                                }
+                                if let Some(f) = x.focal {
+                                    self.focal = f;
+                                }
+                                self.camera = None;
+                            }
+                            None => self.error = Some("No EXIF data found in this photo".into()),
+                        }
+                    }
                 }
                 let r = ui.scope_builder(egui::UiBuilder::new().max_rect(at(g.x + 83.0, g.y + 178.0, 64.0, 23.0)), |ui| theme::button_sized(ui, "Save", Vec2::new(64.0, 23.0))).inner;
                 if r.clicked() {
@@ -832,4 +847,114 @@ fn extend(origin: (f64, f64), from: (f64, f64), to: (f64, f64), m: f64) -> (f64,
     let l = (dx * dx + dy * dy).sqrt().max(1e-9);
     let t = local(origin, to, origin);
     unlocal(origin, (t.0 + dx / l * m, t.1 + dy / l * m))
+}
+
+/// What BUT_samplephoto reads from a photo: image size and focal length.
+struct Exif {
+    size: Option<(u32, u32)>,
+    focal: Option<f64>,
+}
+
+/// Minimal JPEG / EXIF reader: SOF dimensions plus the Exif IFD (FocalLength 0x920A,
+/// PixelXDimension 0xA002, PixelYDimension 0xA003).
+fn read_exif(b: &[u8]) -> Option<Exif> {
+    if b.get(..2)? != [0xFF, 0xD8] {
+        return None;
+    }
+    let mut out = Exif { size: None, focal: None };
+    let mut exif_size: (Option<u32>, Option<u32>) = (None, None);
+    let mut i = 2;
+    while i + 4 <= b.len() && b[i] == 0xFF {
+        let marker = b[i + 1];
+        let len = u16::from_be_bytes([b[i + 2], b[i + 3]]) as usize;
+        let seg = b.get(i + 4..i + 2 + len)?;
+        match marker {
+            0xE1 if seg.starts_with(b"Exif\0\0") => {
+                let t = &seg[6..];
+                let le = t.get(..2)? == b"II";
+                let u16_at = |o: usize| -> Option<u32> {
+                    let v = t.get(o..o + 2)?;
+                    Some(if le { u16::from_le_bytes([v[0], v[1]]) } else { u16::from_be_bytes([v[0], v[1]]) } as u32)
+                };
+                let u32_at = |o: usize| -> Option<u32> {
+                    let v = t.get(o..o + 4)?;
+                    let a = [v[0], v[1], v[2], v[3]];
+                    Some(if le { u32::from_le_bytes(a) } else { u32::from_be_bytes(a) })
+                };
+                let tags = |ifd: usize| -> Vec<(u32, u32, usize)> {
+                    let n = u16_at(ifd).unwrap_or(0) as usize;
+                    (0..n).filter_map(|k| {
+                        let e = ifd + 2 + k * 12;
+                        Some((u16_at(e)?, u16_at(e + 2)?, e + 8))
+                    }).collect()
+                };
+                let ifd0 = u32_at(4)? as usize;
+                if let Some((_, _, off)) = tags(ifd0).into_iter().find(|(tag, _, _)| *tag == 0x8769) {
+                    let exif_ifd = u32_at(off)? as usize;
+                    for (tag, typ, off) in tags(exif_ifd) {
+                        let val = || if typ == 3 { u16_at(off) } else { u32_at(off) };
+                        match tag {
+                            0x920A => {
+                                let p = u32_at(off)? as usize;
+                                let (n, d) = (u32_at(p)?, u32_at(p + 4)?);
+                                if d != 0 {
+                                    out.focal = Some(n as f64 / d as f64);
+                                }
+                            }
+                            0xA002 => exif_size.0 = val(),
+                            0xA003 => exif_size.1 = val(),
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            0xC0..=0xC3 if seg.len() >= 5 => {
+                let h = u16::from_be_bytes([seg[1], seg[2]]) as u32;
+                let w = u16::from_be_bytes([seg[3], seg[4]]) as u32;
+                out.size = Some((w, h));
+            }
+            0xDA => break,
+            _ => {}
+        }
+        i += 2 + len;
+    }
+    if let (Some(w), Some(h)) = exif_size {
+        out.size = Some((w, h));
+    }
+    (out.size.is_some() || out.focal.is_some()).then_some(out)
+}
+
+#[cfg(test)]
+mod tests {
+    /// SOF0 dimensions plus an Exif IFD with FocalLength 5.0 and 4608x3456 pixel dimensions.
+    #[test]
+    fn exif_focal_and_size() {
+        let mut t: Vec<u8> = b"II*\0".to_vec();
+        t.extend_from_slice(&8u32.to_le_bytes()); // IFD0 at 8
+        t.extend_from_slice(&1u16.to_le_bytes());
+        t.extend_from_slice(&[0x69, 0x87, 4, 0]);
+        t.extend_from_slice(&1u32.to_le_bytes());
+        t.extend_from_slice(&26u32.to_le_bytes()); // Exif IFD at 26
+        t.extend_from_slice(&0u32.to_le_bytes());
+        t.extend_from_slice(&3u16.to_le_bytes());
+        for (tag, typ, v) in [(0x920Au16, 5u16, 68u32), (0xA002, 4, 4608), (0xA003, 4, 3456)] {
+            t.extend_from_slice(&tag.to_le_bytes());
+            t.extend_from_slice(&typ.to_le_bytes());
+            t.extend_from_slice(&1u32.to_le_bytes());
+            t.extend_from_slice(&v.to_le_bytes());
+        }
+        t.extend_from_slice(&0u32.to_le_bytes());
+        t.extend_from_slice(&5u32.to_le_bytes()); // rational 5/1 at 68
+        t.extend_from_slice(&1u32.to_le_bytes());
+        let mut app1 = b"Exif\0\0".to_vec();
+        app1.extend_from_slice(&t);
+        let mut j = vec![0xFF, 0xD8, 0xFF, 0xE1];
+        j.extend_from_slice(&((app1.len() + 2) as u16).to_be_bytes());
+        j.extend_from_slice(&app1);
+        j.extend_from_slice(&[0xFF, 0xC0, 0, 11, 8, 0, 100, 0, 200, 3, 0, 0, 0]);
+        j.extend_from_slice(&[0xFF, 0xDA, 0, 2]);
+        let x = super::read_exif(&j).unwrap();
+        assert_eq!(x.size, Some((4608, 3456)));
+        assert_eq!(x.focal, Some(5.0));
+    }
 }

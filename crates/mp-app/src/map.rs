@@ -20,15 +20,18 @@ pub enum Provider {
     EsriWorldStreet,
     EsriWorldTopo,
     OpenTopoMap,
+    /// "Custom": tiles injected from disk (FlightPlanner Inject Custom Map), cache only
+    Custom,
 }
 
 impl Provider {
-    pub const ALL: [Provider; 5] = [
+    pub const ALL: [Provider; 6] = [
         Provider::EsriWorldImagery,
         Provider::OpenStreetMap,
         Provider::EsriWorldStreet,
         Provider::EsriWorldTopo,
         Provider::OpenTopoMap,
+        Provider::Custom,
     ];
 
     pub fn name(&self) -> &'static str {
@@ -38,6 +41,7 @@ impl Provider {
             Provider::EsriWorldStreet => "EsriWorldStreetMap",
             Provider::EsriWorldTopo => "EsriWorldTopoMap",
             Provider::OpenTopoMap => "OpenTopoMap",
+            Provider::Custom => "Custom",
         }
     }
 
@@ -48,6 +52,7 @@ impl Provider {
             Provider::EsriWorldStreet => "esri_street",
             Provider::EsriWorldTopo => "esri_topo",
             Provider::OpenTopoMap => "opentopo",
+            Provider::Custom => "custom",
         }
     }
 
@@ -82,6 +87,7 @@ impl Provider {
             ),
             Provider::OpenStreetMap => format!("https://tile.openstreetmap.org/{z}/{x}/{y}.png"),
             Provider::OpenTopoMap => format!("https://tile.opentopomap.org/{z}/{x}/{y}.png"),
+            Provider::Custom => String::new(),
         }
     }
 }
@@ -329,6 +335,44 @@ impl TileCache {
     }
 }
 
+/// BUT_InjectCustomMap: copy a z/y/x tile folder (".../Z<zoom>/<y>/<x>.jpg|png") into the
+/// "Custom" provider cache. Returns tiles per zoom level.
+pub fn inject_custom_tiles(cache: &std::path::Path, from: &std::path::Path) -> std::collections::BTreeMap<u8, usize> {
+    let mut counts = std::collections::BTreeMap::new();
+    let mut stack = vec![from.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+                continue;
+            }
+            let ext = p.extension().map(|x| x.to_string_lossy().to_lowercase()).unwrap_or_default();
+            if !matches!(ext.as_str(), "jpg" | "jpeg" | "png") {
+                continue;
+            }
+            // ...\Z?<zoom>\<y>\<x>.ext
+            let comps: Vec<String> = p.components().rev().take(3).map(|c| c.as_os_str().to_string_lossy().to_string()).collect();
+            if comps.len() < 3 {
+                continue;
+            }
+            let x = comps[0].split('.').next().and_then(|v| v.parse::<u32>().ok());
+            let y = comps[1].parse::<u32>().ok();
+            let z = comps[2].trim_start_matches(['Z', 'z']).parse::<u8>().ok();
+            let (Some(x), Some(y), Some(z)) = (x, y, z) else { continue };
+            let to = tile_path(&cache.to_path_buf(), TileKey { provider: Provider::Custom, z, x, y });
+            if let Some(parent) = to.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if std::fs::copy(&p, &to).is_ok() {
+                *counts.entry(z).or_insert(0) += 1;
+            }
+        }
+    }
+    counts
+}
+
 fn tile_path(dir: &PathBuf, key: TileKey) -> PathBuf {
     dir.join(key.provider.key())
         .join(key.z.to_string())
@@ -341,6 +385,9 @@ fn fetch_tile(agent: &ureq::Agent, dir: Option<&PathBuf>, key: TileKey) -> Optio
         .and_then(|d| std::fs::read(tile_path(d, key)).ok())
         .or_else(|| {
             let url = key.provider.url(key.z, key.x, key.y);
+            if url.is_empty() {
+                return None;
+            }
             let mut resp = agent.get(&url).call().ok()?;
             let body = resp.body_mut().read_to_vec().ok()?;
             if let Some(d) = dir {
