@@ -553,15 +553,31 @@ pub fn draw_wp(painter: &egui::Painter, pin: egui::TextureId, shadow: egui::Text
 }
 
 /// `GMapMarkerQuad` heading lines (length 500): red = heading, black = COG, orange = target.
-pub fn draw_heading_lines(painter: &egui::Painter, p: Pos2, heading: f32, cog: f32, target: f32) {
-    let len = 500.0;
+pub struct LineOpts {
+    pub heading: bool,
+    pub cog: bool,
+    pub target: bool,
+    pub nav_bearing: bool,
+    pub length: f32,
+}
+
+pub fn draw_heading_lines(painter: &egui::Painter, p: Pos2, heading: f32, cog: f32, target: f32, nav: f32, o: &LineOpts) {
     let l = |deg: f32, col: Color32| {
         let a = (deg - 90.0).to_radians();
-        painter.line_segment([p, p + Vec2::new(a.cos(), a.sin()) * len], egui::Stroke::new(2.0, col));
+        painter.line_segment([p, p + Vec2::new(a.cos(), a.sin()) * o.length], egui::Stroke::new(2.0, col));
     };
-    l(heading, Color32::RED);
-    l(cog, Color32::BLACK);
-    l(target, Color32::from_rgb(255, 165, 0));
+    if o.heading {
+        l(heading, Color32::RED);
+    }
+    if o.nav_bearing {
+        l(nav, Color32::from_rgb(0, 128, 0));
+    }
+    if o.cog {
+        l(cog, Color32::BLACK);
+    }
+    if o.target {
+        l(target, Color32::from_rgb(255, 165, 0));
+    }
 }
 
 /// `GMapMarkerQuad` frame: four motor circles, blue front arm, green body, red sysid.

@@ -121,3 +121,16 @@ mod tests {
         assert_eq!(m.range, Some((1.0, 100.0)));
     }
 }
+
+/// Every parameter name in a firmware's metadata with a plausible default (first option,
+/// range minimum, or 0). Used by the simulator to look like a real autopilot.
+pub fn all_defaults(fw: Firmware) -> Vec<(String, f32)> {
+    let Some(sec) = all().get(fw.meta_key()) else { return Vec::new() };
+    sec.iter()
+        .filter(|(k, _)| !k.contains(':') && k.len() <= 16)
+        .map(|(k, m)| {
+            let v = m.values.first().map(|(v, _)| *v as f32).or(m.range.map(|(lo, _)| lo as f32)).unwrap_or(0.0);
+            (k.clone(), v)
+        })
+        .collect()
+}

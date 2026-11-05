@@ -1,23 +1,35 @@
+#![allow(deprecated)]
 //! Mission Planner UI (egui/eframe). One codebase for desktop, Android and iOS.
 
 pub mod app;
 pub mod assets;
+pub mod firmware_ui;
 pub mod fonts;
 mod demo;
 pub mod hud;
+pub mod log_browse;
 pub mod map;
 pub mod platform;
+pub mod rtcm;
+pub mod sitl;
 pub mod theme;
+pub mod tools;
 pub mod views;
+pub mod zedgraph;
 
 pub use app::MissionPlannerApp;
 
 pub const APP_NAME: &str = "Mission Planner";
 
+/// Program.cs: `name + " " + ProductVersion + " build " + version`.
+pub fn title_base() -> String {
+    format!("{APP_NAME} 1.3.83 build {}-rs", env!("CARGO_PKG_VERSION"))
+}
+
 fn options() -> eframe::NativeOptions {
     eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title(format!("{APP_NAME} {} (Rust)", env!("CARGO_PKG_VERSION")))
+            .with_title(title_base())
             .with_inner_size([1280.0, 800.0])
             .with_min_inner_size([360.0, 480.0]),
         ..Default::default()

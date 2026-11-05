@@ -80,7 +80,12 @@ struct Vehicle {
     boot: Instant,
     params: BTreeMap<String, f32>,
     mission: Vec<Locationwp>,
-    upload: Option<(u16, Vec<Locationwp>)>,
+    upload: Option<(u16, Vec<Locationwp>, MavMissionType)>,
+    fence: Vec<Locationwp>,
+    accel_step: u8,
+    magcal: Option<u8>,
+    param_queue: std::collections::VecDeque<usize>,
+    rally: Vec<Locationwp>,
     armed: bool,
     mode: u32,
     pos: PointLatLngAlt, // alt = relative metres
@@ -136,9 +141,27 @@ impl Vehicle {
             ("RC3_MIN", 1100.0),
             ("RC3_MAX", 1900.0),
             ("COMPASS_USE", 1.0),
+            ("COMPASS_DEV_ID", 97539.0),
+            ("COMPASS_PRIO1_ID", 97539.0),
+            ("COMPASS_EXTERNAL", 1.0),
+            ("COMPASS_ORIENT", 0.0),
+            ("INS_ACC_ID", 2753028.0),
+            ("INS_GYR_ID", 2752772.0),
+            ("BARO1_DEVID", 65540.0),
             ("GPS_TYPE", 1.0),
         ] {
             params.insert(n.to_string(), v);
+        }
+        // real firmware defaults first, then the metadata fallback for everything else
+        for line in include_str!("../assets/copter_defaults.parm").lines() {
+            if let Some((k, v)) = line.split_once(',') {
+                if let Ok(v) = v.trim().parse::<f32>() {
+                    params.entry(k.trim().to_string()).or_insert(v);
+                }
+            }
+        }
+        for (k, v) in crate::param_meta::all_defaults(crate::firmware::Firmware::ArduCopter2) {
+            params.entry(k).or_insert(v);
         }
         Self {
             sock,
@@ -154,6 +177,11 @@ impl Vehicle {
                 ..Default::default()
             }],
             upload: None,
+            fence: Vec::new(),
+            accel_step: 0,
+            magcal: None,
+            param_queue: Default::default(),
+            rally: Vec::new(),
             armed: false,
             mode: MODE_STABILIZE,
             pos: PointLatLngAlt::new(SITL_HOME.lat, SITL_HOME.lng, 0.0),
@@ -200,11 +228,23 @@ impl Vehicle {
             MavSeverity::MAV_SEVERITY_INFO,
             "ArduCopter V4.6.0 (rust-sim)",
         );
+        self.text(MavSeverity::MAV_SEVERITY_INFO, "ChibiOS: rust-sim");
+        self.text(MavSeverity::MAV_SEVERITY_INFO, "SITL 0042001F 3331510A 34363732");
         while !stop.load(Ordering::Relaxed) {
             if let Ok((n, _)) = self.sock.recv_from(&mut buf) {
                 let mut r = mavlink::MavlinkReader::new(&buf[..n]);
                 while let Ok((_, msg)) = r.read_any_message::<MavMessage>() {
                     self.handle(msg);
+                }
+            }
+            if !self.param_queue.is_empty() {
+                let count = self.params.len() as u16;
+                let names: Vec<(String, f32)> = self.params.iter().map(|(k, v)| (k.clone(), *v)).collect();
+                for _ in 0..25 {
+                    let Some(i) = self.param_queue.pop_front() else { break };
+                    if let Some((k, v)) = names.get(i).cloned() {
+                        self.send_param(&k, v, i as u16, count);
+                    }
                 }
             }
             let now = Instant::now();
@@ -224,12 +264,8 @@ impl Vehicle {
     fn handle(&mut self, msg: MavMessage) {
         match msg {
             MavMessage::PARAM_REQUEST_LIST(_) => {
-                let all: Vec<(String, f32)> =
-                    self.params.iter().map(|(k, v)| (k.clone(), *v)).collect();
-                let count = all.len() as u16;
-                for (i, (k, v)) in all.into_iter().enumerate() {
-                    self.send_param(&k, v, i as u16, count);
-                }
+                // stream the list over time like a real autopilot
+                self.param_queue = (0..self.params.len()).collect();
             }
             MavMessage::PARAM_REQUEST_READ(r) => {
                 let count = self.params.len() as u16;
@@ -258,11 +294,7 @@ impl Vehicle {
                 }
             }
             MavMessage::MISSION_REQUEST_LIST(r) => {
-                let count = if r.mission_type == MavMissionType::MAV_MISSION_TYPE_MISSION {
-                    self.mission.len() as u16
-                } else {
-                    0
-                };
+                let count = self.list(r.mission_type).len() as u16;
                 self.send(MavMessage::MISSION_COUNT(MISSION_COUNT_DATA {
                     count,
                     target_system: 255,
@@ -272,21 +304,25 @@ impl Vehicle {
                 }));
             }
             MavMessage::MISSION_REQUEST_INT(r) => {
-                if let Some(wp) = self.mission.get(r.seq as usize).copied() {
+                if let Some(wp) = self.list(r.mission_type).get(r.seq as usize).copied() {
                     if let Some(item) = wp.to_mission_item_int(r.seq, 255, 190, r.mission_type) {
                         self.send(MavMessage::MISSION_ITEM_INT(item));
                     }
                 }
             }
             MavMessage::MISSION_COUNT(c) => {
-                if c.mission_type != MavMissionType::MAV_MISSION_TYPE_MISSION {
+                if c.mission_type == MavMissionType::MAV_MISSION_TYPE_ALL {
                     self.mission_ack(c.mission_type, MavMissionResult::MAV_MISSION_UNSUPPORTED);
                 } else if c.count == 0 {
-                    self.mission.truncate(1);
+                    match c.mission_type {
+                        MavMissionType::MAV_MISSION_TYPE_FENCE => self.fence.clear(),
+                        MavMissionType::MAV_MISSION_TYPE_RALLY => self.rally.clear(),
+                        _ => self.mission.truncate(1),
+                    }
                     self.mission_ack(c.mission_type, MavMissionResult::MAV_MISSION_ACCEPTED);
                 } else {
-                    self.upload = Some((c.count, Vec::new()));
-                    self.request_upload_item(0);
+                    self.upload = Some((c.count, Vec::new(), c.mission_type));
+                    self.request_upload_item(0, c.mission_type);
                 }
             }
             MavMessage::MISSION_ITEM_INT(m) => {
@@ -299,7 +335,7 @@ impl Vehicle {
                 }
                 let mut done = None;
                 let mut next = None;
-                if let Some((count, items)) = self.upload.as_mut() {
+                if let Some((count, items, _)) = self.upload.as_mut() {
                     if m.seq as usize == items.len() {
                         items.push(Locationwp::from_mission_item_int(&m));
                         if items.len() == *count as usize {
@@ -310,13 +346,17 @@ impl Vehicle {
                     }
                 }
                 if let Some(n) = next {
-                    self.request_upload_item(n);
+                    self.request_upload_item(n, m.mission_type);
                 }
                 if let Some(items) = done {
                     self.upload = None;
-                    self.mission = items;
+                    match m.mission_type {
+                        MavMissionType::MAV_MISSION_TYPE_FENCE => self.fence = items,
+                        MavMissionType::MAV_MISSION_TYPE_RALLY => self.rally = items,
+                        _ => self.mission = items,
+                    }
                     self.mission_ack(m.mission_type, MavMissionResult::MAV_MISSION_ACCEPTED);
-                    let n = self.mission.len();
+                    let n = self.list(m.mission_type).len();
                     self.text(
                         MavSeverity::MAV_SEVERITY_INFO,
                         &format!("Mission: {n} items received"),
@@ -329,16 +369,44 @@ impl Vehicle {
             }
             MavMessage::SET_MODE(s) => self.set_mode(s.custom_mode),
             MavMessage::COMMAND_LONG(c) => self.command(c),
+            MavMessage::LOG_REQUEST_LIST(_) => {
+                // two onboard DataFlash logs
+                let size = crate::dataflash::sample_log().len() as u32;
+                for (id, size) in [(1u16, size), (2, size)] {
+                    self.send(MavMessage::LOG_ENTRY(LOG_ENTRY_DATA { time_utc: 1_700_000_000 + id as u32 * 600, size, id, num_logs: 2, last_log_num: 2 }));
+                }
+            }
+            MavMessage::LOG_REQUEST_DATA(r) => {
+                let log = crate::dataflash::sample_log();
+                let size = log.len() as u32;
+                let end = r.ofs.saturating_add(r.count).min(size);
+                let mut ofs = r.ofs;
+                while ofs < end {
+                    let n = (end - ofs).min(90);
+                    let mut data = [0u8; 90];
+                    data[..n as usize].copy_from_slice(&log[ofs as usize..(ofs + n) as usize]);
+                    self.send(MavMessage::LOG_DATA(LOG_DATA_DATA { ofs, id: r.id, count: n as u8, data }));
+                    ofs += n;
+                }
+            }
             _ => {}
         }
     }
 
-    fn request_upload_item(&mut self, seq: u16) {
+    fn list(&self, mt: MavMissionType) -> &Vec<Locationwp> {
+        match mt {
+            MavMissionType::MAV_MISSION_TYPE_FENCE => &self.fence,
+            MavMissionType::MAV_MISSION_TYPE_RALLY => &self.rally,
+            _ => &self.mission,
+        }
+    }
+
+    fn request_upload_item(&mut self, seq: u16, mt: MavMissionType) {
         self.send(MavMessage::MISSION_REQUEST_INT(MISSION_REQUEST_INT_DATA {
             seq,
             target_system: 255,
             target_component: 190,
-            mission_type: MavMissionType::MAV_MISSION_TYPE_MISSION,
+            mission_type: mt,
         }));
     }
 
@@ -451,6 +519,33 @@ impl Vehicle {
                 }
                 MavResult::MAV_RESULT_ACCEPTED
             }
+            MAV_CMD_PREFLIGHT_CALIBRATION if c.param5 == 1.0 => {
+                // full 6-position accel cal: ask for each position in turn
+                self.accel_step = 1;
+                self.ack(c.command, MavResult::MAV_RESULT_ACCEPTED);
+                self.ask_accel_pos();
+                return;
+            }
+            MAV_CMD_DO_START_MAG_CAL => {
+                self.magcal = Some(0);
+                MavResult::MAV_RESULT_ACCEPTED
+            }
+            MAV_CMD_DO_CANCEL_MAG_CAL => {
+                self.magcal = None;
+                MavResult::MAV_RESULT_ACCEPTED
+            }
+            MAV_CMD_DO_ACCEPT_MAG_CAL => MavResult::MAV_RESULT_ACCEPTED,
+            MAV_CMD_ACCELCAL_VEHICLE_POS => {
+                if self.accel_step >= 6 {
+                    self.accel_step = 0;
+                    self.text(MavSeverity::MAV_SEVERITY_INFO, "Calibration successful");
+                    self.send_accel_pos(16777215.0);
+                } else if self.accel_step > 0 {
+                    self.accel_step += 1;
+                    self.ask_accel_pos();
+                }
+                return;
+            }
             MAV_CMD_PREFLIGHT_CALIBRATION
             | MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN
             | MAV_CMD_DO_SET_SERVO
@@ -459,6 +554,23 @@ impl Vehicle {
             _ => MavResult::MAV_RESULT_UNSUPPORTED,
         };
         self.ack(c.command, res);
+    }
+
+    fn ask_accel_pos(&mut self) {
+        let names = ["", "level", "on its LEFT side", "on its RIGHT side", "nose DOWN", "nose UP", "on its BACK"];
+        let n = names[self.accel_step as usize];
+        self.text(MavSeverity::MAV_SEVERITY_CRITICAL, &format!("Place vehicle {n} and press any key."));
+        self.send_accel_pos(self.accel_step as f32);
+    }
+
+    fn send_accel_pos(&mut self, pos: f32) {
+        self.send(MavMessage::COMMAND_LONG(COMMAND_LONG_DATA {
+            param1: pos,
+            command: MavCmd::MAV_CMD_ACCELCAL_VEHICLE_POS,
+            target_system: 255,
+            target_component: 190,
+            ..Default::default()
+        }));
     }
 
     fn home_position(&mut self) {
@@ -643,7 +755,31 @@ impl Vehicle {
         }
     }
 
+    fn magcal_tick(&mut self) {
+        let Some(pct) = self.magcal else { return };
+        let pct = (pct + 10).min(100);
+        self.magcal = if pct >= 100 { None } else { Some(pct) };
+        self.send(MavMessage::MAG_CAL_PROGRESS(MAG_CAL_PROGRESS_DATA { compass_id: 0, completion_pct: pct, cal_status: MagCalStatus::MAG_CAL_RUNNING_STEP_TWO, ..Default::default() }));
+        if pct >= 100 {
+            self.send(MavMessage::MAG_CAL_REPORT(MAG_CAL_REPORT_DATA {
+                fitness: 4.3,
+                ofs_x: 12.0,
+                ofs_y: -31.0,
+                ofs_z: 44.0,
+                diag_x: 1.0,
+                diag_y: 1.0,
+                diag_z: 1.0,
+                compass_id: 0,
+                cal_status: MagCalStatus::MAG_CAL_SUCCESS,
+                autosaved: 1,
+                ..Default::default()
+            }));
+            self.text(MavSeverity::MAV_SEVERITY_INFO, "Mag(0) good orientation: 0 1.0");
+        }
+    }
+
     fn slow_telemetry(&mut self) {
+        self.magcal_tick();
         let mut base = MavModeFlag::MAV_MODE_FLAG_CUSTOM_MODE_ENABLED
             | MavModeFlag::MAV_MODE_FLAG_STABILIZE_ENABLED;
         if self.armed {
@@ -709,6 +845,20 @@ impl Vehicle {
             servo2_raw: thr,
             servo3_raw: thr,
             servo4_raw: thr,
+            ..Default::default()
+        }));
+        let t = self.boot.elapsed().as_secs_f32();
+        self.send(MavMessage::RAW_IMU(RAW_IMU_DATA {
+            time_usec: self.boot.elapsed().as_micros() as u64,
+            xacc: (self.pitch * 17.0 + (t * 7.0).sin() * 3.0) as i16,
+            yacc: (-self.roll * 17.0 + (t * 5.0).cos() * 3.0) as i16,
+            zacc: -1000 + ((t * 9.0).sin() * 5.0) as i16,
+            xgyro: ((t * 3.0).sin() * 4.0) as i16,
+            ygyro: ((t * 2.0).cos() * 4.0) as i16,
+            zgyro: ((t * 1.3).sin() * 2.0) as i16,
+            xmag: (200.0 * self.yaw.to_radians().cos()) as i16,
+            ymag: (-200.0 * self.yaw.to_radians().sin()) as i16,
+            zmag: -420,
             ..Default::default()
         }));
         self.send(MavMessage::VIBRATION(VIBRATION_DATA {

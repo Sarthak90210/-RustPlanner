@@ -5,7 +5,7 @@
 //! an `RwLock`, and one-shot results come back as [`LinkEvent`]s.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::io;
+use std::io::{self, Write};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -68,6 +68,31 @@ pub struct LinkShared {
     pub bytes_received: u64,
     pub link_lost: bool,
     pub autopilot_version: Option<(u32, u64)>,
+    /// Last ACCELCAL_VEHICLE_POS requested by the vehicle (COMMAND_LONG from the autopilot).
+    pub accelcal_pos: Option<u32>,
+    /// MAG_CAL_PROGRESS completion % per compass
+    pub mag_progress: [u8; 3],
+    /// MAG_CAL_REPORT per compass: (status, fitness, offsets)
+    pub mag_report: [Option<(String, f32, [f32; 3])>; 3],
+    /// Set while replaying a tlog.
+    pub playback: Option<crate::tlog::PlaybackInfo>,
+    /// The tlog being recorded for this connection.
+    pub tlog_path: Option<std::path::PathBuf>,
+    /// LOG_ENTRY list: (id, size bytes, time_utc)
+    pub log_entries: Vec<(u16, u32, u32)>,
+    /// MAVLink Inspector: last message per (sysid, compid, msgid) with rate.
+    pub inspector: BTreeMap<(u8, u8, u32), MsgStat>,
+}
+
+/// One row of the MAVLink Inspector.
+#[derive(Debug, Clone)]
+pub struct MsgStat {
+    pub name: &'static str,
+    pub count: u64,
+    /// messages per second (smoothed)
+    pub rate: f32,
+    pub last: Instant,
+    pub msg: MavMessage,
 }
 
 impl LinkShared {
@@ -98,6 +123,8 @@ pub enum LinkEvent {
         result: String,
         ok: bool,
     },
+    LogList(usize),
+    LogDownloaded { id: u16, path: std::path::PathBuf, result: Result<(), String> },
 }
 
 #[derive(Debug, Clone)]
@@ -133,6 +160,16 @@ pub enum LinkCommand {
         lng: f64,
         alt: f32,
     },
+    /// LOG_REQUEST_LIST
+    LogList,
+    /// REQUEST_DATA_STREAM rates (CurrentState.rateattitude etc.)
+    SetStreamRates { attitude: u16, position: u16, status: u16, rc: u16, sensors: u16 },
+    /// LOG_REQUEST_DATA for a whole log, written to `path`.
+    LogDownload { id: u16, size: u32, path: std::path::PathBuf },
+    /// LOG_ERASE
+    LogErase,
+    /// Telemetry log playback control.
+    Playback(crate::tlog::PlaybackCommand),
 }
 
 /// Handle to a running link (equivalent of `MainV2.comPort`).
@@ -141,15 +178,30 @@ pub struct Link {
     tx: Sender<LinkCommand>,
     pub events: Receiver<LinkEvent>,
     thread: Option<JoinHandle<()>>,
+    playback: Option<Sender<crate::tlog::PlaybackCommand>>,
 }
 
 impl Link {
     pub fn connect(spec: ConnectionSpec) -> Self {
+        Self::connect_with(spec, None)
+    }
+
+    /// Replay a telemetry log as if it were a live connection.
+    pub fn playback(path: &std::path::Path) -> io::Result<Self> {
+        let shared = Arc::new(RwLock::new(LinkShared::default()));
+        let ctl = crate::tlog::playback(path, shared.clone())?;
+        let (tx, _rx) = crossbeam_channel::unbounded();
+        let (_etx, erx) = crossbeam_channel::unbounded();
+        Ok(Self { shared, tx, events: erx, thread: None, playback: Some(ctl) })
+    }
+
+    /// Connect, recording a `.tlog` into `tlog_dir` (Mission Planner logs every connection).
+    pub fn connect_with(spec: ConnectionSpec, tlog_dir: Option<std::path::PathBuf>) -> Self {
         let shared = Arc::new(RwLock::new(LinkShared {
             status: LinkStatus::Connecting,
             spec: Some(spec.clone()),
             progress: Some(Progress {
-                label: "Connecting...".into(),
+                label: if spec == ConnectionSpec::Auto { "Waiting for ports".into() } else { "Connecting Mavlink".into() },
                 done: 0,
                 total: 0,
             }),
@@ -161,8 +213,19 @@ impl Link {
         let thread = std::thread::Builder::new()
             .name("mavlink".into())
             .spawn(move || {
-                let result = comms::open(&spec)
-                    .and_then(|t| Worker::new(t, sh.clone(), rx, etx.clone()).run());
+                let result = comms::open(&spec).and_then(|t| {
+                    let mut w = Worker::new(t, sh.clone(), rx, etx.clone());
+                    if let Some(dir) = &tlog_dir {
+                        match crate::tlog::TlogWriter::create(dir) {
+                            Ok(tl) => {
+                                sh.write().tlog_path = Some(tl.path.clone());
+                                w.tlog = Some(tl);
+                            }
+                            Err(e) => log::warn!("tlog: {e}"),
+                        }
+                    }
+                    w.run()
+                });
                 let err = result.err().map(|e| e.to_string());
                 {
                     let mut s = sh.write();
@@ -177,11 +240,25 @@ impl Link {
             tx,
             events: erx,
             thread: Some(thread),
+            playback: None,
         }
     }
 
     pub fn send(&self, cmd: LinkCommand) {
+        if let (Some(p), LinkCommand::Playback(c)) = (&self.playback, &cmd) {
+            let _ = p.send(*c);
+            return;
+        }
         let _ = self.tx.send(cmd);
+    }
+
+    /// A sender for background producers (e.g. RTK injection).
+    pub fn sender(&self) -> Sender<LinkCommand> {
+        self.tx.clone()
+    }
+
+    pub fn is_playback(&self) -> bool {
+        self.playback.is_some()
     }
 
     pub fn status(&self) -> LinkStatus {
@@ -191,6 +268,9 @@ impl Link {
 
 impl Drop for Link {
     fn drop(&mut self) {
+        if let Some(p) = &self.playback {
+            let _ = p.send(crate::tlog::PlaybackCommand::Stop);
+        }
         let _ = self.tx.send(LinkCommand::Disconnect);
         if let Some(t) = self.thread.take() {
             let _ = t.join();
@@ -235,7 +315,20 @@ struct PendingCmd {
     tries: u32,
 }
 
+struct LogDownload {
+    id: u16,
+    size: u32,
+    path: std::path::PathBuf,
+    data: Vec<u8>,
+    have: Vec<bool>,
+    last_rx: Instant,
+    retries: u32,
+}
+
 struct Worker {
+    tlog: Option<crate::tlog::TlogWriter>,
+    log_dl: Option<LogDownload>,
+    log_expect: Option<u16>,
     reader: mavlink::MavlinkReader<Box<dyn Transport>>,
     shared: Arc<RwLock<LinkShared>>,
     rx: Receiver<LinkCommand>,
@@ -278,6 +371,9 @@ impl Worker {
     ) -> Self {
         let now = Instant::now();
         Self {
+            tlog: None,
+            log_dl: None,
+            log_expect: None,
             reader: mavlink::MavlinkReader::new(transport),
             shared,
             rx,
@@ -304,8 +400,21 @@ impl Worker {
                 self.handle_command(cmd)?;
             }
 
-            match self.reader.read_any_message::<MavMessage>() {
-                Ok((hdr, msg)) => self.handle_message(hdr, msg)?,
+            match self.reader.read_any_raw_message::<MavMessage>() {
+                Ok(raw) => {
+                    let bytes = match &raw {
+                        mavlink::MAVLinkMessageRaw::V1(m) => m.raw_bytes(),
+                        mavlink::MAVLinkMessageRaw::V2(m) => m.raw_bytes(),
+                    };
+                    if let Some(t) = self.tlog.as_mut() {
+                        t.write_frame(bytes);
+                    }
+                    let hdr = MavHeader { system_id: raw.system_id(), component_id: raw.component_id(), sequence: raw.sequence() };
+                    match <MavMessage as mavlink::Message>::parse(raw.version(), raw.message_id(), raw.payload()) {
+                        Ok(msg) => self.handle_message(hdr, msg)?,
+                        Err(e) => log::trace!("mavlink parse: {e:?}"),
+                    }
+                }
                 Err(MessageReadError::Io(e)) if is_timeout(&e) => {}
                 Err(MessageReadError::Io(e)) => return Err(e),
                 Err(MessageReadError::Parse(e)) => log::trace!("mavlink parse: {e:?}"),
@@ -322,9 +431,13 @@ impl Worker {
             sequence: self.seq,
         };
         self.seq = self.seq.wrapping_add(1);
+        let mut buf = Vec::with_capacity(280);
+        mavlink::write_versioned_msg(&mut buf, MavlinkVersion::V2, hdr, &msg).map_err(|e| io::Error::other(format!("{e:?}")))?;
+        if let Some(t) = self.tlog.as_mut() {
+            t.write_frame(&buf);
+        }
         let w = self.reader.get_mut();
-        mavlink::write_versioned_msg(w, MavlinkVersion::V2, hdr, &msg)
-            .map_err(|e| io::Error::other(format!("{e:?}")))?;
+        w.write_all(&buf)?;
         w.flush()
     }
 
@@ -428,6 +541,50 @@ impl Worker {
                     target_system: self.target_sys,
                     target_component: self.target_comp,
                 }))?
+            }
+            LinkCommand::Playback(_) => {}
+            LinkCommand::SetStreamRates { attitude, position, status, rc, sensors } => {
+                let streams = [
+                    (MavDataStream::MAV_DATA_STREAM_EXTENDED_STATUS, status),
+                    (MavDataStream::MAV_DATA_STREAM_POSITION, position),
+                    (MavDataStream::MAV_DATA_STREAM_EXTRA1, attitude),
+                    (MavDataStream::MAV_DATA_STREAM_EXTRA2, attitude),
+                    (MavDataStream::MAV_DATA_STREAM_EXTRA3, status),
+                    (MavDataStream::MAV_DATA_STREAM_RAW_SENSORS, sensors),
+                    (MavDataStream::MAV_DATA_STREAM_RC_CHANNELS, rc),
+                ];
+                for (stream, r) in streams {
+                    self.send(MavMessage::REQUEST_DATA_STREAM(REQUEST_DATA_STREAM_DATA {
+                        req_message_rate: r,
+                        target_system: self.target_sys,
+                        target_component: self.target_comp,
+                        req_stream_id: stream,
+                        start_stop: if r > 0 { 1 } else { 0 },
+                    }))?;
+                }
+            }
+            LinkCommand::LogList => {
+                self.shared.write().log_entries.clear();
+                self.log_expect = None;
+                self.send(MavMessage::LOG_REQUEST_LIST(LOG_REQUEST_LIST_DATA {
+                    start: 0,
+                    end: 0xffff,
+                    target_system: self.target_sys,
+                    target_component: self.target_comp,
+                }))?;
+            }
+            LinkCommand::LogErase => self.send(MavMessage::LOG_ERASE(LOG_ERASE_DATA { target_system: self.target_sys, target_component: self.target_comp }))?,
+            LinkCommand::LogDownload { id, size, path } => {
+                let chunks = (size as usize).div_ceil(90);
+                self.log_dl = Some(LogDownload { id, size, path, data: vec![0; size as usize], have: vec![false; chunks], last_rx: Instant::now(), retries: 0 });
+                self.set_progress(Some(Progress { label: format!("Downloading log {id}"), done: 0, total: size as usize }));
+                self.send(MavMessage::LOG_REQUEST_DATA(LOG_REQUEST_DATA_DATA {
+                    ofs: 0,
+                    count: 0xffff_ffff,
+                    id,
+                    target_system: self.target_sys,
+                    target_component: self.target_comp,
+                }))?;
             }
             LinkCommand::Guided { lat, lng, alt } => {
                 // setGuidedModeWP: MISSION_ITEM_INT with current = 2
@@ -565,6 +722,24 @@ impl Worker {
     // ---------------------------------------------------------------- incoming messages
 
     fn handle_message(&mut self, hdr: MavHeader, msg: MavMessage) -> io::Result<()> {
+        {
+            use mavlink::Message;
+            let now = Instant::now();
+            let key = (hdr.system_id as u8, hdr.component_id, msg.message_id());
+            let mut s = self.shared.write();
+            match s.inspector.get_mut(&key) {
+                Some(st) => {
+                    let dt = now.duration_since(st.last).as_secs_f32().max(1e-3);
+                    st.rate = st.rate * 0.8 + (1.0 / dt) * 0.2;
+                    st.count += 1;
+                    st.last = now;
+                    st.msg = msg.clone();
+                }
+                None => {
+                    s.inspector.insert(key, MsgStat { name: msg.message_name(), count: 1, rate: 0.0, last: now, msg: msg.clone() });
+                }
+            }
+        }
         // Pick the first autopilot that heartbeats as our target (MAVlist[0]).
         if !self.got_heartbeat {
             if let MavMessage::HEARTBEAT(hb) = &msg {
@@ -619,6 +794,22 @@ impl Worker {
             if let MavMessage::AUTOPILOT_VERSION(v) = &msg {
                 s.autopilot_version = Some((v.flight_sw_version, v.capabilities.bits()));
             }
+            if let MavMessage::MAG_CAL_PROGRESS(m) = &msg {
+                if let Some(p) = s.mag_progress.get_mut(m.compass_id as usize) {
+                    *p = m.completion_pct;
+                }
+            }
+            if let MavMessage::MAG_CAL_REPORT(m) = &msg {
+                if let Some(r) = s.mag_report.get_mut(m.compass_id as usize) {
+                    let st = format!("{:?}", m.cal_status).trim_start_matches("MAG_CAL_").to_string();
+                    *r = Some((st, m.fitness, [m.ofs_x, m.ofs_y, m.ofs_z]));
+                }
+            }
+            if let MavMessage::COMMAND_LONG(c) = &msg {
+                if c.command == MavCmd::MAV_CMD_ACCELCAL_VEHICLE_POS {
+                    s.accelcal_pos = Some(c.param1 as u32);
+                }
+            }
         }
 
         match msg {
@@ -636,6 +827,20 @@ impl Worker {
             MavMessage::MISSION_REQUEST(r) => self.on_mission_request(r.seq, false)?,
             MavMessage::MISSION_ACK(a) => self.on_mission_ack(a),
             MavMessage::COMMAND_ACK(a) => self.on_command_ack(a),
+            MavMessage::LOG_ENTRY(e) => {
+                let n = {
+                    let mut s = self.shared.write();
+                    if e.num_logs > 0 && !s.log_entries.iter().any(|x| x.0 == e.id) {
+                        s.log_entries.push((e.id, e.size, e.time_utc));
+                    }
+                    s.log_entries.len()
+                };
+                self.log_expect = Some(e.num_logs);
+                if n >= e.num_logs as usize {
+                    self.event(LinkEvent::LogList(n));
+                }
+            }
+            MavMessage::LOG_DATA(d) => self.on_log_data(d)?,
             _ => {}
         }
         Ok(())
@@ -932,10 +1137,67 @@ impl Worker {
         }
     }
 
+    fn on_log_data(&mut self, d: LOG_DATA_DATA) -> io::Result<()> {
+        let mut finished = None;
+        if let Some(dl) = self.log_dl.as_mut() {
+            if d.id == dl.id {
+                let ofs = d.ofs as usize;
+                let n = (d.count as usize).min(90).min(dl.data.len().saturating_sub(ofs));
+                dl.data[ofs..ofs + n].copy_from_slice(&d.data[..n]);
+                if let Some(h) = dl.have.get_mut(ofs / 90) {
+                    *h = true;
+                }
+                dl.last_rx = Instant::now();
+                let got = dl.have.iter().filter(|h| **h).count();
+                self.shared.write().progress = Some(Progress { label: format!("Downloading log {}", dl.id), done: (got * 90).min(dl.size as usize), total: dl.size as usize });
+                if got == dl.have.len() || d.count == 0 {
+                    finished = self.log_dl.take();
+                }
+            }
+        }
+        if let Some(dl) = finished {
+            self.set_progress(None);
+            let result = std::fs::create_dir_all(dl.path.parent().unwrap_or(std::path::Path::new(".")))
+                .and_then(|_| std::fs::write(&dl.path, &dl.data))
+                .map_err(|e| e.to_string());
+            self.send(MavMessage::LOG_REQUEST_END(LOG_REQUEST_END_DATA { target_system: self.target_sys, target_component: self.target_comp }))?;
+            self.event(LinkEvent::LogDownloaded { id: dl.id, path: dl.path, result });
+        }
+        Ok(())
+    }
+
+    /// Re-request the first missing log chunk once the stream goes quiet.
+    fn log_retry(&mut self) -> io::Result<()> {
+        let mut req = None;
+        let mut fail = None;
+        if let Some(dl) = self.log_dl.as_mut() {
+            if dl.last_rx.elapsed() > Duration::from_millis(1000) {
+                dl.retries += 1;
+                dl.last_rx = Instant::now();
+                if dl.retries > 20 {
+                    fail = Some((dl.id, dl.path.clone()));
+                } else if let Some(first) = dl.have.iter().position(|h| !h) {
+                    let last = dl.have[first..].iter().position(|h| *h).map(|k| first + k).unwrap_or(dl.have.len());
+                    req = Some((dl.id, (first * 90) as u32, ((last - first) * 90) as u32));
+                }
+            }
+        }
+        if let Some((id, path)) = fail {
+            self.log_dl = None;
+            self.set_progress(None);
+            self.event(LinkEvent::LogDownloaded { id, path, result: Err("Timeout".into()) });
+        }
+        if let Some((id, ofs, count)) = req {
+            self.send(MavMessage::LOG_REQUEST_DATA(LOG_REQUEST_DATA_DATA { ofs, count, id, target_system: self.target_sys, target_component: self.target_comp }))?;
+        }
+        Ok(())
+    }
+
     // ---------------------------------------------------------------- periodic work
 
     fn tick(&mut self) -> io::Result<()> {
         let now = Instant::now();
+        self.log_retry()?;
 
         if now.duration_since(self.last_heartbeat_tx) >= Duration::from_secs(1) {
             self.last_heartbeat_tx = now;

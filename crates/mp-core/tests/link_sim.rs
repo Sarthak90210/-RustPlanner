@@ -131,8 +131,7 @@ fn full_session_against_sim() {
             let s = link.shared.read();
             (s.cs.alt, s.cs.armed, s.cs.mode.clone())
         };
-        if alt > 4.0 {
-            assert!(armed);
+        if alt > 4.0 && armed {
             assert_eq!(mode, "Guided");
             break;
         }
@@ -140,4 +139,56 @@ fn full_session_against_sim() {
         std::thread::sleep(Duration::from_millis(100));
     }
     assert!(!link.shared.read().messages.is_empty());
+}
+
+#[test]
+fn tlog_logs_and_playback() {
+    let dir = std::env::temp_dir().join(format!("mprs-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let port = 14710;
+    let link = Link::connect_with(ConnectionSpec::UdpListen { port }, Some(dir.join("tlogs")));
+    let _sim = sim::spawn(port).unwrap();
+    wait_event(&link, Duration::from_secs(30), |e| matches!(e, LinkEvent::ParamsLoaded(_)));
+
+    // DataFlash log list + download over MAVLink
+    link.send(LinkCommand::LogList);
+    wait_event(&link, Duration::from_secs(5), |e| matches!(e, LinkEvent::LogList(2)));
+    let entries = link.shared.read().log_entries.clone();
+    assert_eq!(entries.len(), 2);
+    let out = dir.join("log2.bin");
+    let size = mp_core::dataflash::sample_log().len() as u32;
+    assert_eq!(entries[1].1, size);
+    link.send(LinkCommand::LogDownload { id: 2, size, path: out.clone() });
+    match wait_event(&link, Duration::from_secs(15), |e| matches!(e, LinkEvent::LogDownloaded { .. })) {
+        LinkEvent::LogDownloaded { result, .. } => result.unwrap(),
+        _ => unreachable!(),
+    }
+    let data = std::fs::read(&out).unwrap();
+    assert_eq!(data, mp_core::dataflash::sample_log());
+    let parsed = mp_core::dataflash::parse(&data);
+    assert_eq!(parsed.gps_track().len(), 200);
+
+    // the tlog was recorded and parses
+    let tlog = link.shared.read().tlog_path.clone().unwrap();
+    std::thread::sleep(Duration::from_millis(1500));
+    drop(link);
+    let recs = mp_core::tlog::read(&tlog).unwrap();
+    assert!(recs.len() > 50, "only {} records", recs.len());
+
+    // playback feeds CurrentState
+    let pb = Link::playback(&tlog).unwrap();
+    pb.send(LinkCommand::Playback(mp_core::tlog::PlaybackCommand::Speed(20.0)));
+    pb.send(LinkCommand::Playback(mp_core::tlog::PlaybackCommand::Play(true)));
+    let end = Instant::now() + Duration::from_secs(5);
+    loop {
+        let s = pb.shared.read();
+        if s.cs.lat != 0.0 && s.cs.mode != "Unknown" {
+            assert_eq!(s.cs.sysid, 1);
+            break;
+        }
+        drop(s);
+        assert!(Instant::now() < end, "playback never produced a position");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }

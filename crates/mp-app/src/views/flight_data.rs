@@ -39,17 +39,51 @@ const QUICK_COLORS: [Color32; 6] = [
 ];
 
 /// CMB_action items (MAV_CMD names offered by the Actions tab).
+/// FlightData.actions enum (CMB_action items) and the command each one sends.
 const ACTIONS: &[(&str, u16, [f32; 7])] = &[
-    ("RETURN_TO_LAUNCH", 20, [0.0; 7]),
-    ("LAND", 21, [0.0; 7]),
-    ("MISSION_START", 300, [0.0; 7]),
-    ("PREFLIGHT_CALIBRATION", 241, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-    ("PREFLIGHT_REBOOT_SHUTDOWN", 246, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-    ("DO_DIGICAM_CONTROL", 203, [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
-    ("DO_SET_SERVO", 183, [0.0; 7]),
-    ("DO_REPEAT_SERVO", 184, [0.0; 7]),
-    ("DO_SET_RELAY", 181, [0.0; 7]),
+    ("Loiter_Unlim", 17, [0.0; 7]),
+    ("Return_To_Launch", 20, [0.0; 7]),
+    ("Preflight_Calibration", 241, [1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0]),
+    ("Mission_Start", 300, [0.0; 7]),
+    ("Preflight_Reboot_Shutdown", 246, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+    ("Trigger_Camera", 203, [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
+    ("System_Time", 0, [0.0; 7]),
+    ("Battery_Reset", 42651, [255.0, 100.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+    ("ADSB_Out_Ident", 10001, [0.0; 7]),
+    ("Scripting_cmd_stop_and_restart", 42701, [3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+    ("Scripting_cmd_stop", 42701, [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+    ("HighLatency_Enable", 2600, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+    ("HighLatency_Disable", 2600, [0.0; 7]),
+    ("Toggle_Safety_Switch", 5300, [0.0; 7]),
+    ("Parachute_Release", 208, [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+    ("Engine_Start", 223, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+    ("Engine_Stop", 223, [0.0; 7]),
+    ("Terminate_Flight", 185, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+    ("Format_SD_Card", 526, [1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+    ("Reboot_Mass_Storage", 246, [3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
 ];
+
+enum Prompt {
+    /// CustomMessageBox YesNo
+    Confirm { title: String, text: String, then: Confirmed },
+    /// InputBox with one or more fields
+    Input { title: String, fields: Vec<(String, String)>, then: Inputted },
+}
+
+#[derive(Clone, Copy)]
+enum Confirmed {
+    DoAction(usize),
+    Arm(bool),
+}
+
+#[derive(Clone, Copy)]
+enum Inputted {
+    FlyToHereAlt(f64, f64),
+    FlyToCoords,
+    PointCameraCoords,
+    AddPoi(f64, f64),
+    SendMessage,
+}
 
 const MOUNT_MODES: &[&str] = &["RETRACT", "NEUTRAL", "MAVLINK_TARGETING", "RC_TARGETING", "GPS_POINT"];
 
@@ -73,12 +107,26 @@ pub struct FlightDataView {
     last_armed: bool,
     armed_at: Instant,
     left_w: f32,
+    prompt: Option<Prompt>,
+    pois: Vec<(f64, f64, String)>,
+    camera_overlap: bool,
+    graph: crate::zedgraph::TuningGraph,
+    tlog_name: String,
+    hud_window: Option<hud::HudClick>,
+    log_browse: crate::log_browse::LogBrowse,
+    analysis: Option<(String, Vec<(String, String, String)>)>,
+    raw_sensor: bool,
+    logdl_open: bool,
+    logdl_busy: bool,
+    logdl_queue: Vec<(u16, u32)>,
+    logdl_selected: std::collections::BTreeSet<u16>,
+    logdl_output: Vec<String>,
 }
 
 impl Default for FlightDataView {
     fn default() -> Self {
         Self {
-            tab: 0,
+            tab: std::env::var("MP_FDTAB").ok().and_then(|v| v.parse().ok()).unwrap_or(0),
             auto_pan: true,
             tuning: false,
             mission: Vec::new(),
@@ -97,11 +145,32 @@ impl Default for FlightDataView {
             last_armed: false,
             armed_at: Instant::now(),
             left_w: 300.0,
+            prompt: None,
+            pois: Vec::new(),
+            camera_overlap: false,
+            graph: Default::default(),
+            tlog_name: String::new(),
+            hud_window: None,
+            log_browse: Default::default(),
+            analysis: None,
+            raw_sensor: false,
+            logdl_open: false,
+            logdl_busy: false,
+            logdl_queue: Vec::new(),
+            logdl_selected: Default::default(),
+            logdl_output: Vec::new(),
         }
     }
 }
 
 impl FlightDataView {
+    /// temp form "logindex": open the log browser on a picked .bin.
+    pub fn open_log_browse(&mut self) {
+        if let Some(path) = crate::log_browse::pick_bin() {
+            self.log_browse.load(path);
+        }
+    }
+
     pub fn on_event(&mut self, e: &LinkEvent) {
         if let LinkEvent::MissionDownloaded { mission_type: 0, items } = e {
             self.mission = items.clone();
@@ -154,8 +223,8 @@ impl FlightDataView {
             .show(ui, |ui| self.map_area(ui, app, &cs));
     }
 
-    fn hud_ui(&self, ui: &mut egui::Ui, cs: &CurrentState, connected: bool, size: Vec2) {
-        hud::show(
+    fn hud_ui(&mut self, ui: &mut egui::Ui, cs: &CurrentState, connected: bool, size: Vec2) {
+        let click = hud::show(
             ui,
             &hud::HudInput {
                 cs,
@@ -165,6 +234,64 @@ impl FlightDataView {
             },
             size,
         );
+        if let Some(c) = click {
+            self.hud_window = Some(c);
+        }
+        self.hud_windows(ui.ctx(), cs);
+    }
+
+    /// EKF Status / Vibration / PreArm windows opened from the HUD.
+    fn hud_windows(&mut self, ctx: &egui::Context, cs: &CurrentState) {
+        let Some(which) = self.hud_window else { return };
+        let mut open = true;
+        let title = match which {
+            hud::HudClick::Ekf => "EKF Status",
+            hud::HudClick::Vibe => "Vibration",
+            hud::HudClick::PreArm => "PreArm Checks",
+        };
+        egui::Window::new(title).open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| match which {
+            hud::HudClick::Ekf => {
+                for (n, v) in [("velocity_variance", cs.ekf_velv), ("pos_horiz_variance", cs.ekf_posh), ("pos_vert_variance", cs.ekf_posv), ("compass_variance", cs.ekf_compass), ("terrain_alt_variance", cs.ekf_terrain)] {
+                    ui.horizontal(|ui| {
+                        ui.add_sized(Vec2::new(130.0, 18.0), egui::Label::new(RichText::new(n).color(Color32::WHITE)));
+                        let col = if v > 0.8 { Color32::RED } else if v > 0.5 { Color32::from_rgb(255, 165, 0) } else { theme::GREEN };
+                        let (r, _) = ui.allocate_exact_size(Vec2::new(200.0, 16.0), Sense::hover());
+                        ui.painter().rect_filled(r, 0.0, theme::CONTROL_BG);
+                        ui.painter().rect_filled(Rect::from_min_size(r.min, Vec2::new(r.width() * v.clamp(0.0, 1.0), r.height())), 0.0, col);
+                        theme::label(ui, format!("{v:.2}"));
+                    });
+                }
+                ui.separator();
+                let names = ["attitude", "velocity_horiz", "velocity_vert", "pos_horiz_rel", "pos_horiz_abs", "pos_vert_abs", "pos_vert_agl", "const_pos_mode", "pred_pos_horiz_rel", "pred_pos_horiz_abs", "uninitialized", "gps_glitch"];
+                egui::Grid::new("ekfflags").num_columns(2).show(ui, |ui| {
+                    for (i, n) in names.iter().enumerate() {
+                        let on = cs.ekfflags & (1 << i) != 0;
+                        theme::label(ui, *n);
+                        ui.label(RichText::new(if on { "True" } else { "False" }).color(if on { theme::GREEN } else { Color32::GRAY }));
+                        ui.end_row();
+                    }
+                });
+            }
+            hud::HudClick::Vibe => {
+                for (n, v) in [("Vibe X", cs.vibex), ("Vibe Y", cs.vibey), ("Vibe Z", cs.vibez)] {
+                    ui.horizontal(|ui| {
+                        ui.add_sized(Vec2::new(60.0, 18.0), egui::Label::new(RichText::new(n).color(Color32::WHITE)));
+                        let col = if v > 60.0 { Color32::RED } else if v > 30.0 { Color32::from_rgb(255, 165, 0) } else { theme::GREEN };
+                        let (r, _) = ui.allocate_exact_size(Vec2::new(220.0, 16.0), Sense::hover());
+                        ui.painter().rect_filled(r, 0.0, theme::CONTROL_BG);
+                        ui.painter().rect_filled(Rect::from_min_size(r.min, Vec2::new(r.width() * (v / 90.0).clamp(0.0, 1.0), r.height())), 0.0, col);
+                        theme::label(ui, format!("{v:.1}"));
+                    });
+                }
+                theme::label(ui, format!("Clipping  Primary {}  Secondary {}  Tertiary {}", cs.clip0, cs.clip1, cs.clip2));
+            }
+            hud::HudClick::PreArm => {
+                theme::label(ui, if cs.sensors_health & 0x1000_0000 != 0 { "Ready to Arm" } else { "Not Ready to Arm" });
+            }
+        });
+        if !open {
+            self.hud_window = None;
+        }
     }
 
     // ------------------------------------------------------------------ tabControlactions
@@ -186,8 +313,8 @@ impl FlightDataView {
                 8 => aux_ui(ui, app),
                 9 => scripts_ui(ui, app),
                 10 => payload_ui(ui, app),
-                11 => tlogs_ui(ui, app),
-                _ => dflogs_ui(ui, app),
+                11 => self.tlogs_ui(ui, app),
+                _ => self.dflogs_ui(ui, app),
             });
         });
     }
@@ -251,7 +378,7 @@ impl FlightDataView {
         };
         let rr = cell(0, 0);
         ui.put(rr, |ui: &mut egui::Ui| {
-            egui::ComboBox::from_id_salt("CMB_action")
+            egui::ComboBox::from_id_salt("CMB_action").wrap_mode(egui::TextWrapMode::Truncate)
                 .width(rr.width() - 4.0)
                 .selected_text(ACTIONS[self.action_sel].0)
                 .show_ui(ui, |ui| {
@@ -264,7 +391,7 @@ impl FlightDataView {
         let rr = cell(0, 1);
         let wp_count = self.mission.len().max(1) as u16;
         ui.put(rr, |ui: &mut egui::Ui| {
-            egui::ComboBox::from_id_salt("CMB_setwp")
+            egui::ComboBox::from_id_salt("CMB_setwp").wrap_mode(egui::TextWrapMode::Truncate)
                 .width(rr.width() - 4.0)
                 .selected_text(self.wp_sel.to_string())
                 .show_ui(ui, |ui| {
@@ -278,7 +405,7 @@ impl FlightDataView {
         let sel_name = modes.iter().find(|(k, _)| *k == sel_mode).map(|(_, n)| n.clone()).unwrap_or_default();
         let rr = cell(0, 2);
         ui.put(rr, |ui: &mut egui::Ui| {
-            egui::ComboBox::from_id_salt("CMB_modes")
+            egui::ComboBox::from_id_salt("CMB_modes").wrap_mode(egui::TextWrapMode::Truncate)
                 .width(rr.width() - 4.0)
                 .selected_text(sel_name)
                 .show_ui(ui, |ui| {
@@ -292,7 +419,7 @@ impl FlightDataView {
         });
         let rr = cell(0, 3);
         ui.put(rr, |ui: &mut egui::Ui| {
-            egui::ComboBox::from_id_salt("CMB_mountmode")
+            egui::ComboBox::from_id_salt("CMB_mountmode").wrap_mode(egui::TextWrapMode::Truncate)
                 .width(rr.width() - 4.0)
                 .selected_text(MOUNT_MODES[self.mount_sel])
                 .show_ui(ui, |ui| {
@@ -324,8 +451,10 @@ impl FlightDataView {
             .enumerate()
         {
             let rr = cell(4, r);
-            let top = Rect::from_min_size(rr.min, Vec2::new(rr.width(), 14.0));
-            let bot = Rect::from_min_max(Pos2::new(rr.left(), rr.top() + 15.0), rr.max);
+            // ModifyandSet: FlowLayoutPanel with the NumericUpDown above the MyButton
+            let cellr = rr.expand(3.0);
+            let top = Rect::from_min_size(cellr.min, Vec2::new(cellr.width(), 16.0));
+            let bot = Rect::from_min_max(Pos2::new(cellr.left(), cellr.top() + 17.0), cellr.max);
             ui.put(top, egui::DragValue::new(val).speed(0.5).max_decimals(1));
             if ui.put(bot, |ui: &mut egui::Ui| theme::button_sized(ui, text, bot.size())).clicked() {
                 clicked = Some(text);
@@ -342,8 +471,11 @@ impl FlightDataView {
         let fw = cs.firmware;
         match text {
             "Do Action" => {
-                let (_, cmd, p) = ACTIONS[self.action_sel];
-                link.send(LinkCommand::CommandLong { command: cmd, params: p });
+                self.prompt = Some(Prompt::Confirm {
+                    title: "Action".into(),
+                    text: format!("Are you sure you want to do {} ?", ACTIONS[self.action_sel].0),
+                    then: Confirmed::DoAction(self.action_sel),
+                });
             }
             "Set WP" => link.send(LinkCommand::SetCurrentWp(self.wp_sel)),
             "Set Mode" => link.send(LinkCommand::SetMode(sel_mode)),
@@ -352,7 +484,10 @@ impl FlightDataView {
                     link.send(LinkCommand::SetMode(k));
                 }
             }
-            "Arm/ Disarm" => link.send(LinkCommand::Arm { arm: !cs.armed, force: false }),
+            "Arm/ Disarm" => {
+                let action = if cs.armed { "Disarm" } else { "Arm" };
+                self.prompt = Some(Prompt::Confirm { title: action.into(), text: format!("Are you sure you want to {action}"), then: Confirmed::Arm(!cs.armed) });
+            }
             "Restart Mission" => {
                 link.send(LinkCommand::SetCurrentWp(0));
                 if let Some(k) = find("Auto") {
@@ -375,9 +510,17 @@ impl FlightDataView {
             }
             "Abort Landing" => link.send(LinkCommand::CommandLong { command: 191, params: [0.0; 7] }),
             "Set Home Alt" => {
-                if let Some(h) = cs.home {
-                    app.toasts.info(format!("Home alt {:.1} m", h.alt));
+                // BUT_Homealt: zero the displayed altitude here (toggle back to reset)
+                let mut s = link.shared.write();
+                if s.cs.altoffsethome != 0.0 {
+                    s.cs.altoffsethome = 0.0;
+                } else {
+                    s.cs.altoffsethome = s.cs.alt;
                 }
+            }
+            "Raw Sensor View" => self.raw_sensor = true,
+            "Message" => {
+                self.prompt = Some(Prompt::Input { title: "Message".into(), fields: vec![("Enter Message".into(), String::new())], then: Inputted::SendMessage })
             }
             "Set Mount" => link.send(LinkCommand::CommandLong { command: 204, params: [self.mount_sel as f32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }),
             other => not_ported(app, other),
@@ -407,11 +550,8 @@ impl FlightDataView {
         egui::CentralPanel::default().frame(egui::Frame::new()).show(ui, |ui| {
             if self.tuning {
                 // splitContainer1.Panel1: zg1 tuning graph
-                let h = ui.available_height() * 0.5;
-                let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), h), Sense::hover());
-                ui.painter().rect_filled(r, 0.0, Color32::from_rgb(0x37, 0x37, 0x38));
-                ui.painter().rect_filled(r.shrink(20.0), 0.0, Color32::from_rgb(0x1f, 0x1f, 0x20));
-                ui.painter().text(r.center_top() + Vec2::new(0.0, 4.0), egui::Align2::CENTER_TOP, "Tuning", fonts::ui_id(12.0), Color32::WHITE);
+                let size = Vec2::new(ui.available_width(), ui.available_height() * 0.5);
+                self.graph.ui(ui, cs, size);
                 ui.add_space(4.0);
             }
             self.map_ui(ui, app, cs);
@@ -428,6 +568,17 @@ impl FlightDataView {
         let assets = app.assets;
         let zoom = app.settings.fd_map.zoom;
         let guided = self.guided_target;
+        let pois = self.pois.clone();
+        let pl = &app.settings.planner;
+        let flag = |k: &str| pl.get(k).map(|v| v == "True").unwrap_or(true);
+        let line_opts = map::LineOpts {
+            heading: flag("GMapMarkerBase_DisplayHeading"),
+            cog: flag("GMapMarkerBase_DisplayCOG"),
+            target: flag("GMapMarkerBase_DisplayTarget"),
+            nav_bearing: flag("GMapMarkerBase_DisplayNavBearing"),
+            length: pl.get("GMapMarkerBase_length").and_then(|v| v.parse().ok()).unwrap_or(500.0),
+        };
+        let track_len: usize = pl.get("NUM_tracklength").and_then(|v| v.parse().ok()).unwrap_or(200);
         let mut context_latlng = None;
         let out = map::show(ui, &mut app.settings.fd_map, app.tiles, |_ui, view, resp, painter| {
             let pts: Vec<Pos2> = mission
@@ -453,13 +604,19 @@ impl FlightDataView {
             if let Some((lat, lng)) = guided {
                 map::draw_pin(painter, assets.marker_red.id(), assets.marker_shadow.id(), view.to_screen(lat, lng));
             }
+            for (lat, lng, name) in &pois {
+                let p = view.to_screen(*lat, *lng);
+                map::draw_pin(painter, assets.marker_red.id(), assets.marker_shadow.id(), p);
+                painter.text(p + Vec2::new(8.0, -20.0), egui::Align2::LEFT_TOP, name, fonts::ui_id(fonts::UI_SIZE), Color32::WHITE);
+            }
             if cs.track.len() > 1 {
-                let t: Vec<Pos2> = cs.track.iter().map(|&(a, b)| view.to_screen(a, b)).collect();
+                let skip = cs.track.len().saturating_sub(track_len);
+                let t: Vec<Pos2> = cs.track.iter().skip(skip).map(|&(a, b)| view.to_screen(a, b)).collect();
                 painter.add(egui::Shape::line(t, Stroke::new(2.0, Color32::from_rgb(255, 0, 255))));
             }
             if has_pos {
                 let p = view.to_screen(cs.lat, cs.lng);
-                map::draw_heading_lines(painter, p, cs.yaw, cs.groundcourse, cs.target_bearing);
+                map::draw_heading_lines(painter, p, cs.yaw, cs.groundcourse, cs.target_bearing, cs.nav_bearing, &line_opts);
                 map::draw_quad(painter, p, cs.yaw, cs.sysid.max(1));
             }
             if resp.secondary_clicked() {
@@ -477,44 +634,119 @@ impl FlightDataView {
             self.auto_pan = false;
         }
         let link = app.link;
+        let mut ctx_action: Option<&str> = None;
         out.response.context_menu(|ui| {
-            let ll: (f64, f64) = ui.ctx().data(|d| d.get_temp(egui::Id::unique("fd_ctx_ll"))).unwrap_or_default();
-            if ui.button("Fly To Here").clicked() {
-                if let Some(l) = link {
-                    l.send(LinkCommand::Guided { lat: ll.0, lng: ll.1, alt: self.guided_alt });
-                    self.guided_target = Some(ll);
+            // contextMenuStripMap, in FlightData.Designer.cs order
+            for item in ["Fly To Here", "Fly To Here Alt", "Fly To Coords", "Add Poi", "Point Camera Here", "Point Camera Coords", "Trigger Camera NOW", "Flight Planner"] {
+                if ui.button(item).clicked() {
+                    ctx_action = Some(item);
+                    ui.close();
                 }
-                ui.close();
             }
-            ui.horizontal(|ui| {
-                ui.label("Fly To Here Alt");
-                ui.add(egui::DragValue::new(&mut self.guided_alt).suffix(" m"));
+            ui.menu_button("Set Home Here", |ui| {
+                if ui.button("Set Home Here").clicked() {
+                    ctx_action = Some("Set Home Here");
+                    ui.close();
+                }
+                if ui.button("Set EKF Origin Here").clicked() {
+                    ctx_action = Some("Set EKF Origin Here");
+                    ui.close();
+                }
             });
-            if ui.button("Point Camera Here").clicked() {
-                if let Some(l) = link {
-                    l.send(LinkCommand::CommandLong { command: mavcmd::DO_SET_ROI, params: [0.0, 0.0, 0.0, 0.0, ll.0 as f32, ll.1 as f32, 0.0] });
-                }
-                ui.close();
-            }
-            if ui.button("Trigger Camera NOW").clicked() {
-                if let Some(l) = link {
-                    l.send(LinkCommand::CommandLong { command: 203, params: [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0] });
-                }
-                ui.close();
-            }
-            if ui.button("Set Home Here").clicked() {
-                if let Some(l) = link {
-                    l.send(LinkCommand::CommandLong { command: 179, params: [0.0, 0.0, 0.0, 0.0, ll.0 as f32, ll.1 as f32, 0.0] });
-                }
-                ui.close();
-            }
             if ui.button("TakeOff").clicked() {
-                if let Some(l) = link {
-                    l.send(LinkCommand::CommandLong { command: mavcmd::TAKEOFF, params: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, self.guided_alt] });
-                }
+                ctx_action = Some("TakeOff");
                 ui.close();
+            }
+            if ui.checkbox(&mut self.camera_overlap, "Camera Overlap").clicked() {
+                ui.close();
+            }
+            for item in ["Jump To Tag", "Gimbal Video"] {
+                if ui.button(item).clicked() {
+                    ctx_action = Some(item);
+                    ui.close();
+                }
             }
         });
+        if let Some(a) = ctx_action {
+            let ll: (f64, f64) = ui.ctx().data(|d| d.get_temp(egui::Id::unique("fd_ctx_ll"))).unwrap_or_default();
+            let need_link = |app: &mut AppCtx| {
+                if link.is_none() {
+                    app.toasts.error("Please Connect First");
+                }
+                link
+            };
+            match a {
+                "Fly To Here" => {
+                    if let Some(l) = need_link(app) {
+                        l.send(LinkCommand::Guided { lat: ll.0, lng: ll.1, alt: self.guided_alt });
+                        self.guided_target = Some(ll);
+                    }
+                }
+                "Fly To Here Alt" => {
+                    self.prompt = Some(Prompt::Input {
+                        title: "Enter Alt".into(),
+                        fields: vec![("Enter Guided Mode Alt".into(), format!("{}", self.guided_alt))],
+                        then: Inputted::FlyToHereAlt(ll.0, ll.1),
+                    })
+                }
+                "Fly To Coords" => {
+                    self.prompt = Some(Prompt::Input {
+                        title: "Fly To Coords".into(),
+                        fields: vec![("Lat".into(), format!("{:.7}", ll.0)), ("Lng".into(), format!("{:.7}", ll.1)), ("Alt".into(), format!("{}", self.guided_alt))],
+                        then: Inputted::FlyToCoords,
+                    })
+                }
+                "Add Poi" => self.prompt = Some(Prompt::Input { title: "POI".into(), fields: vec![("Enter ID".into(), String::new())], then: Inputted::AddPoi(ll.0, ll.1) }),
+                "Point Camera Here" => {
+                    if let Some(l) = need_link(app) {
+                        l.send(LinkCommand::CommandLong { command: mavcmd::DO_SET_ROI, params: [0.0, 0.0, 0.0, 0.0, ll.0 as f32, ll.1 as f32, 0.0] });
+                    }
+                }
+                "Point Camera Coords" => {
+                    self.prompt = Some(Prompt::Input {
+                        title: "Point Camera Coords".into(),
+                        fields: vec![("Lat".into(), format!("{:.7}", ll.0)), ("Lng".into(), format!("{:.7}", ll.1)), ("Alt".into(), "0".into())],
+                        then: Inputted::PointCameraCoords,
+                    })
+                }
+                "Trigger Camera NOW" => {
+                    if let Some(l) = need_link(app) {
+                        l.send(LinkCommand::CommandLong { command: 203, params: [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0] });
+                    }
+                }
+                "Flight Planner" => app.settings.view = crate::app::View::FlightPlan,
+                "Set Home Here" => {
+                    if let Some(l) = need_link(app) {
+                        l.send(LinkCommand::CommandLong { command: 179, params: [0.0, 0.0, 0.0, 0.0, ll.0 as f32, ll.1 as f32, 0.0] });
+                    }
+                }
+                "Set EKF Origin Here" => {
+                    if let Some(l) = need_link(app) {
+                        use mp_core::mavlink::dialects::ardupilotmega::{MavMessage, SET_GPS_GLOBAL_ORIGIN_DATA};
+                        l.send(LinkCommand::Send(Box::new(MavMessage::SET_GPS_GLOBAL_ORIGIN(SET_GPS_GLOBAL_ORIGIN_DATA {
+                            latitude: (ll.0 * 1e7) as i32,
+                            longitude: (ll.1 * 1e7) as i32,
+                            altitude: 0,
+                            target_system: cs.sysid,
+                            time_usec: 0,
+                        }))));
+                    }
+                }
+                "TakeOff" => {
+                    if let Some(l) = need_link(app) {
+                        l.send(LinkCommand::CommandLong { command: mavcmd::TAKEOFF, params: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, self.guided_alt] });
+                    }
+                }
+                "Jump To Tag" => not_ported(app, "Jump To Tag"),
+                "Gimbal Video" => not_ported(app, "Gimbal Video"),
+                _ => {}
+            }
+        }
+        self.prompt_ui(ui.ctx(), app);
+        self.log_downloader(ui.ctx(), app);
+        self.log_browse.ui(ui.ctx());
+        self.analysis_window(ui.ctx());
+        self.raw_sensor_window(ui.ctx(), cs);
 
         // ---- overlays positioned as in splitContainer1.Panel2
         let p = ui.painter().with_clip_rect(mrect);
@@ -539,6 +771,429 @@ impl FlightDataView {
         p.rect_filled(gr, 0.0, Color32::BLACK);
         p.galley(gr.min, gl, Color32::WHITE);
     }
+}
+
+impl FlightDataView {
+    /// CustomMessageBox (Yes/No) and InputBox prompts.
+    fn prompt_ui(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
+        let Some(prompt) = self.prompt.as_mut() else { return };
+        let mut result: Option<bool> = None;
+        let title = match prompt {
+            Prompt::Confirm { title, .. } | Prompt::Input { title, .. } => title.clone(),
+        };
+        egui::Modal::new(egui::Id::unique("fd_prompt")).show(ctx, |ui| {
+            ui.set_min_width(280.0);
+            ui.label(RichText::new(&title).strong().color(Color32::WHITE));
+            ui.add_space(6.0);
+            let confirm = matches!(prompt, Prompt::Confirm { .. });
+            match prompt {
+                Prompt::Confirm { text, .. } => {
+                    theme::label(ui, text.as_str());
+                }
+                Prompt::Input { fields, .. } => {
+                    for (l, v) in fields.iter_mut() {
+                        theme::label(ui, l.as_str());
+                        ui.text_edit_singleline(v);
+                    }
+                }
+            }
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                let (yes, no) = if confirm { ("Yes", "No") } else { ("OK", "Cancel") };
+                if theme::button(ui, yes).clicked() {
+                    result = Some(true);
+                }
+                if theme::button(ui, no).clicked() {
+                    result = Some(false);
+                }
+            });
+        });
+        let Some(ok) = result else { return };
+        let Some(prompt) = self.prompt.take() else { return };
+        if !ok {
+            return;
+        }
+        let link = app.link;
+        let num = |f: &[(String, String)], i: usize| f.get(i).and_then(|(_, v)| v.trim().parse::<f64>().ok());
+        match prompt {
+            Prompt::Confirm { then, .. } => {
+                let Some(l) = link else {
+                    app.toasts.error("Please Connect First");
+                    return;
+                };
+                match then {
+                    Confirmed::DoAction(i) => {
+                        let (name, cmd, p) = ACTIONS[i];
+                        if name == "System_Time" {
+                            use mp_core::mavlink::dialects::ardupilotmega::{MavMessage, SYSTEM_TIME_DATA};
+                            let us = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_micros() as u64).unwrap_or(0);
+                            l.send(LinkCommand::Send(Box::new(MavMessage::SYSTEM_TIME(SYSTEM_TIME_DATA { time_unix_usec: us, time_boot_ms: 0 }))));
+                        } else {
+                            l.send(LinkCommand::CommandLong { command: cmd, params: p });
+                        }
+                    }
+                    Confirmed::Arm(arm) => l.send(LinkCommand::Arm { arm, force: false }),
+                }
+            }
+            Prompt::Input { fields, then, .. } => match then {
+                Inputted::FlyToHereAlt(lat, lng) => {
+                    if let (Some(l), Some(alt)) = (link, num(&fields, 0)) {
+                        self.guided_alt = alt as f32;
+                        l.send(LinkCommand::Guided { lat, lng, alt: alt as f32 });
+                        self.guided_target = Some((lat, lng));
+                    }
+                }
+                Inputted::FlyToCoords => {
+                    if let (Some(l), Some(lat), Some(lng), Some(alt)) = (link, num(&fields, 0), num(&fields, 1), num(&fields, 2)) {
+                        l.send(LinkCommand::Guided { lat, lng, alt: alt as f32 });
+                        self.guided_target = Some((lat, lng));
+                    }
+                }
+                Inputted::PointCameraCoords => {
+                    if let (Some(l), Some(lat), Some(lng), Some(alt)) = (link, num(&fields, 0), num(&fields, 1), num(&fields, 2)) {
+                        l.send(LinkCommand::CommandLong { command: mavcmd::DO_SET_ROI, params: [0.0, 0.0, 0.0, 0.0, lat as f32, lng as f32, alt as f32] });
+                    }
+                }
+                Inputted::SendMessage => {
+                    if let (Some(l), Some((_, text))) = (link, fields.first()) {
+                        use mp_core::mavlink::dialects::ardupilotmega::{MavMessage, MavSeverity, STATUSTEXT_DATA};
+                        l.send(LinkCommand::Send(Box::new(MavMessage::STATUSTEXT(STATUSTEXT_DATA { severity: MavSeverity::MAV_SEVERITY_INFO, text: text.as_str().into(), id: 0, chunk_seq: 0 }))));
+                    }
+                }
+                Inputted::AddPoi(lat, lng) => {
+                    let name = fields.first().map(|(_, v)| v.clone()).unwrap_or_default();
+                    self.pois.push((lat, lng, name));
+                }
+            },
+        }
+    }
+}
+
+impl FlightDataView {
+    /// tabTLogs: Load Log / Play/Pause / Tlog > Kml, LBL_logfn, tracklog, speed buttons.
+    fn tlogs_ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
+        let o = ui.available_rect_before_wrap().min;
+        let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));
+        let b = |ui: &mut egui::Ui, rr: Rect, t: &str| ui.put(rr, |ui: &mut egui::Ui| theme::button_sized(ui, t, rr.size())).clicked();
+        let f = fonts::ui_id(fonts::UI_SIZE);
+        let pb = app.link.filter(|l| l.is_playback());
+        let info = pb.and_then(|l| l.shared.read().playback);
+        if b(ui, r(3.0, 3.0, 80.0, 27.0), "Load Log") {
+            let picked = if crate::platform::HAS_NATIVE_DIALOGS {
+                rfd_pick_tlog()
+            } else {
+                crate::platform::list_files_in(&crate::platform::data_dir().join("logs"), &["tlog"]).last().cloned()
+            };
+            if let Some(path) = picked {
+                self.tlog_name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                app.actions.push(crate::app::AppAction::PlayTlog(path));
+            }
+        }
+        if b(ui, r(3.0, 36.0, 80.0, 27.0), "Play/Pause") {
+            if let (Some(l), Some(i)) = (pb, info) {
+                l.send(LinkCommand::Playback(mp_core::tlog::PlaybackCommand::Play(!i.playing)));
+            }
+        }
+        if b(ui, r(3.0, 69.0, 80.0, 46.0), "Tlog > Kml or Graph") {
+            not_ported(app, "Tlog > Kml or Graph");
+        }
+        ui.painter().with_clip_rect(r(94.0, 0.0, 193.0, 33.0)).text(o + Vec2::new(94.0, 10.0), egui::Align2::LEFT_TOP, &self.tlog_name, f.clone(), Color32::WHITE);
+        // tracklog: seek bar
+        let tr = r(94.0, 36.0, 157.0, 27.0);
+        let mut pos = info.map(|i| i.position).unwrap_or(0.0);
+        let resp = ui.put(tr, egui::Slider::new(&mut pos, 0.0..=1.0).show_value(false));
+        if resp.drag_stopped() || resp.clicked() {
+            if let Some(l) = pb {
+                l.send(LinkCommand::Playback(mp_core::tlog::PlaybackCommand::Seek(pos)));
+            }
+        }
+        for (x, y, w, t, sp) in [
+            (6.0, 23.0, 23.0, "0.1", 0.1f32),
+            (35.0, 23.0, 27.0, "0.25", 0.25),
+            (68.0, 23.0, 23.0, "0.5", 0.5),
+            (97.0, 23.0, 23.0, "1x", 1.0),
+            (6.0, 59.0, 23.0, "2x", 2.0),
+            (35.0, 59.0, 23.0, "5x", 5.0),
+            (64.0, 59.0, 23.0, "10x", 10.0),
+        ] {
+            if b(ui, r(94.0 + x, 69.0 + y - 23.0, w, 30.0), t) {
+                if let Some(l) = pb {
+                    l.send(LinkCommand::Playback(mp_core::tlog::PlaybackCommand::Speed(sp)));
+                }
+            }
+        }
+        let p = ui.painter();
+        p.text(o + Vec2::new(257.0, 40.0), egui::Align2::LEFT_TOP, format!("{:.2} %", pos * 100.0), f.clone(), Color32::WHITE);
+        p.text(o + Vec2::new(257.0, 76.0), egui::Align2::LEFT_TOP, format!("x {:.1}", info.map(|i| i.speed).unwrap_or(1.0)), f, Color32::WHITE);
+        ui.allocate_rect(r(0.0, 0.0, 287.0, 181.0), Sense::hover());
+    }
+
+    /// tablogbrowse: DataFlash log tools; the first button opens the Log Downloader.
+    fn dflogs_ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
+        let o = ui.available_rect_before_wrap().min;
+        let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));
+        let b = |ui: &mut egui::Ui, rr: Rect, t: &str| ui.put(rr, |ui: &mut egui::Ui| theme::button_sized(ui, t, rr.size())).clicked();
+        if b(ui, r(3.0, 3.0, 110.0, 38.0), "Download DataFlash Log Via Mavlink") {
+            match app.link.filter(|l| l.status() == LinkStatus::Connected && !l.is_playback()) {
+                Some(l) => {
+                    l.send(LinkCommand::LogList);
+                    self.logdl_open = true;
+                    self.logdl_output.push("Getting list of logs".into());
+                }
+                None => app.toasts.error("Please Connect First"),
+            }
+        }
+        for (x, y, w, h, t) in [
+            (119.0, 3.0, 87.0, 38.0, "Review a Log"),
+            (235.0, 3.0, 87.0, 38.0, "Auto Analysis"),
+            (3.0, 47.0, 110.0, 38.0, "Create KML + gpx"),
+            (119.0, 47.0, 87.0, 38.0, "Convert .Bin to .Log"),
+            (235.0, 47.0, 88.0, 38.0, "Create Matlab File"),
+            (3.0, 91.0, 110.0, 40.0, "Geo Reference Images"),
+        ] {
+            if b(ui, r(x, y, w, h), t) {
+                self.dflog_action(t, app);
+            }
+        }
+        ui.allocate_rect(r(0.0, 0.0, 330.0, 135.0), Sense::hover());
+    }
+
+    /// DataFlash log tools on a picked .bin.
+    fn dflog_action(&mut self, what: &str, app: &mut AppCtx) {
+        if what == "Geo Reference Images" {
+            not_ported(app, what);
+            return;
+        }
+        let Some(path) = crate::log_browse::pick_bin() else { return };
+        if what == "Review a Log" {
+            self.log_browse.load(path);
+            return;
+        }
+        let data = match std::fs::read(&path) {
+            Ok(d) => d,
+            Err(e) => {
+                app.toasts.error(e.to_string());
+                return;
+            }
+        };
+        let log = mp_core::dataflash::parse(&data);
+        let stem = path.with_extension("");
+        let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let res = match what {
+            "Create KML + gpx" => {
+                let (kml, gpx) = log.to_kml_gpx(&name);
+                std::fs::write(stem.with_extension("kml"), kml).and_then(|_| std::fs::write(stem.with_extension("gpx"), gpx)).map(|_| format!("{}.kml / .gpx", stem.display()))
+            }
+            "Convert .Bin to .Log" => std::fs::write(stem.with_extension("log"), log.to_text()).map(|_| format!("{}.log", stem.display())),
+            "Create Matlab File" => std::fs::write(stem.with_extension("mat"), log.to_mat_v4()).map(|_| format!("{}.mat", stem.display())),
+            "Auto Analysis" => {
+                self.analysis = Some((name.clone(), log.analysis()));
+                return;
+            }
+            _ => return,
+        };
+        match res {
+            Ok(p) => app.toasts.error(format!("Saved {p}")),
+            Err(e) => app.toasts.error(e.to_string()),
+        }
+    }
+
+    /// RAW_IMU / RC view (BUT_RAWSensor -> RAW_Sensor form).
+    fn raw_sensor_window(&mut self, ctx: &egui::Context, cs: &CurrentState) {
+        if !self.raw_sensor {
+            return;
+        }
+        let mut open = true;
+        egui::Window::new("Raw Sensor View").open(&mut open).collapsible(false).show(ctx, |ui| {
+            egui::Grid::new("raw").num_columns(4).spacing(Vec2::new(18.0, 4.0)).show(ui, |ui| {
+                for (a, b, c, n) in [("ax", "ay", "az", "Accel"), ("gx", "gy", "gz", "Gyro"), ("mx", "my", "mz", "Mag")] {
+                    theme::label(ui, n);
+                    for k in [a, b, c] {
+                        theme::label(ui, format!("{k}: {:.0}", cs.field(k).unwrap_or(0.0)));
+                    }
+                    ui.end_row();
+                }
+            });
+            ui.separator();
+            egui::Grid::new("rawrc").num_columns(2).show(ui, |ui| {
+                for i in 0..8 {
+                    theme::label(ui, format!("ch{}in {}", i + 1, cs.ch_in[i]));
+                    theme::label(ui, format!("ch{}out {}", i + 1, cs.ch_out[i]));
+                    ui.end_row();
+                }
+            });
+        });
+        if !open {
+            self.raw_sensor = false;
+        }
+    }
+
+    /// LogAnalyzer results window.
+    fn analysis_window(&mut self, ctx: &egui::Context) {
+        let Some((name, rows)) = self.analysis.clone() else { return };
+        let mut open = true;
+        egui::Window::new(format!("Log Analysis - {name}")).open(&mut open).collapsible(false).show(ctx, |ui| {
+            egui::Grid::new("analysis").num_columns(3).striped(true).show(ui, |ui| {
+                for h in ["Test", "Status", "Message"] {
+                    ui.label(RichText::new(h).strong().color(Color32::WHITE));
+                }
+                ui.end_row();
+                for (t, st, m) in rows {
+                    theme::label(ui, t);
+                    let col = match st.as_str() {
+                        "GOOD" => Color32::from_rgb(0, 200, 0),
+                        "WARN" => Color32::from_rgb(255, 165, 0),
+                        "FAIL" => Color32::RED,
+                        _ => Color32::WHITE,
+                    };
+                    ui.label(RichText::new(st).color(col).strong());
+                    theme::label(ui, m);
+                    ui.end_row();
+                }
+            });
+        });
+        if !open {
+            self.analysis = None;
+        }
+    }
+
+    /// Log/LogDownloadMavLink "Log Downloader" form.
+    fn log_downloader(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
+        if !self.logdl_open {
+            return;
+        }
+        let Some(link) = app.link.filter(|l| !l.is_playback()) else {
+            self.logdl_open = false;
+            return;
+        };
+        let (entries, prog) = {
+            let s = link.shared.read();
+            (s.log_entries.clone(), s.progress.clone())
+        };
+        // start the next queued download
+        if !self.logdl_busy {
+            if let Some((id, size)) = self.logdl_queue.pop() {
+                let dir = crate::platform::data_dir().join("logs");
+                let name = format!("{} {}.bin", chrono_like(entries.iter().find(|e| e.0 == id).map(|e| e.2).unwrap_or(0)), id);
+                self.logdl_output.push(format!("Downloading log {id} ({size} bytes)"));
+                link.send(LinkCommand::LogDownload { id, size, path: dir.join(name) });
+                self.logdl_busy = true;
+            }
+        }
+        let mut open = true;
+        egui::Window::new("Log Downloader").open(&mut open).collapsible(false).default_size(Vec2::new(784.0, 412.0)).show(ctx, |ui| {
+            ui.horizontal_top(|ui| {
+                ui.vertical(|ui| {
+                    ui.set_width(321.0);
+                    theme::label(ui, "Log files:");
+                    egui::ScrollArea::vertical().id_salt("logs").max_height(244.0).show(ui, |ui| {
+                        for (id, size, t) in &entries {
+                            let mut on = self.logdl_selected.contains(id);
+                            if ui.checkbox(&mut on, format!("{id} {} {:.0} KB", chrono_like(*t), *size as f32 / 1024.0)).changed() {
+                                if on {
+                                    self.logdl_selected.insert(*id);
+                                } else {
+                                    self.logdl_selected.remove(id);
+                                }
+                            }
+                        }
+                    });
+                    ui.add_space(8.0);
+                    egui::Grid::new("logbtn").num_columns(2).spacing(Vec2::new(24.0, 6.0)).show(ui, |ui| {
+                        if theme::button_sized(ui, "Download All Logs", Vec2::new(136.0, 23.0)).clicked() {
+                            self.logdl_queue = entries.iter().rev().map(|e| (e.0, e.1)).collect();
+                        }
+                        if theme::button_sized(ui, "First Person KML", Vec2::new(136.0, 23.0)).clicked() {
+                            self.dflog_action("Create KML + gpx", app);
+                        }
+                        ui.end_row();
+                        if theme::button_sized(ui, "Download Selected Logs", Vec2::new(136.0, 23.0)).clicked() {
+                            self.logdl_queue = entries.iter().rev().filter(|e| self.logdl_selected.contains(&e.0)).map(|e| (e.0, e.1)).collect();
+                        }
+                        if theme::button_sized(ui, "Create KML", Vec2::new(136.0, 23.0)).clicked() {
+                            self.dflog_action("Create KML + gpx", app);
+                        }
+                        ui.end_row();
+                        if theme::button_sized(ui, "Clear Logs", Vec2::new(136.0, 23.0)).clicked() {
+                            link.send(LinkCommand::LogErase);
+                            link.send(LinkCommand::LogList);
+                            self.logdl_output.push("Erasing logs".into());
+                        }
+                        if theme::button_sized(ui, ".bin to .log", Vec2::new(136.0, 23.0)).clicked() {
+                            self.dflog_action("Convert .Bin to .Log", app);
+                        }
+                        ui.end_row();
+                    });
+                    ui.add_space(8.0);
+                    let (done, total) = prog.as_ref().map(|p| (p.done, p.total)).unwrap_or((0, 0));
+                    ui.horizontal(|ui| {
+                        theme::progress(ui, if total > 0 { done as f32 / total as f32 } else { 0.0 }, Vec2::new(276.0, 19.0), "");
+                        theme::label(ui, done.to_string());
+                    });
+                });
+                ui.vertical(|ui| {
+                    theme::label(ui, "Output:");
+                    let (rr, _) = ui.allocate_exact_size(Vec2::new(451.0, 356.0), Sense::hover());
+                    ui.painter().rect_filled(rr, 0.0, theme::CONTROL_BG);
+                    ui.scope_builder(egui::UiBuilder::new().max_rect(rr.shrink(3.0)), |ui| {
+                        egui::ScrollArea::vertical().id_salt("logout").stick_to_bottom(true).show(ui, |ui| {
+                            for l in &self.logdl_output {
+                                theme::label(ui, l.as_str());
+                            }
+                        });
+                    });
+                    theme::label(ui, "NOTE: When posting support querys, please send the .bin file");
+                });
+            });
+        });
+        if !open {
+            self.logdl_open = false;
+        }
+    }
+
+    pub fn on_log_event(&mut self, e: &LinkEvent) {
+        match e {
+            LinkEvent::LogList(n) => self.logdl_output.push(format!("Got {n} logs")),
+            LinkEvent::LogDownloaded { id, path, result } => {
+                self.logdl_busy = false;
+                match result {
+                    Ok(()) => self.logdl_output.push(format!("Log {id} saved to {}", path.display())),
+                    Err(e) => self.logdl_output.push(format!("Log {id} failed: {e}")),
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn chrono_like(utc: u32) -> String {
+    if utc == 0 {
+        return "1-1-1980 0-00-00".into();
+    }
+    let days = utc as i64 / 86400;
+    let secs = utc as i64 % 86400;
+    // civil-from-days (Howard Hinnant)
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!("{y:04}-{m:02}-{d:02} {:02}-{:02}-{:02}", secs / 3600, (secs / 60) % 60, secs % 60)
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn rfd_pick_tlog() -> Option<std::path::PathBuf> {
+    rfd::FileDialog::new().add_filter("Telemetry Log", &["tlog"]).set_directory(crate::platform::data_dir().join("logs")).pick_file()
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn rfd_pick_tlog() -> Option<std::path::PathBuf> {
+    None
 }
 
 // ------------------------------------------------------------------ QuickView
@@ -784,43 +1439,6 @@ fn scripts_ui(ui: &mut egui::Ui, app: &mut AppCtx) {
 
 fn payload_ui(ui: &mut egui::Ui, app: &mut AppCtx) {
     placed_buttons(ui, app, "Payload Control", &[(10.0, 134.0, 56.0, 23.0, "Reset Position"), (73.0, 134.0, 56.0, 23.0, "Video Control")]);
-}
-
-fn tlogs_ui(ui: &mut egui::Ui, app: &mut AppCtx) {
-    placed_buttons(
-        ui,
-        app,
-        "Telemetry log playback",
-        &[
-            (3.0, 3.0, 80.0, 27.0, "Load Log"),
-            (3.0, 36.0, 80.0, 27.0, "Play/Pause"),
-            (3.0, 69.0, 80.0, 46.0, "Tlog > Kml or Graph"),
-            (96.0, 23.0, 23.0, 30.0, "0.1"),
-            (125.0, 23.0, 27.0, 30.0, "0.25"),
-            (158.0, 23.0, 23.0, 30.0, "0.5"),
-            (187.0, 23.0, 23.0, 30.0, "1x"),
-            (96.0, 59.0, 23.0, 30.0, "2x"),
-            (125.0, 59.0, 23.0, 30.0, "5x"),
-            (154.0, 59.0, 23.0, 30.0, "10x"),
-        ],
-    );
-}
-
-fn dflogs_ui(ui: &mut egui::Ui, app: &mut AppCtx) {
-    placed_buttons(
-        ui,
-        app,
-        "DataFlash logs",
-        &[
-            (3.0, 3.0, 110.0, 38.0, "Download DataFlash Log Via Mavlink"),
-            (119.0, 3.0, 87.0, 38.0, "Review a Log"),
-            (235.0, 3.0, 87.0, 38.0, "Auto Analysis"),
-            (3.0, 47.0, 110.0, 38.0, "Create KML + gpx"),
-            (119.0, 47.0, 87.0, 38.0, "Convert .Bin to .Log"),
-            (235.0, 47.0, 88.0, 38.0, "Create Matlab File"),
-            (3.0, 91.0, 110.0, 40.0, "Geo Reference Images"),
-        ],
-    );
 }
 
 fn fmt_val(v: f64) -> String {

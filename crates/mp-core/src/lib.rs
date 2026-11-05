@@ -4,7 +4,10 @@
 //! Platform independent: no UI and no OS-specific code outside of `comms` serial support.
 
 pub mod comms;
+pub mod dataflash;
+pub mod devid;
 pub mod firmware;
+pub mod fwupload;
 pub mod geo;
 pub mod link;
 pub mod mavcmd;
@@ -13,6 +16,8 @@ pub mod param_meta;
 pub mod paramfile;
 pub mod sim;
 pub mod state;
+pub mod survey;
+pub mod tlog;
 
 pub use mavlink;
 

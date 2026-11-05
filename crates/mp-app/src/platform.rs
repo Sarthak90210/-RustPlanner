@@ -108,3 +108,16 @@ pub fn list_files(exts: &[&str]) -> Vec<PathBuf> {
     v.sort();
     v
 }
+
+/// Files in `dir` with one of the given extensions, sorted.
+pub fn list_files_in(dir: &std::path::Path, exts: &[&str]) -> Vec<PathBuf> {
+    let mut v: Vec<PathBuf> = std::fs::read_dir(dir)
+        .map(|rd| {
+            rd.filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| p.extension().map(|e| exts.iter().any(|x| e.eq_ignore_ascii_case(x))).unwrap_or(false))
+                .collect()
+        })
+        .unwrap_or_default();
+    v.sort();
+    v
+}

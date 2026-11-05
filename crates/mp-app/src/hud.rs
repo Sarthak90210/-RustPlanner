@@ -129,14 +129,41 @@ fn pad(n: impl std::fmt::Display, width: usize) -> String {
     format!("{n:>width$}")
 }
 
-pub fn show(ui: &mut Ui, input: &HudInput, size: Vec2) {
-    let (resp, painter) = ui.allocate_painter(size, Sense::hover());
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HudClick {
+    Ekf,
+    Vibe,
+    PreArm,
+}
+
+/// Draws the HUD; returns which status item was clicked (HUD.cs ekfhitzone / vibehitzone /
+/// prearmhitzone).
+pub fn show(ui: &mut Ui, input: &HudInput, size: Vec2) -> Option<HudClick> {
+    let (resp, painter) = ui.allocate_painter(size, Sense::click());
     let rect = resp.rect;
     let painter = painter.with_clip_rect(rect);
     painter.rect_filled(rect, 0.0, Color32::BLACK);
     let cs = input.cs;
     let hud = Hud { painter, ctx: ui.ctx(), w: rect.width() as i32, h: rect.height() as i32, o: rect.min };
     draw(&hud, cs, input);
+
+    let pos = resp.interact_pointer_pos().filter(|_| resp.clicked())?;
+    let (w, h) = (rect.width(), rect.height());
+    let fontsize = (rect.height() as i32 / 30) as f32;
+    let ybo = if fontsize >= 8.0 { (fontsize as i32 / 3) as f32 } else { 2.0 };
+    let yto = fontsize + ybo + 2.0;
+    let ypos = [h - 2.0 * yto - ybo - 4.0, h - yto - ybo - 4.0];
+    let zone = |x: f32, y: f32, zw: f32, zh: f32| Rect::from_min_size(rect.min + Vec2::new(x, y), Vec2::new(zw, zh));
+    if zone(w - 23.0 * fontsize, ypos[1], 40.0, fontsize * 2.0).contains(pos) {
+        return Some(HudClick::Ekf);
+    }
+    if zone(w - 18.0 * fontsize, ypos[1], 40.0, fontsize * 2.0).contains(pos) {
+        return Some(HudClick::Vibe);
+    }
+    if zone(w - 26.0 * fontsize, ypos[0] - 4.0, 16.0 * fontsize, fontsize * 2.0).contains(pos) && !cs.armed {
+        return Some(HudClick::PreArm);
+    }
+    None
 }
 
 fn draw(g: &Hud, cs: &CurrentState, input: &HudInput) {

@@ -18,6 +18,8 @@ pub const BAUD_RATES: &[u32] = &[
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConnectionSpec {
+    /// Mission Planner "AUTO": scan serial ports for a MAVLink heartbeat (CommsSerialScan).
+    Auto,
     Serial {
         port: String,
         baud: u32,
@@ -40,6 +42,7 @@ pub enum ConnectionSpec {
 impl std::fmt::Display for ConnectionSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            ConnectionSpec::Auto => write!(f, "AUTO"),
             ConnectionSpec::Serial { port, baud } => write!(f, "{port} @ {baud}"),
             ConnectionSpec::Tcp { host, port } => write!(f, "tcp:{host}:{port}"),
             ConnectionSpec::UdpListen { port } => write!(f, "udp:0.0.0.0:{port}"),
@@ -67,6 +70,11 @@ pub fn serial_ports() -> Vec<String> {
 
 pub fn open(spec: &ConnectionSpec) -> io::Result<Box<dyn Transport>> {
     match spec {
+        ConnectionSpec::Auto => {
+            let (port, baud) = autoscan(std::time::Duration::from_secs(50))
+                .ok_or_else(|| io::Error::new(io::ErrorKind::TimedOut, "Timeout"))?;
+            open_serial(&port, baud)
+        }
         ConnectionSpec::Serial { port, baud } => open_serial(port, *baud),
         ConnectionSpec::Tcp { host, port } => {
             let addr = resolve(host, *port)?;
@@ -219,4 +227,39 @@ impl Write for UdpTransport {
         self.out.clear();
         Ok(())
     }
+}
+
+/// Port of `CommsSerialScan.Scan`: try every serial port at the common baud rates and return the
+/// first one that delivers a valid MAVLink HEARTBEAT.
+pub fn autoscan(deadline: std::time::Duration) -> Option<(String, u32)> {
+    let end = std::time::Instant::now() + deadline;
+    while std::time::Instant::now() < end {
+        for port in serial_ports() {
+            for baud in [115200u32, 57600, 921600, 38400, 500000] {
+                if let Ok(t) = open_serial(&port, baud) {
+                    if probe_heartbeat(t, std::time::Duration::from_millis(1500)) {
+                        return Some((port, baud));
+                    }
+                }
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    None
+}
+
+fn probe_heartbeat(t: Box<dyn Transport>, wait: std::time::Duration) -> bool {
+    use mavlink::dialects::ardupilotmega::MavMessage;
+    let end = std::time::Instant::now() + wait;
+    let mut r = mavlink::MavlinkReader::new(t);
+    while std::time::Instant::now() < end {
+        match r.read_any_message::<MavMessage>() {
+            Ok((_, MavMessage::HEARTBEAT(_))) => return true,
+            Ok(_) => {}
+            Err(mavlink::error::MessageReadError::Io(e)) if matches!(e.kind(), io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock) => {}
+            Err(mavlink::error::MessageReadError::Io(_)) => return false,
+            Err(_) => {}
+        }
+    }
+    false
 }

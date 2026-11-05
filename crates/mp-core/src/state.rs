@@ -93,6 +93,11 @@ pub struct CurrentState {
     // ekf / vibe
     pub ekfstatus: f32,
     pub ekfflags: u16,
+    pub ekf_velv: f32,
+    pub ekf_posh: f32,
+    pub ekf_posv: f32,
+    pub ekf_compass: f32,
+    pub ekf_terrain: f32,
     pub vibex: f32,
     pub vibey: f32,
     pub vibez: f32,
@@ -102,6 +107,17 @@ pub struct CurrentState {
 
     // misc
     pub rangefinder: f32,
+    /// Set Home Alt: subtracted from alt (CurrentState.altoffsethome)
+    pub altoffsethome: f32,
+    pub ax: f32,
+    pub ay: f32,
+    pub az: f32,
+    pub gx: f32,
+    pub gy: f32,
+    pub gz: f32,
+    pub mx: f32,
+    pub my: f32,
+    pub mz: f32,
     pub wind_dir: f32,
     pub wind_vel: f32,
     pub press_temp: f32,
@@ -183,6 +199,11 @@ impl Default for CurrentState {
             rxerrors: 0,
             ekfstatus: 0.0,
             ekfflags: 0,
+            ekf_velv: 0.0,
+            ekf_posh: 0.0,
+            ekf_posv: 0.0,
+            ekf_compass: 0.0,
+            ekf_terrain: 0.0,
             vibex: 0.0,
             vibey: 0.0,
             vibez: 0.0,
@@ -190,6 +211,16 @@ impl Default for CurrentState {
             clip1: 0,
             clip2: 0,
             rangefinder: 0.0,
+            altoffsethome: 0.0,
+            ax: 0.0,
+            ay: 0.0,
+            az: 0.0,
+            gx: 0.0,
+            gy: 0.0,
+            gz: 0.0,
+            mx: 0.0,
+            my: 0.0,
+            mz: 0.0,
             wind_dir: 0.0,
             wind_vel: 0.0,
             press_temp: 0.0,
@@ -302,6 +333,15 @@ impl CurrentState {
             ("clip1", self.clip1 as f64),
             ("clip2", self.clip2 as f64),
             ("rangefinder1", self.rangefinder as f64),
+            ("ax", self.ax as f64),
+            ("ay", self.ay as f64),
+            ("az", self.az as f64),
+            ("gx", self.gx as f64),
+            ("gy", self.gy as f64),
+            ("gz", self.gz as f64),
+            ("mx", self.mx as f64),
+            ("my", self.my as f64),
+            ("mz", self.mz as f64),
             ("wind_dir", self.wind_dir as f64),
             ("wind_vel", self.wind_vel as f64),
             ("press_temp", self.press_temp as f64),
@@ -401,7 +441,7 @@ impl CurrentState {
                         }
                     }
                 }
-                self.alt = g.relative_alt as f32 / 1000.0;
+                self.alt = g.relative_alt as f32 / 1000.0 - self.altoffsethome;
                 self.altasl = g.alt as f32 / 1000.0;
                 self.vx = g.vx as f32 / 100.0;
                 self.vy = g.vy as f32 / 100.0;
@@ -534,6 +574,11 @@ impl CurrentState {
             }
             MavMessage::EKF_STATUS_REPORT(e) => {
                 self.ekfflags = e.flags.bits();
+                self.ekf_velv = e.velocity_variance;
+                self.ekf_posh = e.pos_horiz_variance;
+                self.ekf_posv = e.pos_vert_variance;
+                self.ekf_compass = e.compass_variance;
+                self.ekf_terrain = e.terrain_alt_variance;
                 self.ekfstatus = e
                     .velocity_variance
                     .max(e.pos_horiz_variance)
@@ -547,6 +592,17 @@ impl CurrentState {
                 }
             }
             MavMessage::RANGEFINDER(r) => self.rangefinder = r.distance,
+            MavMessage::RAW_IMU(r) => {
+                self.ax = r.xacc as f32;
+                self.ay = r.yacc as f32;
+                self.az = r.zacc as f32;
+                self.gx = r.xgyro as f32;
+                self.gy = r.ygyro as f32;
+                self.gz = r.zgyro as f32;
+                self.mx = r.xmag as f32;
+                self.my = r.ymag as f32;
+                self.mz = r.zmag as f32;
+            }
             MavMessage::WIND(w) => {
                 self.wind_dir = (w.direction + 360.0) % 360.0;
                 self.wind_vel = w.speed;

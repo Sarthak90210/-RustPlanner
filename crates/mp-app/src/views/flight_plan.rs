@@ -53,6 +53,28 @@ pub struct FlightPlanView {
     mission_type: usize,
     waypoints_collapsed: bool,
     wpfile: String,
+    /// lists for the mission types not currently shown (index = MAV_MISSION_TYPE)
+    stash: [Vec<Locationwp>; 3],
+    polygon: Vec<(f64, f64)>,
+    drawing_polygon: bool,
+    survey_dialog: Option<SurveyParams>,
+    grid_ui: Option<Box<super::survey_ui::GridUi>>,
+    circle_dialog: Option<(f64, f64, String, String)>,
+    measure: Option<(f64, f64)>,
+}
+
+#[derive(Clone, Copy)]
+struct SurveyParams {
+    alt: f32,
+    spacing: f32,
+    angle: f32,
+    overshoot: f32,
+}
+
+impl Default for SurveyParams {
+    fn default() -> Self {
+        Self { alt: 100.0, spacing: 50.0, angle: 0.0, overshoot: 0.0 }
+    }
 }
 
 impl Default for FlightPlanView {
@@ -74,6 +96,13 @@ impl Default for FlightPlanView {
             mission_type: 0,
             waypoints_collapsed: false,
             wpfile: "...".into(),
+            stash: Default::default(),
+            polygon: Vec::new(),
+            drawing_polygon: false,
+            survey_dialog: None,
+            grid_ui: None,
+            circle_dialog: None,
+            measure: None,
         }
     }
 }
@@ -85,15 +114,23 @@ fn put_button(ui: &mut egui::Ui, r: Rect, text: &str) -> bool {
 impl FlightPlanView {
     pub fn on_event(&mut self, e: &LinkEvent, toasts: &mut Toasts) {
         match e {
+            LinkEvent::MissionDownloaded { mission_type: mt @ (1 | 2), items } => {
+                *self.list_for(*mt as usize) = items.clone();
+                toasts.info(format!("Got {} items", items.len()));
+            }
+            LinkEvent::MissionUploaded { mission_type: 1 | 2, result } => {
+                if let Err(e) = result {
+                    toasts.error(format!("Write failed: {e}"));
+                }
+            }
             LinkEvent::MissionDownloaded { mission_type: 0, items } => {
                 if items.is_empty() {
                     toasts.error("No waypoints received");
                     return;
                 }
                 self.home = items[0];
-                self.items = items[1..].to_vec();
+                *self.list_for(0) = items[1..].to_vec();
                 self.selected = None;
-                toasts.info(format!("Got {} waypoints", self.items.len()));
             }
             LinkEvent::MissionUploaded { mission_type: 0, result } => match result {
                 Ok(()) => toasts.info("Done"),
@@ -112,6 +149,16 @@ impl FlightPlanView {
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
+        // developer switch for screenshots: MP_SURVEY=1 opens Survey (Grid) on a sample polygon
+        if self.polygon.is_empty() && std::env::var_os("MP_SURVEY").is_some() {
+            let (lat, lng) = (-35.363261, 149.165230);
+            self.polygon = vec![(lat + 0.0020, lng - 0.0030), (lat + 0.0024, lng + 0.0025), (lat - 0.0015, lng + 0.0032), (lat - 0.0022, lng - 0.0020)];
+            let mut g = super::survey_ui::GridUi::new(self.polygon.clone(), (lat, lng), app.settings.fp_map.provider);
+            if let Ok(t) = std::env::var("MP_SURVEY").map(|v| v.parse::<usize>().unwrap_or(0)) {
+                g.set_tab(t);
+            }
+            self.grid_ui = Some(Box::new(g));
+        }
         if self.home.lat == 0.0 && self.home.lng == 0.0 {
             if let Some(h) = app.link.and_then(|l| l.shared.read().cs.home) {
                 self.home.lat = h.lat;
@@ -137,6 +184,19 @@ impl FlightPlanView {
 
         if self.browser_open {
             self.file_browser(ui.ctx(), app);
+        }
+        self.auto_wp_dialogs(ui.ctx(), app);
+        if self.drawing_polygon {
+            egui::Area::new(egui::Id::unique("poly_hint")).anchor(egui::Align2::CENTER_TOP, Vec2::new(0.0, 70.0)).show(ui.ctx(), |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        theme::label(ui, format!("Click the map to add polygon points ({})", self.polygon.len()));
+                        if theme::button(ui, "Done").clicked() {
+                            self.drawing_polygon = false;
+                        }
+                    });
+                });
+            });
         }
     }
 
@@ -210,7 +270,8 @@ impl FlightPlanView {
                 None => app.toasts.error("Please Connect First"),
                 Some(l) if read => l.send(LinkCommand::ReadMission { mission_type: self.mission_type as u8 }),
                 Some(l) => {
-                    let mut all = vec![self.home];
+                    // home is item 0 of the mission only; fence and rally lists are sent as-is
+                    let mut all = if self.mission_type == 0 { vec![self.home] } else { Vec::new() };
                     all.extend(self.items.iter().copied());
                     l.send(LinkCommand::WriteMission { mission_type: self.mission_type as u8, items: all });
                 }
@@ -482,7 +543,11 @@ impl FlightPlanView {
         let mut select = None;
         let mut ctx_pos = None;
         let mut mouse = None;
-        let items = self.items.clone();
+        let items = if self.mission_type == 0 { self.items.clone() } else { self.stash[0].clone() };
+        let fence = if self.mission_type == 1 { self.items.clone() } else { self.stash[1].clone() };
+        let rally = if self.mission_type == 2 { self.items.clone() } else { self.stash[2].clone() };
+        let poly = self.polygon.clone();
+        let measure = self.measure;
 
         let out = map::show(ui, &mut app.settings.fp_map, app.tiles, |_ui, view, resp, painter| {
             let mut screen: Vec<(usize, Pos2)> = Vec::new();
@@ -515,6 +580,28 @@ impl FlightPlanView {
                     let hov = hover.map(|h| (h - *p).length() < 16.0).unwrap_or(false);
                     map::draw_wp(painter, assets.marker_green.id(), assets.marker_shadow.id(), *p, &(i + 1).to_string(), selected == Some(*i), zoom, hov);
                 }
+            }
+            // fence (red polygons/circles, return point), rally (R pins), drawn polygon
+            draw_fence(painter, view, &fence);
+            for (k, r) in rally.iter().enumerate() {
+                let p = view.to_screen(r.lat, r.lng);
+                map::draw_pin(painter, assets.marker_red.id(), assets.marker_shadow.id(), p);
+                painter.text(p + Vec2::new(-5.0, -28.0), egui::Align2::LEFT_TOP, format!("R{}", k + 1), fonts::ui_id(fonts::UI_SIZE), Color32::BLACK);
+            }
+            if poly.len() > 1 {
+                let mut pts: Vec<Pos2> = poly.iter().map(|&(a, b)| view.to_screen(a, b)).collect();
+                pts.push(pts[0]);
+                painter.add(egui::Shape::line(pts, Stroke::new(2.0, Color32::from_rgb(255, 0, 255))));
+            }
+            for &(a, b) in &poly {
+                painter.circle_filled(view.to_screen(a, b), 5.0, Color32::from_rgb(255, 0, 255));
+            }
+            if let (Some((mlat, mlng)), Some(h)) = (measure, hover) {
+                let p0 = view.to_screen(mlat, mlng);
+                painter.line_segment([p0, h], Stroke::new(2.0, Color32::WHITE));
+                let (hl, hg) = view.to_latlng(h);
+                let d = PointLatLngAlt::new(mlat, mlng, 0.0).distance(&PointLatLngAlt::new(hl, hg, 0.0));
+                painter.text(h + Vec2::new(10.0, 0.0), egui::Align2::LEFT_CENTER, format!("{d:.1} m"), fonts::ui_id(12.0), Color32::WHITE);
             }
             if let Some(cs) = &cs {
                 if cs.lat != 0.0 || cs.lng != 0.0 {
@@ -583,7 +670,16 @@ impl FlightPlanView {
         if let Some(i) = select {
             self.selected = Some(i);
         }
-        if let Some((lat, lng)) = add_at {
+        if let (Some((lat, lng)), true) = (add_at, self.drawing_polygon) {
+            self.polygon.push((lat, lng));
+        } else if let (Some((lat, lng)), Some(_)) = (add_at, self.measure) {
+            let _ = (lat, lng);
+            self.measure = None;
+        } else if let (Some((lat, lng)), 1 | 2) = (add_at, self.mission_type) {
+            let id = if self.mission_type == 1 { 5001 } else { 5100 };
+            let wp = Locationwp { id, lat, lng, alt: app.settings.default_alt, frame: if id == 5100 { 3 } else { 0 }, ..Default::default() };
+            self.items.push(wp);
+        } else if let Some((lat, lng)) = add_at {
             if self.home.lat == 0.0 && self.home.lng == 0.0 && self.items.is_empty() && !app.connected() {
                 self.home.lat = lat;
                 self.home.lng = lng;
@@ -619,15 +715,18 @@ impl FlightPlanView {
         }
         ui.put(Rect::from_min_size(o + Vec2::new(w - 177.0, 3.0), Vec2::new(121.0, 21.0)), |ui: &mut egui::Ui| {
             let names = ["Mission", "Fence", "Rally"];
-            egui::ComboBox::from_id_salt("cmb_missiontype")
+            let mut to = self.mission_type;
+            let r = egui::ComboBox::from_id_salt("cmb_missiontype")
                 .width(113.0)
                 .selected_text(names[self.mission_type])
                 .show_ui(ui, |ui| {
                     for (i, n) in names.iter().enumerate() {
-                        ui.selectable_value(&mut self.mission_type, i, *n);
+                        ui.selectable_value(&mut to, i, *n);
                     }
                 })
-                .response
+                .response;
+            self.switch_type(to);
+            r
         });
         p.text(o + Vec2::new(w - 45.0, 5.0), egui::Align2::LEFT_TOP, "Zoom", f.clone(), Color32::BLACK);
         ui.put(
@@ -751,11 +850,92 @@ impl FlightPlanView {
             ui.close();
         }
         ui.separator();
-        for sub in ["Polygon", "Geo-Fence", "Rally Points", "Auto WP", "Map Tool"] {
-            ui.menu_button(sub, |ui| {
-                ui.add_enabled(false, egui::Button::new("Not available in this port yet"));
-            });
-        }
+        ui.menu_button("Polygon", |ui| {
+            if ui.button("Draw a Polygon").clicked() {
+                self.drawing_polygon = true;
+                self.polygon.clear();
+                ui.close();
+            }
+            if ui.button("Clear Polygon").clicked() {
+                self.polygon.clear();
+                self.drawing_polygon = false;
+                ui.close();
+            }
+            if ui.button("Area").clicked() {
+                let a = mp_core::survey::area(&self.polygon);
+                app.toasts.error(format!("Area: {a:.0} m2 ({:.3} km2)", a / 1e6));
+                ui.close();
+            }
+        });
+        ui.menu_button("Geo-Fence", |ui| {
+            if ui.button("Polygon Inclusion (from polygon)").clicked() {
+                self.add_fence_polygon(5001, app);
+                ui.close();
+            }
+            if ui.button("Polygon Exclusion (from polygon)").clicked() {
+                self.add_fence_polygon(5002, app);
+                ui.close();
+            }
+            if ui.button("Circle Inclusion Here").clicked() {
+                self.fence_list().push(Locationwp { id: 5003, p1: 100.0, lat, lng, frame: 0, ..Default::default() });
+                ui.close();
+            }
+            if ui.button("Circle Exclusion Here").clicked() {
+                self.fence_list().push(Locationwp { id: 5004, p1: 100.0, lat, lng, frame: 0, ..Default::default() });
+                ui.close();
+            }
+            if ui.button("Set Return Location").clicked() {
+                self.fence_list().push(Locationwp { id: 5000, lat, lng, frame: 0, ..Default::default() });
+                ui.close();
+            }
+            if ui.button("Clear").clicked() {
+                self.fence_list().clear();
+                ui.close();
+            }
+        });
+        ui.menu_button("Rally Points", |ui| {
+            if ui.button("Set Rally Point").clicked() {
+                let alt = app.settings.default_alt;
+                self.rally_list().push(Locationwp { id: 5100, lat, lng, alt, frame: 3, ..Default::default() });
+                ui.close();
+            }
+            if ui.button("Clear Rally Points").clicked() {
+                self.rally_list().clear();
+                ui.close();
+            }
+        });
+        ui.menu_button("Auto WP", |ui| {
+            if ui.button("Create WP Circle").clicked() {
+                self.circle_dialog = Some((lat, lng, "50".into(), "8".into()));
+                ui.close();
+            }
+            if ui.button("Survey (Grid)").clicked() {
+                if self.polygon.len() < 3 {
+                    app.toasts.error("Please define a polygon.");
+                } else {
+                    self.grid_ui = Some(Box::new(super::survey_ui::GridUi::new(self.polygon.clone(), (self.home.lat, self.home.lng), app.settings.fp_map.provider)));
+                }
+                ui.close();
+            }
+            if ui.button("SimpleGrid").clicked() {
+                if self.polygon.len() < 3 {
+                    app.toasts.error("Please define a polygon.");
+                } else {
+                    self.survey_dialog = Some(SurveyParams { spacing: 30.0, ..Default::default() });
+                }
+                ui.close();
+            }
+        });
+        ui.menu_button("Map Tool", |ui| {
+            if ui.button("Measure Distance").clicked() {
+                self.measure = Some((lat, lng));
+                ui.close();
+            }
+            if ui.button("Rotate Map").clicked() {
+                app.toasts.error("Rotate Map: not available in this port yet");
+                ui.close();
+            }
+        });
         ui.menu_button("File Load/Save", |ui| {
             if ui.button("Save WP File").clicked() {
                 let text = mission::write_waypoint_file(&self.home, &self.items);
@@ -806,6 +986,135 @@ impl FlightPlanView {
         }
     }
 
+    /// The list for a mission type (the active one lives in `items`).
+    fn list_for(&mut self, mt: usize) -> &mut Vec<Locationwp> {
+        if mt == self.mission_type {
+            &mut self.items
+        } else {
+            &mut self.stash[mt]
+        }
+    }
+
+    fn fence_list(&mut self) -> &mut Vec<Locationwp> {
+        self.list_for(1)
+    }
+
+    fn rally_list(&mut self) -> &mut Vec<Locationwp> {
+        self.list_for(2)
+    }
+
+    fn switch_type(&mut self, to: usize) {
+        if to != self.mission_type {
+            let cur = std::mem::take(&mut self.items);
+            self.stash[self.mission_type] = cur;
+            self.items = std::mem::take(&mut self.stash[to]);
+            self.mission_type = to;
+            self.selected = None;
+        }
+    }
+
+    fn add_fence_polygon(&mut self, cmd: u16, app: &mut AppCtx) {
+        if self.polygon.len() < 3 {
+            app.toasts.error("Please define a polygon.");
+            return;
+        }
+        let n = self.polygon.len() as f32;
+        let pts = self.polygon.clone();
+        for (lat, lng) in pts {
+            self.fence_list().push(Locationwp { id: cmd, p1: n, lat, lng, frame: 0, ..Default::default() });
+        }
+    }
+
+    /// Survey (Grid) / Create WP Circle dialogs.
+    fn auto_wp_dialogs(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
+        if let Some(g) = self.grid_ui.as_mut() {
+            match g.show(ctx, app) {
+                super::survey_ui::GridResult::Open => {}
+                super::survey_ui::GridResult::Cancel => self.grid_ui = None,
+                super::survey_ui::GridResult::Accept(list) => {
+                    self.switch_type(0);
+                    self.items.extend(list);
+                    self.grid_ui = None;
+                }
+            }
+        }
+        let mut close_survey = false;
+        let mut accept_survey = None;
+        if let Some(sp) = self.survey_dialog.as_mut() {
+            egui::Window::new("SimpleGrid").collapsible(false).resizable(false).show(ctx, |ui| {
+                egui::Grid::new("survey").num_columns(2).show(ui, |ui| {
+                    theme::label(ui, "Altitude (m)");
+                    ui.add(egui::DragValue::new(&mut sp.alt).range(1.0..=10000.0));
+                    ui.end_row();
+                    theme::label(ui, "Distance between lines (m)");
+                    ui.add(egui::DragValue::new(&mut sp.spacing).range(1.0..=5000.0));
+                    ui.end_row();
+                    theme::label(ui, "Angle (deg)");
+                    ui.add(egui::DragValue::new(&mut sp.angle).range(0.0..=360.0));
+                    ui.end_row();
+                    theme::label(ui, "Overshoot (m)");
+                    ui.add(egui::DragValue::new(&mut sp.overshoot).range(0.0..=500.0));
+                    ui.end_row();
+                });
+                let wps = mp_core::survey::grid(&self.polygon, sp.spacing as f64, sp.angle as f64, sp.overshoot as f64);
+                let area = mp_core::survey::area(&self.polygon);
+                theme::label(ui, format!("Area: {area:.0} m2   Waypoints: {}", wps.len()));
+                ui.horizontal(|ui| {
+                    if theme::button(ui, "Accept").clicked() {
+                        accept_survey = Some((wps, sp.alt));
+                    }
+                    if theme::button(ui, "Cancel").clicked() {
+                        close_survey = true;
+                    }
+                });
+            });
+        }
+        if let Some((wps, alt)) = accept_survey {
+            self.switch_type(0);
+            for (lat, lng) in wps {
+                let mut wp = self.new_wp(app, mavcmd::WAYPOINT, lat, lng);
+                wp.alt = alt;
+                self.items.push(wp);
+            }
+            close_survey = true;
+        }
+        if close_survey {
+            self.survey_dialog = None;
+        }
+
+        let mut close_circle = false;
+        let mut accept_circle = None;
+        if let Some((lat, lng, radius, points)) = self.circle_dialog.as_mut() {
+            egui::Window::new("Create WP Circle").collapsible(false).resizable(false).show(ctx, |ui| {
+                theme::label(ui, "Radius (m)");
+                ui.text_edit_singleline(radius);
+                theme::label(ui, "Points");
+                ui.text_edit_singleline(points);
+                ui.horizontal(|ui| {
+                    if theme::button(ui, "OK").clicked() {
+                        if let (Ok(r), Ok(n)) = (radius.trim().parse::<f64>(), points.trim().parse::<usize>()) {
+                            accept_circle = Some(mp_core::survey::circle((*lat, *lng), r, n));
+                        }
+                    }
+                    if theme::button(ui, "Cancel").clicked() {
+                        close_circle = true;
+                    }
+                });
+            });
+        }
+        if let Some(pts) = accept_circle {
+            self.switch_type(0);
+            for (lat, lng) in pts {
+                let wp = self.new_wp(app, mavcmd::WAYPOINT, lat, lng);
+                self.items.push(wp);
+            }
+            close_circle = true;
+        }
+        if close_circle {
+            self.circle_dialog = None;
+        }
+    }
+
     fn file_browser(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
         let mut open = true;
         let mut load = None;
@@ -842,4 +1151,39 @@ fn system_button(ui: &mut egui::Ui, text: &str, size: Vec2) -> egui::Response {
     p.rect_stroke(r, 0.0, Stroke::new(1.0, Color32::from_rgb(0xad, 0xad, 0xad)), StrokeKind::Inside);
     p.text(r.center(), egui::Align2::CENTER_CENTER, text, fonts::ui_id(fonts::UI_SIZE), Color32::BLACK);
     resp
+}
+
+/// Fence items: polygon vertex runs (p1 = vertex count), circles (p1 = radius), return point.
+fn draw_fence(painter: &egui::Painter, view: &map::MapView, fence: &[Locationwp]) {
+    let mut i = 0;
+    let mpp = view.metres_per_pixel() as f32;
+    while i < fence.len() {
+        let f = fence[i];
+        match f.id {
+            5001 | 5002 => {
+                let n = (f.p1 as usize).max(1).min(fence.len() - i);
+                let mut pts: Vec<Pos2> = fence[i..i + n].iter().map(|w| view.to_screen(w.lat, w.lng)).collect();
+                if pts.len() > 1 {
+                    pts.push(pts[0]);
+                }
+                let col = if f.id == 5001 { Color32::from_rgb(0, 200, 0) } else { Color32::RED };
+                painter.add(egui::Shape::line(pts, Stroke::new(3.0, col)));
+                i += n;
+            }
+            5003 | 5004 => {
+                let col = if f.id == 5003 { Color32::from_rgb(0, 200, 0) } else { Color32::RED };
+                if mpp > 0.0 {
+                    painter.circle_stroke(view.to_screen(f.lat, f.lng), f.p1 / mpp, Stroke::new(3.0, col));
+                }
+                i += 1;
+            }
+            5000 => {
+                let p = view.to_screen(f.lat, f.lng);
+                painter.circle_filled(p, 6.0, Color32::from_rgb(255, 165, 0));
+                painter.text(p + Vec2::new(8.0, 0.0), egui::Align2::LEFT_CENTER, "Return", fonts::ui_id(fonts::UI_SIZE), Color32::WHITE);
+                i += 1;
+            }
+            _ => i += 1,
+        }
+    }
 }

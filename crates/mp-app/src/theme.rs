@@ -316,6 +316,32 @@ pub fn vtrackbar(ui: &mut Ui, rect: Rect, value: &mut f64, min: f64, max: f64) -
     resp
 }
 
+/// Horizontal WinForms TrackBar (TickStyle BottomRight): groove, blue thumb, `ticks` ticks.
+pub fn htrackbar(ui: &mut Ui, rect: Rect, value: &mut f64, min: f64, max: f64, ticks: usize) -> Response {
+    let resp = ui.interact(rect, ui.scope_id().with("htrk").with((rect.left() as i32, rect.top() as i32)), Sense::click_and_drag());
+    let p = ui.painter();
+    let groove = Rect::from_min_size(Pos2::new(rect.left() + 13.0, rect.top() + 10.0), Vec2::new(rect.width() - 26.0, 4.0));
+    p.rect_filled(groove, 0.0, Color32::from_rgb(0xe7, 0xea, 0xea));
+    p.rect_stroke(groove, 0.0, Stroke::new(1.0, Color32::from_rgb(0xd6, 0xd6, 0xd6)), StrokeKind::Inside);
+    let n = ticks.max(1);
+    for s in 0..=n {
+        let x = groove.left() + (s as f32 / n as f32) * groove.width();
+        p.line_segment([Pos2::new(x, groove.bottom() + 12.0), Pos2::new(x, groove.bottom() + 16.0)], Stroke::new(1.0, Color32::from_rgb(0xc4, 0xc4, 0xc4)));
+    }
+    let span = if max > min { max - min } else { 1.0 };
+    if let Some(pos) = resp.interact_pointer_pos() {
+        if resp.dragged() || resp.clicked() {
+            let f = ((pos.x - groove.left()) / groove.width()).clamp(0.0, 1.0) as f64;
+            *value = min + f * span;
+        }
+    }
+    let f = ((*value - min) / span).clamp(0.0, 1.0) as f32;
+    let tx = groove.left() + f * groove.width();
+    let thumb = Rect::from_center_size(Pos2::new(tx, groove.center().y + 2.0), Vec2::new(11.0, 21.0));
+    p.rect_filled(thumb, 0.0, if resp.hovered() || resp.dragged() { Color32::from_rgb(0x1c, 0x97, 0xea) } else { Color32::from_rgb(0x00, 0x7a, 0xd9) });
+    resp
+}
+
 /// WinForms Label: plain white text at the UI font.
 pub fn label(ui: &mut Ui, text: impl Into<String>) -> Response {
     ui.add(egui::Label::new(egui::RichText::new(text.into()).color(TEXT)).selectable(false))

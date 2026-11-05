@@ -13,28 +13,90 @@ use crate::app::{AppCtx, Toasts};
 use crate::theme::BsvItem;
 use crate::{fonts, platform, theme};
 
-const PAGES: [&str; 11] = [
-    "GeoFence",
-    "Basic Tuning",
-    "Extended Tuning",
-    "Standard Params",
-    "Advanced Params",
-    "Onboard OSD",
-    "MAVFtp",
-    "User Params",
-    "Full Parameter List",
-    "Full Parameter Tree",
-    "Planner",
-];
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Page {
+    GeoFence,
+    BasicTuning,
+    ExtendedTuning,
+    StandardParams,
+    AdvancedParams,
+    OnboardOsd,
+    MavFtp,
+    UserParams,
+    FullParamList,
+    Planner,
+}
+
+impl Page {
+    fn label(&self, fw: Firmware) -> &'static str {
+        match self {
+            Page::GeoFence => "GeoFence",
+            Page::BasicTuning => "Basic Tuning",
+            Page::ExtendedTuning if fw == Firmware::ArduPlane => "QP Extended Tuning",
+            Page::ExtendedTuning => "Extended Tuning",
+            Page::StandardParams => "Standard Params",
+            Page::AdvancedParams => "Advanced Params",
+            Page::OnboardOsd => "Onboard OSD",
+            Page::MavFtp => "MAVFtp",
+            Page::UserParams => "User Params",
+            Page::FullParamList => "Full Parameter List",
+            Page::Planner => "Planner",
+        }
+    }
+}
+
+/// SoftwareConfig.cs page list: vehicle pages only once connected with all params.
+fn pages(app: &AppCtx) -> Vec<Page> {
+    let mut v = Vec::new();
+    if let Some(l) = app.link.filter(|_| app.connected()) {
+        let s = l.shared.read();
+        let fw = s.cs.firmware;
+        let has = |p: &str| s.params.keys().any(|k| k.starts_with(p));
+        if s.params_complete {
+            if fw == Firmware::ArduCopter2 {
+                v.push(Page::GeoFence);
+            }
+            v.push(Page::BasicTuning);
+            if matches!(fw, Firmware::ArduCopter2 | Firmware::ArduPlane) {
+                v.push(Page::ExtendedTuning);
+            }
+            v.push(Page::StandardParams);
+            v.push(Page::AdvancedParams);
+            if has("OSD") {
+                v.push(Page::OnboardOsd);
+            }
+            // MAV_PROTOCOL_CAPABILITY_FTP
+            if s.autopilot_version.map(|(_, caps)| caps & 32 != 0).unwrap_or(false) {
+                v.push(Page::MavFtp);
+            }
+            v.push(Page::UserParams);
+        }
+    }
+    v.push(Page::FullParamList);
+    v.push(Page::Planner);
+    v
+}
 
 pub struct ConfigView {
-    page: usize,
+    page: Page,
     pub params: ParamEditor,
+    extended: crate::views::tuning::ExtendedTuning,
+    user_add: String,
 }
 
 impl Default for ConfigView {
     fn default() -> Self {
-        Self { page: 8, params: ParamEditor::default() }
+        let page = match std::env::var("MP_PAGE").ok().and_then(|v| v.parse::<usize>().ok()) {
+            Some(1) => Page::BasicTuning,
+            Some(2) => Page::ExtendedTuning,
+            Some(3) => Page::StandardParams,
+            Some(4) => Page::AdvancedParams,
+            Some(7) => Page::UserParams,
+            Some(10) => Page::Planner,
+            Some(0) => Page::GeoFence,
+            _ => Page::FullParamList,
+        };
+        Self { page, params: ParamEditor::default(), extended: Default::default(), user_add: String::new() }
     }
 }
 
@@ -44,34 +106,57 @@ impl ConfigView {
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
-        let items: Vec<BsvItem> = PAGES.iter().map(|p| BsvItem { label: p.to_string(), parent: None }).collect();
+        let fw = app.link.map(|l| l.shared.read().cs.firmware).unwrap_or_default();
+        let list = pages(app);
+        let shown = if list.contains(&self.page) { self.page } else { Page::FullParamList };
+        let items: Vec<BsvItem> = list.iter().map(|p| BsvItem { label: p.label(fw).to_string(), parent: None }).collect();
+        let before = list.iter().position(|p| *p == shown).unwrap_or(0);
+        let mut idx = before;
         egui::Panel::left("cfg_bsv")
             .resizable(false)
             .exact_size(theme::BSV_WIDTH)
             .frame(egui::Frame::new())
-            .show(ui, |ui| theme::backstage(ui, &items, &mut self.page));
-        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::BG).inner_margin(6)).show(ui, |ui| {
-            let fw = app.link.map(|l| l.shared.read().cs.firmware).unwrap_or_default();
-            match self.page {
-                0 => friendly(ui, app, &self.params, |n, _| n.starts_with("FENCE_")),
-                1 => friendly(ui, app, &self.params, |n, _| {
-                    matches!(n, "ATC_INPUT_TC" | "MOT_THST_HOVER" | "PILOT_ACCEL_Z" | "PILOT_SPEED_UP" | "ATC_RAT_RLL_P" | "ATC_RAT_PIT_P" | "ATC_RAT_YAW_P" | "ATC_ANG_RLL_P" | "ATC_ANG_PIT_P" | "ATC_ANG_YAW_P")
-                }),
-                2 => friendly(ui, app, &self.params, |n, _| n.starts_with("ATC_") || n.starts_with("PSC_") || n.starts_with("WPNAV_")),
-                3 => friendly(ui, app, &self.params, |_, m| m.map(|m| m.user == "Standard").unwrap_or(false)),
-                4 => friendly(ui, app, &self.params, |_, m| m.map(|m| m.user == "Advanced").unwrap_or(false)),
-                5 => friendly(ui, app, &self.params, |n, _| n.starts_with("OSD")),
-                6 => {
-                    theme::label(ui, "MAVFtp: not available in this port yet");
+            .show(ui, |ui| theme::backstage(ui, &items, &mut idx));
+        if idx != before {
+            self.page = list[idx];
+        }
+        let page = if idx != before { self.page } else { shown };
+        egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::BG).inner_margin(6)).show(ui, |ui| match page {
+            Page::GeoFence => crate::views::tuning::geofence(ui, app),
+            Page::BasicTuning => crate::views::tuning::basic_tuning(ui, app),
+            Page::ExtendedTuning => self.extended.ui(ui, app),
+            Page::StandardParams => friendly(ui, app, &self.params, |_, m| m.map(|m| m.user == "Standard").unwrap_or(false)),
+            Page::AdvancedParams => friendly(ui, app, &self.params, |_, m| m.map(|m| m.user == "Advanced").unwrap_or(false)),
+            Page::OnboardOsd => friendly(ui, app, &self.params, |n, _| n.starts_with("OSD")),
+            Page::MavFtp => {
+                theme::label(ui, "MAVFtp: not available in this port yet");
+            }
+            Page::UserParams => self.user_params(ui, app),
+            Page::FullParamList => self.params.ui(ui, app, false),
+            Page::Planner => planner(ui, app, fw),
+        });
+    }
+
+    /// ConfigUserDefined: a user-chosen list of parameters.
+    fn user_params(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
+        let Some(link) = app.link else { return };
+        let all: Vec<String> = link.shared.read().params.keys().cloned().collect();
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_id_salt("user_add").width(200.0).selected_text(self.user_add.clone()).show_ui(ui, |ui| {
+                for n in &all {
+                    ui.selectable_value(&mut self.user_add, n.clone(), n);
                 }
-                7 => {
-                    theme::label(ui, "User Params: add parameters to show here (not available in this port yet)");
-                }
-                8 => self.params.ui(ui, app, false),
-                9 => self.params.ui(ui, app, true),
-                _ => planner(ui, app, fw),
+            });
+            if theme::button(ui, "Add").clicked() && !self.user_add.is_empty() && !app.settings.user_params.contains(&self.user_add) {
+                app.settings.user_params.push(self.user_add.clone());
+            }
+            if theme::button(ui, "Clear").clicked() {
+                app.settings.user_params.clear();
             }
         });
+        ui.separator();
+        let chosen = app.settings.user_params.clone();
+        friendly(ui, app, &self.params, |n, _| chosen.iter().any(|c| c == n));
     }
 }
 
@@ -156,6 +241,8 @@ pub struct ParamEditor {
     modified_only: bool,
     none_default: bool,
     tree_collapsed: bool,
+    compare: Option<Vec<(String, f32, f32, bool)>>,
+    editing: Option<(String, String)>,
 }
 
 impl ParamEditor {
@@ -224,7 +311,13 @@ impl ParamEditor {
                 link.send(LinkCommand::RequestParams);
             }
             if b(ui, r(116.0, 19.0), "Compare Params") {
-                app.toasts.error("Compare Params: not available in this port yet");
+                if let Some((_, text)) = platform::open_text("Compare Parameters", "Param List", &["param", "parm", "txt"]) {
+                    let diffs: Vec<(String, f32, f32, bool)> = paramfile::load(&text)
+                        .into_iter()
+                        .filter_map(|(k, v)| params.get(&k).filter(|p| p.value != v).map(|p| (k, p.value, v, true)))
+                        .collect();
+                    self.compare = Some(diffs);
+                }
             }
             if b(ui, r(141.0, 22.0), "Commit Params") {
                 link.send(LinkCommand::CommandLong { command: 245, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
@@ -286,12 +379,55 @@ impl ParamEditor {
                 })
                 .map(|(k, p)| (k.clone(), p.value))
                 .collect();
-            self.grid(ui, link, fw, &rows);
+            let mut rows = rows;
+            let favs = app.settings.fav_params.clone();
+            rows.sort_by_key(|(k, _)| !favs.contains(k));
+            self.grid(ui, link, fw, &rows, &mut app.settings.fav_params);
         });
+        self.compare_window(ui.ctx());
+    }
+
+    /// ParamCompare form: diff against a file, tick the rows to take, Continue.
+    fn compare_window(&mut self, ctx: &egui::Context) {
+        let Some(diffs) = self.compare.as_mut() else { return };
+        let mut open = true;
+        let mut apply = false;
+        egui::Window::new("Param Compare").open(&mut open).collapsible(false).default_size(Vec2::new(480.0, 400.0)).show(ctx, |ui| {
+            if diffs.is_empty() {
+                theme::label(ui, "No differences");
+                return;
+            }
+            egui::Grid::new("cmp").num_columns(4).striped(true).show(ui, |ui| {
+                for h in ["Command", "Value", "New Value", "Use"] {
+                    ui.label(RichText::new(h).color(Color32::WHITE).strong());
+                }
+                ui.end_row();
+                for (n, cur, new, take) in diffs.iter_mut() {
+                    theme::label(ui, n.as_str());
+                    theme::label(ui, paramfile::format_value(*cur));
+                    theme::label(ui, paramfile::format_value(*new));
+                    ui.checkbox(take, "");
+                    ui.end_row();
+                }
+            });
+            if theme::button(ui, "Continue").clicked() {
+                apply = true;
+            }
+        });
+        if apply {
+            for (n, _, new, take) in self.compare.take().unwrap_or_default() {
+                if take {
+                    self.edits.insert(n, new);
+                }
+            }
+            self.modified_only = true;
+        } else if !open {
+            self.compare = None;
+        }
     }
 
     /// The Params DataGridView: Name 130 | Value 70 | Default 70 | Units 60 | Options 150 | Desc | Fav 30
-    fn grid(&mut self, ui: &mut egui::Ui, _link: &Link, fw: Firmware, rows: &[(String, f32)]) {
+    fn grid(&mut self, ui: &mut egui::Ui, _link: &Link, fw: Firmware, rows: &[(String, f32)], favs: &mut Vec<String>) {
         let widths = [130.0f32, 70.0, 70.0, 60.0, 150.0, 0.0, 30.0];
         let headers = ["Name", "Value", "Default", "Units", "Options", "Desc", "Fav"];
         let avail = ui.available_width();
@@ -350,34 +486,47 @@ impl ParamEditor {
                         s.bg_stroke = Stroke::NONE;
                     }
                 }
-                let changed = match meta.filter(|m| !m.values.is_empty()) {
-                    Some(m) => {
-                        let mut c = false;
-                        let cur = m.values.iter().find(|(k, _)| *k as f32 == v).map(|(k, _)| k.to_string()).unwrap_or_else(|| paramfile::format_value(v));
-                        child.put(cells[1].shrink(1.0), |ui: &mut egui::Ui| {
-                            egui::ComboBox::from_id_salt(("pv", name))
-                                .width(cells[1].width() - 6.0)
-                                .selected_text(cur)
-                                .show_ui(ui, |ui| {
-                                    for (k, s) in &m.values {
-                                        if ui.selectable_label(*k as f32 == v, format!("{k}: {s}")).clicked() {
-                                            v = *k as f32;
-                                            c = true;
-                                        }
+                // DataGridView: plain text until the cell is clicked (EditingControlShowing)
+                let editing = self.editing.as_ref().map(|(n, _)| n == name).unwrap_or(false);
+                let mut changed = false;
+                if !editing {
+                    let resp = child.put(cells[1].shrink(1.0), egui::Label::new(egui::RichText::new(paramfile::format_value(v)).color(Color32::WHITE)).sense(Sense::click()));
+                    if resp.clicked() {
+                        self.editing = Some((name.clone(), paramfile::format_value(v)));
+                    }
+                } else if let Some(m) = meta.filter(|m| !m.values.is_empty()) {
+                    let cur = paramfile::format_value(v);
+                    child.put(cells[1].shrink(1.0), |ui: &mut egui::Ui| {
+                        let r = egui::ComboBox::from_id_salt(("pv", name))
+                            .width(cells[1].width() - 6.0)
+                            .selected_text(cur)
+                            .show_ui(ui, |ui| {
+                                for (k, s) in &m.values {
+                                    if ui.selectable_label(*k as f32 == v, format!("{k}: {s}")).clicked() {
+                                        v = *k as f32;
+                                        changed = true;
                                     }
-                                })
-                                .response
-                        });
-                        c
+                                }
+                            })
+                            .response;
+                        r
+                    });
+                    if changed {
+                        self.editing = None;
                     }
-                    None => {
-                        let mut dv = egui::DragValue::new(&mut v).speed(meta.and_then(|m| m.increment).unwrap_or(0.01)).max_decimals(6);
-                        if let Some((lo, hi)) = meta.and_then(|m| m.range) {
-                            dv = dv.range(lo..=hi).clamp_existing_to_range(false);
+                } else if let Some((_, buf)) = self.editing.as_mut() {
+                    let r = child.put(cells[1].shrink(1.0), egui::TextEdit::singleline(buf));
+                    if !r.has_focus() && !r.lost_focus() {
+                        r.request_focus();
+                    }
+                    if r.lost_focus() {
+                        if let Ok(nv) = buf.trim().parse::<f32>() {
+                            v = nv;
+                            changed = true;
                         }
-                        child.put(cells[1].shrink(1.0), dv).changed()
+                        self.editing = None;
                     }
-                };
+                }
                 if changed {
                     if v == *value {
                         self.edits.remove(name);
@@ -401,8 +550,14 @@ impl ParamEditor {
                         ui.interact(cells[5], ui.scope_id().with(("pd", name)), Sense::hover()).on_hover_text(&m.description);
                     }
                 }
-                let mut fav = false;
-                ui.put(Rect::from_center_size(cells[6].center(), Vec2::splat(16.0)), egui::Checkbox::without_text(&mut fav));
+                let mut fav = favs.contains(name);
+                if ui.put(Rect::from_center_size(cells[6].center(), Vec2::splat(16.0)), egui::Checkbox::without_text(&mut fav)).changed() {
+                    if fav {
+                        favs.push(name.clone());
+                    } else {
+                        favs.retain(|f| f != name);
+                    }
+                }
             }
         });
     }
@@ -439,78 +594,257 @@ pub fn flight_modes(ui: &mut egui::Ui, app: &mut AppCtx) {
         _ => 6,
     };
     let ranges = ["PWM 0 - 1230", "PWM 1231 - 1360", "PWM 1361 - 1490", "PWM 1491 - 1620", "PWM 1621 - 1749", "PWM 1750 +"];
-    let mut sel: [u32; 6] = [0; 6];
-    for (i, s) in sel.iter_mut().enumerate() {
-        *s = params.get(&format!("{prefix}{}", i + 1)).map(|p| p.value as u32).unwrap_or(0);
-    }
-    let pending_id = egui::Id::unique("fm_pending");
-    let mut pending: [u32; 6] = ui.ctx().data(|d| d.get_temp(pending_id)).unwrap_or(sel);
+    let current: [u32; 6] = std::array::from_fn(|i| params.get(&format!("{prefix}{}", i + 1)).map(|p| p.value as u32).unwrap_or(0));
+    let simple_p = params.get("SIMPLE").map(|p| p.value as u32);
+    let ss_p = params.get("SUPER_SIMPLE").map(|p| p.value as u32);
+    let state_id = egui::Id::unique("fm_state");
+    let mut st: ([u32; 6], u32, u32) = ui.ctx().data(|d| d.get_temp(state_id)).unwrap_or((current, simple_p.unwrap_or(0), ss_p.unwrap_or(0)));
 
-    egui::Grid::new("fltmodes").num_columns(4).spacing(Vec2::new(12.0, 8.0)).show(ui, |ui| {
-        for i in 0..6 {
-            let label = RichText::new(format!("Flight Mode {}", i + 1)).color(Color32::WHITE);
-            let r = ui.label(label);
-            if pos == i + 1 {
-                ui.painter().rect_filled(r.rect.expand(2.0), 0.0, Color32::from_rgb(0, 128, 0).gamma_multiply(0.6));
-                ui.painter().text(r.rect.left_center(), egui::Align2::LEFT_CENTER, format!("Flight Mode {}", i + 1), fonts::ui_id(fonts::UI_SIZE), Color32::WHITE);
-            }
-            let name = modes.iter().find(|(k, _)| *k == pending[i]).map(|(_, n)| n.clone()).unwrap_or_else(|| pending[i].to_string());
-            egui::ComboBox::from_id_salt(("fm", i)).width(160.0).selected_text(name).show_ui(ui, |ui| {
-                for (k, n) in &modes {
-                    ui.selectable_value(&mut pending[i], *k, n);
-                }
-            });
-            let simple = format!("SIMPLE {}", i + 1);
-            let mut s = false;
-            ui.checkbox(&mut s, "Simple Mode");
-            let _ = simple;
-            ui.label(RichText::new(ranges[i]).color(Color32::WHITE));
-            ui.end_row();
+    let o = ui.max_rect().min;
+    let f = fonts::ui_id(fonts::UI_SIZE);
+    let p = ui.painter().clone();
+    let at = |x: f32, y: f32| o + Vec2::new(x, y);
+    p.text(at(94.0, 15.0), egui::Align2::LEFT_TOP, "Current Mode:", f.clone(), Color32::WHITE);
+    p.text(at(174.0, 15.0), egui::Align2::LEFT_TOP, &cs.mode, f.clone(), Color32::WHITE);
+    p.text(at(94.0, 32.0), egui::Align2::LEFT_TOP, "Current PWM:", f.clone(), Color32::WHITE);
+    p.text(at(174.0, 32.0), egui::Align2::LEFT_TOP, format!("{ch}: {pwm}"), f.clone(), Color32::WHITE);
+    let ty = 48.0;
+    for i in 0..6 {
+        let y = ty + i as f32 * 25.0;
+        let lr = Rect::from_min_size(at(3.0, y), Vec2::new(104.0, 25.0));
+        if pos == i + 1 {
+            p.rect_filled(lr, 0.0, Color32::from_rgb(0, 128, 0));
         }
-    });
-    ui.ctx().data_mut(|d| d.insert_temp(pending_id, pending));
-    ui.add_space(8.0);
-    ui.label(RichText::new(format!("Current Mode: {}", cs.mode)).color(Color32::WHITE));
-    ui.label(RichText::new(format!("Current PWM: {ch}: {pwm}")).color(Color32::WHITE));
-    ui.add_space(6.0);
-    if theme::button(ui, "Save Modes").clicked() {
-        for i in 0..6 {
-            if pending[i] != sel[i] {
-                link.send(LinkCommand::SetParam { name: format!("{prefix}{}", i + 1), value: pending[i] as f32 });
+        p.text(lr.left_center() + Vec2::new(2.0, 0.0), egui::Align2::LEFT_CENTER, format!("Flight Mode {}", i + 1), f.clone(), Color32::WHITE);
+        let name = modes.iter().find(|(k, _)| *k == st.0[i]).map(|(_, n)| n.clone()).unwrap_or_else(|| st.0[i].to_string());
+        ui.put(Rect::from_min_size(at(113.0, y + 3.0), Vec2::new(104.0, 20.0)), |ui: &mut egui::Ui| {
+            egui::ComboBox::from_id_salt(("CMB_fmode", i))
+                .width(96.0)
+                .wrap_mode(egui::TextWrapMode::Truncate)
+                .selected_text(name)
+                .show_ui(ui, |ui| {
+                    for (k, n) in &modes {
+                        ui.selectable_value(&mut st.0[i], *k, n);
+                    }
+                })
+                .response
+        });
+        if simple_p.is_some() {
+            let mut b = st.1 & (1 << i) != 0;
+            if ui.put(Rect::from_min_size(at(222.0, y + 2.0), Vec2::new(105.0, 16.0)), egui::Checkbox::new(&mut b, "Simple Mode")).changed() {
+                st.1 = if b { st.1 | (1 << i) } else { st.1 & !(1 << i) };
             }
+        }
+        if ss_p.is_some() {
+            let mut b = st.2 & (1 << i) != 0;
+            if ui.put(Rect::from_min_size(at(332.0, y + 2.0), Vec2::new(135.0, 16.0)), egui::Checkbox::new(&mut b, "Super Simple Mode")).changed() {
+                st.2 = if b { st.2 | (1 << i) } else { st.2 & !(1 << i) };
+            }
+        }
+        p.text(at(473.0, y), egui::Align2::LEFT_TOP, ranges[i], f.clone(), Color32::WHITE);
+    }
+    let save = Rect::from_min_size(at(113.0, ty + 153.0), Vec2::new(104.0, 41.0));
+    if ui.put(save, |ui: &mut egui::Ui| theme::button_sized(ui, "Save Modes", save.size())).clicked() {
+        if app.readonly {
+            app.toasts.error("Readonly mode: parameters not written");
+        } else {
+            for i in 0..6 {
+                if st.0[i] != current[i] {
+                    link.send(LinkCommand::SetParam { name: format!("{prefix}{}", i + 1), value: st.0[i] as f32 });
+                }
+            }
+            if simple_p.is_some_and(|v| v != st.1) {
+                link.send(LinkCommand::SetParam { name: "SIMPLE".into(), value: st.1 as f32 });
+            }
+            if ss_p.is_some_and(|v| v != st.2) {
+                link.send(LinkCommand::SetParam { name: "SUPER_SIMPLE".into(), value: st.2 as f32 });
+            }
+            ui.ctx().data_mut(|d| d.remove::<([u32; 6], u32, u32)>(state_id));
+            return;
         }
     }
+    ui.put(
+        Rect::from_min_size(at(333.0, ty + 150.0), Vec2::new(140.0, 24.0)),
+        egui::Hyperlink::from_label_and_url("Simple and Super Simple description", "https://ardupilot.org/copter/docs/simpleandsuper-simple-modes.html"),
+    );
+    ui.ctx().data_mut(|d| d.insert_temp(state_id, st));
+    ui.allocate_rect(Rect::from_min_size(o, Vec2::new(593.0, 250.0)), Sense::hover());
 }
 
 // ------------------------------------------------------------------ ConfigPlanner
 
 fn planner(ui: &mut egui::Ui, app: &mut AppCtx, _fw: Firmware) {
-    egui::Grid::new("planner").num_columns(2).spacing(Vec2::new(16.0, 8.0)).show(ui, |ui| {
-        theme::label(ui, "Map Type (Flight Data)");
-        crate::views::flight_data::provider_combo(ui, &mut app.settings.fd_map.provider, "pl_fd");
-        ui.end_row();
-        theme::label(ui, "Map Type (Flight Plan)");
-        crate::views::flight_data::provider_combo(ui, &mut app.settings.fp_map.provider, "pl_fp");
-        ui.end_row();
-        theme::label(ui, "Layout / UI Scale");
-        if ui.add(egui::Slider::new(&mut app.settings.ui_scale, 0.6..=3.0).step_by(0.1)).changed() {
-            ui.ctx().set_zoom_factor(app.settings.ui_scale);
+    // ConfigPlanner.resx, laid out absolutely
+    egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
+        let (area, _) = ui.allocate_exact_size(Vec2::new(949.0, 693.0), Sense::hover());
+        let o = area.min;
+        let p = ui.painter().clone();
+        let f = fonts::ui_id(fonts::UI_SIZE);
+        let lab = |x: f32, y: f32, t: &str| {
+            p.text(o + Vec2::new(x, y), egui::Align2::LEFT_TOP, t, f.clone(), Color32::WHITE);
+        };
+        let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));
+        let pl = &mut app.settings.planner;
+
+        for (x, y, t) in [
+            (9.0, 11.0, "Video Device"),
+            (9.0, 38.0, "Video Format"),
+            (9.0, 65.0, "OSD Color"),
+            (9.0, 90.0, "Speech"),
+            (9.0, 142.0, "UI Language"),
+            (9.0, 171.0, "Joystick"),
+            (9.0, 198.0, "Dist Units"),
+            (249.0, 198.0, "Alt Units"),
+            (9.0, 225.0, "Speed Units"),
+            (9.0, 254.0, "Telemetry Rates"),
+            (104.0, 254.0, "Attitude"),
+            (220.0, 254.0, "Position"),
+            (330.0, 254.0, "Mode/Status"),
+            (461.0, 254.0, "RC"),
+            (535.0, 254.0, "Sensor"),
+            (9.0, 278.0, "Connect Reset"),
+            (9.0, 301.0, "Track Length"),
+            (180.0, 303.0, "Dist to Home"),
+            (9.0, 327.0, "Waypoints"),
+            (9.0, 350.0, "HUD"),
+            (9.0, 373.0, "Map Follow"),
+            (9.0, 398.0, "Log Path"),
+            (9.0, 424.0, "Theme"),
+            (9.0, 451.0, "Layout"),
+            (9.0, 477.0, "GCS ID"),
+            (9.0, 502.0, "Aircraft Icon"),
+            (841.0, 502.0, "Line Length"),
+            (9.0, 527.0, "Inactive Aircraft"),
+            (9.0, 656.0, "Map Access Mode"),
+        ] {
+            lab(x, y, t);
         }
-        ui.end_row();
-        theme::label(ui, "Units: Distance / Speed");
-        theme::label(ui, "Meters / meters_per_second");
-        ui.end_row();
-        theme::label(ui, "Simulator UDP port");
-        ui.add(egui::DragValue::new(&mut app.settings.sim_port));
-        ui.end_row();
-        theme::label(ui, "Map cache");
-        ui.horizontal(|ui| {
-            theme::label(ui, platform::tile_cache_dir().display().to_string());
-            if theme::button(ui, "Clear").clicked() {
-                let _ = std::fs::remove_dir_all(platform::tile_cache_dir());
-                app.toasts.info("Map cache cleared");
+        lab(252.0, 108.0, "NOTE: Set the low level of SEVERITY to speak");
+        lab(480.0, 198.0, "NOTE: The Configuration Tab will NOT display these units,\nas those are raw values.");
+
+        let combo = |ui: &mut egui::Ui, pl: &mut BTreeMap<String, String>, key: &str, rr: Rect, opts: &[&str], def: &str| {
+            let cur = pl.get(key).cloned().unwrap_or_else(|| def.to_string());
+            ui.put(rr, |ui: &mut egui::Ui| {
+                egui::ComboBox::from_id_salt(("pl", key))
+                    .width(rr.width() - 8.0)
+                    .wrap_mode(egui::TextWrapMode::Truncate)
+                    .selected_text(cur.clone())
+                    .show_ui(ui, |ui| {
+                        for o in opts {
+                            if ui.selectable_label(cur == *o, *o).clicked() {
+                                pl.insert(key.to_string(), o.to_string());
+                            }
+                        }
+                    })
+                    .response
+            });
+        };
+        let check = |ui: &mut egui::Ui, pl: &mut BTreeMap<String, String>, key: &str, rr: Rect, text: &str, def: bool| {
+            let mut b = pl.get(key).map(|v| v == "True").unwrap_or(def);
+            if ui.put(rr, egui::Checkbox::new(&mut b, text)).changed() {
+                pl.insert(key.to_string(), if b { "True".into() } else { "False".into() });
             }
-        });
-        ui.end_row();
+        };
+        combo(ui, pl, "video_device", r(107.0, 8.0, 245.0, 21.0), &["None"], "None");
+        combo(ui, pl, "video_format", r(107.0, 35.0, 408.0, 21.0), &["Default"], "Default");
+        for (x, t) in [(358.0, "Start"), (439.0, "Stop")] {
+            let br = r(x, 6.0, 75.0, 23.0);
+            if ui.put(br, |ui: &mut egui::Ui| theme::button_sized(ui, t, br.size())).clicked() {
+                app.toasts.error("Video capture: not available in this port yet");
+            }
+        }
+        let pl = &mut app.settings.planner;
+        check(ui, pl, "CHK_hudshow", r(520.0, 10.0, 140.0, 18.0), "Enable HUD Overlay", true);
+        combo(ui, pl, "hudcolor", r(107.0, 62.0, 138.0, 21.0), &["White", "Red", "Green", "Blue", "Yellow", "Orange", "LightGray"], "White");
+        check(ui, pl, "speechenable", r(107.0, 89.0, 105.0, 17.0), "Enable Speech", false);
+        check(ui, pl, "speech_armed_only", r(212.0, 89.0, 115.0, 17.0), "Only when Armed", false);
+        check(ui, pl, "speechwaypointenabled", r(332.0, 89.0, 75.0, 17.0), "Waypoint", false);
+        check(ui, pl, "speechmodeenabled", r(408.0, 89.0, 60.0, 17.0), "Mode", false);
+        check(ui, pl, "speechcustomenabled", r(469.0, 89.0, 85.0, 17.0), "30s Interval", false);
+        check(ui, pl, "speechbatteryenabled", r(559.0, 89.0, 110.0, 17.0), "Battery Warning", false);
+        check(ui, pl, "speechaltenabled", r(671.0, 89.0, 85.0, 17.0), "Alt Warning", false);
+        check(ui, pl, "speecharmenabled", r(760.0, 89.0, 85.0, 17.0), "Arm/Disarm", false);
+        check(ui, pl, "speechlowspeedenabled", r(853.0, 89.0, 85.0, 17.0), "Low Speed", false);
+        combo(ui, pl, "speech_severity", r(107.0, 111.0, 138.0, 21.0), &["EMERGENCY", "ALERT", "CRITICAL", "ERROR", "WARNING", "NOTICE", "INFO", "DEBUG"], "CRITICAL");
+        combo(ui, pl, "language", r(107.0, 139.0, 138.0, 21.0), &["English (en-US)"], "English (en-US)");
+        let jr = r(107.0, 166.0, 99.0, 23.0);
+        if ui.put(jr, |ui: &mut egui::Ui| theme::button_sized(ui, "Joystick Setup", jr.size())).clicked() {
+            app.toasts.error("Joystick: not available in this port yet");
+        }
+        let pl = &mut app.settings.planner;
+        combo(ui, pl, "distunits", r(107.0, 195.0, 138.0, 21.0), &["Meters", "Feet"], "Meters");
+        combo(ui, pl, "altunits", r(320.0, 195.0, 138.0, 21.0), &["Meters", "Feet"], "Meters");
+        combo(ui, pl, "speedunits", r(107.0, 222.0, 138.0, 21.0), &["meters_per_second", "fps", "kph", "mph", "knots"], "meters_per_second");
+        for (key, x, def) in [("rateattitude", 166.0, "4"), ("rateposition", 282.0, "2"), ("ratestatus", 415.0, "2"), ("raterc", 489.0, "2"), ("ratesensors", 584.0, "2")] {
+            combo(ui, pl, key, r(x, 251.0, 40.0, 21.0), &["0", "1", "2", "3", "4", "5", "6", "8", "10", "20", "25", "50"], def);
+        }
+        check(ui, pl, "CHK_resetapmonconnect", r(107.0, 277.0, 220.0, 17.0), "Reset on USB Connect (toggle DTR)", true);
+        check(ui, pl, "CHK_rtsresetesp32", r(320.0, 277.0, 255.0, 19.0), "Disable RTS reset on ESP32 SerialUSB", false);
+        let mut tl: f32 = pl.get("NUM_tracklength").and_then(|v| v.parse().ok()).unwrap_or(200.0);
+        if ui.put(r(107.0, 300.0, 67.0, 20.0), egui::DragValue::new(&mut tl).range(10.0..=100000.0)).changed() {
+            pl.insert("NUM_tracklength".into(), tl.to_string());
+        }
+        check(ui, pl, "CHK_disttohomeflightdata", r(267.0, 302.0, 135.0, 17.0), "Display in Flightdata", false);
+        check(ui, pl, "loadwpsonconnect", r(107.0, 326.0, 180.0, 17.0), "Load Waypoints on connect?", false);
+        check(ui, pl, "CHK_GDIPlus", r(107.0, 349.0, 225.0, 17.0), "GDI+ (old type/no HW acceleration)", false);
+        check(ui, pl, "CHK_maprotation", r(107.0, 372.0, 210.0, 17.0), "Map is rotated to follow the plane", false);
+        let mut logdir = pl.get("logdirectory").cloned().unwrap_or_else(|| platform::data_dir().join("logs").display().to_string());
+        if ui.put(r(107.0, 395.0, 386.0, 20.0), egui::TextEdit::singleline(&mut logdir)).changed() {
+            pl.insert("logdirectory".into(), logdir.clone());
+        }
+        let br = r(496.0, 393.0, 75.0, 23.0);
+        if ui.put(br, |ui: &mut egui::Ui| theme::button_sized(ui, "Browse", br.size())).clicked() {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            if let Some(d) = rfd::FileDialog::new().pick_folder() {
+                pl.insert("logdirectory".into(), d.display().to_string());
+            }
+        }
+        combo(ui, pl, "theme", r(107.0, 421.0, 138.0, 21.0), &["BurntKermit", "HighContrast"], "BurntKermit");
+        let tr = r(249.0, 421.0, 75.0, 20.0);
+        if ui.put(tr, |ui: &mut egui::Ui| theme::button_sized(ui, "Custom", tr.size())).clicked() {
+            app.toasts.error("Theme editor: not available in this port yet");
+        }
+        let pl = &mut app.settings.planner;
+        combo(ui, pl, "displayview", r(107.0, 448.0, 138.0, 21.0), &["Basic", "Advanced", "Custom"], "Advanced");
+        let mut gcsid: f32 = pl.get("gcsid").and_then(|v| v.parse().ok()).unwrap_or(255.0);
+        if ui.put(r(107.0, 475.0, 53.0, 20.0), egui::DragValue::new(&mut gcsid).range(1.0..=255.0)).changed() {
+            pl.insert("gcsid".into(), gcsid.to_string());
+        }
+        check(ui, pl, "GMapMarkerBase_DisplayCOG", r(107.0, 501.0, 90.0, 17.0), "Display COG", true);
+        check(ui, pl, "GMapMarkerBase_DisplayHeading", r(199.0, 501.0, 108.0, 17.0), "Display Heading", true);
+        check(ui, pl, "GMapMarkerBase_DisplayNavBearing", r(308.0, 501.0, 126.0, 17.0), "Display Nav Bearing", true);
+        check(ui, pl, "GMapMarkerBase_DisplayRadius", r(436.0, 501.0, 125.0, 17.0), "Display Turn Radius", true);
+        check(ui, pl, "GMapMarkerBase_DisplayTarget", r(563.0, 501.0, 98.0, 17.0), "Display Target", true);
+        check(ui, pl, "GMapMarkerBase_DisplayToolTip", r(663.0, 501.0, 103.0, 17.0), "Display ToolTip", false);
+        let mut ll: f32 = pl.get("GMapMarkerBase_length").and_then(|v| v.parse().ok()).unwrap_or(500.0);
+        if ui.put(r(768.0, 500.0, 67.0, 20.0), egui::DragValue::new(&mut ll).range(0.0..=10000.0)).changed() {
+            pl.insert("GMapMarkerBase_length".into(), ll.to_string());
+        }
+        combo(ui, pl, "GMapMarkerBase_InactiveDisplayStyle", r(107.0, 524.0, 138.0, 21.0), &["Normal", "Transparent", "Hidden"], "Normal");
+        let vr = r(107.0, 551.0, 99.0, 20.0);
+        if ui.put(vr, |ui: &mut egui::Ui| theme::button_sized(ui, "Start/Stop Vario", vr.size())).clicked() {
+            app.toasts.error("Vario: not available in this port yet");
+        }
+        let pl = &mut app.settings.planner;
+        check(ui, pl, "password_protect", r(340.0, 554.0, 150.0, 17.0), "Password Protect Config", false);
+        check(ui, pl, "showairports", r(496.0, 554.0, 95.0, 17.0), "Show Airports", false);
+        check(ui, pl, "enableadsb", r(598.0, 554.0, 60.0, 17.0), "ADSB", false);
+        check(ui, pl, "ShowNoFly", r(671.0, 554.0, 60.0, 17.0), "No Fly", false);
+        check(ui, pl, "analyticsoptout", r(107.0, 577.0, 120.0, 17.0), "OptOut Anon Stats", false);
+        check(ui, pl, "beta_updates", r(228.0, 577.0, 95.0, 17.0), "Beta Updates", false);
+        check(ui, pl, "norcreceiver", r(340.0, 577.0, 110.0, 17.0), "No RC Receiver", false);
+        check(ui, pl, "showtfr", r(496.0, 577.0, 60.0, 17.0), "TFR's", false);
+        check(ui, pl, "autoParamCommit", r(598.0, 578.0, 130.0, 17.0), "Auto Commit Params", true);
+        check(ui, pl, "Params_BG", r(107.0, 600.0, 190.0, 17.0), "Params Download in BackGround", false);
+        check(ui, pl, "SlowMachine", r(340.0, 600.0, 160.0, 17.0), "Runing on a slow computer", false);
+        check(ui, pl, "mavdebug", r(106.0, 623.0, 160.0, 17.0), "Mavlink Message Debug", false);
+        check(ui, pl, "chk_temp", r(340.0, 623.0, 150.0, 17.0), "Testing Screen", false);
+        combo(ui, pl, "mapCache", r(107.0, 653.0, 138.0, 21.0), &["ServerAndCache", "ServerOnly", "CacheOnly"], "ServerAndCache");
+        let mr = r(251.0, 653.0, 94.0, 21.0);
+        if ui.put(mr, |ui: &mut egui::Ui| theme::button_sized(ui, "Open Map Cache", mr.size())).clicked() {
+            let dir = platform::tile_cache_dir();
+            let _ = std::fs::create_dir_all(&dir);
+            ui.ctx().open_url(egui::OpenUrl::new_tab(format!("file:///{}", dir.display())));
+        }
     });
 }
