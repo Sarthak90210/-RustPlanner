@@ -1,0 +1,16 @@
+{
+"name": "gmapcache",
+"w": 600,
+"h": 400,
+"controls": [
+{
+"name": "myDataGridView1",
+"kind": "grid",
+"parent": "$this",
+"x": 0,
+"y": 0,
+"w": 675,
+"h": 534
+}
+]
+}

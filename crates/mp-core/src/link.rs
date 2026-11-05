@@ -86,6 +86,8 @@ pub struct LinkShared {
     pub adsb: BTreeMap<u32, (String, f64, f64, f32, f32, Instant)>,
     /// MainV2.comPort.MAVlist: every vehicle heard on this link, by (sysid, compid)
     pub mavs: BTreeMap<(u8, u8), MavSummary>,
+    /// MAVLinkInterface.Open(getparams: false): skip the parameter download on connect
+    pub skip_params: bool,
 }
 
 /// What the map and the vehicle selector need about each vehicle on the link.
@@ -226,8 +228,14 @@ impl Link {
 
     /// Connect, recording a `.tlog` into `tlog_dir` (Mission Planner logs every connection).
     pub fn connect_with(spec: ConnectionSpec, tlog_dir: Option<std::path::PathBuf>) -> Self {
+        Self::connect_with_params(spec, tlog_dir, true)
+    }
+
+    /// MainV2 Ctrl+T opens the link without starting a parameter download.
+    pub fn connect_with_params(spec: ConnectionSpec, tlog_dir: Option<std::path::PathBuf>, get_params: bool) -> Self {
         let shared = Arc::new(RwLock::new(LinkShared {
             status: LinkStatus::Connecting,
+            skip_params: !get_params,
             spec: Some(spec.clone()),
             progress: Some(Progress {
                 label: if spec == ConnectionSpec::Auto { "Waiting for ports".into() } else { "Connecting Mavlink".into() },
@@ -886,7 +894,9 @@ impl Worker {
                     }
                     self.event(LinkEvent::Connected);
                     self.request_datastreams()?;
-                    self.start_param_fetch()?;
+                    if !self.shared.read().skip_params {
+                        self.start_param_fetch()?;
+                    }
                 }
             }
         }

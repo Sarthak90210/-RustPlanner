@@ -25,6 +25,26 @@ fn wait_event(
 }
 
 #[test]
+fn connect_without_parameters_then_request_explicitly() {
+    // A separate port per process also allows concurrent workspace test runs.
+    let port = std::net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let link = Link::connect_with_params(ConnectionSpec::UdpListen { port }, None, false);
+    assert!(link.shared.read().skip_params);
+    let _sim = sim::spawn(port).unwrap();
+    wait_event(&link, Duration::from_secs(10), |e| matches!(e, LinkEvent::Connected));
+    // Observe actual traffic beyond connection setup, while the default session test
+    // separately verifies the normal automatic parameter fetch.
+    let (tx, rx) = crossbeam_channel::unbounded();
+    link.send(LinkCommand::Subscribe { msgid: 0, tx });
+    rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert!(link.shared.read().params.is_empty());
+    link.send(LinkCommand::RequestParams);
+    wait_event(&link, Duration::from_secs(10), |e| matches!(e, LinkEvent::ParamsLoaded(_)));
+    assert!(link.shared.read().params.contains_key("ANGLE_MAX"));
+}
+
+#[test]
 fn full_session_against_sim() {
     let port = 14700;
     let link = Link::connect(ConnectionSpec::UdpListen { port });

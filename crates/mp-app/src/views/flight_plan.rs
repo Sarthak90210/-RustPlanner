@@ -14,6 +14,7 @@ use crate::views::flight_data::provider_combo;
 use crate::{fonts, map, platform, theme};
 
 pub(crate) mod menu;
+mod map_controls;
 
 const HOME_IDX: usize = usize::MAX;
 
@@ -587,6 +588,7 @@ impl FlightPlanView {
         let wp_radius = app.settings.wp_radius;
         let assets = app.assets;
         let zoom = app.settings.fp_map.zoom;
+        let bearing = app.settings.fp_map.bearing as f32;
 
         let mut add_at = None;
         let mut new_drag = self.dragging;
@@ -673,8 +675,16 @@ impl FlightPlanView {
             }
             if let Some(cs) = &cs {
                 if cs.lat != 0.0 || cs.lng != 0.0 {
-                    map::draw_quad(painter, view.to_screen(cs.lat, cs.lng), cs.yaw, cs.sysid.max(1));
+                    map::draw_quad(painter, view.to_screen(cs.lat, cs.lng), cs.yaw - bearing, cs.sysid.max(1));
                 }
+            }
+
+            // Overlay controls own their clicks and drags; they must not edit the mission.
+            if _ui.input(|i| i.pointer.interact_pos()).is_some_and(|p| map_controls::over_control(view.rect, p)) {
+                if !_ui.input(|i| i.pointer.primary_down()) {
+                    new_drag = None;
+                }
+                return true;
             }
 
             // hit-test the pin body (tip at the point, 32x32 above it)
@@ -723,9 +733,10 @@ impl FlightPlanView {
         });
         {
             let r = out.view.rect;
-            let (a, b) = out.view.to_latlng(r.left_bottom());
-            let (c, e) = out.view.to_latlng(r.right_top());
-            self.view_bounds = Some((a, b, c, e));
+            let corners = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom()].map(|p| out.view.to_latlng(p));
+            self.view_bounds = Some(corners.iter().fold((90.0_f64, 180.0_f64, -90.0_f64, -180.0_f64), |b, &(a, c)| {
+                (b.0.min(a), b.1.min(c), b.2.max(a), b.3.max(c))
+            }));
         }
 
         if mouse.is_some() {
@@ -768,6 +779,7 @@ impl FlightPlanView {
             self.ctx_pos = ctx_pos;
         }
         out.response.context_menu(|ui| self.context_menu(ui, app));
+        self.map_controls(ui, out.view.rect, app);
 
         // overlays: lbl_distance / lbl_prevdist / lbl_homedist, cmb_missiontype, Zoom
         let mrect = out.view.rect;

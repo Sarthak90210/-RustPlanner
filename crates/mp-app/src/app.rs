@@ -219,6 +219,8 @@ pub struct MissionPlannerApp {
     ctx_clone: egui::Context,
     tools: crate::tool_windows::Tools,
     more_tools: crate::more_tools::MoreTools,
+    hotkey_tools: crate::hotkey_tools::HotkeyTools,
+    skip_params_once: bool,
     joystick: crate::joystick::Joystick,
     speech: crate::speech::SpeechRules,
     vario: Option<std::time::Instant>,
@@ -292,6 +294,8 @@ impl MissionPlannerApp {
             ctx_clone: cc.egui_ctx.clone(),
             tools: Default::default(),
             more_tools: Default::default(),
+            hotkey_tools: Default::default(),
+            skip_params_once: false,
             joystick: Default::default(),
             speech: Default::default(),
             vario: None,
@@ -331,7 +335,9 @@ impl MissionPlannerApp {
                 AppAction::Connect(spec) => {
                     self.link = None;
                     self.toasts.info(format!("Connecting to {spec}"));
-                    self.link = Some(Link::connect_with(spec, Some(platform::data_dir().join("logs"))));
+                    let get_params = !std::mem::take(&mut self.skip_params_once);
+                    let l = Link::connect_with_params(spec, Some(platform::data_dir().join("logs")), get_params);
+                    self.link = Some(l);
                 }
                 AppAction::Disconnect => {
                     self.link = None;
@@ -754,6 +760,60 @@ impl MissionPlannerApp {
                 l.send(mp_core::link::LinkCommand::RequestParams);
             }
         }
+        // Text editors own cut, undo and the other editing shortcuts while focused.
+        if ctx.egui_wants_keyboard_input() {
+            return;
+        }
+        let ctrl = |k: Key| ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, k));
+        // Ctrl+P PluginUI
+        if ctrl(Key::P) {
+            self.hotkey_tools.plugins_open = true;
+        }
+        // Ctrl+G SerialOutputNMEA
+        if ctrl(Key::G) {
+            actions.push(AppAction::Tool("NMEA".into()));
+        }
+        // Ctrl+X GMAPCache
+        if ctrl(Key::X) {
+            self.hotkey_tools.cache_open = true;
+        }
+        // Ctrl+L SpectrogramUI
+        if ctrl(Key::L) {
+            actions.push(AppAction::Tool("Spectrogram".into()));
+        }
+        // Ctrl+Z Camera().test: request camera / video / storage info and start streaming
+        if ctrl(Key::Z) {
+            if let Some(l) = &self.link {
+                let cam = l.shared.read().mavs.keys().find(|(_, c)| *c == 100).copied();
+                if let Some((sys, comp)) = cam {
+                    use mp_core::mavlink::dialects::ardupilotmega::*;
+                    for cmd in [MavCmd::MAV_CMD_REQUEST_CAMERA_INFORMATION, MavCmd::MAV_CMD_REQUEST_VIDEO_STREAM_INFORMATION, MavCmd::MAV_CMD_REQUEST_CAMERA_SETTINGS, MavCmd::MAV_CMD_SET_CAMERA_MODE, MavCmd::MAV_CMD_REQUEST_STORAGE_INFORMATION, MavCmd::MAV_CMD_VIDEO_START_STREAMING] {
+                        l.send(mp_core::link::LinkCommand::Send(Box::new(MavMessage::COMMAND_LONG(COMMAND_LONG_DATA { param1: 0.0, param2: 0.0, param3: 0.0, param4: 0.0, param5: 0.0, param6: 0.0, param7: 0.0, command: cmd, target_system: sys, target_component: comp, confirmation: 0 }))));
+                    }
+                }
+            }
+        }
+        // Ctrl+T: connect without downloading parameters (comPort.Open(false))
+        if ctrl(Key::T) {
+            if let Some(spec) = self.connection_spec() {
+                actions.push(AppAction::Connect(spec));
+                self.skip_params_once = true;
+            }
+        }
+        // Ctrl+Y: PREFLIGHT_STORAGE write
+        if ctrl(Key::Y) {
+            match &self.link {
+                Some(l) => {
+                    l.send(mp_core::link::LinkCommand::CommandLong { command: 245, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
+                    self.toasts.info("Storage write requested");
+                }
+                None => self.toasts.error("Invalid command"),
+            }
+        }
+        // Ctrl+J DevopsUI
+        if ctrl(Key::J) {
+            self.hotkey_tools.devops_open = true;
+        }
     }
 
     /// CTX_mainmenu: AutoHide, Full Screen, Readonly, Connection Options, Connection List.
@@ -937,6 +997,7 @@ impl eframe::App for MissionPlannerApp {
                     assets,
                     readonly,
                     joystick,
+                    hotkey_tools,
                     ..
                 } = self;
                 let view = settings.view;
@@ -951,6 +1012,7 @@ impl eframe::App for MissionPlannerApp {
                     readonly: *readonly,
                     joystick,
                 };
+                hotkey_tools.ui(ui.ctx(), &mut app);
                 match view {
                     View::FlightData => flight_data.ui(ui, &mut app),
                     View::FlightPlan => flight_plan.ui(ui, &mut app),

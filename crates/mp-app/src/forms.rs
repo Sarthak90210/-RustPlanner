@@ -52,7 +52,7 @@ macro_rules! forms {
 }
 
 const FORMS: &[(&str, &str)] = forms!(
-    "rangefinder", "airspeed", "optflow", "mount", "parachute", "tracker", "bluetooth", "esp8266", "cubeid", "dronecan", "repl", "initialparams", "compassmot", "serial", "sikradio", "osd", "adsb", "gpsorder", "hwosd", "georef", "fwdisabled", "paramloading", "secureap", "tradheli", "trackerui"
+    "rangefinder", "airspeed", "optflow", "mount", "parachute", "tracker", "bluetooth", "esp8266", "cubeid", "dronecan", "repl", "initialparams", "compassmot", "serial", "sikradio", "osd", "adsb", "gpsorder", "hwosd", "georef", "fwdisabled", "paramloading", "secureap", "tradheli", "trackerui", "devops", "gmapcache"
 );
 
 const IMAGES: &[(&str, &[u8])] = &[

@@ -17,6 +17,7 @@ const R: f64 = 6_378_137.0;
 
 /// Prompts opened from the context menu.
 pub(super) enum MenuPrompt {
+    RotateMap(String),
     OffsetPolygon(String),
     ZoomTo(String, String),
     ModifyAlt(String),
@@ -160,6 +161,79 @@ impl FlightPlanView {
         hit.or(self.selected).unwrap_or(self.items.len()).min(self.items.len())
     }
 
+    /// Shared by the map icon and the map context menu.
+    pub(super) fn polygon_menu(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
+        if ui.button("Draw a Polygon").clicked() {
+            self.drawing_polygon = true;
+            ui.close();
+        }
+        if ui.button("Clear Polygon").clicked() {
+            self.polygon.clear();
+            self.drawing_polygon = false;
+            ui.close();
+        }
+        if ui.button("Save Polygon").clicked() {
+            if self.polygon.is_empty() {
+                app.toasts.error("Please define a polygon.");
+            } else {
+                let mut text = String::from("#saved by Mission Planner\r\n");
+                for (a, b) in &self.polygon {
+                    text.push_str(&format!("{a} {b}\r\n"));
+                }
+                if let Some(Err(e)) = platform::save_text("Save Polygon", "polygon.poly", "Polygon", &["poly"], &text) {
+                    app.toasts.error(e);
+                }
+            }
+            ui.close();
+        }
+        if ui.button("Load Polygon").clicked() {
+            if let Some((_, text)) = platform::open_text("Load Polygon", "Polygon", &["poly", "txt"]) {
+                self.polygon = text
+                    .lines()
+                    .filter(|l| !l.starts_with('#'))
+                    .filter_map(|l| {
+                        let v: Vec<f64> = l.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+                        (v.len() >= 2).then(|| (v[0], v[1]))
+                    })
+                    .collect();
+            }
+            ui.close();
+        }
+        if ui.button("From SHP").clicked() {
+            if let Some(p) = pick("From SHP", "Shape file", &["shp"]) {
+                match std::fs::read(&p).map(|b| read_shp(&b)) {
+                    Ok(shapes) if !shapes.is_empty() => self.polygon = shapes.into_iter().max_by_key(|s| s.len()).unwrap_or_default(),
+                    _ => app.toasts.error("No polygon found in the shape file"),
+                }
+            }
+            ui.close();
+        }
+        if ui.button("From Current Waypoints").clicked() {
+            self.polygon = self.items.iter().filter(|w| w.has_location() && (w.lat != 0.0 || w.lng != 0.0)).map(|w| (w.lat, w.lng)).collect();
+            ui.close();
+        }
+        if ui.button("Offset Polygon").clicked() {
+            self.menu_prompt = Some(MenuPrompt::OffsetPolygon("10".into()));
+            ui.close();
+        }
+        if ui.button("Area").clicked() {
+            let a = mp_core::survey::area(&self.polygon);
+            app.toasts.info(format!("Area: {a:.0} m2 ({:.3} km2)", a / 1e6));
+            ui.close();
+        }
+        if self.mission_type == 1 {
+            ui.separator();
+            if ui.button("Fence Inclusion").clicked() {
+                self.add_fence_polygon(5001, app);
+                ui.close();
+            }
+            if ui.button("Fence Exclusion").clicked() {
+                self.add_fence_polygon(5002, app);
+                ui.close();
+            }
+        }
+    }
+
     /// contextMenuStrip1, in Mission Planner's order.
     pub(super) fn context_menu(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
         let Some((lat, lng, hit)) = self.ctx_pos else { return };
@@ -248,76 +322,7 @@ impl FlightPlanView {
             ui.close();
         }
         ui.separator();
-        ui.menu_button("Polygon", |ui| {
-            if ui.button("Draw a Polygon").clicked() {
-                self.drawing_polygon = true;
-                self.polygon.clear();
-                ui.close();
-            }
-            if ui.button("Clear Polygon").clicked() {
-                self.polygon.clear();
-                self.drawing_polygon = false;
-                ui.close();
-            }
-            if ui.button("Save Polygon").clicked() {
-                if self.polygon.is_empty() {
-                    app.toasts.error("Please define a polygon.");
-                } else {
-                    let mut text = String::from("#saved by Mission Planner\r\n");
-                    for (a, b) in &self.polygon {
-                        text.push_str(&format!("{a} {b}\r\n"));
-                    }
-                    if let Some(Err(e)) = platform::save_text("Save Polygon", "polygon.poly", "Polygon", &["poly"], &text) {
-                        app.toasts.error(e);
-                    }
-                }
-                ui.close();
-            }
-            if ui.button("Load Polygon").clicked() {
-                if let Some((_, text)) = platform::open_text("Load Polygon", "Polygon", &["poly", "txt"]) {
-                    self.polygon = text
-                        .lines()
-                        .filter(|l| !l.starts_with('#'))
-                        .filter_map(|l| {
-                            let v: Vec<f64> = l.split_whitespace().filter_map(|x| x.parse().ok()).collect();
-                            (v.len() >= 2).then(|| (v[0], v[1]))
-                        })
-                        .collect();
-                }
-                ui.close();
-            }
-            if ui.button("From SHP").clicked() {
-                if let Some(p) = pick("From SHP", "Shape file", &["shp"]) {
-                    match std::fs::read(&p).map(|b| read_shp(&b)) {
-                        Ok(shapes) if !shapes.is_empty() => self.polygon = shapes.into_iter().max_by_key(|s| s.len()).unwrap_or_default(),
-                        _ => app.toasts.error("No polygon found in the shape file"),
-                    }
-                }
-                ui.close();
-            }
-            if ui.button("From Current Waypoints").clicked() {
-                self.polygon = self.items.iter().filter(|w| w.has_location() && (w.lat != 0.0 || w.lng != 0.0)).map(|w| (w.lat, w.lng)).collect();
-                ui.close();
-            }
-            if ui.button("Offset Polygon").clicked() {
-                self.menu_prompt = Some(MenuPrompt::OffsetPolygon("10".into()));
-                ui.close();
-            }
-            if ui.button("Area").clicked() {
-                let a = mp_core::survey::area(&self.polygon);
-                app.toasts.error(format!("Area: {a:.0} m2 ({:.3} km2)", a / 1e6));
-                ui.close();
-            }
-            ui.separator();
-            if ui.button("Fence Inclusion").clicked() {
-                self.add_fence_polygon(5001, app);
-                ui.close();
-            }
-            if ui.button("Fence Exclusion").clicked() {
-                self.add_fence_polygon(5002, app);
-                ui.close();
-            }
-        });
+        ui.menu_button("Polygon", |ui| self.polygon_menu(ui, app));
         ui.menu_button("Geo-Fence", |ui| {
             if ui.button("Upload").clicked() {
                 self.transfer(app, 1, false);
@@ -410,6 +415,10 @@ impl FlightPlanView {
             }
             if ui.button("Zoom To").clicked() {
                 self.menu_prompt = Some(MenuPrompt::ZoomTo(format!("{lat:.6}"), format!("{lng:.6}")));
+                ui.close();
+            }
+            if ui.button("Rotate Map").clicked() {
+                self.menu_prompt = Some(MenuPrompt::RotateMap(app.settings.fp_map.bearing.to_string()));
                 ui.close();
             }
             if ui.button("Prefetch").clicked() {
@@ -600,6 +609,7 @@ impl FlightPlanView {
         if let Some(p) = self.menu_prompt.as_mut() {
             let mut done = None;
             let title = match p {
+                MenuPrompt::RotateMap(_) => "Rotate map to heading",
                 MenuPrompt::OffsetPolygon(_) => "Offset Polygon",
                 MenuPrompt::ZoomTo(..) => "Zoom To",
                 MenuPrompt::ModifyAlt(_) => "Modify Alt",
@@ -616,6 +626,7 @@ impl FlightPlanView {
                     ui.text_edit_singleline(v);
                 };
                 match p {
+                    MenuPrompt::RotateMap(h) => field(ui, "Enter new UP heading", h),
                     MenuPrompt::OffsetPolygon(d) => field(ui, "Distance (m, negative shrinks)", d),
                     MenuPrompt::ZoomTo(a, b) => {
                         field(ui, "Lat", a);
@@ -664,6 +675,12 @@ impl FlightPlanView {
     fn apply_prompt(&mut self, p: MenuPrompt, app: &mut AppCtx) {
         let num = |s: &str| s.trim().parse::<f64>().ok();
         match p {
+            MenuPrompt::RotateMap(h) => {
+                match num(&h).filter(|h| h.is_finite()) {
+                    Some(h) => app.settings.fp_map.bearing = h.rem_euclid(360.0),
+                    None => app.toasts.error("Please enter a finite heading in degrees."),
+                }
+            }
             MenuPrompt::OffsetPolygon(d) => {
                 let Some(d) = num(&d) else { return };
                 if self.polygon.len() < 3 {

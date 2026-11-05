@@ -174,23 +174,38 @@ pub struct MapView {
     pub rect: Rect,
     pub zoom: f64,
     center_world: (f64, f64),
+    rotation: egui::emath::Rot2,
 }
 
 impl MapView {
-    pub fn to_screen(&self, lat: f64, lng: f64) -> Pos2 {
-        let (x, y) = latlng_to_world(lat, lng, self.zoom);
-        let c = self.rect.center();
-        Pos2::new(
-            c.x + (x - self.center_world.0) as f32,
-            c.y + (y - self.center_world.1) as f32,
+    fn new(rect: Rect, state: &MapState) -> Self {
+        Self {
+            rect,
+            zoom: state.zoom,
+            center_world: latlng_to_world(state.lat, state.lng, state.zoom),
+            rotation: egui::emath::Rot2::from_angle(-(state.bearing as f32).to_radians()),
+        }
+    }
+
+    fn world_to_screen(&self, x: f64, y: f64) -> Pos2 {
+        self.rect.center() + self.rotation * Vec2::new(
+            (x - self.center_world.0) as f32,
+            (y - self.center_world.1) as f32,
         )
     }
 
+    pub fn to_screen(&self, lat: f64, lng: f64) -> Pos2 {
+        let (x, y) = latlng_to_world(lat, lng, self.zoom);
+        let world_width = TILE * 2f64.powf(self.zoom);
+        let dx = (x - self.center_world.0 + world_width / 2.0).rem_euclid(world_width) - world_width / 2.0;
+        self.world_to_screen(self.center_world.0 + dx, y)
+    }
+
     pub fn to_latlng(&self, p: Pos2) -> (f64, f64) {
-        let c = self.rect.center();
+        let d = self.rotation.inverse() * (p - self.rect.center());
         world_to_latlng(
-            self.center_world.0 + (p.x - c.x) as f64,
-            self.center_world.1 + (p.y - c.y) as f64,
+            self.center_world.0 + d.x as f64,
+            self.center_world.1 + d.y as f64,
             self.zoom,
         )
     }
@@ -210,6 +225,9 @@ pub struct MapState {
     pub lng: f64,
     pub zoom: f64,
     pub provider: Provider,
+    /// Heading at the top of the map, in degrees clockwise from north.
+    #[serde(default)]
+    pub bearing: f64,
 }
 
 impl Default for MapState {
@@ -220,6 +238,7 @@ impl Default for MapState {
             zoom: 16.0,
             // MainV2 default map: GoogleSatelliteMap
             provider: Provider::GoogleSatellite,
+            bearing: 0.0,
         }
     }
 }
@@ -228,6 +247,28 @@ impl MapState {
     pub fn center_on(&mut self, lat: f64, lng: f64) {
         self.lat = lat;
         self.lng = lng;
+    }
+
+    /// Fit the route in the current viewport, accounting for bearing and the dateline.
+    pub fn fit_points(&mut self, points: &[(f64, f64)], size: Vec2) {
+        let points: Vec<_> = points.iter().copied()
+            .filter(|(a, b)| a.is_finite() && b.is_finite() && a.abs() <= 90.0 && b.abs() <= 180.0)
+            .collect();
+        let Some(&(lat, lng)) = points.first() else { return };
+        let origin = latlng_to_world(lat, lng, 0.0);
+        let rot = egui::emath::Rot2::from_angle(-(self.bearing as f32).to_radians());
+        let mut bounds = Rect::NOTHING;
+        for (lat, lng) in points {
+            let (x, y) = latlng_to_world(lat, lng, 0.0);
+            let dx = (x - origin.0 + TILE / 2.0).rem_euclid(TILE) - TILE / 2.0;
+            bounds.extend_with(Pos2::ZERO + rot * Vec2::new(dx as f32, (y - origin.1) as f32));
+        }
+        let d = rot.inverse() * bounds.center().to_vec2();
+        let (lat, lng) = world_to_latlng(origin.0 + d.x as f64, origin.1 + d.y as f64, 0.0);
+        self.center_on(lat, (lng + 180.0).rem_euclid(360.0) - 180.0);
+        let available = (size - Vec2::splat(80.0)).max(Vec2::splat(1.0));
+        let scale = (available.x / bounds.width().max(1e-6)).min(available.y / bounds.height().max(1e-6));
+        self.zoom = (scale as f64).log2().clamp(2.0, self.provider.max_zoom() as f64 + 2.0).min(20.0);
     }
 }
 
@@ -251,6 +292,13 @@ pub struct TileCache {
 }
 
 impl TileCache {
+    #[cfg(test)]
+    pub(crate) fn offline() -> Self {
+        let mut cache = Self::new(None);
+        cache.started = true;
+        cache
+    }
+
     pub fn new(cache_dir: Option<PathBuf>) -> Self {
         let (done_tx, done_rx) = crossbeam_channel::unbounded();
         Self {
@@ -500,28 +548,20 @@ pub fn show(
         }
         if dz != 0.0 {
             let anchor = hover.unwrap_or(rect.center());
-            let before = MapView {
-                rect,
-                zoom: state.zoom,
-                center_world: latlng_to_world(state.lat, state.lng, state.zoom),
-            };
+            let before = MapView::new(rect, state);
             let (alat, alng) = before.to_latlng(anchor);
             state.zoom = (state.zoom + dz).clamp(2.0, max_z + 2.0);
             // keep anchor fixed
             let (ax, ay) = latlng_to_world(alat, alng, state.zoom);
-            let c = rect.center();
-            let cw = (ax - (anchor.x - c.x) as f64, ay - (anchor.y - c.y) as f64);
+            let d = before.rotation.inverse() * (anchor - rect.center());
+            let cw = (ax - d.x as f64, ay - d.y as f64);
             let (lat, lng) = world_to_latlng(cw.0, cw.1, state.zoom);
             state.lat = lat;
             state.lng = lng;
         }
     }
 
-    let mut view = MapView {
-        rect,
-        zoom: state.zoom,
-        center_world: latlng_to_world(state.lat, state.lng, state.zoom),
-    };
+    let view = MapView::new(rect, state);
 
     draw_tiles(&painter, &view, state.provider, cache);
 
@@ -529,7 +569,7 @@ pub fn show(
     let consumed = overlay(ui, &view, &response, &painter_overlay);
 
     if !consumed && response.dragged_by(egui::PointerButton::Primary) {
-        let d = response.drag_delta();
+        let d = view.rotation.inverse() * response.drag_delta();
         let cw = (
             view.center_world.0 - d.x as f64,
             view.center_world.1 - d.y as f64,
@@ -537,7 +577,6 @@ pub fn show(
         let (lat, lng) = world_to_latlng(cw.0, cw.1, state.zoom);
         state.lat = lat.clamp(-85.0, 85.0);
         state.lng = ((lng + 540.0) % 360.0) - 180.0;
-        view.center_world = latlng_to_world(state.lat, state.lng, state.zoom);
     }
 
     // attribution + scale bar
@@ -558,12 +597,16 @@ fn draw_tiles(painter: &egui::Painter, view: &MapView, provider: Provider, cache
     let z = (view.zoom.floor() as i32).clamp(0, max_z as i32) as u8;
     let scale = 2f64.powf(view.zoom - z as f64); // pixel scale of a z-level tile
     let tile_px = TILE * scale;
-    let c = view.rect.center();
     let cw_z = (view.center_world.0 / scale, view.center_world.1 / scale); // centre in z-level pixels
-    let left = cw_z.0 - (c.x - view.rect.left()) as f64 / scale;
-    let top = cw_z.1 - (c.y - view.rect.top()) as f64 / scale;
-    let right = left + view.rect.width() as f64 / scale;
-    let bottom = top + view.rect.height() as f64 / scale;
+    let mut bounds = Rect::NOTHING;
+    for p in [view.rect.left_top(), view.rect.right_top(), view.rect.right_bottom(), view.rect.left_bottom()] {
+        let d = view.rotation.inverse() * (p - view.rect.center());
+        bounds.extend_with(Pos2::new(d.x, d.y));
+    }
+    let left = cw_z.0 + bounds.left() as f64 / scale;
+    let top = cw_z.1 + bounds.top() as f64 / scale;
+    let right = cw_z.0 + bounds.right() as f64 / scale;
+    let bottom = cw_z.1 + bounds.bottom() as f64 / scale;
     let n = 1u32 << z;
     let (tx0, tx1) = ((left / TILE).floor() as i64, (right / TILE).floor() as i64);
     let (ty0, ty1) = (
@@ -583,14 +626,14 @@ fn draw_tiles(painter: &egui::Painter, view: &MapView, provider: Provider, cache
                 x: wx,
                 y: ty as u32,
             };
-            let sx = view.rect.left() as f64 + (tx as f64 * TILE - left) * scale;
-            let sy = view.rect.top() as f64 + (ty as f64 * TILE - top) * scale;
+            let sx = view.rect.center().x as f64 + (tx as f64 * TILE - cw_z.0) * scale;
+            let sy = view.rect.center().y as f64 + (ty as f64 * TILE - cw_z.1) * scale;
             let r = Rect::from_min_size(
                 Pos2::new(sx as f32, sy as f32),
                 Vec2::splat(tile_px as f32 + 0.5),
             );
             if let Some(id) = cache.get(&key) {
-                painter.image(id, r, uv_full, Color32::WHITE);
+                paint_tile(painter, view, id, r, uv_full);
                 continue;
             }
             // Fall back to a cached ancestor, cropped and scaled.
@@ -610,7 +653,7 @@ fn draw_tiles(painter: &egui::Painter, view: &MapView, provider: Provider, cache
                     let ox = (wx & ((1 << up) - 1)) as f32 * f;
                     let oy = ((ty as u32) & ((1 << up) - 1)) as f32 * f;
                     let uv = Rect::from_min_size(Pos2::new(ox, oy), Vec2::splat(f));
-                    painter.image(id, r, uv, Color32::WHITE);
+                    paint_tile(painter, view, id, r, uv);
                     break;
                 }
             }
@@ -628,6 +671,15 @@ fn draw_tiles(painter: &egui::Painter, view: &MapView, provider: Provider, cache
     if !q.is_empty() {
         cache.queue.cv.notify_all();
     }
+}
+
+fn paint_tile(painter: &egui::Painter, view: &MapView, id: egui::TextureId, rect: Rect, uv: Rect) {
+    let mut mesh = egui::Mesh::with_texture(id);
+    mesh.add_rect_with_uv(rect, uv, Color32::WHITE);
+    for v in &mut mesh.vertices {
+        v.pos = view.rect.center() + view.rotation * (v.pos - view.rect.center());
+    }
+    painter.add(mesh);
 }
 
 fn draw_scale(painter: &egui::Painter, view: &MapView) {
@@ -743,6 +795,107 @@ pub fn draw_quad(painter: &egui::Painter, p: Pos2, heading: f32, sysid: u8) {
 
 #[cfg(test)]
 mod provider_tests {
+    use super::*;
+
+    #[test]
+    fn old_map_settings_default_to_north_up() {
+        let state: MapState = serde_json::from_str(r#"{"lat":10,"lng":20,"zoom":15,"provider":"OpenStreetMap"}"#).unwrap();
+        assert_eq!(state.bearing, 0.0);
+    }
+
+    #[test]
+    fn bearing_rotates_projection_and_preserves_inverse() {
+        let rect = Rect::from_min_size(Pos2::new(15.0, 20.0), Vec2::new(800.0, 600.0));
+        let state = MapState { lat: 12.0, lng: 79.0, zoom: 16.0, bearing: 90.0, ..Default::default() };
+        let view = MapView::new(rect, &state);
+        let east = view.to_screen(12.0, 79.001);
+        assert!(east.y < rect.center().y);
+        assert!((east.x - rect.center().x).abs() < 0.01);
+        for bearing in [0.0, 45.0, 90.0, 180.0, 359.0] {
+            let view = MapView::new(rect, &MapState { bearing, ..state.clone() });
+            for p in [rect.left_top(), rect.center(), rect.right_bottom()] {
+                let (a, b) = view.to_latlng(p);
+                assert!(view.to_screen(a, b).distance(p) < 0.02);
+            }
+        }
+    }
+
+    #[test]
+    fn rotated_map_keeps_wheel_anchor_and_pans_with_pointer() {
+        let ctx = egui::Context::default();
+        let mut cache = TileCache::offline();
+        let mut state = MapState { bearing: 90.0, ..Default::default() };
+        let mut frame = |state: &mut MapState, events: Vec<egui::Event>| {
+            let mut view = None;
+            let mut output = ctx.run_ui(egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(800.0, 600.0))),
+                events, ..Default::default()
+            }, |ui| { view = Some(show(ui, state, &mut cache, |_, _, _, _| false).view); });
+            output.textures_delta.clear();
+            view.unwrap()
+        };
+        let anchor = Pos2::new(300.0, 200.0);
+        frame(&mut state, vec![egui::Event::PointerMoved(anchor)]);
+        let before = frame(&mut state, Vec::new());
+        let (lat, lng) = before.to_latlng(anchor);
+        let after = frame(&mut state, vec![egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point, delta: Vec2::new(0.0, 60.0), modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move, source: egui::MouseWheelSource::Unknown,
+        }]);
+        assert!(after.zoom > before.zoom);
+        assert!(after.to_screen(lat, lng).distance(anchor) < 0.02);
+
+        // Finish the wheel smoothing before starting a separate pan gesture.
+        for _ in 0..120 { frame(&mut state, Vec::new()); }
+        frame(&mut state, vec![egui::Event::PointerButton {
+            pos: anchor, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE
+        }]);
+        let start = frame(&mut state, Vec::new()).to_latlng(anchor);
+        let moved = anchor + Vec2::new(40.0, 20.0);
+        frame(&mut state, vec![egui::Event::PointerMoved(moved)]);
+        let view = frame(&mut state, Vec::new());
+        assert!(view.to_screen(start.0, start.1).distance(moved) < 0.02);
+    }
+
+    #[test]
+    fn fit_route_at_bearing_and_across_dateline() {
+        let size = Vec2::new(800.0, 600.0);
+        for bearing in [0.0, 45.0, 90.0, 200.0] {
+            let mut state = MapState { bearing, ..Default::default() };
+            for pts in [vec![(12.0, 79.0), (12.1, 79.2), (11.8, 79.1)], vec![(10.0, 179.95), (10.1, -179.95)]] {
+                state.fit_points(&pts, size);
+                let rect = Rect::from_min_size(Pos2::ZERO, size);
+                let view = MapView::new(rect, &state);
+                for (a, b) in pts {
+                    assert!(rect.shrink(35.0).contains(view.to_screen(a, b)), "{state:?}");
+                }
+                assert!(state.zoom > 8.0);
+            }
+        }
+    }
+
+    #[test]
+    fn rotated_tiles_match_overlay_coordinates() {
+        let ctx = egui::Context::default();
+        let state = MapState { lat: 0.0, lng: 0.0, zoom: 3.0, bearing: 37.0, ..Default::default() };
+        let rect = Rect::from_min_size(Pos2::ZERO, Vec2::new(800.0, 600.0));
+        let view = MapView::new(rect, &state);
+        let tile = Rect::from_min_size(rect.center(), Vec2::splat(256.0));
+        let mut output = ctx.run_pass(egui::RawInput::default(), |ctx| {
+            let painter = ctx.layer_painter(egui::LayerId::background());
+            paint_tile(&painter, &view, egui::TextureId::Managed(1), tile, UV1);
+        });
+        output.textures_delta.clear();
+        let (lat, lng) = world_to_latlng(view.center_world.0 + 256.0, view.center_world.1 + 256.0, state.zoom);
+        let expected = rect.center() + view.rotation * Vec2::splat(256.0);
+        assert!(view.to_screen(lat, lng).distance(expected) < 0.01);
+        let mesh = output.shapes.iter().find_map(|s| match &s.shape {
+            egui::Shape::Mesh(m) => Some(m),
+            _ => None,
+        }).unwrap();
+        assert!(mesh.vertices.iter().any(|v| v.pos.distance(view.to_screen(lat, lng)) < 0.01));
+    }
+
     #[test]
     fn bing_quadkey() {
         // Bing Maps docs: tile (3, 5) at level 3 -> quadkey 213

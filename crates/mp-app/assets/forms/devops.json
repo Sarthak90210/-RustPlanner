@@ -1,0 +1,189 @@
+{
+"name": "devops",
+"w": 600,
+"h": 400,
+"controls": [
+{
+"name": "but_doit",
+"kind": "button",
+"parent": "$this",
+"x": 526,
+"y": 6,
+"w": 75,
+"h": 23,
+"text": "Do It"
+},
+{
+"name": "flowLayoutPanel1",
+"kind": "panel",
+"parent": "$this",
+"x": 3,
+"y": 3,
+"w": 465,
+"h": 58
+},
+{
+"name": "textBox1",
+"kind": "text",
+"parent": "$this",
+"x": 3,
+"y": 67,
+"w": 465,
+"h": 144
+},
+{
+"name": "but_test",
+"kind": "button",
+"parent": "$this",
+"x": 513,
+"y": 76,
+"w": 75,
+"h": 23,
+"text": "test"
+},
+{
+"name": "num_count",
+"kind": "num",
+"parent": "flowLayoutPanel1",
+"x": 375,
+"y": 29,
+"w": 62,
+"h": 20
+},
+{
+"name": "label7",
+"kind": "label",
+"parent": "flowLayoutPanel1",
+"x": 335,
+"y": 26,
+"w": 34,
+"h": 13,
+"text": "count"
+},
+{
+"name": "num_regstart",
+"kind": "num",
+"parent": "flowLayoutPanel1",
+"x": 267,
+"y": 29,
+"w": 62,
+"h": 20
+},
+{
+"name": "label6",
+"kind": "label",
+"parent": "flowLayoutPanel1",
+"x": 219,
+"y": 26,
+"w": 42,
+"h": 13,
+"text": "regstart"
+},
+{
+"name": "num_address",
+"kind": "num",
+"parent": "flowLayoutPanel1",
+"x": 151,
+"y": 29,
+"w": 62,
+"h": 20
+},
+{
+"name": "label5",
+"kind": "label",
+"parent": "flowLayoutPanel1",
+"x": 101,
+"y": 26,
+"w": 44,
+"h": 13,
+"text": "address"
+},
+{
+"name": "num_busno",
+"kind": "num",
+"parent": "flowLayoutPanel1",
+"x": 33,
+"y": 29,
+"w": 62,
+"h": 20
+},
+{
+"name": "label4",
+"kind": "label",
+"parent": "flowLayoutPanel1",
+"x": 3,
+"y": 26,
+"w": 24,
+"h": 13,
+"text": "bus"
+},
+{
+"name": "txt_spiname",
+"kind": "text",
+"parent": "flowLayoutPanel1",
+"x": 343,
+"y": 3,
+"w": 100,
+"h": 20,
+"text": "icm20948_ext"
+},
+{
+"name": "dom_bustype",
+"kind": "num",
+"parent": "flowLayoutPanel1",
+"x": 275,
+"y": 3,
+"w": 62,
+"h": 20,
+"text": "SPI"
+},
+{
+"name": "label3",
+"kind": "label",
+"parent": "flowLayoutPanel1",
+"x": 222,
+"y": 0,
+"w": 47,
+"h": 13,
+"text": "bus type"
+},
+{
+"name": "num_compid",
+"kind": "num",
+"parent": "flowLayoutPanel1",
+"x": 154,
+"y": 3,
+"w": 62,
+"h": 20
+},
+{
+"name": "label2",
+"kind": "label",
+"parent": "flowLayoutPanel1",
+"x": 107,
+"y": 0,
+"w": 41,
+"h": 13,
+"text": "compid"
+},
+{
+"name": "num_sysid",
+"kind": "num",
+"parent": "flowLayoutPanel1",
+"x": 39,
+"y": 3,
+"w": 62,
+"h": 20
+},
+{
+"name": "label1",
+"kind": "label",
+"parent": "flowLayoutPanel1",
+"x": 3,
+"y": 0,
+"w": 30,
+"h": 13,
+"text": "sysid"
+}
+]
+}

@@ -8,6 +8,7 @@ pub mod fonts;
 pub mod georef_ui;
 pub mod forms;
 mod demo;
+pub mod hotkey_tools;
 pub mod hud;
 pub mod joystick;
 pub mod log_browse;

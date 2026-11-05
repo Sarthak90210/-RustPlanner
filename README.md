@@ -1,7 +1,8 @@
 # Mission Planner (Rust)
 
-A Rust port of [ArduPilot Mission Planner](https://github.com/ArduPilot/MissionPlanner), one codebase for
-Windows, macOS, Linux, Android and iOS. The UI is rebuilt from Mission Planner's own layout files
+A Rust port in progress of [ArduPilot Mission Planner](https://github.com/ArduPilot/MissionPlanner), targeting
+Windows, macOS, Linux, Android and iOS. Full feature parity and native builds on every platform are still pending.
+The UI is rebuilt from Mission Planner's own layout files
 (`*.Designer.cs`, `*.resx`), theme (`BurntKermit.mpsystheme`, `ThemeManager.cs`) and icon assets, and
 the HUD is a line-by-line port of `HUD.cs doPaint()`.
 
@@ -43,7 +44,9 @@ rustup target add aarch64-apple-ios
 cargo build -p mp-app --lib --target aarch64-apple-ios --release
 ```
 
-Builds `libmp_app` (static/cdylib). An Xcode wrapper app calls `start_mission_planner()`. Rendering uses wgpu/Metal.
+The library exposes `start_mission_planner()` for an Xcode wrapper. The wrapper, signing, packaging and
+device validation remain to be completed. This command alone does not produce an installable iOS app.
+The iOS target selects wgpu for rendering.
 
 ## Status
 
@@ -52,10 +55,31 @@ with retries, parameter writes, mission upload/download (MISSION_ITEM_INT with M
 modes, arm/disarm, guided "Fly To Here", takeoff, servo/relay, calibration commands, `.waypoints` and
 `.param` files, map tiles with disk cache.
 
-Screens follow Mission Planner's layout. Not yet ported (buttons are present and report so): firmware install,
-log download/review, telemetry log playback, scripts, geofence/rally editing, survey grid, joystick, MAVFtp,
-SiK radio config, video/HUD overlay, speech, plugins. Serial ports are desktop only; Android USB serial
-needs a JNI bridge.
+Additional implementations include firmware upload/signing, log download/review and telemetry playback,
+Python scripts and the MAVFtp Lua REPL, geofence/rally editing, survey grids, desktop joystick input,
+MAVFtp, SiK radio settings, MJPEG video, desktop speech, georeferencing, OSD editing, and device pages.
+Their presence in the source is not proof of physical-device compatibility or complete Mission Planner parity.
+
+Flight Plan has polygon and zoom icons using the original icon geometry and menu actions. Rotate Map
+rotates tiles and overlays together, including pointer placement, panning, wheel zoom and mission fitting.
+The remaining MainV2 keyboard tools include plugin discovery, tile cache management, device operations,
+and connecting without an automatic parameter download. Editing shortcuts stay with focused text fields.
+
+Validation is headless while screenshot capture is paused. `cargo test --workspace` covers the UDP
+simulator sessions, the radio test double, core algorithms and egui input events for the map controls.
+It does not launch the application window or provide fresh visual comparison screenshots.
+
+Known gaps include:
+
+- GDAL georeferenced raster loading and opacity control. The custom tile provider is a separate implementation.
+- Mission Planner's place-name geocoder. The current Zoom To dialog takes latitude and longitude.
+- Loading or executing existing .NET plugins. The plugin tool lists files only.
+- Complete source-by-source behavior and visual parity across all pages and tools.
+- Native macOS/Linux verification and Android/iOS packaging and device runs. CI jobs are configured,
+  but local Windows tests do not establish that these platforms build or run.
+- Mobile file picking and Android USB serial integration. Mobile serial and some desktop-only tools
+  need platform adapters; several mobile file-open paths currently return no selection.
+- Real flight-controller, firmware-flashing, camera, radio and tracker qualification for the implemented tools.
 
 ## License
 

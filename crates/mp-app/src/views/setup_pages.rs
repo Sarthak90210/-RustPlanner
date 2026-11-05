@@ -58,7 +58,7 @@ fn signed_name(p: &std::path::Path) -> std::path::PathBuf {
 
 pub fn got_all_params(link: &Link) -> bool {
     let s = link.shared.read();
-    s.param_count > 0 && s.params.len() >= s.param_count as usize
+    s.params_complete || (s.param_count > 0 && s.params.len() >= s.param_count as usize)
 }
 
 impl ExtraPages {
