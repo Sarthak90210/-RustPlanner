@@ -333,6 +333,7 @@ impl MissionPlannerApp {
         for a in actions {
             match a {
                 AppAction::Connect(spec) => {
+                    self.joystick.stop(self.link.as_ref());
                     self.link = None;
                     self.toasts.info(format!("Connecting to {spec}"));
                     let get_params = !std::mem::take(&mut self.skip_params_once);
@@ -340,11 +341,13 @@ impl MissionPlannerApp {
                     self.link = Some(l);
                 }
                 AppAction::Disconnect => {
+                    self.joystick.stop(self.link.as_ref());
                     self.link = None;
                 }
                 AppAction::StartSim => {
                     if self.sim.is_none() {
                         let port = self.settings.sim_port;
+                        self.joystick.stop(self.link.as_ref());
                         self.link = None;
                         self.link = Some(Link::connect_with(ConnectionSpec::UdpListen { port }, Some(platform::data_dir().join("logs"))));
                         match sim::spawn(port) {
@@ -357,6 +360,7 @@ impl MissionPlannerApp {
                     }
                 }
                 AppAction::PlayTlog(path) => {
+                    self.joystick.stop(self.link.as_ref());
                     self.link = None;
                     match Link::playback(&path) {
                         Ok(l) => {
@@ -386,6 +390,7 @@ impl MissionPlannerApp {
                         .info("Demo flight: uploading mission, arming, taking off");
                 }
                 AppAction::StartSwarm(kind, n) => {
+                    self.joystick.stop(self.link.as_ref());
                     self.link = None;
                     self.sim = None;
                     self.swarm.clear();
@@ -403,6 +408,7 @@ impl MissionPlannerApp {
                 }
                 AppAction::StopSim => {
                     self.swarm.clear();
+                    self.joystick.stop(self.link.as_ref());
                     self.link = None;
                     if let Some(s) = self.sim.take() {
                         s.stop();
@@ -450,6 +456,11 @@ impl MissionPlannerApp {
                     drop_link = true;
                 }
                 LinkEvent::ParamsLoaded(n) => self.toasts.info(format!("Got {n} parameters")),
+                LinkEvent::AltitudeChanged(result) => match result {
+                    Ok(()) => self.toasts.info("Altitude change accepted"),
+                    Err(e) => self.toasts.error(e),
+                },
+                LinkEvent::OperationError(e) => self.toasts.error(e),
                 LinkEvent::CommandAck {
                     command,
                     result,
@@ -470,6 +481,7 @@ impl MissionPlannerApp {
             self.flight_data.on_log_event(&e);
         }
         if drop_link {
+            self.joystick.stop(self.link.as_ref());
             self.link = None;
         }
     }
@@ -622,6 +634,7 @@ impl MissionPlannerApp {
                             .response
                     });
                     if let Some((sysid, compid)) = pick {
+                        self.joystick.stop(Some(link));
                         link.send(mp_core::link::LinkCommand::SetTarget { sysid, compid });
                     }
                 }
@@ -929,7 +942,7 @@ impl eframe::App for MissionPlannerApp {
             self.applied_theme = want;
         }
         crate::units::set_from(&self.settings.planner);
-        self.joystick.tick(self.link.as_ref());
+        self.joystick.tick(self.link.as_ref(), self.readonly);
         self.ctx_clone = ctx.clone();
         if let Some(l) = &self.link {
             let (cs, msgs) = {

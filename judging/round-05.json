@@ -1,0 +1,29 @@
+{
+  "round": 5,
+  "commit": "f787de9",
+  "reviewer": "independent agent judge_round5",
+  "score": 5.9,
+  "ui_ux_score": 6.8,
+  "feature_score": 5.3,
+  "ui_ux_provisional": true,
+  "evidence": "Source review against the local C# reference, with three stale round3 captures. No current application screenshots, real-device or other-platform validation.",
+  "findings": [
+    "Change Alt sends guided position current=2 instead of altitude-only current=3; Change Speed parameters differ.",
+    "Joystick button actions absent and Manual Control flag ignored by the sender.",
+    "Unit conversions are missing from PLAN editing, gauges, status and action inputs.",
+    "Planner GCS ID, log path and serial reset settings are stored but not applied.",
+    "One physical link only; the sysid selector changes vehicles on that transport.",
+    "DroneCAN interface actions have no implementation.",
+    "Mobile file selection and serial adapters remain incomplete; no installable iOS wrapper.",
+    "External scripts lack Mission Planner's injected automation object model.",
+    "Plugin manager lists files without executing plugins or supporting lifecycle methods.",
+    "Language and Basic/Advanced layout selection do not apply the expected behavior.",
+    "Password Protect Config stores a checkbox without protecting navigation.",
+    "Camera discovery, GStreamer/HereLink and recording the rendered HUD are incomplete.",
+    "PLAN MAVFTP checkbox does not select packed mission/fence/rally transfer.",
+    "Place geocoding, live KML and GDAL raster/opacity behavior are absent or substituted.",
+    "Raw parameter editing lacks reference read-only/range confirmations and typed bitmask editing."
+  ],
+  "regressions": "No newly introduced regression substantiated against the prior commit.",
+  "next_round": "Joystick functions and protocol mismatches first, then operational Planner settings and units. Do not award 10 without substantiated parity."
+}

@@ -125,6 +125,8 @@ pub enum LinkEvent {
     Connected,
     Disconnected(Option<String>),
     ParamsLoaded(usize),
+    AltitudeChanged(Result<(), String>),
+    OperationError(String),
     ParamSet {
         name: String,
         ok: bool,
@@ -179,6 +181,8 @@ pub enum LinkCommand {
         lng: f64,
         alt: f32,
     },
+    /// setNewWPAlt: MISSION_ITEM_INT current=3, without a new horizontal target.
+    ChangeAltitude { alt: f32 },
     /// LOG_REQUEST_LIST
     LogList,
     /// REQUEST_DATA_STREAM rates (CurrentState.rateattitude etc.)
@@ -380,6 +384,7 @@ struct Worker {
     pending_sets: HashMap<String, PendingSet>,
     mission: Option<MissionOp>,
     pending_cmd: Option<PendingCmd>,
+    pending_alt: Option<(MISSION_ITEM_INT_DATA, Instant, u8)>,
     mirror: Option<(std::net::UdpSocket, std::net::SocketAddr, bool)>,
     subscribers: Vec<(u32, Sender<MavMessage>)>,
     raw_subscribers: Vec<(u32, Sender<(u8, u8, Vec<u8>)>)>,
@@ -428,6 +433,7 @@ impl Worker {
             pending_sets: HashMap::new(),
             mission: None,
             pending_cmd: None,
+            pending_alt: None,
             mirror: None,
             subscribers: Vec::new(),
             raw_subscribers: Vec::new(),
@@ -515,6 +521,10 @@ impl Worker {
     // ---------------------------------------------------------------- commands from the UI
 
     fn handle_command(&mut self, cmd: LinkCommand) -> io::Result<()> {
+        if self.pending_alt.is_some() && matches!(cmd, LinkCommand::ReadMission { .. } | LinkCommand::WriteMission { .. } | LinkCommand::Guided { .. }) {
+            self.event(LinkEvent::OperationError("Wait for the pending altitude change before another mission operation".into()));
+            return Ok(());
+        }
         match cmd {
             LinkCommand::Disconnect => {}
             LinkCommand::Send(m) => self.send(*m)?,
@@ -690,6 +700,17 @@ impl Worker {
                     target_system: self.target_sys,
                     target_component: self.target_comp,
                 }))?;
+            }
+            LinkCommand::ChangeAltitude { alt } => {
+                if !alt.is_finite() || self.mission.is_some() || self.pending_alt.is_some() {
+                    self.event(LinkEvent::AltitudeChanged(Err("Altitude invalid or mission transfer busy".into())));
+                    return Ok(());
+                }
+                let wp = Locationwp::waypoint(0.0, 0.0, alt, 3);
+                let mut item = wp.to_mission_item_int(0, self.target_sys, self.target_comp, MavMissionType::MAV_MISSION_TYPE_MISSION).unwrap();
+                item.current = 3;
+                self.send(MavMessage::MISSION_ITEM_INT(item.clone()))?;
+                self.pending_alt = Some((item, Instant::now(), 1));
             }
             LinkCommand::Guided { lat, lng, alt } => {
                 // setGuidedModeWP: MISSION_ITEM_INT with current = 2
@@ -963,7 +984,7 @@ impl Worker {
             }
             MavMessage::MISSION_REQUEST_INT(r) => self.on_mission_request(r.seq, true)?,
             MavMessage::MISSION_REQUEST(r) => self.on_mission_request(r.seq, false)?,
-            MavMessage::MISSION_ACK(a) => self.on_mission_ack(a),
+            MavMessage::MISSION_ACK(a) if hdr.component_id == self.target_comp => self.on_mission_ack(a),
             MavMessage::COMMAND_ACK(a) => self.on_command_ack(a),
             MavMessage::LOG_ENTRY(e) => {
                 let n = {
@@ -1225,6 +1246,16 @@ impl Worker {
     }
 
     fn on_mission_ack(&mut self, a: MISSION_ACK_DATA) {
+        if self.pending_alt.is_some()
+            && a.mission_type == MavMissionType::MAV_MISSION_TYPE_MISSION
+            && (a.target_system == GCS_SYSID || a.target_system == 0)
+            && (a.target_component == GCS_COMPID || a.target_component == 0) {
+            self.pending_alt = None;
+            self.event(LinkEvent::AltitudeChanged(if a.mavtype == MavMissionResult::MAV_MISSION_ACCEPTED {
+                Ok(())
+            } else { Err(format!("Altitude change failed: {:?}", a.mavtype)) }));
+            return;
+        }
         if let Some(MissionOp::Upload {
             mission_type,
             items,
@@ -1447,6 +1478,20 @@ impl Worker {
         }
         for (n, v) in retry {
             self.send_param_set(&n, v)?;
+        }
+
+        if let Some((item, sent, tries)) = self.pending_alt.as_mut() {
+            if now.duration_since(*sent) > MISSION_TIMEOUT {
+                if *tries >= 3 {
+                    self.pending_alt = None;
+                    self.event(LinkEvent::AltitudeChanged(Err("Altitude change timed out".into())));
+                } else {
+                    *tries += 1;
+                    *sent = now;
+                    let item = item.clone();
+                    self.send(MavMessage::MISSION_ITEM_INT(item))?;
+                }
+            }
         }
 
         // Command retries

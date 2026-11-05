@@ -805,8 +805,8 @@ impl FlightDataView {
                 }
             }
             "Clear Track" => link.shared.write().cs.track.clear(),
-            "Change Speed" => link.send(LinkCommand::CommandLong { command: 178, params: [1.0, self.change_speed, -1.0, 0.0, 0.0, 0.0, 0.0] }),
-            "Change Alt" => link.send(LinkCommand::Guided { lat: cs.lat, lng: cs.lng, alt: self.change_alt }),
+            "Change Speed" => link.send(LinkCommand::CommandLong { command: 178, params: [0.0, self.change_speed, 0.0, 0.0, 0.0, 0.0, 0.0] }),
+            "Change Alt" => link.send(LinkCommand::ChangeAltitude { alt: self.change_alt }),
             "Set Loiter Rad" => {
                 let plane = fw == mp_core::firmware::Firmware::ArduPlane;
                 let name = if plane { "WP_LOITER_RAD" } else { "CIRCLE_RADIUS" };

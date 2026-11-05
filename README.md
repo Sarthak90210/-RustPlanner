@@ -60,6 +60,15 @@ Python scripts and the MAVFtp Lua REPL, geofence/rally editing, survey grids, de
 MAVFtp, SiK radio settings, MJPEG video, desktop speech, georeferencing, OSD editing, and device pages.
 Their presence in the source is not proof of physical-device compatibility or complete Mission Planner parity.
 
+Joystick setup includes 16 button mapping rows, settings, detection and 14 of the reference button functions.
+Actions trigger on edges, relay/custom-axis mappings handle release, and takeoff waits for Guided telemetry.
+Manual Control selects MAVLink MANUAL_CONTROL; stopping RC control sends release values for all 16 channels.
+The gilrs adapter currently exposes 19 standardized buttons; arbitrary DirectInput axes/buttons and gimbal
+point tracking still need adapters. No physical joystick or flight-controller validation has been performed.
+
+DATA Change Alt uses the altitude-only mission flag and reports the autopilot's acceptance, rejection or
+timeout. The independent judging baseline and open gaps are recorded in `judging/round-05.json`.
+
 Flight Plan has polygon and zoom icons using the original icon geometry and menu actions. Rotate Map
 rotates tiles and overlays together, including pointer placement, panning, wheel zoom and mission fitting.
 The remaining MainV2 keyboard tools include plugin discovery, tile cache management, device operations,
