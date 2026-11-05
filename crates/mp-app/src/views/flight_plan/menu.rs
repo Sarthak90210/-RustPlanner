@@ -100,7 +100,7 @@ fn glyph(c: char) -> [u8; 7] {
 }
 
 /// Minimal ESRI shapefile reader: every polygon / polyline / point record as (lat, lng) lists.
-pub(super) fn read_shp(bytes: &[u8]) -> Vec<Vec<(f64, f64)>> {
+pub(crate) fn read_shp(bytes: &[u8]) -> Vec<Vec<(f64, f64)>> {
     let mut out = Vec::new();
     let mut i = 100;
     let le_i32 = |b: &[u8]| i32::from_le_bytes([b[0], b[1], b[2], b[3]]);

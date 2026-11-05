@@ -13,7 +13,7 @@ use crate::app::{AppCtx, Toasts};
 use crate::views::flight_data::provider_combo;
 use crate::{fonts, map, platform, theme};
 
-mod menu;
+pub(crate) mod menu;
 
 const HOME_IDX: usize = usize::MAX;
 

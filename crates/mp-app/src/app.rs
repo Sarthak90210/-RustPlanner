@@ -215,6 +215,7 @@ pub struct MissionPlannerApp {
     applied_theme: (String, String),
     ctx_clone: egui::Context,
     tools: crate::tool_windows::Tools,
+    more_tools: crate::more_tools::MoreTools,
     joystick: crate::joystick::Joystick,
     speech: crate::speech::SpeechRules,
     vario: Option<std::time::Instant>,
@@ -287,6 +288,7 @@ impl MissionPlannerApp {
             applied_theme: (String::new(), String::new()),
             ctx_clone: cc.egui_ctx.clone(),
             tools: Default::default(),
+            more_tools: Default::default(),
             joystick: Default::default(),
             speech: Default::default(),
             vario: None,
@@ -365,7 +367,7 @@ impl MissionPlannerApp {
                     }
                 }
                 AppAction::Tool(name) => {
-                    if !self.tools.activate(&name, self.link.as_ref(), &mut self.toasts) {
+                    if !self.tools.activate(&name, self.link.as_ref(), &mut self.toasts) && !self.more_tools.activate(&name, self.link.as_ref(), &mut self.toasts, &mut self.settings) {
                         self.toasts.error(format!("{name}: not available in this port yet"));
                     }
                 }
@@ -853,6 +855,7 @@ impl eframe::App for MissionPlannerApp {
         self.hotkeys(&ctx, &mut actions);
         self.inspector.show(&ctx, self.link.as_ref(), &mut self.toasts);
         self.tools.ui(&ctx, self.link.as_ref(), &mut self.toasts);
+        self.more_tools.ui(&ctx, self.link.as_ref(), &mut self.toasts);
         // ThemeManager.LoadTheme(CMB_theme.Text)
         let want = (
             self.settings.planner.get("theme").cloned().unwrap_or_else(|| "BurntKermit".into()),
@@ -896,7 +899,7 @@ impl eframe::App for MissionPlannerApp {
                 self.flight_data.open_log_browse();
             }
             Some(crate::tools::TempAction::Unavailable(n)) => {
-                if !self.tools.activate(n, self.link.as_ref(), &mut self.toasts) {
+                if !self.tools.activate(n, self.link.as_ref(), &mut self.toasts) && !self.more_tools.activate(n, self.link.as_ref(), &mut self.toasts, &mut self.settings) {
                     self.toasts.error(format!("{n}: not available in this port yet"));
                 }
             }

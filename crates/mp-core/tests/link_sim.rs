@@ -228,3 +228,36 @@ fn mavftp_against_sim() {
     assert_eq!(rtl.1, 1500.0);
     assert_eq!(rtl.2, Some(1500.0));
 }
+
+#[test]
+fn swarm_three_vehicles_one_link() {
+    use mp_core::mavlink::dialects::ardupilotmega::{MavCmd, MavMessage, COMMAND_LONG_DATA};
+    let port = 14740;
+    let link = Link::connect(ConnectionSpec::UdpListen { port });
+    let _sims: Vec<_> = (1..=3u8)
+        .map(|i| sim::spawn_with(sim::SimOptions { gcs_port: port, sysid: i, kind: sim::SimKind::Copter, offset: (0.0, i as f64 * 10.0) }).unwrap())
+        .collect();
+    wait_event(&link, Duration::from_secs(10), |e| matches!(e, LinkEvent::Connected));
+    let end = Instant::now() + Duration::from_secs(10);
+    while link.shared.read().mavs.len() < 3 {
+        assert!(Instant::now() < end, "only {} vehicles seen", link.shared.read().mavs.len());
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    // arm sysid 2 only (FormationControl "Arm")
+    link.send(LinkCommand::Send(Box::new(MavMessage::COMMAND_LONG(COMMAND_LONG_DATA {
+        param1: 1.0,
+        command: MavCmd::MAV_CMD_COMPONENT_ARM_DISARM,
+        target_system: 2,
+        target_component: 1,
+        ..Default::default()
+    }))));
+    let end = Instant::now() + Duration::from_secs(10);
+    loop {
+        let armed: Vec<bool> = link.shared.read().mavs.values().map(|m| m.armed).collect();
+        if armed == vec![false, true, false] {
+            break;
+        }
+        assert!(Instant::now() < end, "armed states {armed:?}");
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
