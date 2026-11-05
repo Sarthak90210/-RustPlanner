@@ -67,16 +67,26 @@ The gilrs adapter currently exposes 19 standardized buttons; arbitrary DirectInp
 point tracking still need adapters. No physical joystick or flight-controller validation has been performed.
 
 DATA Change Alt uses the altitude-only mission flag and reports the autopilot's acceptance, rejection or
-timeout. The independent judging baseline and open gaps are recorded in `judging/round-05.json`.
+timeout through Mission Planner's legacy MISSION_ITEM path. Vehicle selection cancels prior transactions;
+commands retain separate queue/ACK/retry lifecycles. Controller or button-map changes require re-enabling,
+and stopping controls releases held relays and cancels queued command retries.
+Independent judging baselines and open gaps are recorded in `judging/round-05.json` and `round-06.json`.
 
 Flight Plan has polygon and zoom icons using the original icon geometry and menu actions. Rotate Map
 rotates tiles and overlays together, including pointer placement, panning, wheel zoom and mission fitting.
 The remaining MainV2 keyboard tools include plugin discovery, tile cache management, device operations,
 and connecting without an automatic parameter download. Editing shortcuts stay with focused text fields.
 
-Validation is headless while screenshot capture is paused. `cargo test --workspace` covers the UDP
-simulator sessions, the radio test double, core algorithms and egui input events for the map controls.
-It does not launch the application window or provide fresh visual comparison screenshots.
+`cargo test --workspace` covers UDP simulator sessions, an independent TCP peer for command/altitude
+transactions, the radio test double, core algorithms and egui input events for the map controls.
+TCP lets the transaction tests intentionally omit ACKs without depending on host UDP packet delivery.
+
+Fresh rendered screens can be exported with `MP_CAPTURE=<absolute.png>` and `MP_CAPTURE_AFTER=7`.
+The application captures its actual eframe viewport and exits; these images exclude OS title bars and
+other applications. `MP_DATA_DIR` isolates preferences, cache and logs from the normal installation.
+On Windows, `scripts/capture_round.ps1 -Round 7` captures 50 scenes sequentially on desktop 1 with an
+isolated profile, waits for simulator parameters, and records image receipts, process IDs and the binary
+hash under `target/judging/round07`. It uses the built-in simulator and does not connect to real hardware.
 
 Known gaps include:
 

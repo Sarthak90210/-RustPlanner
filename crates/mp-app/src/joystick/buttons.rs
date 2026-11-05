@@ -54,7 +54,7 @@ impl Function {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct ButtonCfg {
     pub buttonno: i16,
@@ -86,6 +86,22 @@ pub struct Runtime {
 }
 
 impl Runtime {
+    pub fn release_actions(&mut self, configs: &[ButtonCfg; 16]) -> Vec<LinkCommand> {
+        let mut commands = Vec::new();
+        for (i, c) in configs.iter().enumerate() {
+            if self.previous[i] && c.function == Function::Do_Set_Relay {
+                commands.push(LinkCommand::CommandLong {
+                    command: 181,
+                    params: [c.params[0], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                });
+            }
+        }
+        self.previous = [false; 16];
+        self.pending_takeoff = None;
+        self.custom = [None; 2];
+        commands
+    }
+
     /// Synchronize while disabled so enabling with a held button does not fire it.
     pub fn sync(&mut self, configs: &[ButtonCfg; 16], states: &[bool]) {
         self.pending_takeoff = None;
@@ -266,6 +282,31 @@ mod tests {
         assert!(
             matches!(commands[0], LinkCommand::CommandLong { command: 181, params } if params[1] == 0.0)
         );
+    }
+
+    #[test]
+    fn disable_releases_relay_and_cancels_pending_takeoff_once() {
+        let mut cfg = defaults();
+        cfg[0] = ButtonCfg {
+            buttonno: 0,
+            function: Function::Do_Set_Relay,
+            params: [3.0, 0.0, 0.0, 0.0],
+            ..Default::default()
+        };
+        cfg[1] = ButtonCfg {
+            buttonno: 1,
+            function: Function::TakeOff,
+            ..Default::default()
+        };
+        let mut r = Runtime::default();
+        r.poll(&cfg, &[true, true], Firmware::ArduCopter2, None);
+        let commands = r.release_actions(&cfg);
+        assert_eq!(commands.len(), 1);
+        assert!(
+            matches!(commands[0], LinkCommand::CommandLong { command: 181, params } if params[0] == 3.0 && params[1] == 0.0)
+        );
+        assert!(r.mode_commands(4, Instant::now()).is_empty());
+        assert!(r.release_actions(&cfg).is_empty());
     }
 
     #[test]

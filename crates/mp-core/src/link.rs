@@ -4,7 +4,7 @@
 //! The UI talks to it through [`Link`]: commands go in over a channel, state is shared behind
 //! an `RwLock`, and one-shot results come back as [`LinkEvent`]s.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::io::{self, Write};
 use std::sync::Arc;
 use std::thread::JoinHandle;
@@ -174,6 +174,8 @@ pub enum LinkCommand {
         command: u16,
         params: [f32; 7],
     },
+    /// Stop queued command retries before releasing interactive controls.
+    CancelCommands,
     SetCurrentWp(u16),
     /// Guided "Fly To Here".
     Guided {
@@ -181,7 +183,7 @@ pub enum LinkCommand {
         lng: f64,
         alt: f32,
     },
-    /// setNewWPAlt: MISSION_ITEM_INT current=3, without a new horizontal target.
+    /// setNewWPAlt: MISSION_ITEM current=3, without a new horizontal target.
     ChangeAltitude { alt: f32 },
     /// LOG_REQUEST_LIST
     LogList,
@@ -354,6 +356,7 @@ struct PendingCmd {
     params: [f32; 7],
     sent: Instant,
     tries: u32,
+    in_progress: bool,
 }
 
 struct LogDownload {
@@ -384,7 +387,8 @@ struct Worker {
     pending_sets: HashMap<String, PendingSet>,
     mission: Option<MissionOp>,
     pending_cmd: Option<PendingCmd>,
-    pending_alt: Option<(MISSION_ITEM_INT_DATA, Instant, u8)>,
+    command_queue: VecDeque<(MavCmd, [f32; 7])>,
+    pending_alt: Option<(MISSION_ITEM_DATA, Instant, u8)>,
     mirror: Option<(std::net::UdpSocket, std::net::SocketAddr, bool)>,
     subscribers: Vec<(u32, Sender<MavMessage>)>,
     raw_subscribers: Vec<(u32, Sender<(u8, u8, Vec<u8>)>)>,
@@ -433,6 +437,7 @@ impl Worker {
             pending_sets: HashMap::new(),
             mission: None,
             pending_cmd: None,
+            command_queue: VecDeque::new(),
             pending_alt: None,
             mirror: None,
             subscribers: Vec::new(),
@@ -527,6 +532,10 @@ impl Worker {
         }
         match cmd {
             LinkCommand::Disconnect => {}
+            LinkCommand::CancelCommands => {
+                self.pending_cmd = None;
+                self.command_queue.clear();
+            }
             LinkCommand::Send(m) => self.send(*m)?,
             LinkCommand::RequestParams => self.start_param_fetch()?,
             LinkCommand::SetParam { name, value } => {
@@ -664,6 +673,28 @@ impl Worker {
             LinkCommand::SubscribeRaw { msgid, tx } => self.raw_subscribers.push((msgid, tx)),
             LinkCommand::SetTarget { sysid, compid } => {
                 if sysid != self.target_sys || compid != self.target_comp {
+                    self.pending_cmd = None;
+                    self.command_queue.clear();
+                    self.param_fetch = None;
+                    for (name, _) in std::mem::take(&mut self.pending_sets) {
+                        self.event(LinkEvent::ParamSet { name, ok: false });
+                    }
+                    if let Some(operation) = self.mission.take() {
+                        match operation {
+                            MissionOp::Upload { mission_type, .. } => self.event(LinkEvent::MissionUploaded {
+                                mission_type: mission_type as u8,
+                                result: Err("Mission upload cancelled because the selected vehicle changed".into()),
+                            }),
+                            MissionOp::Download { .. } => self.event(LinkEvent::OperationError("Mission download cancelled because the selected vehicle changed".into())),
+                        }
+                    }
+                    if let Some(dl) = self.log_dl.take() {
+                        self.event(LinkEvent::LogDownloaded { id: dl.id, path: dl.path,
+                            result: Err("Log download cancelled because the selected vehicle changed".into()) });
+                    }
+                    if self.pending_alt.take().is_some() {
+                        self.event(LinkEvent::AltitudeChanged(Err("Altitude change cancelled because the selected vehicle changed".into())));
+                    }
                     self.target_sys = sysid;
                     self.target_comp = compid;
                     {
@@ -674,6 +705,7 @@ impl Worker {
                         s.params.clear();
                         s.param_count = 0;
                         s.params_complete = false;
+                        s.autopilot_version = None;
                         if let Some(m) = s.mavs.get(&(sysid, compid)) {
                             s.cs.firmware = m.firmware;
                         }
@@ -706,10 +738,15 @@ impl Worker {
                     self.event(LinkEvent::AltitudeChanged(Err("Altitude invalid or mission transfer busy".into())));
                     return Ok(());
                 }
-                let wp = Locationwp::waypoint(0.0, 0.0, alt, 3);
-                let mut item = wp.to_mission_item_int(0, self.target_sys, self.target_comp, MavMissionType::MAV_MISSION_TYPE_MISSION).unwrap();
-                item.current = 3;
-                self.send(MavMessage::MISSION_ITEM_INT(item.clone()))?;
+                // setWP defaults to use_int=false in the reference, including on
+                // older autopilots that do not implement MISSION_ITEM_INT.
+                let item = MISSION_ITEM_DATA { target_system: self.target_sys,
+                    target_component: self.target_comp, seq: 0,
+                    frame: MavFrame::MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                    command: MavCmd::MAV_CMD_NAV_WAYPOINT, current: 3, autocontinue: 1,
+                    x: 0.0, y: 0.0, z: alt, param1: 0.0, param2: 0.0, param3: 0.0, param4: 0.0,
+                    mission_type: MavMissionType::MAV_MISSION_TYPE_MISSION };
+                self.send(MavMessage::MISSION_ITEM(item.clone()))?;
                 self.pending_alt = Some((item, Instant::now(), 1));
             }
             LinkCommand::Guided { lat, lng, alt } => {
@@ -730,12 +767,33 @@ impl Worker {
     }
 
     fn command_long(&mut self, command: MavCmd, params: [f32; 7]) -> io::Result<()> {
+        // Relay release is idempotent and must take effect immediately, even if a
+        // different command is waiting for an ACK. Keep a queued copy for tracking.
+        let release = command == MavCmd::MAV_CMD_DO_SET_RELAY && params[1] == 0.0;
+        if release {
+            self.command_queue.retain(|(c, p)| *c != command || p[0] != params[0]);
+            if self.pending_cmd.as_ref().is_some_and(|p| p.command == command && p.params[0] == params[0]) {
+                self.pending_cmd = None;
+            }
+        }
+        if self.pending_cmd.is_some() {
+            if self.command_queue.len() >= 128 {
+                self.event(LinkEvent::OperationError("Command queue is full".into()));
+            } else if release {
+                self.send_command_long(command, params, 0)?;
+                self.command_queue.push_front((command, params));
+            } else {
+                self.command_queue.push_back((command, params));
+            }
+            return Ok(());
+        }
         self.send_command_long(command, params, 0)?;
         self.pending_cmd = Some(PendingCmd {
             command,
             params,
             sent: Instant::now(),
             tries: 1,
+            in_progress: false,
         });
         Ok(())
     }
@@ -985,7 +1043,7 @@ impl Worker {
             MavMessage::MISSION_REQUEST_INT(r) => self.on_mission_request(r.seq, true)?,
             MavMessage::MISSION_REQUEST(r) => self.on_mission_request(r.seq, false)?,
             MavMessage::MISSION_ACK(a) if hdr.component_id == self.target_comp => self.on_mission_ack(a),
-            MavMessage::COMMAND_ACK(a) => self.on_command_ack(a),
+            MavMessage::COMMAND_ACK(a) if from_ap => self.on_command_ack(a),
             MavMessage::LOG_ENTRY(e) => {
                 let n = {
                     let mut s = self.shared.write();
@@ -1289,6 +1347,15 @@ impl Worker {
     }
 
     fn on_command_ack(&mut self, a: COMMAND_ACK_DATA) {
+        if (a.target_system != 0 && a.target_system != GCS_SYSID)
+            || (a.target_component != 0 && a.target_component != GCS_COMPID) { return }
+        if a.result == MavResult::MAV_RESULT_IN_PROGRESS {
+            if let Some(p) = self.pending_cmd.as_mut().filter(|p| p.command == a.command) {
+                p.sent = Instant::now();
+                p.in_progress = true;
+            }
+            return;
+        }
         if let Some(p) = &self.pending_cmd {
             if p.command == a.command {
                 let ok = a.result == MavResult::MAV_RESULT_ACCEPTED
@@ -1489,15 +1556,16 @@ impl Worker {
                     *tries += 1;
                     *sent = now;
                     let item = item.clone();
-                    self.send(MavMessage::MISSION_ITEM_INT(item))?;
+                    self.send(MavMessage::MISSION_ITEM(item))?;
                 }
             }
         }
 
         // Command retries
         if let Some(p) = self.pending_cmd.as_mut() {
-            if now.duration_since(p.sent) > CMD_TIMEOUT {
-                if p.tries >= 3 {
+            let timeout = if p.in_progress { Duration::from_secs(60) } else { CMD_TIMEOUT };
+            if now.duration_since(p.sent) > timeout {
+                if p.tries >= 3 || p.in_progress {
                     let c = p.command as u16;
                     self.pending_cmd = None;
                     self.event(LinkEvent::CommandAck {
@@ -1511,6 +1579,12 @@ impl Worker {
                     let (c, params, conf) = (p.command, p.params, p.tries as u8 - 1);
                     self.send_command_long(c, params, conf)?;
                 }
+            }
+        }
+
+        if self.pending_cmd.is_none() {
+            if let Some((command, params)) = self.command_queue.pop_front() {
+                self.command_long(command, params)?;
             }
         }
 

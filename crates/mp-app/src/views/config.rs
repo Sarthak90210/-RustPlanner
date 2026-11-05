@@ -94,6 +94,7 @@ impl Default for ConfigView {
             Some(2) => Page::ExtendedTuning,
             Some(3) => Page::StandardParams,
             Some(4) => Page::AdvancedParams,
+            Some(5) => Page::OnboardOsd,
             Some(6) => Page::MavFtp,
             Some(7) => Page::UserParams,
             Some(10) => Page::Planner,

@@ -1,0 +1,33 @@
+{
+  "round": 6,
+  "commit": "21d2932c8546015abc06e340e0e872daa8a5558f",
+  "reviewer": "independent agent judge_round6",
+  "score": 6.1,
+  "ui_ux_score": 6.8,
+  "feature_score": 5.7,
+  "ui_ux_provisional": true,
+  "evidence": "Frozen-source review against C#, the full implementation patch, and parent verification of 56 tests and a Windows debug build. No fresh captures, hardware runs or five-platform proof.",
+  "improvements": [
+    "Altitude-only mission flag with ACK, rejection and timeout reporting.",
+    "Button mappings and principal parameters, held-button suppression on ordinary enable, manual packets and extension-channel RC release.",
+    "Pending takeoff is cancelled on stop and waits for Guided telemetry."
+  ],
+  "patch_findings": [
+    "Pending altitude change survives vehicle selection; retry/ACK ownership can cross targets.",
+    "Controller switching and imported/remapped settings can create false press edges.",
+    "Altitude change sends only MISSION_ITEM_INT; the reference defaults to legacy MISSION_ITEM.",
+    "Simultaneous actions overwrite the single pending command ACK/retry state.",
+    "Relay OFF is lost when controls stop before the release edge.",
+    "Camera action lacks the reference legacy DIGICAM_CONTROL fallback."
+  ],
+  "remaining_blockers": [
+    "Control transaction isolation and controller lifecycle correctness.",
+    "Joystick raw axes/buttons, calibration, firmware profiles and gimbal point tracking.",
+    "Bidirectional display/input unit conversion across PLAN, DATA actions, gauges and Status.",
+    "Native mobile file and USB serial adapters, installable iOS wrapper and five-platform validation.",
+    "Operational Planner identity, directories, reset, language, layout and password controls.",
+    "Multiple physical links and packed mission MAVFTP transfer.",
+    "Plugin execution, compatible scripting object model and actual DroneCAN interface.",
+    "GStreamer/HereLink, rendered HUD recording, geocoding and current visual comparison."
+  ]
+}

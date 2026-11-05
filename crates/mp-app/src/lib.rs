@@ -3,6 +3,7 @@
 
 pub mod app;
 pub mod assets;
+mod capture;
 pub mod firmware_ui;
 pub mod fonts;
 pub mod georef_ui;
@@ -38,6 +39,8 @@ pub fn title_base() -> String {
 
 fn options() -> eframe::NativeOptions {
     eframe::NativeOptions {
+        persistence_path: std::env::var_os("MP_DATA_DIR").map(|p| std::path::PathBuf::from(p).join("state.ron")),
+        persist_window: std::env::var_os("MP_CAPTURE").is_none(),
         viewport: egui::ViewportBuilder::default()
             .with_title(title_base())
             .with_inner_size([1280.0, 800.0])
@@ -50,6 +53,10 @@ fn options() -> eframe::NativeOptions {
 
 /// Desktop entry point (Windows, macOS, Linux) and iOS.
 pub fn run() -> eframe::Result {
+    if let Some(path) = std::env::var_os("MP_DATA_DIR") {
+        let _ = std::fs::create_dir_all(&path);
+        platform::set_data_dir(std::path::PathBuf::from(path));
+    }
     eframe::run_native(
         APP_NAME,
         options(),

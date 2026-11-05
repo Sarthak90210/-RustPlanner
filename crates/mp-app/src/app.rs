@@ -220,6 +220,7 @@ pub struct MissionPlannerApp {
     tools: crate::tool_windows::Tools,
     more_tools: crate::more_tools::MoreTools,
     hotkey_tools: crate::hotkey_tools::HotkeyTools,
+    capture: Option<crate::capture::Capture>,
     skip_params_once: bool,
     joystick: crate::joystick::Joystick,
     speech: crate::speech::SpeechRules,
@@ -295,6 +296,7 @@ impl MissionPlannerApp {
             tools: Default::default(),
             more_tools: Default::default(),
             hotkey_tools: Default::default(),
+            capture: crate::capture::Capture::from_env(),
             skip_params_once: false,
             joystick: Default::default(),
             speech: Default::default(),
@@ -1061,6 +1063,17 @@ impl eframe::App for MissionPlannerApp {
         if self.link.is_some() {
             // live telemetry
             ctx.request_repaint_after(Duration::from_millis(50));
+        }
+        if let Some(capture) = &mut self.capture {
+            let (connected, params_complete, parameters) = self.link.as_ref().map(|l| {
+                let s = l.shared.read();
+                (s.status == LinkStatus::Connected, s.params_complete, s.params.len())
+            }).unwrap_or((false, false, 0));
+            let simulated = std::env::var_os("MP_AUTOSIM").is_some() || std::env::var_os("MP_SWARM").is_some();
+            capture.tick(&ctx, !simulated || (connected && params_complete), serde_json::json!({
+                "view": format!("{:?}", self.settings.view), "connected": connected,
+                "params_complete": params_complete, "parameters": parameters,
+            }));
         }
     }
 

@@ -49,6 +49,10 @@ pub struct Joystick {
     button_settings: Option<usize>,
     was_active: bool,
     was_manual: bool,
+    last_device: Option<usize>,
+    active_buttons: [ButtonCfg; 16],
+    #[cfg(test)]
+    test_buttons: Option<Vec<bool>>,
     pub elevons: bool,
     pub manual_control: bool,
     /// last output per channel (0 = released / no override)
@@ -85,6 +89,10 @@ impl Default for Joystick {
             button_settings: None,
             was_active: false,
             was_manual: false,
+            last_device: None,
+            active_buttons: buttons::defaults(),
+            #[cfg(test)]
+            test_buttons: None,
             elevons: false,
             manual_control: false,
             output: [0; 16],
@@ -104,6 +112,12 @@ fn config_path() -> std::path::PathBuf {
 impl Joystick {
     /// Release RC before replacing a link or selecting another vehicle.
     pub fn stop(&mut self, link: Option<&Link>) {
+        if let Some(l) = link.filter(|_| self.was_active) {
+            l.send(LinkCommand::CancelCommands);
+            for command in self.button_runtime.release_actions(&self.active_buttons) {
+                l.send(command);
+            }
+        }
         if self.was_active && !self.was_manual {
             if let Some(l) = link {
                 let (sys, comp) = {
@@ -206,6 +220,10 @@ impl Joystick {
     }
 
     fn button_states(&self) -> Vec<bool> {
+        #[cfg(test)]
+        if let Some(states) = &self.test_buttons {
+            return states.clone();
+        }
         #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
         {
             use gilrs::Button::*;
@@ -268,10 +286,24 @@ impl Joystick {
                 self.button_detect = None;
             }
         }
+        // A different controller or imported/remapped buttons must be enabled again.
+        if self.was_active
+            && (self.device != self.last_device || self.buttons != self.active_buttons)
+        {
+            self.enabled = false;
+        }
         let active = self.enabled
             && self.device.is_some()
             && !readonly
             && link.is_some_and(|l| l.status() == mp_core::link::LinkStatus::Connected);
+        if self.was_active && !active {
+            if let Some(l) = link {
+                l.send(LinkCommand::CancelCommands);
+                for command in self.button_runtime.release_actions(&self.active_buttons) {
+                    l.send(command);
+                }
+            }
+        }
         if active {
             let l = link.unwrap();
             let (firmware, pan, mode) = {
@@ -294,6 +326,7 @@ impl Joystick {
             for command in self.button_runtime.mode_commands(mode, Instant::now()) {
                 l.send(command);
             }
+            self.active_buttons = self.buttons.clone();
         } else {
             self.button_runtime.sync(&self.buttons, &states);
         }
@@ -329,6 +362,7 @@ impl Joystick {
         }
         self.was_active = active;
         self.was_manual = self.manual_control;
+        self.last_device = self.device;
     }
 
     pub fn setup_ui(&mut self, ui: &mut egui::Ui, firmware: &str, toasts: &mut crate::app::Toasts) {
@@ -815,5 +849,70 @@ mod tests {
             }
         }
         assert!(!joystick.was_active);
+    }
+
+    #[test]
+    fn controller_and_mapping_changes_cannot_create_an_arm_edge() {
+        use std::net::UdpSocket;
+        for remap in [false, true] {
+            let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_millis(30)))
+                .unwrap();
+            let link = Link::connect_with_params(
+                mp_core::comms::ConnectionSpec::UdpClient {
+                    host: "127.0.0.1".into(),
+                    port: socket.local_addr().unwrap().port(),
+                },
+                None,
+                false,
+            );
+            {
+                let mut s = link.shared.write();
+                s.status = mp_core::link::LinkStatus::Connected;
+                s.cs.sysid = 42;
+                s.cs.compid = 1;
+            }
+            let mut j = Joystick::default();
+            #[cfg(not(any(target_os = "android", target_os = "ios", target_arch = "wasm32")))]
+            {
+                j.gilrs = None;
+            }
+            j.enabled = true;
+            j.was_active = true;
+            j.last_device = Some(1);
+            j.device = Some(if remap { 1 } else { 2 });
+            j.test_buttons = Some(vec![true, true]);
+            j.buttons[0] = ButtonCfg {
+                buttonno: if remap { 1 } else { 0 },
+                function: Function::Arm,
+                ..Default::default()
+            };
+            j.active_buttons[0] = ButtonCfg {
+                buttonno: 0,
+                function: Function::Arm,
+                ..Default::default()
+            };
+            j.tick(Some(&link), false);
+            assert!(!j.enabled, "Changed input source remained enabled");
+            let end = Instant::now() + Duration::from_millis(150);
+            let mut bytes = [0; 4096];
+            let mut released = false;
+            while Instant::now() < end {
+                if let Ok((n, _)) = socket.recv_from(&mut bytes) {
+                    let (_, message) = mp_core::mavlink::MavlinkReader::new(&bytes[..n])
+                        .read_any_message::<MavMessage>()
+                        .unwrap();
+                    assert!(
+                        !matches!(message, MavMessage::COMMAND_LONG(_)),
+                        "Held button generated an action after source change"
+                    );
+                    if let MavMessage::RC_CHANNELS_OVERRIDE(m) = message {
+                        released = m.chan1_raw == 0 && m.chan16_raw == 65534;
+                    }
+                }
+            }
+            assert!(released);
+        }
     }
 }
