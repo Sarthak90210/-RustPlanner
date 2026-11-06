@@ -535,6 +535,85 @@ mod parameter_file_tests {
         assert_eq!(matching_groups.len(), 1);
         assert_eq!(matching_groups.get("WPNAV").copied(), Some(2));
     }
+
+    #[test]
+    fn wildcard_glob_parameter_search_matches_asterisk_and_question_mark() {
+        assert!(wildcard_matches("BATT*_VOLT", "BATT_VOLT_PIN"));
+        assert!(wildcard_matches("BATT*_VOLT", "SYSID_BATT2_VOLT_PIN"));
+        assert!(wildcard_matches("SERVO?_MIN", "SERVO1_MIN"));
+        assert!(!wildcard_matches("SERVO?_MIN", "SERVO10_MIN"));
+        assert!(wildcard_matches("*MAX", "ANGLE_MAX"));
+        assert!(wildcard_matches("WPNAV*", "WPNAV_SPEED"));
+        assert!(!wildcard_matches("NONEXISTENT*", "WPNAV_SPEED"));
+        assert!(wildcard_matches("", "ANY_PARAM"));
+    }
+
+    #[test]
+    fn post_write_parameter_count_divergence_triggers_check_flag() {
+        let mut editor = ParamEditor::default();
+        let mut toasts = Toasts::default();
+
+        editor.pending.insert("CAN_D1_PROTOCOL".into());
+        assert!(!editor.check_param_count_divergence);
+
+        // When write finishes, check flag is set to true to inspect count divergence
+        editor.on_event(&LinkEvent::ParamSet { name: "CAN_D1_PROTOCOL".into(), ok: true }, &mut toasts);
+        assert!(editor.check_param_count_divergence);
+        assert!(editor.pending.is_empty());
+    }
+}
+
+/// Matches search pattern against text, supporting `*` (any sequence) and `?` (any single char).
+/// Mirrors C# ConfigRawParams.cs L895:
+/// `new Regex(searchfor.Replace("*", ".*").Replace("..*", ".*"), RegexOptions.IgnoreCase | RegexOptions.Singleline)`
+pub fn wildcard_matches(pattern: &str, text: &str) -> bool {
+    let p = pattern.trim().to_lowercase();
+    if p.is_empty() {
+        return true;
+    }
+    let t = text.to_lowercase();
+    if !p.contains('*') && !p.contains('?') {
+        return t.contains(&p);
+    }
+
+    let parts: Vec<&str> = p.split('*').collect();
+    let mut current_offset = 0;
+
+    for part in parts {
+        if part.is_empty() {
+            continue;
+        }
+        if let Some(pos) = find_substring_with_wildcards(&t[current_offset..], part) {
+            current_offset += pos + part.chars().count();
+        } else {
+            return false;
+        }
+    }
+    true
+}
+
+fn find_substring_with_wildcards(text: &str, sub: &str) -> Option<usize> {
+    let t_chars: Vec<char> = text.chars().collect();
+    let s_chars: Vec<char> = sub.chars().collect();
+    if s_chars.is_empty() {
+        return Some(0);
+    }
+    if t_chars.len() < s_chars.len() {
+        return None;
+    }
+    for i in 0..=(t_chars.len() - s_chars.len()) {
+        let mut matched = true;
+        for j in 0..s_chars.len() {
+            if s_chars[j] != '?' && s_chars[j] != t_chars[i + j] {
+                matched = false;
+                break;
+            }
+        }
+        if matched {
+            return Some(i);
+        }
+    }
+    None
 }
 
 /// Matches C# ListExtension.SortENABLE:
@@ -596,6 +675,8 @@ pub struct ParamEditor {
     pub reboot_required_staged: bool,
     /// Whether to display the post-save reboot confirmation prompt
     pub show_reboot_prompt: bool,
+    /// Whether to check if available parameter count diverged from vehicle reported count post-save
+    pub check_param_count_divergence: bool,
 }
 
 impl ParamEditor {
@@ -670,6 +751,7 @@ impl ParamEditor {
                         self.show_reboot_prompt = true;
                         toasts.info("Reboot is required for some parameters to take effect.");
                     }
+                    self.check_param_count_divergence = true;
                 }
             }
         }
@@ -683,6 +765,23 @@ impl ParamEditor {
         } else {
             (self.offline_params.clone(), Firmware::ArduCopter2, (0, 0))
         };
+
+        if self.check_param_count_divergence {
+            self.check_param_count_divergence = false;
+            if let Some(link) = app.link {
+                let s = link.shared.read();
+                let received = s.params.len();
+                let reported = s.param_count as usize;
+                if reported > 0 && received != reported {
+                    if s.cs.armed {
+                        app.toasts.error("The number of available parameters changed, until full param refresh is done, some parameters will not be available.");
+                    } else {
+                        app.toasts.info("The number of available parameters changed. A full param refresh will be done to show all params.");
+                        link.send(LinkCommand::RequestParams);
+                    }
+                }
+            }
+        }
 
         self.file_ui(ui.ctx(), &params, target, app.toasts, is_connected);
 
@@ -846,8 +945,8 @@ impl ParamEditor {
                 let g = group_of(k);
                 *groups.entry(g.clone()).or_default() += 1;
                 let matches_q = q.is_empty()
-                    || k.to_lowercase().contains(&q)
-                    || param_meta::get(fw, k).map(|m| m.description.to_lowercase().contains(&q) || m.display_name.to_lowercase().contains(&q)).unwrap_or(false);
+                    || wildcard_matches(&q, k)
+                    || param_meta::get(fw, k).map(|m| wildcard_matches(&q, &m.description) || wildcard_matches(&q, &m.display_name)).unwrap_or(false);
                 if matches_q {
                     *matching_groups.entry(g).or_default() += 1;
                     total_matches += 1;
@@ -917,8 +1016,8 @@ impl ParamEditor {
                 .filter(|(k, p)| !self.none_default || defaults.as_ref().and_then(|d| d.get(*k)).map(|d| *d != p.value).unwrap_or(false))
                 .filter(|(k, _)| {
                     q.is_empty()
-                        || k.to_lowercase().contains(&q)
-                        || param_meta::get(fw, k).map(|m| m.description.to_lowercase().contains(&q) || m.display_name.to_lowercase().contains(&q)).unwrap_or(false)
+                        || wildcard_matches(&q, k)
+                        || param_meta::get(fw, k).map(|m| wildcard_matches(&q, &m.description) || wildcard_matches(&q, &m.display_name)).unwrap_or(false)
                 })
                 .map(|(k, p)| (k.clone(), p.value))
                 .collect();

@@ -1,0 +1,95 @@
+{
+  "round": 42,
+  "date": "2026-11-06",
+  "review_type": "Independent adversarial source, parity, and UI/UX review of parameter reboot requirement detection, post-save autopilot reboot prompting, and category tree search synchronization",
+  "reviewed_head": "b94c4a3a98d6938a61e8ed0c71beaaf39f8499b8",
+  "reviewed_uncommitted_worktree": false,
+  "reviewed_files": [
+    "crates/mp-app/src/views/config.rs",
+    "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigRawParams.cs"
+  ],
+  "verdict": "REJECTED for exact-clone parity (Score: 6.5/10). Critical parameter management and UX parity capabilities verified: write_confirm_window checks param_meta::get(fw, name).reboot_required for all staged parameter edits, highlights affected parameters with '[Reboot Required]', and displays a prominent warning banner; post-save completion triggers reboot_prompt_window matching C# ConfigRawParams.cs L374-L377 prompting the operator to reboot the autopilot and dispatching MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN (command 246 param1=1.0); category tree search synchronization computes live matching counts ('+ {g} ({match_cnt})' and 'All ({total_matches})'), auto-synchronizes selected_group when a single group matches or when active category has 0 matches, and hides non-matching categories during active queries. All 205 workspace tests pass cleanly with zero warnings or failures. However, modern Android Scoped Storage (API 30+) and iOS sandboxing continue to restrict posix filesystem access without OS-level SAF/UIDocumentPicker dialogs, parameter searches do not yet support C# wildcard pattern matching ('*'), and vehicle parameter count mutations during write remain unmonitored.",
+  "scores": {
+    "overall": 6.5,
+    "ui_ux": 7.0,
+    "features": 7.4,
+    "cross_platform_delivery": 4.0,
+    "scale": "Adversarial parity evaluation on a 0-10 exact-clone scale. 10/10 requires 100% feature, UI/UX, behavioral, and architectural equivalence to Mission Planner C# across all target platforms."
+  },
+  "independent_validation": [
+    {
+      "command": "cargo test --workspace",
+      "result": "PASS: 205 passed, 0 failed, 1 ignored (64 mp-core unit, 25 mp-core integration, 116 mp-app unit)",
+      "scope": "Reviewer independently executed the full workspace test suite locally on Windows. Zero test failures, zero regressions, zero hangs across all crates."
+    },
+    {
+      "command": "cargo test -p mp-app --lib write_confirm_detects_reboot_required_and_prompts_after_save",
+      "result": "PASS: 1 passed, 0 failed",
+      "scope": "Independently verified parameter reboot required detection in write_confirm_window, on_event post-write trigger, and reboot_prompt_window modal dismissal lifecycle."
+    },
+    {
+      "command": "cargo test -p mp-app --lib param_tree_search_synchronization_and_group_filtering",
+      "result": "PASS: 1 passed, 0 failed",
+      "scope": "Independently verified ParamEditor search query group partitioning, single group auto-expand synchronization, and category match tallying."
+    },
+    {
+      "command": "gh run view 42255840683",
+      "result": "IN_PROGRESS / SUCCESS: Android debug APK succeeded (1m54s), Ubuntu desktop succeeded (3m15s); Windows desktop, macOS desktop, and iOS runners active",
+      "scope": "Verified remote multi-platform GitHub Actions CI run 42255840683 triggered on commit b94c4a3."
+    }
+  ],
+  "verified_improvements": [
+    "R41-02 resolved: ParamEditor::write_confirm_window inspects param_meta::get(fw, name).reboot_required for all changed parameters. The confirmation modal displays a prominent warning ('⚠️ Note: One or more parameters require an autopilot reboot to take effect.') and appends '[Reboot Required]' to each affected parameter row. Upon confirmation, reboot_required_staged is armed.",
+    "R41-02 resolved: ParamEditor::on_event monitors write completions. Once all pending parameter writes are acknowledged, if reboot_required_staged is set, it dispatches an informational toast ('Reboot is required for some parameters to take effect.') and opens the reboot_prompt_window modal dialog matching C# ConfigRawParams.cs L374-L377.",
+    "R41-02 resolved: reboot_prompt_window presents 'Reboot is required for some parameters to take effect. Do you want to reboot the autopilot now?' with 'Reboot Now', 'Later', and Escape key handlers. 'Reboot Now' issues MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN (command 246 with param1=1.0) and emits confirmation toast.",
+    "R41-03 resolved: ParamEditor tree search synchronization dynamically computes matching parameter counts per group (matching_groups) and total matching parameters (total_matches). Category tree items display live match badges: '+ {g} ({match_cnt})' and 'All ({total_matches})'.",
+    "R41-03 resolved: Auto-synchronization of selected_group: when a search query matches only a single parameter group, or when the active selected category has 0 matches while other categories match, selected_group automatically synchronizes to the matching group so search results are never hidden by stale group filters.",
+    "Workspace test expansion: test suite expanded from 203 to 205 passing tests with dedicated unit tests validating write confirm reboot requirement detection, post-save reboot prompting, and tree view search synchronization.",
+    "Multi-platform CI health: Remote Android debug APK and Ubuntu desktop Linux builds completed cleanly in CI."
+  ],
+  "findings": [
+    {
+      "id": "R42-01",
+      "priority": "P1",
+      "subsystem": "Mobile Scoped Storage & Native SAF File Picker Bridge",
+      "status": "architectural limitation",
+      "evidence": [
+        "document_roots() in crates/mp-app/src/platform.rs queries posix filesystem paths (/sdcard/Download, /storage/emulated/0).",
+        "On Android 11+ (API level 30+), Scoped Storage enforces SELinux isolation where direct posix access to /storage/emulated/0 is blocked for non-manager apps without using the Storage Access Framework (SAF / Intent.ACTION_OPEN_DOCUMENT). Similarly, iOS external file access requires UIDocumentPickerViewController to issue security-scoped resource bookmarks."
+      ],
+      "impact": "On modern Android and iOS devices, operators cannot access files in shared device storage or third-party cloud drives without OS SAF/DocumentPicker delegation.",
+      "required_fix": "Implement JNI intent dispatch for Android SAF (ACTION_OPEN_DOCUMENT / ACTION_CREATE_DOCUMENT) and Objective-C/Swift UIDocumentPickerViewController bindings on iOS."
+    },
+    {
+      "id": "R42-02",
+      "priority": "P2",
+      "subsystem": "Parameter Search Wildcard & Glob Pattern Matching",
+      "status": "missing feature",
+      "evidence": [
+        "In C# ConfigRawParams.cs L1014 (filterList), search input is converted to a regex supporting asterisk wildcards: Regex filter = new Regex(searchfor.Replace('*', '.*').Replace('..*', '.*'), RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline);",
+        "In Rust ParamEditor (crates/mp-app/src/views/config.rs), filtering performs exact substring matching: k.to_lowercase().contains(&q) || param_meta::get(fw, k).map(|m| m.description.to_lowercase().contains(&q) || m.display_name.to_lowercase().contains(&q)).unwrap_or(false);",
+        "Queries containing wildcards (e.g. 'BATT*_VOLT' or 'SERVO*MIN') fail to match in Rust because '*' is treated as a literal character."
+      ],
+      "impact": "Operators searching for parameter families using standard Mission Planner wildcard patterns receive zero search results.",
+      "required_fix": "Enhance search matching in ParamEditor to support glob wildcard matching ('*') across parameter names and metadata."
+    },
+    {
+      "id": "R42-03",
+      "priority": "P3",
+      "subsystem": "Post-Write Parameter Count Change Notification",
+      "status": "missing feature",
+      "evidence": [
+        "In C# ConfigRawParams.cs L379-L385, after parameter writing completes, if the vehicle's parameter count changed (TotalReceived != TotalReported), Mission Planner notifies the operator: 'The number of available parameters changed, until full param refresh is done, some parameters will not be available.'",
+        "In Rust ParamEditor, parameter count changes resulting from enabling subsystems or script features are not detected post-save."
+      ],
+      "impact": "Operators enabling features that dynamically reveal new parameters on the vehicle are not alerted that a full parameter refresh is needed.",
+      "required_fix": "Check for total parameter count mismatch post-save and display an advisory toast/dialog prompting the operator to refresh parameters."
+    }
+  ],
+  "next_concrete_task": "Implement glob wildcard search support ('*') in ParamEditor matching C# ConfigRawParams.cs L1014 regex filter, allowing operators to search parameter families with wildcards.",
+  "not_verified": [
+    "No physical flight controller was connected via hardware USB/telemetry radios.",
+    "Mobile APK was compiled in CI but not executed on physical Android 11+ or iOS 17+ hardware.",
+    "Pixel-level font rendering and GDI+ anti-aliasing were not diffed against WinForms."
+  ]
+}
