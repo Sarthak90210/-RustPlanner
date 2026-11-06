@@ -182,6 +182,7 @@ mod tests {
             let mut output = self.ctx.run_ui(input, |ui| {
                 let mut app = AppCtx {
                     link: None,
+                    extra_links: &[],
                     tiles: &mut self.tiles,
                     toasts: &mut self.toasts,
                     settings: &mut self.settings,

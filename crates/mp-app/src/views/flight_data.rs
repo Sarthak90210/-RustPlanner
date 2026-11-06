@@ -925,7 +925,10 @@ impl FlightDataView {
             .link
             .map(|l| {
                 let s = l.shared.read();
-                s.mavs.iter().filter(|((sys, comp), m)| (*sys, *comp) != (s.cs.sysid, s.cs.compid) && m.lat != 0.0).map(|((sys, _), m)| (*sys, m.lat, m.lng, m.heading)).collect()
+                s.mavs.iter().filter(|((sys, comp), m)| (*sys, *comp) != (s.cs.sysid, s.cs.compid) && m.lat != 0.0).map(|((sys, _), m)| (*sys, m.lat, m.lng, m.heading))
+                    // vehicles on the other comports
+                    .chain(app.extra_links.iter().flat_map(|l| l.shared.read().mavs.iter().filter(|(_, m)| m.lat != 0.0).map(|((sys, _), m)| (*sys, m.lat, m.lng, m.heading)).collect::<Vec<_>>()))
+                    .collect()
             })
             .unwrap_or_default();
         // MainV2 ADSB: traffic reported by the vehicle (Planner "ADSB" option)

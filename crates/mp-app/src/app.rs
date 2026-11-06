@@ -159,6 +159,8 @@ impl Toasts {
 
 pub enum AppAction {
     Connect(ConnectionSpec),
+    /// ConnectionOptions / Connection List: another MAVLinkInterface added to Comports
+    ConnectExtra(ConnectionSpec),
     Disconnect,
     StartSim,
     StopSim,
@@ -177,6 +179,8 @@ pub enum AppAction {
 /// Shared context handed to each view.
 pub struct AppCtx<'a> {
     pub link: Option<&'a Link>,
+    /// MainV2.Comports other than the active comPort
+    pub extra_links: &'a [Link],
     pub tiles: &'a mut TileCache,
     pub toasts: &'a mut Toasts,
     pub settings: &'a mut Settings,
@@ -222,6 +226,10 @@ pub struct MissionPlannerApp {
     hotkey_tools: crate::hotkey_tools::HotkeyTools,
     capture: Option<crate::capture::Capture>,
     skip_params_once: bool,
+    /// MainV2.Comports besides comPort (the active `link`)
+    extra_links: Vec<Link>,
+    /// ConnectionOptions form: (port, baud)
+    conn_form: Option<(String, u32)>,
     /// InputBox "Enter Password": Some(view) to open a protected screen, None to set it
     pw_prompt: Option<(Option<View>, String)>,
     /// last seen value of the "Password Protect Config" box
@@ -231,7 +239,6 @@ pub struct MissionPlannerApp {
     vario: Option<std::time::Instant>,
     menu_hidden: bool,
     last_title: String,
-    show_conn_list: bool,
     pub readonly: bool,
     assets: crate::assets::Assets,
     startup: Vec<AppAction>,
@@ -302,6 +309,8 @@ impl MissionPlannerApp {
             hotkey_tools: Default::default(),
             capture: crate::capture::Capture::from_env(),
             skip_params_once: false,
+            extra_links: Vec::new(),
+            conn_form: None,
             pw_prompt: None,
             pw_protect_seen: None,
             joystick: Default::default(),
@@ -309,7 +318,6 @@ impl MissionPlannerApp {
             vario: None,
             menu_hidden: false,
             last_title: String::new(),
-            show_conn_list: false,
             readonly: false,
             assets: crate::assets::Assets::load(&cc.egui_ctx),
             startup,
@@ -351,6 +359,19 @@ impl MissionPlannerApp {
                 AppAction::Disconnect => {
                     self.joystick.stop(self.link.as_ref());
                     self.link = None;
+                    // the next comport carries on as the active one
+                    if !self.extra_links.is_empty() {
+                        self.link = Some(self.extra_links.remove(0));
+                    }
+                }
+                AppAction::ConnectExtra(spec) => {
+                    self.toasts.info(format!("Connecting to {spec}"));
+                    let l = Link::connect_with(spec, Some(platform::data_dir().join("logs")));
+                    if self.link.is_none() {
+                        self.link = Some(l);
+                    } else {
+                        self.extra_links.push(l);
+                    }
                 }
                 AppAction::StartSim => {
                     if self.sim.is_none() {
@@ -405,8 +426,8 @@ impl MissionPlannerApp {
                     let port = self.settings.sim_port;
                     self.link = Some(Link::connect_with(ConnectionSpec::UdpListen { port }, Some(platform::data_dir().join("logs"))));
                     for i in 0..n {
-                        // SITL.cs: instances laid out on a grid, 10 m apart
-                        let offset = ((i / 3) as f64 * 10.0, (i % 3) as f64 * 10.0);
+                        // SITL.cs: home.newpos(NUM_heading = 0, a * 4): a line 4 m apart to the north
+                        let offset = (i as f64 * 4.0, 0.0);
                         match sim::spawn_with(sim::SimOptions { gcs_port: port, sysid: i + 1, kind, offset }) {
                             Ok(h) => self.swarm.push(h),
                             Err(e) => self.toasts.error(format!("Simulator failed: {e}")),
@@ -428,6 +449,11 @@ impl MissionPlannerApp {
     }
 
     fn drain_events(&mut self) {
+        // other comports run their own workers; their events are not shown
+        for l in &self.extra_links {
+            for _ in l.events.try_iter() {}
+        }
+        self.extra_links.retain(|l| l.status() != LinkStatus::Disconnected || l.shared.read().last_packet.is_none());
         let Some(link) = &self.link else { return };
         let events: Vec<LinkEvent> = link.events.try_iter().collect();
         if let Some(d) = self.demo.as_mut() {
@@ -625,25 +651,40 @@ impl MissionPlannerApp {
                 let s = link.shared.read();
                 if s.status == LinkStatus::Connected {
                     let label = format!("{}-{}-{:?}", s.cs.sysid, s.cs.compid, s.cs.firmware);
-                    let mavs: Vec<(u8, u8, String)> = s.mavs.iter().map(|((a, b), m)| (*a, *b, format!("{a}-{b}-{:?}", m.firmware))).collect();
+                    // UpdateSysIDS: every MAV on every comport (None = the active one)
+                    let mut mavs: Vec<(Option<usize>, u8, u8, String)> = s.mavs.iter().map(|((a, b), m)| (None, *a, *b, format!("{a}-{b}-{:?}", m.firmware))).collect();
                     drop(s);
+                    for (i, l) in self.extra_links.iter().enumerate() {
+                        let s = l.shared.read();
+                        mavs.extend(s.mavs.iter().map(|((a, b), m)| (Some(i), *a, *b, format!("{a}-{b}-{:?}", m.firmware))));
+                    }
                     let mut pick = None;
                     child.put(egui::Rect::from_min_size(cc + Vec2::new(102.0, 27.0), Vec2::new(136.0, 21.0)), |ui: &mut egui::Ui| {
                         egui::ComboBox::from_id_salt("sysid")
                             .width(128.0)
                             .selected_text(label.clone())
                             .show_ui(ui, |ui| {
-                                for (a, b, n) in &mavs {
-                                    if ui.selectable_label(*n == label, n).clicked() {
-                                        pick = Some((*a, *b));
+                                for (li, a, b, n) in &mavs {
+                                    if ui.selectable_label(li.is_none() && *n == label, n).clicked() {
+                                        pick = Some((*li, *a, *b));
                                     }
                                 }
                             })
                             .response
                     });
-                    if let Some((sysid, compid)) = pick {
+                    if let Some((li, sysid, compid)) = pick {
                         self.joystick.stop(Some(link));
-                        link.send(mp_core::link::LinkCommand::SetTarget { sysid, compid });
+                        // cmb_sysid: comPort becomes the port that MAV is on
+                        if let Some(i) = li {
+                            let next = self.extra_links.remove(i);
+                            if let Some(prev) = self.link.take() {
+                                self.extra_links.push(prev);
+                            }
+                            self.link = Some(next);
+                        }
+                        if let Some(l) = &self.link {
+                            l.send(mp_core::link::LinkCommand::SetTarget { sysid, compid });
+                        }
                     }
                 }
             }
@@ -917,31 +958,63 @@ impl MissionPlannerApp {
                 ui.close();
             }
             if ui.button("Connection Options").clicked() {
-                self.show_conn_options = true;
+                self.conn_form = Some((self.settings.port.clone(), self.settings.baud));
                 ui.close();
             }
             if ui.button("Connection List").clicked() {
-                self.show_conn_list = true;
+                // connectionListToolStripMenuItem: one connection per line of a text file
+                if let Some((_, text)) = platform::open_text("Connection List", "Connection list", &["txt", "*"]) {
+                    for spec in parse_connection_list(&text) {
+                        _actions.push(AppAction::ConnectExtra(spec));
+                    }
+                }
                 ui.close();
             }
         });
-        if self.show_conn_list {
-            let mut open = true;
-            egui::Window::new("Connection List").open(&mut open).collapsible(false).show(&resp.ctx, |ui| {
-                theme::label(ui, "Active connections:");
-                match &self.link {
-                    Some(l) => {
-                        let s = l.shared.read();
-                        theme::label(ui, format!("{}  sysid {}  {:?}", s.spec.as_ref().map(|c| c.to_string()).unwrap_or_default(), s.cs.sysid, s.status));
+        self.conn_form_ui(&resp.ctx, _actions);
+    }
+
+    /// ConnectionOptions: CMB_serialport (ports, TCP, UDP, UDPCl, WS), CMB_baudrate, Connect.
+    fn conn_form_ui(&mut self, ctx: &egui::Context, actions: &mut Vec<AppAction>) {
+        let Some((port, baud)) = self.conn_form.as_mut() else { return };
+        let mut open = true;
+        let mut go = false;
+        egui::Window::new("Connection Options").open(&mut open).resizable(false).collapsible(false).show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                egui::ComboBox::from_id_salt("co_port").width(113.0).selected_text(port.clone()).show_ui(ui, |ui| {
+                    let mut opts = comms::serial_ports();
+                    opts.extend(["TCP".into(), "UDP".into(), "UDPCl".into(), "WS".into()]);
+                    for o in opts {
+                        ui.selectable_value(port, o.clone(), o);
                     }
-                    None => {
-                        theme::label(ui, "none");
+                });
+                egui::ComboBox::from_id_salt("co_baud").width(103.0).selected_text(baud.to_string()).show_ui(ui, |ui| {
+                    for b in comms::BAUD_RATES {
+                        ui.selectable_value(baud, *b, b.to_string());
                     }
+                });
+                if theme::button(ui, "Connect").clicked() {
+                    go = true;
                 }
             });
-            if !open {
-                self.show_conn_list = false;
+        });
+        if go {
+            let (port, baud) = self.conn_form.clone().unwrap_or_default();
+            let st = &self.settings;
+            let spec = match port.as_str() {
+                "TCP" => Some(ConnectionSpec::Tcp { host: st.tcp_host.clone(), port: st.tcp_port }),
+                "UDP" => Some(ConnectionSpec::UdpListen { port: st.udp_port }),
+                "UDPCl" => Some(ConnectionSpec::UdpClient { host: st.udpcl_host.clone(), port: st.udpcl_port }),
+                "WS" | "" => None,
+                p => Some(ConnectionSpec::Serial { port: p.to_string(), baud }),
+            };
+            match spec {
+                Some(spec) => actions.push(AppAction::ConnectExtra(spec)),
+                None => self.toasts.error("Select a serial port, TCP, UDP or UDPCl"),
             }
+        }
+        if !open {
+            self.conn_form = None;
         }
     }
 
@@ -1084,11 +1157,13 @@ impl eframe::App for MissionPlannerApp {
                     readonly,
                     joystick,
                     hotkey_tools,
+                    extra_links,
                     ..
                 } = self;
                 let view = settings.view;
                 let mut app = AppCtx {
                     link: link.as_ref(),
+                    extra_links: extra_links.as_slice(),
                     tiles,
                     toasts,
                     settings,
@@ -1150,5 +1225,42 @@ impl eframe::App for MissionPlannerApp {
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, SETTINGS_KEY, &self.settings);
+    }
+}
+
+/// connectionListToolStripMenuItem: `tcp://host:port`, `udp://host:port` (listen),
+/// `udpcl://host:port` and `serial:PORT:baud`, one per line.
+pub fn parse_connection_list(text: &str) -> Vec<ConnectionSpec> {
+    let mut out = Vec::new();
+    for line in text.lines().map(str::trim) {
+        let hp = |rest: &str| rest.rsplit_once(':').and_then(|(h, p)| p.trim().parse::<u16>().ok().map(|p| (h.to_string(), p)));
+        if let Some(r) = line.strip_prefix("tcp://") {
+            if let Some((host, port)) = hp(r) {
+                out.push(ConnectionSpec::Tcp { host, port });
+            }
+        } else if let Some(r) = line.strip_prefix("udpcl://") {
+            if let Some((host, port)) = hp(r) {
+                out.push(ConnectionSpec::UdpClient { host, port });
+            }
+        } else if let Some(r) = line.strip_prefix("udp://") {
+            if let Some((_, port)) = hp(r) {
+                out.push(ConnectionSpec::UdpListen { port });
+            }
+        } else if let Some(r) = line.strip_prefix("serial:") {
+            if let Some((port, baud)) = r.rsplit_once(':').and_then(|(p, b)| b.trim().parse::<u32>().ok().map(|b| (p.to_string(), b))) {
+                out.push(ConnectionSpec::Serial { port, baud });
+            }
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod connection_list_tests {
+    #[test]
+    fn parses_mp_connection_list() {
+        let v = super::parse_connection_list("tcp://127.0.0.1:5760\nudp://0.0.0.0:14550\nudpcl://10.0.0.2:14551\nserial:COM5:57600\njunk\n");
+        assert_eq!(v.len(), 4);
+        assert_eq!(v[3].to_string().contains("COM5"), true);
     }
 }
