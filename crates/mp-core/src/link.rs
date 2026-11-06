@@ -945,7 +945,8 @@ impl Worker {
             match s.inspector.get_mut(&key) {
                 Some(st) => {
                     let dt = now.duration_since(st.last).as_secs_f32().max(1e-3);
-                    st.rate = st.rate * 0.8 + (1.0 / dt) * 0.2;
+                    // the first interval seeds the average so a 1 Hz message reads 1 Hz at once
+                    st.rate = if st.count == 1 { 1.0 / dt } else { st.rate * 0.8 + (1.0 / dt) * 0.2 };
                     st.count += 1;
                     st.last = now;
                     st.msg = msg.clone();

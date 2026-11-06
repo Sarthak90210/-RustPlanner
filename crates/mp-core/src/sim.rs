@@ -444,7 +444,6 @@ impl Vehicle {
                 params.entry(format!("SERVO{i}_{suffix}")).or_insert(v);
                 params.entry(format!("RC{i}_{suffix}")).or_insert(v);
             }
-            params.entry(format!("SERVO{i}_FUNCTION")).or_insert(0.0);
             params.entry(format!("RC{i}_OPTION")).or_insert(0.0);
             params.entry(format!("RC{i}_DZ")).or_insert(0.0);
         }
@@ -455,6 +454,10 @@ impl Vehicle {
                     params.entry(k.trim().to_string()).or_insert(v);
                 }
             }
+        }
+        // outputs the defaults file does not assign are disabled
+        for i in 1..=16 {
+            params.entry(format!("SERVO{i}_FUNCTION")).or_insert(0.0);
         }
         // parameters removed from Copter 4.x that the metadata still documents
         const LEGACY: &[&str] = &[

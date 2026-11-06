@@ -151,7 +151,8 @@ fn origin_of(f: &Form, ctl: &Ctl) -> Vec2 {
 }
 
 fn hidden(f: &Form, ctl: &Ctl) -> bool {
-    if ctl.hidden {
+    // a 0x0 control (AESKEY) has no visible area in WinForms
+    if ctl.hidden || (ctl.w == 0.0 && ctl.h == 0.0 && ctl.kind != "label") {
         return true;
     }
     let mut p = ctl.parent.as_str();

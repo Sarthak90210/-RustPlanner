@@ -84,6 +84,8 @@ pub struct ConfigView {
     user_add: String,
     ftp: crate::views::mavftp::MavFtpUi,
     osd: crate::views::osd_editor::OsdEditor,
+    standard: crate::views::friendly::FriendlyParams,
+    advanced: crate::views::friendly::FriendlyParams,
     last_page: Option<Page>,
 }
 
@@ -101,7 +103,7 @@ impl Default for ConfigView {
             Some(0) => Page::GeoFence,
             _ => Page::FullParamList,
         };
-        Self { page, params: ParamEditor::default(), extended: Default::default(), user_add: String::new(), ftp: Default::default(), osd: Default::default(), last_page: None }
+        Self { page, params: ParamEditor::default(), extended: Default::default(), user_add: String::new(), ftp: Default::default(), osd: Default::default(), standard: Default::default(), advanced: Default::default(), last_page: None }
     }
 }
 
@@ -135,8 +137,8 @@ impl ConfigView {
             Page::GeoFence => crate::views::tuning::geofence(ui, app),
             Page::BasicTuning => crate::views::tuning::basic_tuning(ui, app),
             Page::ExtendedTuning => self.extended.ui(ui, app),
-            Page::StandardParams => friendly(ui, app, &self.params, |_, m| m.map(|m| m.user == "Standard").unwrap_or(false)),
-            Page::AdvancedParams => friendly(ui, app, &self.params, |_, m| m.map(|m| m.user == "Advanced").unwrap_or(false)),
+            Page::StandardParams => self.standard.ui(ui, app, "Standard"),
+            Page::AdvancedParams => self.advanced.ui(ui, app, "Advanced"),
             Page::OnboardOsd => self.osd.ui(ui, app),
             Page::MavFtp => self.ftp.ui(ui, app),
             Page::UserParams => self.user_params(ui, app),
@@ -176,35 +178,13 @@ pub fn friendly(ui: &mut egui::Ui, app: &mut AppCtx, _ed: &ParamEditor, filter: 
         theme::label(ui, "Please Connect First");
         return;
     };
-    let (params, fw) = {
+    let names: Vec<String> = {
         let s = link.shared.read();
-        (s.params.clone(), s.cs.firmware)
+        let fw = s.cs.firmware;
+        s.params.keys().filter(|k| filter(k, param_meta::get(fw, k))).cloned().collect()
     };
-    let names: Vec<&String> = params.keys().filter(|k| filter(k, param_meta::get(fw, k))).collect();
-    if names.is_empty() {
-        theme::label(ui, if params.is_empty() { "Loading..." } else { "No parameters for this page on this vehicle" });
-        return;
-    }
-    egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-        for n in names {
-            let meta = param_meta::get(fw, n);
-            let val = params[n].value;
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.set_width((ui.available_width() - 260.0).max(200.0));
-                    let title = meta.map(|m| m.display_name.clone()).filter(|s| !s.is_empty()).unwrap_or_else(|| n.clone());
-                    ui.label(RichText::new(title).font(fonts::bold_id(12.0)).color(Color32::WHITE));
-                    if let Some(m) = meta {
-                        ui.label(RichText::new(&m.description).color(Color32::from_gray(200)));
-                    }
-                });
-                param_control(ui, link, fw, n, val, 200.0);
-                ui.label(RichText::new(format!("({n})")).color(Color32::GRAY));
-            });
-            ui.add_space(2.0);
-            ui.separator();
-        }
-    });
+    // pages built from ConfigFriendlyParams blocks write each change straight away
+    crate::views::friendly::rows(ui, app, &names, None);
 }
 
 /// MavlinkComboBox for enum params, MavlinkNumericUpDown (+ range) otherwise. Writes on change.
