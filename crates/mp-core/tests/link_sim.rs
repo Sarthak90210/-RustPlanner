@@ -356,3 +356,49 @@ fn dronecan_over_mavlink_forwarding() {
     assert!(session.log.lock().iter().any(|l| l.0 == 125 && l.3.contains("AP_Periph")), "{:?}", session.log.lock());
     session.stop();
 }
+
+/// setGuidedModeWP: a zero target is ignored; otherwise the vehicle is switched to GUIDED
+/// first and a Copter receives a position target, which the simulator (like ArduPilot)
+/// only accepts in GUIDED.
+#[test]
+fn guided_fly_to_switches_mode_and_moves_the_copter() {
+    let port = std::net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let link = Link::connect_with_params(ConnectionSpec::UdpListen { port }, None, false);
+    let _sim = sim::spawn(port).unwrap();
+    wait_event(&link, Duration::from_secs(10), |e| matches!(e, LinkEvent::Connected));
+    let ack = |link: &Link| {
+        wait_event(link, Duration::from_secs(5), |e| matches!(e, LinkEvent::CommandAck { .. }));
+    };
+    link.send(LinkCommand::SetMode(4));
+    ack(&link);
+    link.send(LinkCommand::Arm { arm: true, force: false });
+    ack(&link);
+    link.send(LinkCommand::CommandLong { command: 22, params: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0] });
+    ack(&link);
+    let wait_for = |what: &str, secs: u64, f: &dyn Fn(&mp_core::state::CurrentState) -> bool| {
+        let end = Instant::now() + Duration::from_secs(secs);
+        while !f(&link.shared.read().cs) {
+            assert!(Instant::now() < end, "timed out waiting for {what}: {:?}", link.shared.read().cs.mode);
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    };
+    wait_for("takeoff", 15, &|cs| cs.alt > 5.0);
+    // LOITER, then a zero target changes nothing
+    link.send(LinkCommand::SetMode(5));
+    ack(&link);
+    wait_for("Loiter", 5, &|cs| cs.mode == "Loiter");
+    link.send(LinkCommand::Guided { lat: 0.0, lng: 0.0, alt: 20.0 });
+    std::thread::sleep(Duration::from_millis(600));
+    assert_eq!(link.shared.read().cs.mode, "Loiter", "a zero target is ignored");
+    // fly to a point about 60 m north: GUIDED again and closing on the target
+    let (lat0, lng0) = {
+        let cs = &link.shared.read().cs;
+        (cs.lat, cs.lng)
+    };
+    let target = (lat0 + 60.0 / 111_320.0, lng0);
+    link.send(LinkCommand::Guided { lat: target.0, lng: target.1, alt: 15.0 });
+    wait_for("Guided", 5, &|cs| cs.mode == "Guided");
+    let dist = |cs: &mp_core::state::CurrentState| ((cs.lat - target.0) * 111_320.0).hypot((cs.lng - target.1) * 111_320.0 * target.0.to_radians().cos());
+    let start = dist(&link.shared.read().cs);
+    wait_for("progress toward the target", 15, &|cs| dist(cs) < start - 15.0);
+}

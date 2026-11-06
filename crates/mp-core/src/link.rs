@@ -767,16 +767,39 @@ impl Worker {
                 self.pending_alt = Some((item, Instant::now(), 1));
             }
             LinkCommand::Guided { lat, lng, alt } => {
-                // setGuidedModeWP: MISSION_ITEM_INT with current = 2
-                let wp = Locationwp::waypoint(lat, lng, alt, 3);
-                if let Some(mut item) = wp.to_mission_item_int(
-                    0,
-                    self.target_sys,
-                    self.target_comp,
-                    MavMissionType::MAV_MISSION_TYPE_MISSION,
-                ) {
-                    item.current = 2;
-                    self.send(MavMessage::MISSION_ITEM_INT(item))?;
+                // setGuidedModeWP: a zero target is ignored
+                if alt == 0.0 || lat == 0.0 || lng == 0.0 {
+                    return Ok(());
+                }
+                let (firmware, mode) = {
+                    let s = self.shared.read();
+                    (s.cs.firmware, s.cs.mode.clone())
+                };
+                // "fix for followme change": switch to GUIDED first
+                if !mode.eq_ignore_ascii_case("GUIDED") {
+                    if let Some((number, _)) = firmware.modes().into_iter().find(|(_, name)| name.eq_ignore_ascii_case("GUIDED")) {
+                        self.command_long(MavCmd::MAV_CMD_DO_SET_MODE, [1.0, number as f32, 0.0, 0.0, 0.0, 0.0, 0.0])?;
+                    }
+                }
+                if firmware == Firmware::ArduPlane {
+                    // setWP(..., current = 2): MISSION_ITEM_INT
+                    let wp = Locationwp::waypoint(lat, lng, alt, 3);
+                    if let Some(mut item) = wp.to_mission_item_int(0, self.target_sys, self.target_comp, MavMissionType::MAV_MISSION_TYPE_MISSION) {
+                        item.current = 2;
+                        self.send(MavMessage::MISSION_ITEM_INT(item))?;
+                    }
+                } else {
+                    // setPositionTargetGlobalInt(pos only): every ignore bit but position and FORCE
+                    self.send(MavMessage::SET_POSITION_TARGET_GLOBAL_INT(SET_POSITION_TARGET_GLOBAL_INT_DATA {
+                        lat_int: (lat * 1e7) as i32,
+                        lon_int: (lng * 1e7) as i32,
+                        alt,
+                        target_system: self.target_sys,
+                        target_component: self.target_comp,
+                        coordinate_frame: MavFrame::MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                        type_mask: PositionTargetTypemask::from_bits_truncate(u16::MAX - (1 << 9) - 0b111),
+                        ..Default::default()
+                    }))?;
                 }
             }
         }

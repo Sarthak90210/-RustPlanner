@@ -150,20 +150,33 @@ impl FormState {
         self.text.insert(ctl.to_string(), v.into());
     }
 
-    /// MavlinkComboBox / check box: an immediate write ("Set X Failed!" on failure).
+    /// MavlinkComboBox: an immediate write ("Set X Failed!" on failure).
     pub fn edit(&mut self, link: &Link, name: &str, value: f32) {
+        self.edit_reporting(link, name, value, format!("Set {name} Failed!"));
+    }
+
+    /// MavlinkCheckBox: an immediate write (Strings.ErrorSetValueFailed on failure).
+    pub fn edit_check(&mut self, link: &Link, name: &str, value: f32) {
+        self.edit_reporting(link, name, value, format!("Set {name} Failed"));
+    }
+
+    fn edit_reporting(&mut self, link: &Link, name: &str, value: f32, failure: String) {
         if let Some(pending) = &mut self.staged { pending.insert(name.to_string(), value); }
         else {
             link.send(LinkCommand::SetParam { name: name.to_string(), value });
-            self.awaiting.insert(name.to_string(), format!("Set {name} Failed!"));
+            self.awaiting.insert(name.to_string(), failure);
         }
     }
 
-    /// MavlinkNumericUpDown: each change restarts a 300 ms timer that writes the final value.
+    /// MavlinkNumericUpDown: the first change starts a 300 ms timer; when it fires the control's
+    /// current value is written.
     pub fn edit_numeric(&mut self, link: &Link, name: &str, value: f32) {
         match &mut self.staged {
             Some(pending) => { pending.insert(name.to_string(), value); }
-            None => { self.delayed.insert(name.to_string(), (value, std::time::Instant::now() + WRITE_DELAY)); }
+            None => {
+                let due = self.delayed.get(name).map(|(_, at)| *at).unwrap_or_else(|| std::time::Instant::now() + WRITE_DELAY);
+                self.delayed.insert(name.to_string(), (value, due));
+            }
         }
         self.flush(link, None);
     }
@@ -316,7 +329,7 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
                 let resp = ui.put(r, |ui: &mut egui::Ui| ui.add_enabled(cur.is_some() && enabled && !app.readonly, egui::Checkbox::new(&mut on, &text)));
                 if resp.changed() && !app.readonly {
                     if let (Some(l), Some(n)) = (link, &bound) {
-                        st.edit(l, n, if on { on_v } else { off_v });
+                        st.edit_check(l, n, if on { on_v } else { off_v });
                     }
                 }
             }

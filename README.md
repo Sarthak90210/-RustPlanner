@@ -183,9 +183,9 @@ transforms, including its zone exceptions, rounded MGRS digits and trailing-zero
 values are checked against the independent PyPI `utm` package. An egui test switches systems and
 edits UTM and MGRS cells. `MP_COORDS=UTM|MGRS` with capture cases 51/52 renders each mode.
 
-Direct-write numeric form controls now follow MavlinkNumericUpDown. Each change restarts a 300 ms timer,
-the control shows its own value while the timer runs, and only the final value is sent. Failed direct
-writes show "Set X Failed" for numerics and "Set X Failed!" for combos and check boxes, as the
+Direct-write numeric form controls now follow MavlinkNumericUpDown. The first change starts a 300 ms timer,
+the control shows its own value while the timer runs, and the value at that moment is written. Failed
+direct writes show "Set X Failed" for numerics and check boxes and "Set X Failed!" for combos, as the
 original controls do. The Rover simulator test confirms that nothing is written before the timer fires.
 
 `DisplayView` is modeled in full: all of the original's flags, the Basic/Advanced presets, and a Custom
@@ -195,6 +195,11 @@ buttons, every DATA tab, the PLAN menus and Verify Height box, each SETUP and CO
 Planner Layout selector. Original page predicates apply: Frame Type (FRAME_CLASS or Copter), Initial
 Tune (Copter or QuadPlane), CONFIG Loading while parameters arrive, and Full Parameter List only when
 disconnected or complete. Pure page-list tests cover layouts, connection states and vehicles.
+
+Guided targets (Fly To Here, Fly To Coords, `/guided`, scripts) follow `setGuidedModeWP`. Zero targets
+are ignored, the vehicle is switched to GUIDED first, Plane gets MISSION_ITEM current=2, and other
+vehicles get SET_POSITION_TARGET_GLOBAL_INT. The simulator now accepts guided targets only in GUIDED,
+as ArduPilot does. A Copter test flies from Loiter to a target this way.
 
 ## License
 

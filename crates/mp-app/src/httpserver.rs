@@ -529,6 +529,9 @@ fn state_json(state: &Snapshot) -> String {
         map.insert((*name).into(), rate.into());
     }
     map.insert("mode".into(), cs.mode.clone().into());
+    // ter_alt: TERRAIN_REPORT terrain height, read by hud.html
+    let ter_alt = s.inspector.get(&(cs.sysid, cs.compid, 136)).and_then(|m| if let MavMessage::TERRAIN_REPORT(t) = &m.msg { Some(t.terrain_height) } else { None }).unwrap_or(0.0);
+    map.insert("ter_alt".into(), serde_json::json!(crate::units::alt(ter_alt)));
     map.insert("HomeAlt".into(), serde_json::json!(state.home.alt));
     map.insert("HomeLocation".into(), serde_json::json!({ "Lat": state.home.lat, "Lng": state.home.lng, "Alt": state.home.alt }));
     serde_json::Value::Object(map).to_string()
@@ -796,7 +799,10 @@ fn georef_image(stream: &mut TcpStream, path: &str) -> io::Result<()> {
         .flatten()
         .and_then(|img| {
             let mut out = Vec::new();
-            img.resize_exact(640, 480, image::imageops::FilterType::Triangle).to_rgb8().write_to(&mut io::Cursor::new(&mut out), image::ImageFormat::Jpeg).ok()?;
+            // ResizeImage(orig, 640x480) keeps the aspect ratio
+            let percent = (640.0 / img.width() as f32).min(480.0 / img.height() as f32);
+            let (w, h) = (((img.width() as f32 * percent) as u32).max(1), ((img.height() as f32 * percent) as u32).max(1));
+            img.resize_exact(w, h, image::imageops::FilterType::CatmullRom).to_rgb8().write_to(&mut io::Cursor::new(&mut out), image::ImageFormat::Jpeg).ok()?;
             Some(out)
         });
     match jpeg {

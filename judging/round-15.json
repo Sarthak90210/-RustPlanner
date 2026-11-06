@@ -1,0 +1,391 @@
+{
+  "round": 15,
+  "review_type": "fresh independent targeted source and evidence review, with a widened scope (DATA Status tab / CurrentState coverage, guided-mode command path)",
+  "reviewed_head": "8e9969ffaa33f0a61d1b42f34a30012de8088639",
+  "date": "2026-11-06",
+  "verdict": "Real progress: the embedded web service, round 14's largest open medium gap, is now ported with low residuals. Two newly found medium gaps offset part of that credit. Several high-severity areas are still open. Not 10/10.",
+  "scores": {
+    "overall": 7.6,
+    "ui_ux": 8.2,
+    "features": 7.0,
+    "scale": "Qualitative exact-C#-parity judgments, not completion percentages. Overall gives equal weight to UI/UX and features."
+  },
+  "rationale": "Run 15 closes round 14's priority 1 (httpserver, medium) and priority 4 (View KML lifetime/binding), and closes or mostly closes priorities 2 and 3 (direct-write feedback and timing, Coords following the map centre, Escape cancel). The web service starts at launch on 0.0.0.0:56781 with the original 200 global / 20 per-IP caps. It serves every original route in the same match order with the original status lines and bodies, including the 404 image/jpg stubs, the keep-alive /mavlink/ JSON with the SYS_STATUS overwrite quirk, /mav/ with traversal protection, the loopback plus CSRF guard on /guided and POST /guide, and a byte-identical hud.html. The probe frames are real renderer crops: both.jpg shows the HUD left of the map with a black fill below the HUD, as Bitmap+DrawImageUnscaled would give. The residuals are low. Georef photos are stretched to exactly 640x480, where ResizeImage keeps the aspect ratio. map.jpg/both.jpg only refresh while the DATA view is drawn. The state websocket sends about 100 CurrentState fields where Newtonsoft serialises all of them; hud.html's second graph line reads cs.ter_alt, which is absent. wps JSON is the planner list keyed 1..n rather than MAV.wps keyed by vehicle sequence including home. The numeric write timer is a true debounce, while the WinForms Timer (Interval re-set to the same 300 does not restart it) fires 300 ms after the first change of a burst. Check-box failures read 'Set X Failed!', where MavlinkCheckBox uses Strings.ErrorSetValueFailed ('Set X Failed'). The wider scope found two medium gaps that earlier rounds had not recorded. (1) LinkCommand::Guided, used by DATA Fly To Here/Fly To Coords, the guided HTTP API and scripting, never switches the vehicle to GUIDED and always sends MISSION_ITEM_INT current=2 in a relative frame. The original setGuidedModeWP sets GUIDED mode first, uses SET_POSITION_TARGET_GLOBAL_INT for non-Plane vehicles and the Locationwp frame, and ignores zero lat/lng/alt, so on a real Copter that is not already in GUIDED, Fly To Here is rejected. (2) The DATA Status tab, the HUD user-items chooser and the state websocket expose about 100 hand-listed CurrentState fields in insertion order through a horizontal flow layout. The original lists every public CurrentState property, about 270, sorted alphabetically in 15 px rows of 120 px name + 50 px value, wrapping into 190 px columns with horizontal scrolling. The features score rises 0.2 net and UI/UX holds, because the Status-tab layout and coverage finding offsets the small Coords and grid closures.",
+  "scope": {
+    "inspected": [
+      "git diff 4f003f4..8e9969f (199165b/06efa30, 46833f1, 8e9969f): forms.rs, vehicle_tuning.rs, setup.rs, flight_plan.rs, httpserver.rs (all 1177 lines), app.rs, flight_data.rs, georef_ui.rs, more_tools.rs, mp-core link.rs and comms.rs",
+      "Controls/MavlinkNumericUpDown.cs (whole file: System.Windows.Forms.Timer, ValueChanged 131-160, Timer_Tick 162-177), MavlinkComboBox.cs 131-198, MavlinkCheckBox.cs 110-141, ExtLibs/Strings/Strings.resx ErrorSetValueFailed",
+      "Utilities/httpserver.cs, whole file (1-1483); MainV2.cs 3237-3246 and 2118-2121; FlightPlanner.cs 4330-4342 (lnk_kml_LinkClicked) and 7933-7958 (MainMap_OnCurrentPositionChanged), 1253-1270 (SetMouseDisplay)",
+      "reference/MissionPlanner/hud.html compared byte for byte with crates/mp-app/assets/hud.html (identical)",
+      "Widened scope: MAVLinkInterface.cs setGuidedModeWP 4442-4486 and MAV.wps population 4145-4357; FlightData.cs goHereToolStripMenuItem_Click 3113-3151 and tabStatus_Paint 6178-6220; CurrentState.cs GetItemList 4556-4580 and its public property set (about 267 properties found by regex)",
+      "Rust counterparts: link.rs Guided handler 769-781, flight_data.rs Fly To Here 1217-1221 and 1390-1401, status_ui 1949-1961, mp-core state.rs fields() 288-341",
+      "Retained-gap anchors rechecked at 8e9969f: flight_data.rs:475-482, fd_tabs.rs:345-346, more_tools.rs:73-80, hotkey_tools.rs:103-112, config.rs:995, comms.rs:9-30; display.rs, config.rs and platform.rs have no diff since 4f003f4"
+    ],
+    "rust_render_images_viewed": [
+      "C:\\Users\\sarth\\AppData\\Local\\Temp\\claude\\73c9ddb9aaa910e3\\e4aaf041-4e2c-4e85-a07d-3a0b60f6a342\\scratchpad\\probe\\both.jpg"
+    ],
+    "render_evidence": "both.jpg is 1274x709 and shows a real DATA HUD crop (DISARMED, 'Not Ready to Arm', Bat1 12.60v, GPS: 3D Fix, Stabilize) left of a real satellite-map crop with the vehicle, heading lines, legend, zoom bar and Google attribution. The HUD is shorter than the map, and the area below it is black, as the original's composite Bitmap encoded to JPEG would be. hud.jpg and map.jpg are in the same folder with consistent sizes (24 KB and 114 KB). No new PLAN render covers the map-centre follow; target/judging/round14 predates 46833f1.",
+    "reviewer_executed_verification": [
+      "None beyond source inspection, a byte comparison of hud.html and viewing the probe JPEG. As instructed, no cargo build or test ran. The worktree was detached to 8e9969f."
+    ],
+    "reported_evidence_not_rerun": [
+      "cargo test --workspace: 113 passed on each of ten runs (main session). This includes the httpserver socket tests for every route, failed_direct_writes_show_the_original_messages, the 300 ms numeric wait in the vehicle tuning test, and the Escape-cancel step in the coord grid test.",
+      "A live simulator probe returned ATTITUDE, GPS_RAW_INT, HEARTBEAT, STATUSTEXT and VFR_HUD in /mavlink/ JSON, and the three MJPEG frames."
+    ],
+    "verification_limits": [
+      "No original C# runtime was run side by side. The WinForms Timer reading (re-setting Interval to the same value does not restart a running timer) comes from .NET Framework reference-source behaviour, not a measurement.",
+      "The map-centre follow in PLAN has no test and no render, so it is verified from source only.",
+      "The claim that Copter rejects Fly To Here outside GUIDED comes from ArduPilot's handling of a guided request (it requires guided mode). It was not exercised against SITL here, and the Rust simulator accepts current=2 regardless of mode.",
+      "No Google Earth or Mavelous client was run against the service. Native macOS, Linux, Android and iOS were not exercised, and no physical device was used."
+    ],
+    "reviewer_actions": "Read-only source and evidence inspection. Only judging/round-15.json was written."
+  },
+  "run15_dispositions": [
+    {
+      "change": "06efa30: direct-write form numerics wait 300 ms, show the pending value, and report failed direct writes",
+      "status": "closed (low residuals)",
+      "closed_parts": "A numeric edit outside a staged (Write PIDS) page goes into FormState.delayed with a 300 ms deadline. flush() sends LinkCommand::SetParam when the deadline passes and requests a repaint for the next deadline. While the timer runs, the control shows its own pending value, as a NumericUpDown keeps base.Value. ParamSet{ok:false} for a tracked name raises a modal CustomMessageBox-equivalent: 'Set X Failed' for numerics (Strings.ErrorSetValueFailed) and 'Set X Failed!' for metadata-option combos (the _source2 path). Success and untracked names are ignored. Rover/Tracker tuning and every SETUP form route events to FormState.on_event. Staged pages still stage instead of writing.",
+      "remaining": "Timer semantics differ. The original uses System.Windows.Forms.Timer. ValueChanged sets Interval=300 and starts the timer only if it is not enabled. Re-setting the same Interval does not restart a running WinForms timer, so the original writes 300 ms after the first change of a burst, and a long spin writes about every 300 ms. The port debounces, so each change restarts the deadline and only the final value goes out. MavlinkCheckBox failures read 'Set X Failed' (ErrorSetValueFailed), but the port's mcheck path uses edit() and shows 'Set X Failed!'. flush() runs only while the form is drawn, so a value edited less than 300 ms before leaving the page is not sent until the page is shown again. The original timer keeps firing. The NumericUpDown 'Value out of range / Do you want to accept the new value?' prompt is absent.",
+      "rust_refs": [
+        "crates/mp-app/src/forms.rs:132-195",
+        "crates/mp-app/src/forms.rs:266-271",
+        "crates/mp-app/src/forms.rs:312-321",
+        "crates/mp-app/src/forms.rs:358-363",
+        "crates/mp-app/src/views/vehicle_tuning.rs:93-95",
+        "crates/mp-app/src/views/vehicle_tuning.rs:382-421",
+        "crates/mp-app/src/views/setup.rs:308-311"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/Controls/MavlinkNumericUpDown.cs:26",
+        "reference/MissionPlanner/Controls/MavlinkNumericUpDown.cs:131-160",
+        "reference/MissionPlanner/Controls/MavlinkNumericUpDown.cs:162-177",
+        "reference/MissionPlanner/Controls/MavlinkComboBox.cs:131-198",
+        "reference/MissionPlanner/Controls/MavlinkCheckBox.cs:110-141",
+        "reference/MissionPlanner/ExtLibs/Strings/Strings.resx (ErrorSetValueFailed = 'Set {0} Failed')"
+      ]
+    },
+    {
+      "change": "46833f1: PLAN Coords follows the map centre; Escape cancels UTM/MGRS cell edits",
+      "status": "closed (low residuals)",
+      "closed_parts": "Whenever the PLAN map centre (settings.fp_map lat/lng, clamped to ±90/±180 as the C# handler does) changes, self.mouse is set to the centre, and mouse movement still overrides it. That reproduces MainMap_OnCurrentPositionChanged setting coords1.Lat/Lng, so the readout no longer shows 0,0 before the mouse moves, and it tracks panning. When a grid coordinate edit loses focus with Escape pressed, the edit is discarded, as DataGridView cancels. The egui test now asserts that an Escape-ended MGRS edit leaves the item unchanged.",
+      "remaining": "The original does not update coords1.Alt/AltSource from the centre, so it keeps the last mouse altitude. The port re-queries SRTM at the centre, which is a cosmetic difference. The centre follow has no test or render. These carry over from round 14: ProjNet versus GeoUtility grid UTM at millimetre level, typed zone text re-normalised, no Ocean/ASCII altsource.",
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_plan.rs:130-131",
+        "crates/mp-app/src/views/flight_plan.rs:743-747",
+        "crates/mp-app/src/views/flight_plan.rs:975-982",
+        "crates/mp-app/src/views/flight_plan.rs:1427-1475"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:7933-7958",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:1253-1270"
+      ]
+    },
+    {
+      "change": "8e9969f: embedded web service (httpserver.rs) at launch; View KML opens the fixed URL",
+      "status": "closed (low residuals)",
+      "closed_parts": "The app starts httpserver::start() at launch, binding 0.0.0.0:56781 (IPAddress.Any). If the bind fails, it logs the original 'Possible multiple instances of planner?' message. Each client gets its own thread, with 200 global and 20 per-IP caps acquired and released as TryAcquire/ReleaseConnectionSlot do, and a 5 s read timeout. Routes follow the original if-chain order. websocket/server sends the 101 'WebSocket Protocol Handshake' with WebSocket-Location and the RFC 6455 accept, then CurrentState JSON and wps JSON every 200 ms, and ends on a 0x88 byte. websocket/raw (or '/' with Upgrade) sends the Date header and binary protocol echo, relays every received frame through LinkCommand::TapFrames (OnPacketReceived), and writes client MAVLink frames through SendRaw. georefnetwork.kml uses the keep-alive header set, and the georef tool now feeds it. location/network/wps KML and block_plane_0.dae are served. hud.html is byte-identical to the original. hud.jpg/map.jpg/both.jpg use the multipart/x-mixed-replace boundary=PLANNER framing at 5 Hz from real renderer crops, with both.jpg composed HUD-left and map-right at the taller height. /guided? and POST /guide are loopback-only with the Origin/Referer CSRF check, reply 'Sent Guide Mode Wp', 'Failed Guide Mode Wp' or '403 Forbidden', and use the same regex-equivalent field names. command_long, rcoverride and get_mission return the exact 404 image/jpg stub. /mavlink/ returns the Messagejson set with index=1 entries, the META_LINKQUALITY counters and the SYS_STATUS overwrite, and stays keep-alive. /mav/ serves exe_dir/mavelous_web with the original content types, Last-Modified/If-Modified-Since 304, the '403 Forbidden Content-Length: 0' traversal reply and the misspelt 'Content -Type' 404. *.jpg is a 640x480 georef image. '/' returns the original index HTML, and anything else gets the text/plain 404. View KML now just opens http://127.0.0.1:56781/network.kml, as lnk_kml_LinkClicked does. ERROR_IO_PENDING (997) is treated as a read timeout in every transport.",
+      "remaining": "All low. (a) Georef photos use resize_exact(640,480). ResizeImage defaults to preserveAspectRatio=true and fits inside 640x480. (b) map.jpg and both.jpg only refresh while the DATA view is drawn (regions expire after 1 s). The original DrawToBitmap of FlightData.mymap works from any screen. When idle and disconnected, no repaint may arrive to start capture. (c) The state websocket serialises about 100 hand-listed fields plus mode/HomeAlt/HomeLocation/rates, where JsonConvert serialises every CurrentState property. hud.html's default line2item 'cs.ter_alt' is absent. (d) wps JSON is the planner list keyed from 1 without home, where the original is MAV.wps keyed by vehicle sequence (0 = home) and filled by mission transfers. (e) The KML and .dae routes all use the georef keep-alive header block. The original location/network/wps use a plain 200 + Content-Type + Content-Length, and the .dae is served as text/plain and closed. HEAD handling is an addition. (f) websocket/raw closes right after the handshake when no link exists, where the original stays subscribed to comPort. The port also requires a 0xFE/0xFD magic byte where the original accepts any MAVLinkMessage that parses. (g) /guided goes through the port's Guided command, which has its own mode and frame gaps; see new gap priority 2.",
+      "rust_refs": [
+        "crates/mp-app/src/app.rs:268-269",
+        "crates/mp-app/src/app.rs:1242-1252",
+        "crates/mp-app/src/httpserver.rs:96-140",
+        "crates/mp-app/src/httpserver.rs:158-196",
+        "crates/mp-app/src/httpserver.rs:206-213",
+        "crates/mp-app/src/httpserver.rs:348-398",
+        "crates/mp-app/src/httpserver.rs:520-629",
+        "crates/mp-app/src/httpserver.rs:631-700",
+        "crates/mp-app/src/httpserver.rs:705-809",
+        "crates/mp-app/src/views/flight_plan.rs:192-206",
+        "crates/mp-app/src/views/flight_plan.rs:398-401",
+        "crates/mp-app/src/georef_ui.rs:122-123",
+        "crates/mp-core/src/link.rs:211-213",
+        "crates/mp-core/src/link.rs:476-478",
+        "crates/mp-core/src/comms.rs:13-17"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/Utilities/httpserver.cs:40-80",
+        "reference/MissionPlanner/Utilities/httpserver.cs:110-245",
+        "reference/MissionPlanner/Utilities/httpserver.cs:284-400",
+        "reference/MissionPlanner/Utilities/httpserver.cs:401-525",
+        "reference/MissionPlanner/Utilities/httpserver.cs:526-786",
+        "reference/MissionPlanner/Utilities/httpserver.cs:788-886",
+        "reference/MissionPlanner/Utilities/httpserver.cs:887-1003",
+        "reference/MissionPlanner/Utilities/httpserver.cs:1004-1316",
+        "reference/MissionPlanner/Utilities/httpserver.cs:1365-1405",
+        "reference/MissionPlanner/MainV2.cs:3237-3246",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4330-4342"
+      ]
+    }
+  ],
+  "new_or_remaining_affected_gaps": [
+    {
+      "priority": 1,
+      "severity": "medium",
+      "area": "DATA Status tab / CurrentState coverage",
+      "title": "Expose the full CurrentState property set and the original Status-tab layout",
+      "finding": "New (widened scope). CurrentState::fields() hand-lists about 67 scalars plus 18 ch*in and 16 ch*out. The Status tab, HUD user-items chooser, tuning graph, checklist, script 'fields' and the state websocket all draw from it. The original tabStatus_Paint iterates cs.GetItemList(true), which is every public CurrentState property (about 267), sorted alphabetically. It draws them as 120 px name + 50 px value rows 15 px apart, starting at (10,10), wrapping to a new 190 px column at the tab height, with horizontal AutoScroll. The port uses an unsorted horizontal flow of 70 px name + value cells. Most battery2-5, EFI, ESC, gps2, ahrs2, transponder, ter_*, hygro, customfield and similar properties cannot be seen or selected.",
+      "rust_refs": [
+        "crates/mp-core/src/state.rs:288-341",
+        "crates/mp-app/src/views/flight_data.rs:1949-1961",
+        "crates/mp-app/src/views/flight_data.rs:542-556",
+        "crates/mp-app/src/httpserver.rs:520-535"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightData.cs:6178-6220",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:4556-4580",
+        "reference/MissionPlanner/GCSViews/FlightData.Designer.cs:2898"
+      ],
+      "next_fix": "Generate the field list from a CurrentState model that covers the original properties (names and types, strings included). Sort it with StringCompareTo and draw the 120/50/15/190 column layout with horizontal scroll. Reuse the list for the choosers and the websocket JSON. Verify with a render and a name-set diff against GetItemList."
+    },
+    {
+      "priority": 2,
+      "severity": "medium",
+      "area": "DATA guided commands (Fly To Here / Fly To Coords / guided API / scripts)",
+      "title": "Match setGuidedModeWP: switch to GUIDED, use the per-vehicle message and frame, ignore zero targets",
+      "finding": "New (widened scope). LinkCommand::Guided always sends MISSION_ITEM_INT current=2 with frame 3 and never changes mode. The original setGuidedModeWP returns early if alt, lat or lng is 0, calls setMode('GUIDED') when the mode is not already GUIDED, and uses setWP(..., current 2) with the Locationwp frame only for ArduPlane. Every other vehicle gets setPositionTargetGlobalInt(frame). Fly To Here also uses GuidedMode.frame/z, prompts for the altitude when z == 0 and shows BadCoords at 0,0. On a real Copter in Loiter/Auto, the port's Fly To Here is rejected because guided requests need GUIDED mode. The /guided HTTP target uses frame 0 (absolute) in the original and relative in the port.",
+      "rust_refs": [
+        "crates/mp-core/src/link.rs:769-781",
+        "crates/mp-app/src/views/flight_data.rs:1217-1221",
+        "crates/mp-app/src/views/flight_data.rs:1390-1401",
+        "crates/mp-app/src/httpserver.rs:673-680",
+        "crates/mp-app/src/script_host.rs:158-160"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4442-4486",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3113-3151",
+        "reference/MissionPlanner/Utilities/httpserver.cs:911-931"
+      ],
+      "next_fix": "Give Guided a frame and a set-mode flag. Ignore zero targets, set GUIDED when needed, send MISSION_ITEM_INT current=2 for Plane and SET_POSITION_TARGET_GLOBAL_INT (position-only mask) for others. Carry GuidedMode.frame, and the HTTP API's frame 0, through. Test against the simulator in a non-GUIDED mode."
+    },
+    {
+      "priority": 3,
+      "severity": "low",
+      "area": "Web service residuals",
+      "title": "Close the httpserver detail differences",
+      "finding": "From the run-15 closure. Georef images are stretched rather than aspect-fitted. map.jpg/both.jpg are tied to the DATA view being drawn. The state JSON is a subset (no ter_alt for hud.html). wps JSON is not MAV.wps. The KML/.dae headers differ. websocket/raw closes without a link.",
+      "rust_refs": [
+        "crates/mp-app/src/httpserver.rs:96-101",
+        "crates/mp-app/src/httpserver.rs:357-370",
+        "crates/mp-app/src/httpserver.rs:538-550",
+        "crates/mp-app/src/httpserver.rs:586-588",
+        "crates/mp-app/src/httpserver.rs:799"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/Utilities/httpserver.cs:366-367",
+        "reference/MissionPlanner/Utilities/httpserver.cs:788-806",
+        "reference/MissionPlanner/Utilities/httpserver.cs:843-876",
+        "reference/MissionPlanner/Utilities/httpserver.cs:1240-1250",
+        "reference/MissionPlanner/Utilities/httpserver.cs:1412-1437"
+      ],
+      "next_fix": "Aspect-fit georef images, render the DATA map offscreen when a stream wants it, serialise the full state, publish MAV.wps, and match the per-route headers."
+    },
+    {
+      "priority": 4,
+      "severity": "low",
+      "area": "CONFIG/SETUP direct-write controls",
+      "title": "Match WinForms timer semantics and per-control failure text",
+      "finding": "From the run-15 closure. The port's debounce differs from the first-change-plus-300 ms WinForms timer. Check boxes show 'Failed!' instead of 'Failed'. A pending write waits for the form to be drawn again. The out-of-range accept prompt is absent.",
+      "rust_refs": [
+        "crates/mp-app/src/forms.rs:163-185",
+        "crates/mp-app/src/forms.rs:312-321"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/Controls/MavlinkNumericUpDown.cs:131-177",
+        "reference/MissionPlanner/Controls/MavlinkCheckBox.cs:110-141"
+      ],
+      "next_fix": "Fire 300 ms after the first change without restarting, flush from the app update loop, use ErrorSetValueFailed for check boxes, and add the out-of-range prompt."
+    },
+    {
+      "priority": 5,
+      "severity": "low",
+      "area": "PLAN Coords / grid residuals",
+      "title": "ProjNet-accurate grid UTM, typed zone retention, Ocean altsource",
+      "finding": "Carried from round 14 minus the closed parts (centre follow and Escape are closed).",
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_plan.rs:713-763",
+        "crates/mp-app/src/views/flight_plan.rs:366-369"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/ExtLibs/Utilities/PointLatLngAlt.cs:255-292",
+        "reference/MissionPlanner/ExtLibs/Utilities/utmpos.cs:69-83",
+        "reference/MissionPlanner/ExtLibs/Utilities/srtm.cs:32-33"
+      ],
+      "next_fix": "Use a full-accuracy TM for the grid, keep typed cell text, and add the Ocean source."
+    }
+  ],
+  "retained_baseline_gaps": [
+    {
+      "priority": 1,
+      "severity": "medium",
+      "status": "closed by run15",
+      "area": "Network services (httpserver)",
+      "title": "Provide the rest of the original embedded HTTP/websocket service",
+      "finding": "Closed. See run15_dispositions. Low residuals are tracked as new_or_remaining_affected_gaps priority 3.",
+      "csharp_refs": [
+        "reference/MissionPlanner/Utilities/httpserver.cs:73",
+        "reference/MissionPlanner/Utilities/httpserver.cs:335-1320",
+        "reference/MissionPlanner/MainV2.cs:3237-3246"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/httpserver.rs:206-213",
+        "crates/mp-app/src/httpserver.rs:348-398"
+      ],
+      "next_fix": "None beyond the low residuals.",
+      "disposition": "closed by run15."
+    },
+    {
+      "priority": 2,
+      "severity": "low",
+      "status": "closed by run15 (low residuals)",
+      "area": "CONFIG Rover Basic Tuning",
+      "title": "Report failed direct writes and match the numeric write timing",
+      "finding": "Closed with residuals; see run15_dispositions and new_or_remaining_affected_gaps priority 4.",
+      "csharp_refs": [
+        "reference/MissionPlanner/Controls/MavlinkNumericUpDown.cs:153-177",
+        "reference/MissionPlanner/Controls/MavlinkComboBox.cs:180-198"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/forms.rs:154-195"
+      ],
+      "next_fix": "See priority 4 residuals.",
+      "disposition": "closed by run15 (low residuals)."
+    },
+    {
+      "priority": 4,
+      "severity": "low",
+      "status": "closed by run15",
+      "area": "PLAN View KML",
+      "title": "Match server lifetime and binding",
+      "finding": "Closed. The service starts at launch on all interfaces, and View KML opens the fixed URL.",
+      "csharp_refs": [
+        "reference/MissionPlanner/MainV2.cs:3237-3246",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4330-4342"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/app.rs:268-269",
+        "crates/mp-app/src/views/flight_plan.rs:398-401"
+      ],
+      "next_fix": "None.",
+      "disposition": "closed by run15."
+    },
+    {
+      "priority": 3,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "DATA video and payload",
+      "title": "Implement the advertised GStreamer, HereLink and gimbal video paths",
+      "finding": "Unchanged at 8e9969f. Set GStreamer Source and HereLink Video report that GStreamer was not found. Payload Video Control reports that no gimbal video stream is configured.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3186-3213",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4946-4972",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:6667-6841"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_data.rs:475-482",
+        "crates/mp-app/src/views/fd_tabs.rs:345-346"
+      ],
+      "next_fix": "Add backend discovery, pipeline input/start/stop and gimbal stream configuration plus the original display modes. Verify with local video fixtures.",
+      "disposition": "open; unchanged by run15."
+    },
+    {
+      "priority": 5,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "Tools / swarm",
+      "title": "Restore distinct swarm workflows, especially Sequence Swarm",
+      "finding": "Unchanged. All four swarm tools open the same small vehicle grid. Sequence Swarm has no layout/step editor or execution.",
+      "csharp_refs": [
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:18-39",
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:89-150"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/more_tools.rs:73-80",
+        "crates/mp-app/src/more_tools.rs:454-553"
+      ],
+      "next_fix": "Give each tool its original state and controls, starting with Sequence layout load/save, editing, steps and execution against multiple deterministic peers.",
+      "disposition": "open; unchanged by run15."
+    },
+    {
+      "priority": 6,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "SETUP / CONFIG navigation",
+      "title": "Honor per-page display flags and original vehicle/loading visibility",
+      "finding": "Unchanged (display.rs and config.rs have no diff since 4f003f4).",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/InitialSetup.cs:183-216",
+        "reference/MissionPlanner/GCSViews/SoftwareConfig.cs:226-260",
+        "reference/MissionPlanner/ExtLibs/Utilities/DisplayView.cs:78-125"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/display.rs:33-58",
+        "crates/mp-app/src/views/setup.rs:39-51",
+        "crates/mp-app/src/views/setup.rs:82-103",
+        "crates/mp-app/src/views/config.rs:49-82"
+      ],
+      "next_fix": "Represent and apply the original display flags and page predicates. Verify navigation across layouts, connection states and vehicles.",
+      "disposition": "open; unchanged by run15."
+    },
+    {
+      "priority": 7,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "Plugins",
+      "title": "Provide original plugin loading and lifecycle compatibility",
+      "finding": "Unchanged. The plugin window says .NET .dll/.cs plugins cannot be loaded.",
+      "csharp_refs": [
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:146-179",
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:256-329",
+        "reference/MissionPlanner/MainV2.cs:2527-2581"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/hotkey_tools.rs:103-112"
+      ],
+      "next_fix": "Implement a compatibility host and page/action bridge, or record an explicit parity exclusion. Validate with a sample plugin.",
+      "disposition": "open; unchanged by run15."
+    },
+    {
+      "priority": 8,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "Localization / Planner",
+      "title": "Restore the original language selector and translated resources",
+      "finding": "Unchanged. The language combo offers only 'English (en-US)'.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:106-128",
+        "reference/MissionPlanner/MainV2.cs:4227-4235"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/config.rs:995"
+      ],
+      "next_fix": "Load translations, persist the culture and update pages and dialogs on change.",
+      "disposition": "open; unchanged by run15."
+    },
+    {
+      "priority": 9,
+      "severity": "high",
+      "status": "confirmed unsupported paths; native platform execution otherwise unverified",
+      "area": "Platform and connections",
+      "title": "Complete missing transport and mobile import paths",
+      "finding": "Unchanged. ConnectionSpec has Auto, Serial, TCP and UDP listen/client only. There is no BLE, WinUSB or websocket client transport. Mobile serial and file import return Unsupported/None.",
+      "csharp_refs": [
+        "reference/MissionPlanner/MainV2.cs:3629-3641",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4484-4488"
+      ],
+      "rust_refs": [
+        "crates/mp-core/src/comms.rs:9-30",
+        "crates/mp-app/src/platform.rs:76-79"
+      ],
+      "next_fix": "Implement the missing custom transports and mobile file/device access, then produce native launch/import receipts per promised OS.",
+      "disposition": "open; unchanged by run15."
+    }
+  ],
+  "prioritized_next_fixes": [
+    "Implement actual GStreamer discovery/pipelines, HereLink and payload gimbal video display modes, verified with local video fixtures (FlightData.cs:3186-3213, 4946-4972, 6667-6841).",
+    "Make guided commands match setGuidedModeWP: ignore zero targets, switch to GUIDED, send MISSION_ITEM_INT current=2 for Plane and SET_POSITION_TARGET_GLOBAL_INT for others, and carry GuidedMode.frame (MAVLinkInterface.cs:4442-4486; FlightData.cs:3113-3151).",
+    "Implement distinct swarm tools, starting with the Sequence Swarm layout/step editor and execution (Swarm/Sequence/LayoutEditor.cs:18-150).",
+    "Expose the full CurrentState property set, alphabetised, in the original Status-tab column layout, and reuse it for the choosers and the state websocket (FlightData.cs:6178-6220; CurrentState.cs:4556-4580).",
+    "Honor DisplayView flags and the original SETUP/CONFIG page predicates, including Frame Type and the Loading page (InitialSetup.cs:183-216; SoftwareConfig.cs:226-260; DisplayView.cs:78-125). After that come plugins, localization and the BLE/WinUSB/mobile paths (PluginLoader.cs:146-329; ConfigPlanner.cs:106-128; MainV2.cs:3629-3641) and the low web-service and timer residuals (httpserver.cs:1240-1250, 1412-1437; MavlinkNumericUpDown.cs:131-177)."
+  ],
+  "ten_out_of_ten_criterion": "No known material UI/UX or feature discrepancy in an adequately reviewed software scope, with the original interactions and promised native platforms verified. This remains a sampled review. The widened scope this round found two medium gaps that earlier rounds had missed, so closing only the listed gaps would not certify unreviewed original functionality."
+}

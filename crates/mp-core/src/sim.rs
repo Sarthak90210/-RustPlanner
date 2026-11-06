@@ -735,9 +735,20 @@ impl Vehicle {
                     self.request_upload_item(0, c.mission_type);
                 }
             }
+            MavMessage::SET_POSITION_TARGET_GLOBAL_INT(t) => {
+                // Copter/Rover guided position targets, ignored outside GUIDED; a target
+                // that ignores its position (type_mask bits 0-2) does not move the vehicle
+                if self.mode == MODE_GUIDED && t.type_mask.bits() & 0b111 == 0 && (t.lat_int != 0 || t.lon_int != 0) {
+                    self.target = Some(PointLatLngAlt::new(t.lat_int as f64 / 1e7, t.lon_int as f64 / 1e7, t.alt as f64));
+                }
+            }
             MavMessage::MISSION_ITEM_INT(m) => {
                 if m.current == 2 {
-                    // guided "fly to here"
+                    // guided "fly to here": ArduPilot's handle_guided_request needs GUIDED
+                    if self.mode != MODE_GUIDED {
+                        self.mission_ack(m.mission_type, MavMissionResult::MAV_MISSION_ERROR);
+                        return;
+                    }
                     let wp = Locationwp::from_mission_item_int(&m);
                     self.target = Some(PointLatLngAlt::new(wp.lat, wp.lng, wp.alt as f64));
                     self.mission_ack(m.mission_type, MavMissionResult::MAV_MISSION_ACCEPTED);
