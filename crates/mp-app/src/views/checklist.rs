@@ -5,6 +5,7 @@
 use egui::{Color32, Rect, Stroke, StrokeKind, Vec2};
 use mp_core::state::CurrentState;
 
+use crate::app::AppCtx;
 use crate::theme;
 
 const DEFAULT_XML: &str = include_str!("../../assets/checklistDefault.xml");
@@ -111,7 +112,7 @@ impl Item {
 }
 
 impl CheckList {
-    pub fn ui(&mut self, ui: &mut egui::Ui, cs: &CurrentState) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, cs: &CurrentState) {
         if self.ticks.len() != self.items.len() {
             self.ticks = vec![false; self.items.len()];
         }
@@ -141,9 +142,12 @@ impl CheckList {
             ui.put(cb, egui::Checkbox::without_text(&mut self.ticks[i]));
             y += 17.0 + h + 4.0;
         }
-        let br = Rect::from_min_size(o + Vec2::new(3.0, y + 2.0), Vec2::new(75.0, 23.0));
-        if ui.put(br, |ui: &mut egui::Ui| theme::button_sized(ui, "Edit", br.size())).clicked() {
-            self.editing = Some(self.items.clone());
+        let show_edit = crate::display::flag(&app.settings.planner, "displayPreFlightTabEdit");
+        if show_edit {
+            let br = Rect::from_min_size(o + Vec2::new(3.0, y + 2.0), Vec2::new(75.0, 23.0));
+            if ui.put(br, |ui: &mut egui::Ui| theme::button_sized(ui, "Edit", br.size())).clicked() {
+                self.editing = Some(self.items.clone());
+            }
         }
         ui.allocate_rect(Rect::from_min_size(o, Vec2::new(pw, y + 30.0)), egui::Sense::hover());
         self.editor(ui.ctx(), cs);

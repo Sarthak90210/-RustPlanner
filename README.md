@@ -219,6 +219,22 @@ Locationwp would send its relative altitude as AMSL. temp > Follow Swarm opens W
 with ground/air master selection, collision checking, multi-mode drone group flight states, the original
 ZedGraph distance-altitude elevation plot, and per-vehicle status cards.
 
+Run 18 adds the remaining DisplayView consumers for Quick-view locking, checklist editing, simple
+flight modes, parameter commit controls and forced menu hiding. The revealed menu stays open while
+the pointer moves over its buttons. CONFIG selects its vehicle-specific starting page.
+
+Guided commands carry Absolute, Relative or Terrain frames through both Plane's mission item and
+Copter's position target. DATA prompts for altitude on the first Fly To Here, saves the altitude and
+frame, rejects invalid integer altitude, converts display units to metres, and changes an existing
+guided target's altitude only while in Guided. The HTTP guided endpoint uses the original frame 0.
+Wire tests cover all three frames on both vehicle paths.
+
+Status uses the original 190-pixel column steps and horizontal scrolling. Its registry is generated
+from the 506 public CurrentState properties, with natural channel/cell ordering and original types.
+The JSON stream preserves booleans and text. Additional telemetry includes secondary GPS/IMUs,
+batteries, terrain, power, optical flow and PID tuning. Unsupported properties are blank/null;
+the full CurrentState decoder and numeric selection lists still need further porting.
+
 ## License
 
 GPL-3.0, like Mission Planner. Icons and marker images are Mission Planner / GMap.NET assets under the same license.

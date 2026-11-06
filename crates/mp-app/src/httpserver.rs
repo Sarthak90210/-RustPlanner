@@ -522,8 +522,10 @@ fn state_json(state: &Snapshot) -> String {
     let s = shared.read();
     let cs = &s.cs;
     let mut map = serde_json::Map::new();
-    for (name, value) in cs.fields() {
-        map.insert(name.into(), serde_json::json!(value));
+    for name in cs.get_item_list(false, false) {
+        let value = cs.property(name);
+        let value = if let Some(v) = value.as_f64() { serde_json::json!(crate::units::field(name, v).0) } else { value };
+        map.insert(name.into(), value);
     }
     for (name, rate) in ["rateattitude", "rateposition", "ratestatus", "raterc", "ratesensors"].iter().zip(state.rates) {
         map.insert((*name).into(), rate.into());
@@ -676,7 +678,7 @@ fn guided(stream: &mut TcpStream, peer: SocketAddr, head: &str, state: &Snapshot
     match parsed {
         Some(((lat, lng), alt)) => {
             if let Some(c) = &state.command {
-                let _ = c.send(LinkCommand::Guided { lat, lng, alt: alt as f32 });
+                let _ = c.send(LinkCommand::Guided { lat, lng, alt: alt as f32, frame: 0 });
             }
             stream.write_all(b"HTTP/1.1 200 OK\r\n\r\nSent Guide Mode Wp")
         }
@@ -1012,7 +1014,7 @@ mod tests {
         let (_server, addr) = server(Snapshot { command: Some(tx), ..Default::default() });
         let (_, body) = get(addr, "GET", "/guided?lat=-34&lng=117.8&alt=30");
         assert_eq!(body, b"Sent Guide Mode Wp");
-        assert!(matches!(rx.try_recv(), Ok(LinkCommand::Guided { lat, lng, alt }) if lat == -34.0 && lng == 117.8 && alt == 30.0));
+        assert!(matches!(rx.try_recv(), Ok(LinkCommand::Guided { lat, lng, alt, frame }) if lat == -34.0 && lng == 117.8 && alt == 30.0 && frame == 0));
         let (_, body) = get(addr, "GET", "/guided?lat=x&lng=1&alt=2");
         assert_eq!(body, b"Failed Guide Mode Wp");
         let (head, _) = request(addr, "GET /guided?lat=1&lng=2&alt=3 HTTP/1.1\r\nOrigin: http://example.com\r\n\r\n");
@@ -1024,7 +1026,7 @@ mod tests {
         let (_, body) = request(addr, &format!("POST /guide HTTP/1.1\r\nContent-Length: {}\r\n\r\n{json}", json.len()));
         assert_eq!(body, b"Sent Guide Mode Wp");
         let sent: Vec<_> = rx.try_iter().collect();
-        assert!(sent.iter().any(|c| matches!(c, LinkCommand::Guided { lat, lng, alt } if *lat == -35.5 && *lng == 149.1 && *alt == 40.0)));
+        assert!(sent.iter().any(|c| matches!(c, LinkCommand::Guided { lat, lng, alt, frame } if *lat == -35.5 && *lng == 149.1 && *alt == 40.0 && *frame == 0)));
     }
 
     fn ws_connect(addr: SocketAddr, path: &str) -> (TcpStream, String) {
@@ -1077,6 +1079,10 @@ mod tests {
         let cs: serde_json::Value = serde_json::from_slice(&cs).unwrap();
         assert_eq!(cs["rateattitude"], 4);
         assert_eq!(cs["roll"], 12.5);
+        assert!(cs["armed"].is_boolean());
+        assert!(cs["mode"].is_string());
+        assert!(cs["gen_speed"].is_null());
+        assert!(cs.get("accelerometer").is_none());
         let (_, wps) = ws_recv(&mut s);
         let wps: serde_json::Value = serde_json::from_slice(&wps).unwrap();
         assert_eq!(wps["1"]["x"], 15_000_000);

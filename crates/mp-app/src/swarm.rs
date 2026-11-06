@@ -462,7 +462,11 @@ impl Grid {
         if resp.drag_stopped() {
             self.drag = None;
         }
-        if self.drag.is_none() {
+        if resp.secondary_clicked() {
+            if let Some(pos) = resp.interact_pointer_pos() {
+                self.hover = hit(self, pos);
+            }
+        } else if self.drag.is_none() && ui.rect_contains_pointer(rect) {
             self.hover = pointer.and_then(|pos| hit(self, pos));
         }
         let mut alt = None;
@@ -802,38 +806,44 @@ impl FormationControl {
                 let z = self.grid.icons.get(&k).map(|i| i.z).unwrap_or(0.0);
                 self.alt_prompt = Some((k, z.to_string()));
             }
-            // PNL_status: one Status block per vehicle
-            let mut y = 61.0;
-            for m in &mavs {
-                let b = r(783.0, y, 113.0, 128.0);
-                let color = if Some(m.key) == self.leader { Color32::RED } else { Color32::WHITE };
-                let f = crate::fonts::ui_id(crate::fonts::UI_SIZE);
-                let at = |x: f32, yy: f32| b.min + Vec2::new(x, yy);
-                let p = ui.painter();
-                let guided = self.guided.get(&m.key).copied().unwrap_or_default();
-                for (x, yy, t) in [
-                    (3.0, 0.0, m.key.1.to_string()),
-                    (3.0, 13.0, "Armed".into()),
-                    (46.0, 13.0, if m.armed { "True" } else { "False" }.into()),
-                    (3.0, 26.0, "Mode".into()),
-                    (46.0, 26.0, m.mode.clone()),
-                    (3.0, 39.0, "GPS".into()),
-                    (46.0, 39.0, if m.gpsstatus >= 3 { "OK" } else { "Bad" }.into()),
-                    (3.0, 52.0, "Guided".into()),
-                ] {
-                    p.text(at(x, yy), egui::Align2::LEFT_TOP, t, f.clone(), color);
+            // PNL_status: (783, 61, 147, 398) FlowLayoutPanel with AutoScroll
+            let pnl_rect = r(783.0, 61.0, 147.0, 398.0);
+            let mut pnl_ui = ui.new_child(egui::UiBuilder::new().max_rect(pnl_rect));
+            egui::ScrollArea::vertical().id_salt("swarm_formation_pnl_status").show(&mut pnl_ui, |ui| {
+                for m in &mavs {
+                    let (card_rect, _) = ui.allocate_exact_size(Vec2::new(113.0, 128.0), Sense::hover());
+                    let color = if Some(m.key) == self.leader { Color32::RED } else { Color32::WHITE };
+                    let f = crate::fonts::ui_id(crate::fonts::UI_SIZE);
+                    let at = |x: f32, yy: f32| card_rect.min + Vec2::new(x, yy);
+                    let p = ui.painter();
+                    let guided = self.guided.get(&m.key).copied().unwrap_or_default();
+                    for (x, yy, t) in [
+                        (3.0, 0.0, m.key.1.to_string()),
+                        (3.0, 13.0, "Armed".into()),
+                        (46.0, 13.0, if m.armed { "True" } else { "False" }.into()),
+                        (3.0, 26.0, "Mode".into()),
+                        (46.0, 26.0, m.mode.clone()),
+                        (3.0, 39.0, "GPS".into()),
+                        (46.0, 39.0, if m.gpsstatus >= 3 { "OK" } else { "Bad" }.into()),
+                        (3.0, 52.0, "Guided".into()),
+                        (3.0, 82.0, "Location".into()),
+                        (3.0, 112.0, "Speed".into()),
+                        (46.0, 112.0, format!("{:.2}", m.groundspeed)),
+                    ] {
+                        p.text(at(x, yy), egui::Align2::LEFT_TOP, t, f.clone(), color);
+                    }
+                    for (yy, t) in [
+                        (52.0, format!("{:.5},{:.5},{:.2}", guided.0, guided.1, guided.2)),
+                        (82.0, format!("{:.5},{:.5},{:.2}", m.lat, m.lng, m.alt)),
+                    ] {
+                        let mut job = egui::text::LayoutJob::simple(t, f.clone(), color, 67.0);
+                        job.wrap.break_anywhere = true;
+                        let galley = ui.painter().layout_job(job);
+                        ui.painter().with_clip_rect(Rect::from_min_size(at(46.0, yy), Vec2::new(67.0, 30.0))).galley(at(46.0, yy), galley, color);
+                    }
+                    ui.add_space(4.0);
                 }
-                for (yy, t) in [(52.0, format!("{},{},{}", guided.0, guided.1, guided.2)), (82.0, format!("{},{},{}", m.lat, m.lng, m.alt))] {
-                    let mut job = egui::text::LayoutJob::simple(t, f.clone(), color, 67.0);
-                    job.wrap.break_anywhere = true;
-                    let galley = ui.painter().layout_job(job);
-                    ui.painter().with_clip_rect(Rect::from_min_size(at(46.0, yy), Vec2::new(67.0, 30.0))).galley(at(46.0, yy), galley, color);
-                }
-                y += 128.0;
-                if y > 61.0 + 398.0 - 128.0 {
-                    break;
-                }
-            }
+            });
         });
         if !open {
             // Control_FormClosing

@@ -92,6 +92,8 @@ pub struct LinkShared {
     pub mission: Vec<Locationwp>,
     /// Per-vehicle mission by (sysid, compid)
     pub missions: BTreeMap<(u8, u8), Vec<Locationwp>>,
+    /// Last guided target for each MAV, shared by DATA, HTTP and scripting.
+    pub guided_targets: BTreeMap<(u8, u8), Locationwp>,
 }
 
 /// What the map and the vehicle selector need about each vehicle on the link.
@@ -191,6 +193,7 @@ pub enum LinkCommand {
         lat: f64,
         lng: f64,
         alt: f32,
+        frame: u8,
     },
     /// setNewWPAlt: MISSION_ITEM current=3, without a new horizontal target.
     ChangeAltitude { alt: f32 },
@@ -783,11 +786,12 @@ impl Worker {
                 self.send(MavMessage::MISSION_ITEM(item.clone()))?;
                 self.pending_alt = Some((item, Instant::now(), 1));
             }
-            LinkCommand::Guided { lat, lng, alt } => {
+            LinkCommand::Guided { lat, lng, alt, frame } => {
                 // setGuidedModeWP: a zero target is ignored
                 if alt == 0.0 || lat == 0.0 || lng == 0.0 {
                     return Ok(());
                 }
+                self.shared.write().guided_targets.insert((self.target_sys, self.target_comp), Locationwp::waypoint(lat, lng, alt, frame));
                 let (firmware, mode) = {
                     let s = self.shared.read();
                     (s.cs.firmware, s.cs.mode.clone())
@@ -798,9 +802,14 @@ impl Worker {
                         self.command_long(MavCmd::MAV_CMD_DO_SET_MODE, [1.0, number as f32, 0.0, 0.0, 0.0, 0.0, 0.0])?;
                     }
                 }
+                let mav_frame = match frame {
+                    0 => MavFrame::MAV_FRAME_GLOBAL,
+                    10 => MavFrame::MAV_FRAME_GLOBAL_TERRAIN_ALT,
+                    _ => MavFrame::MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                };
                 if firmware == Firmware::ArduPlane {
                     // setWP(..., current = 2): MISSION_ITEM_INT
-                    let wp = Locationwp::waypoint(lat, lng, alt, 3);
+                    let wp = Locationwp::waypoint(lat, lng, alt, frame);
                     if let Some(mut item) = wp.to_mission_item_int(0, self.target_sys, self.target_comp, MavMissionType::MAV_MISSION_TYPE_MISSION) {
                         item.current = 2;
                         self.send(MavMessage::MISSION_ITEM_INT(item))?;
@@ -813,7 +822,7 @@ impl Worker {
                         alt,
                         target_system: self.target_sys,
                         target_component: self.target_comp,
-                        coordinate_frame: MavFrame::MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                        coordinate_frame: mav_frame,
                         type_mask: PositionTargetTypemask::from_bits_truncate(u16::MAX - (1 << 9) - 0b111),
                         ..Default::default()
                     }))?;

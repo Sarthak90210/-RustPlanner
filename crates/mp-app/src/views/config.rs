@@ -181,7 +181,7 @@ impl Default for ConfigView {
             Some(7) => Page::UserParams,
             Some(10) => Page::Planner,
             Some(0) => Page::GeoFence,
-            _ => Page::FullParamList,
+            _ => Page::BasicTuning,
         };
         Self { page, loading: Default::default(), params: ParamEditor::default(), extended: Default::default(), user_add: String::new(), ftp: Default::default(), osd: Default::default(), standard: Default::default(), advanced: Default::default(), last_page: None, vehicle_tuning: Default::default() }
     }
@@ -197,7 +197,16 @@ impl ConfigView {
     pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
         let fw = app.link.map(|l| l.shared.read().cs.firmware).unwrap_or_default();
         let list = pages(app);
-        let shown = if list.contains(&self.page) { self.page } else { list.first().copied().unwrap_or(Page::Planner) };
+        let default_page = if app.link.is_none() {
+            Page::Planner
+        } else if fw == Firmware::ArduTracker {
+            Page::ExtendedTuning
+        } else if list.contains(&Page::BasicTuning) {
+            Page::BasicTuning
+        } else {
+            list.first().copied().unwrap_or(Page::Planner)
+        };
+        let shown = if list.contains(&self.page) { self.page } else { default_page };
         let items: Vec<BsvItem> = list.iter().map(|p| BsvItem { label: p.label(fw).to_string(), parent: None }).collect();
         let before = list.iter().position(|p| *p == shown).unwrap_or(0);
         let mut idx = before;
@@ -426,8 +435,10 @@ impl ParamEditor {
                     self.compare = Some(diffs);
                 }
             }
-            if b(ui, r(141.0, 22.0), "Commit Params") {
-                link.send(LinkCommand::CommandLong { command: 245, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
+            if crate::display::flag(&app.settings.planner, "displayParamCommitButton") {
+                if b(ui, r(141.0, 22.0), "Commit Params") {
+                    link.send(LinkCommand::CommandLong { command: 245, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
+                }
             }
             let f = fonts::ui_id(fonts::UI_SIZE);
             ui.painter().text(o + Vec2::new(6.0, 169.0), egui::Align2::LEFT_TOP, "All Units are in raw\nformat with no scaling", f.clone(), Color32::WHITE);
@@ -917,13 +928,14 @@ pub fn flight_modes(ui: &mut egui::Ui, app: &mut AppCtx) {
                 })
                 .response
         });
-        if simple_p.is_some() {
+        let standard_only = crate::display::flag(&app.settings.planner, "standardFlightModesOnly");
+        if !standard_only && simple_p.is_some() {
             let mut b = st.1 & (1 << i) != 0;
             if ui.put(Rect::from_min_size(at(222.0, y + 2.0), Vec2::new(105.0, 16.0)), egui::Checkbox::new(&mut b, "Simple Mode")).changed() {
                 st.1 = if b { st.1 | (1 << i) } else { st.1 & !(1 << i) };
             }
         }
-        if ss_p.is_some() {
+        if !standard_only && ss_p.is_some() {
             let mut b = st.2 & (1 << i) != 0;
             if ui.put(Rect::from_min_size(at(332.0, y + 2.0), Vec2::new(135.0, 16.0)), egui::Checkbox::new(&mut b, "Super Simple Mode")).changed() {
                 st.2 = if b { st.2 | (1 << i) } else { st.2 & !(1 << i) };
@@ -1234,7 +1246,9 @@ fn planner(ui: &mut egui::Ui, app: &mut AppCtx, _fw: Firmware) {
         check(ui, pl, "beta_updates", r(228.0, 577.0, 95.0, 17.0), "Beta Updates", false);
         check(ui, pl, "norcreceiver", r(340.0, 577.0, 110.0, 17.0), "No RC Receiver", false);
         check(ui, pl, "showtfr", r(496.0, 577.0, 60.0, 17.0), "TFR's", false);
-        check(ui, pl, "autoParamCommit", r(598.0, 578.0, 130.0, 17.0), "Auto Commit Params", true);
+        if crate::display::flag(pl, "displayParamCommitButton") {
+            check(ui, pl, "autoParamCommit", r(598.0, 578.0, 130.0, 17.0), "Auto Commit Params", true);
+        }
         check(ui, pl, "Params_BG", r(107.0, 600.0, 190.0, 17.0), "Params Download in BackGround", false);
         check(ui, pl, "SlowMachine", r(340.0, 600.0, 160.0, 17.0), "Runing on a slow computer", false);
         check(ui, pl, "mavdebug", r(106.0, 623.0, 160.0, 17.0), "Mavlink Message Debug", false);

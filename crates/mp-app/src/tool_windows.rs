@@ -666,7 +666,7 @@ impl Tools {
                 *last = Instant::now();
                 if let (Some((lat, lng, _)), Some(l)) = (self.last_fix, link) {
                     if cs.mode.eq_ignore_ascii_case("guided") {
-                        l.send(LinkCommand::Guided { lat, lng, alt: cs.alt.max(10.0) });
+                        l.send(LinkCommand::Guided { lat, lng, alt: cs.alt.max(10.0), frame: 3 });
                     }
                 }
             }

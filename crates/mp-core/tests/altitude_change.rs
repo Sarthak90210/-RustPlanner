@@ -104,6 +104,30 @@ fn send(peer: &Peer, component: u8, message: MavMessage) {
 }
 
 #[test]
+fn guided_frames_survive_the_production_link_for_plane_and_copter() {
+    for mavtype in [MavType::MAV_TYPE_FIXED_WING, MavType::MAV_TYPE_QUADROTOR] {
+        let (link, peer) = Peer::connect();
+        send(&peer, 1, MavMessage::HEARTBEAT(HEARTBEAT_DATA {
+            mavtype, autopilot: MavAutopilot::MAV_AUTOPILOT_ARDUPILOTMEGA,
+            custom_mode: if mavtype == MavType::MAV_TYPE_FIXED_WING { 15 } else { 4 },
+            ..Default::default()
+        }));
+        let until = Instant::now() + Duration::from_secs(2);
+        while link.shared.read().cs.mavtype != mavtype as u32 && Instant::now() < until { std::thread::sleep(Duration::from_millis(5)); }
+        for (frame, expected) in [(0, MavFrame::MAV_FRAME_GLOBAL), (3, MavFrame::MAV_FRAME_GLOBAL_RELATIVE_ALT), (10, MavFrame::MAV_FRAME_GLOBAL_TERRAIN_ALT)] {
+            link.send(LinkCommand::Guided { lat: -35.1, lng: 149.2, alt: 55.0, frame });
+            let msg = receive(&peer, Duration::from_secs(3), |m| matches!(m, MavMessage::MISSION_ITEM_INT(_) | MavMessage::SET_POSITION_TARGET_GLOBAL_INT(_)));
+            match msg {
+                MavMessage::MISSION_ITEM_INT(wp) => { assert_eq!(wp.frame, expected); assert_eq!(wp.current, 2); assert_eq!(wp.z, 55.0); }
+                MavMessage::SET_POSITION_TARGET_GLOBAL_INT(wp) => { assert_eq!(wp.coordinate_frame, expected); assert_eq!(wp.alt, 55.0); }
+                _ => unreachable!(),
+            }
+            assert_eq!(link.shared.read().guided_targets[&(42,1)].frame, frame);
+        }
+    }
+}
+
+#[test]
 fn parameter_clear_then_reassign_waits_for_each_readback_and_cancels_on_target_change() {
     let (link, peer) = Peer::connect();
     for value in [0.0, 10.0] { link.send(LinkCommand::SetParam { name: "SERVO9_FUNCTION".into(), value }); }

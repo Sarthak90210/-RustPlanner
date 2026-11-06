@@ -132,9 +132,11 @@ pub struct CurrentState {
     pub packets_lost: u64,
 
     pub track: Vec<(f64, f64)>,
+    pub extra: std::collections::BTreeMap<String, f64>,
 
     last_pos_update: Option<Instant>,
     last_seq: Option<u8>,
+    rangefinder_alt_index: i32,
 }
 
 impl Default for CurrentState {
@@ -234,11 +236,17 @@ impl Default for CurrentState {
             packets_received: 0,
             packets_lost: 0,
             track: Vec::new(),
+            extra: std::collections::BTreeMap::new(),
             last_pos_update: None,
             last_seq: None,
+            rangefinder_alt_index: i32::MAX,
         }
     }
 }
+
+#[path = "state_properties.rs"]
+mod properties;
+use properties::{PropertyKind, PROPERTIES};
 
 impl CurrentState {
     pub fn location(&self) -> PointLatLngAlt {
@@ -284,100 +292,156 @@ impl CurrentState {
         self.linkqualitygcs = (self.packets_received as f32 / total as f32) * 100.0;
     }
 
-    /// Every numeric field, as listed in Mission Planner's Status tab.
-    pub fn fields(&self) -> Vec<(&'static str, f64)> {
-        let mut v: Vec<(&'static str, f64)> = vec![
-            ("roll", self.roll as f64),
-            ("pitch", self.pitch as f64),
-            ("yaw", self.yaw as f64),
-            ("lat", self.lat),
-            ("lng", self.lng),
-            ("alt", self.alt as f64),
-            ("altasl", self.altasl as f64),
-            ("groundcourse", self.groundcourse as f64),
-            ("gpsstatus", self.gpsstatus as f64),
-            ("satcount", self.satcount as f64),
-            ("gpshdop", self.gpshdop as f64),
-            ("gpsvdop", self.gpsvdop as f64),
-            ("gpsalt", self.gpsalt as f64),
-            ("airspeed", self.airspeed as f64),
-            ("groundspeed", self.groundspeed as f64),
-            ("verticalspeed", self.verticalspeed as f64),
-            ("throttle", self.throttle as f64),
-            ("nav_roll", self.nav_roll as f64),
-            ("nav_pitch", self.nav_pitch as f64),
-            ("nav_bearing", self.nav_bearing as f64),
-            ("target_bearing", self.target_bearing as f64),
-            ("wp_dist", self.wp_dist as f64),
-            ("alt_error", self.alt_error as f64),
-            ("aspd_error", self.aspd_error as f64),
-            ("xtrack_error", self.xtrack_error as f64),
-            ("wpno", self.wpno as f64),
-            ("armed", self.armed as u8 as f64),
-            ("battery_voltage", self.battery_voltage as f64),
-            ("current", self.current as f64),
-            ("battery_remaining", self.battery_remaining as f64),
-            ("battery_usedmah", self.battery_usedmah as f64),
-            ("load", self.load as f64),
-            ("rssi", self.rssi as f64),
-            ("remrssi", self.remrssi as f64),
-            ("noise", self.noise as f64),
-            ("remnoise", self.remnoise as f64),
-            ("txbuf", self.txbuf as f64),
-            ("rxerrors", self.rxerrors as f64),
-            ("ekfstatus", self.ekfstatus as f64),
-            ("vibex", self.vibex as f64),
-            ("vibey", self.vibey as f64),
-            ("vibez", self.vibez as f64),
-            ("clip0", self.clip0 as f64),
-            ("clip1", self.clip1 as f64),
-            ("clip2", self.clip2 as f64),
-            ("rangefinder1", self.rangefinder as f64),
-            ("ax", self.ax as f64),
-            ("ay", self.ay as f64),
-            ("az", self.az as f64),
-            ("gx", self.gx as f64),
-            ("gy", self.gy as f64),
-            ("gz", self.gz as f64),
-            ("mx", self.mx as f64),
-            ("my", self.my as f64),
-            ("mz", self.mz as f64),
-            ("wind_dir", self.wind_dir as f64),
-            ("wind_vel", self.wind_vel as f64),
-            ("press_temp", self.press_temp as f64),
-            ("DistToHome", self.DistToHome() as f64),
-            ("timeInAir", self.time_in_air as f64),
-            ("distTraveled", self.dist_traveled as f64),
-            ("timeSinceBoot", self.time_since_boot as f64),
-            ("linkqualitygcs", self.linkqualitygcs as f64),
-            ("packets_received", self.packets_received as f64),
-            ("packets_lost", self.packets_lost as f64),
-            ("sysid", self.sysid as f64),
-            ("compid", self.compid as f64),
-        ];
-        const CH_IN: [&str; 18] = [
-            "ch1in", "ch2in", "ch3in", "ch4in", "ch5in", "ch6in", "ch7in", "ch8in", "ch9in",
-            "ch10in", "ch11in", "ch12in", "ch13in", "ch14in", "ch15in", "ch16in", "ch17in",
-            "ch18in",
-        ];
-        const CH_OUT: [&str; 16] = [
-            "ch1out", "ch2out", "ch3out", "ch4out", "ch5out", "ch6out", "ch7out", "ch8out",
-            "ch9out", "ch10out", "ch11out", "ch12out", "ch13out", "ch14out", "ch15out", "ch16out",
-        ];
-        for (i, n) in CH_IN.iter().enumerate() {
-            v.push((n, self.ch_in[i] as f64));
-        }
-        for (i, n) in CH_OUT.iter().enumerate() {
-            v.push((n, self.ch_out[i] as f64));
-        }
-        v
+
+
+
+    /// Public properties only, matching GetItemList's type filter and natural sort.
+    pub fn get_item_list(&self, alpha: bool, numbers_only: bool) -> Vec<&'static str> {
+        let mut names: Vec<_> = PROPERTIES.iter()
+            .filter(|(_, kind)| !numbers_only || *kind == PropertyKind::Number)
+            .map(|(name, _)| *name).collect();
+        if alpha { names.sort_by(|a, b| property_order(a, b)); }
+        names
     }
 
+    /// Values keep their original types. Unported properties are null rather than fabricated zeroes.
+    pub fn property(&self, name: &str) -> serde_json::Value {
+        use serde_json::json;
+        match name {
+            "mode" => json!(self.mode),
+            "armed" => json!(self.armed),
+            "messageHigh" => json!(self.message_high),
+            "HomeLocation" => self.home.map(|h| json!({"Lat":h.lat,"Lng":h.lng,"Alt":h.alt})).unwrap_or(json!({"Lat":0,"Lng":0,"Alt":0})),
+            _ => match self.field(name) {
+                Some(v) if PROPERTIES.iter().any(|(n,k)| *n == name && *k == PropertyKind::Bool) => json!(v != 0.0),
+                Some(v) => json!(v),
+                None => serde_json::Value::Null,
+            }
+        }
+    }
+
+    /// Fast property lookup matching CurrentState properties.
     pub fn field(&self, name: &str) -> Option<f64> {
-        self.fields()
-            .into_iter()
-            .find(|(n, _)| *n == name)
-            .map(|(_, v)| v)
+        let val = match name {
+            "roll" => self.roll as f64,
+            "pitch" => self.pitch as f64,
+            "yaw" => self.yaw as f64,
+            "rollspeed" => self.rollspeed as f64,
+            "pitchspeed" => self.pitchspeed as f64,
+            "yawspeed" => self.yawspeed as f64,
+            "lat" => self.lat,
+            "lng" => self.lng,
+            "alt" => self.alt as f64,
+            "altasl" => self.altasl as f64,
+            "altoffsethome" => self.altoffsethome as f64,
+            "groundcourse" => self.groundcourse as f64,
+            "gpsstatus" => self.gpsstatus as f64,
+            "satcount" => self.satcount as f64,
+            "gpshdop" => self.gpshdop as f64,
+            "gpsvdop" => self.gpsvdop as f64,
+            "gpsalt" => self.gpsalt as f64,
+            "airspeed" => self.airspeed as f64,
+            "groundspeed" => self.groundspeed as f64,
+            "verticalspeed" | "climbrate" => self.verticalspeed as f64,
+            "throttle" => self.throttle as f64,
+            "nav_roll" => self.nav_roll as f64,
+            "nav_pitch" => self.nav_pitch as f64,
+            "nav_bearing" => self.nav_bearing as f64,
+            "target_bearing" => self.target_bearing as f64,
+            "wp_dist" => self.wp_dist as f64,
+            "alt_error" => self.alt_error as f64,
+            "aspd_error" => self.aspd_error as f64,
+            "xtrack_error" => self.xtrack_error as f64,
+            "wpno" => self.wpno as f64,
+            "armed" => if self.armed { 1.0 } else { 0.0 },
+            "battery_voltage" => self.battery_voltage as f64,
+            "current" => self.current as f64,
+            "battery_remaining" => self.battery_remaining as f64,
+            "battery_usedmah" => self.battery_usedmah as f64,
+            "load" => self.load as f64,
+            "rssi" => self.rssi as f64,
+            "remrssi" => self.remrssi as f64,
+            "noise" => self.noise as f64,
+            "remnoise" => self.remnoise as f64,
+            "txbuf" | "txbuffer" => self.txbuf as f64,
+            "rxerrors" => self.rxerrors as f64,
+            "ekfstatus" => self.ekfstatus as f64,
+            "ekfflags" => self.ekfflags as f64,
+            "ekfvelv" | "ekf_velv" => self.ekf_velv as f64,
+            "ekfposhor" | "ekf_posh" => self.ekf_posh as f64,
+            "ekfposvert" | "ekf_posv" => self.ekf_posv as f64,
+            "ekfcompv" | "ekf_compass" => self.ekf_compass as f64,
+            "ekfteralt" | "ekf_terrain" => self.ekf_terrain as f64,
+            "vibex" => self.vibex as f64,
+            "vibey" => self.vibey as f64,
+            "vibez" => self.vibez as f64,
+            "clip0" | "vibeclip0" => self.clip0 as f64,
+            "clip1" | "vibeclip1" => self.clip1 as f64,
+            "clip2" | "vibeclip2" => self.clip2 as f64,
+            "sonarrange" => self.rangefinder as f64,
+            "ax" => self.ax as f64,
+            "ay" => self.ay as f64,
+            "az" => self.az as f64,
+            "gx" => self.gx as f64,
+            "gy" => self.gy as f64,
+            "gz" => self.gz as f64,
+            "mx" => self.mx as f64,
+            "my" => self.my as f64,
+            "mz" => self.mz as f64,
+            "wind_dir" => self.wind_dir as f64,
+            "wind_vel" => self.wind_vel as f64,
+            "press_temp" => self.press_temp as f64,
+            "DistToHome" => self.DistToHome() as f64,
+            "timeInAir" => self.time_in_air as f64,
+            "distTraveled" => self.dist_traveled as f64,
+            "timeSinceBoot" => self.time_since_boot as f64,
+            "linkqualitygcs" => self.linkqualitygcs as f64,
+            "packets_received" => self.packets_received as f64,
+            "packets_lost" => self.packets_lost as f64,
+            "sysid" => self.sysid as f64,
+            "compid" => self.compid as f64,
+            "HomeAlt" => self.home.map(|h| h.alt as f64).unwrap_or(0.0),
+            "vx" => self.vx as f64,
+            "vy" => self.vy as f64,
+            "vz" => self.vz as f64,
+            "custom_mode" => self.custom_mode as f64,
+            "base_mode" => self.base_mode as f64,
+            "system_status" => self.system_status as f64,
+            "capabilities" => return self.extra.get(name).copied(),
+            "accelerometer" => if self.sensors_health & 1 != 0 { 1.0 } else { 0.0 },
+            "gyro" => if self.sensors_health & 2 != 0 { 1.0 } else { 0.0 },
+            "compass" => if self.sensors_health & 4 != 0 { 1.0 } else { 0.0 },
+            "barometer" => if self.sensors_health & 8 != 0 { 1.0 } else { 0.0 },
+            "gps" => if self.gpsstatus >= 3 { 1.0 } else { 0.0 },
+            "battery" => if self.sensors_health & (1 << 10) != 0 { 1.0 } else { 0.0 },
+            "failsafe" => if self.system_status == 5 { 1.0 } else { 0.0 },
+            s if s.starts_with("ch") && s.ends_with("in") => {
+                if let Ok(idx) = s[2..s.len() - 2].parse::<usize>() {
+                    if idx >= 1 && idx <= 18 {
+                        return Some(self.ch_in[idx - 1] as f64);
+                    }
+                }
+                return self.extra.get(name).copied();
+            }
+            s if s.starts_with("ch") && s.ends_with("out") => {
+                if let Ok(idx) = s[2..s.len() - 3].parse::<usize>() {
+                    if idx >= 1 && idx <= 16 {
+                        return Some(self.ch_out[idx - 1] as f64);
+                    }
+                }
+                return self.extra.get(name).copied();
+            }
+            _ => return self.extra.get(name).copied(),
+        };
+        Some(val)
+    }
+
+    /// Numeric and boolean properties supported by the telemetry decoder.
+    /// Text and object properties belong in Status/JSON, not numeric plots.
+    pub fn fields(&self) -> Vec<(&'static str, f64)> {
+        self.get_item_list(true, false).into_iter()
+            .filter(|name| PROPERTIES.iter().any(|(n,k)| n == name && matches!(k, PropertyKind::Number | PropertyKind::Bool)))
+            .filter_map(|name| self.field(name).map(|value| (name, value))).collect()
     }
 
     /// Port of `CurrentState.UpdateCurrentSettings` message handling.
@@ -586,12 +650,32 @@ impl CurrentState {
                     .max(e.compass_variance)
                     .max(e.terrain_alt_variance);
             }
-            MavMessage::BATTERY_STATUS(b) if b.id == 0 => {
-                if b.current_consumed >= 0 {
+            MavMessage::BATTERY_STATUS(b) if b.id < 9 => {
+                let volts = b.voltages.iter().chain(&b.voltages_ext).filter(|v| **v != u16::MAX).map(|v| *v as f64 / 1000.0).sum::<f64>();
+                let suffix = if b.id == 0 { String::new() } else { (b.id + 1).to_string() };
+                for (name, value) in [
+                    ("battery_voltage", volts), ("current", b.current_battery as f64 / 100.0),
+                    ("battery_usedmah", b.current_consumed as f64), ("battery_remaining", b.battery_remaining as f64),
+                    ("battery_remainmin", b.time_remaining as f64 / 60.0),
+                ] { self.extra.insert(format!("{name}{suffix}"), value); }
+                if b.temperature != i16::MAX { self.extra.insert(format!("battery_temp{suffix}"), b.temperature as f64 / 100.0); }
+                if b.id == 0 {
+                    self.battery_voltage = volts as f32;
+                    self.current = b.current_battery as f32 / 100.0;
                     self.battery_usedmah = b.current_consumed as f32;
+                    self.battery_remaining = b.battery_remaining as i32;
+                    if b.voltages[0] != u16::MAX {
+                        for (i, v) in b.voltages.iter().chain(&b.voltages_ext).enumerate() {
+                            self.extra.insert(format!("battery_cell{}", i + 1), if *v == u16::MAX { 0.0 } else { *v as f64 / 1000.0 });
+                        }
+                    }
                 }
             }
-            MavMessage::RANGEFINDER(r) => self.rangefinder = r.distance,
+            MavMessage::RANGEFINDER(r) => {
+                self.rangefinder = r.distance;
+                self.extra.insert("sonarvoltage".into(), r.voltage as f64);
+                self.rangefinder_alt_index = -1;
+            }
             MavMessage::RAW_IMU(r) => {
                 self.ax = r.xacc as f32;
                 self.ay = r.yacc as f32;
@@ -607,8 +691,97 @@ impl CurrentState {
                 self.wind_dir = (w.direction + 360.0) % 360.0;
                 self.wind_vel = w.speed;
             }
-            MavMessage::DISTANCE_SENSOR(d) => self.rangefinder = d.current_distance as f32 / 100.0,
-            MavMessage::SCALED_PRESSURE(p) => self.press_temp = p.temperature as f32 / 100.0,
+            MavMessage::POWER_STATUS(p) => {
+                self.extra.insert("boardvoltage".into(), p.Vcc as f64);
+                self.extra.insert("servovoltage".into(), p.Vservo as f64);
+                self.extra.insert("voltageflag".into(), p.flags.bits() as f64);
+            }
+            MavMessage::AUTOPILOT_VERSION(v) => { self.extra.insert("capabilities".into(), v.capabilities.bits() as f64); }
+            MavMessage::LOCAL_POSITION_NED(p) => {
+                self.extra.insert("posn".into(), p.x as f64);
+                self.extra.insert("pose".into(), p.y as f64);
+                self.extra.insert("posd".into(), p.z as f64);
+            }
+            MavMessage::PID_TUNING(p) => {
+                for (name, val) in [("pidaxis", p.axis as u8 as f64), ("piddesired", p.desired as f64), ("pidachieved", p.achieved as f64), ("pidff", p.FF as f64), ("pidP", p.P as f64), ("pidI", p.I as f64), ("pidD", p.D as f64), ("pidSRate", p.SRate as f64), ("pidPDmod", p.PDmod as f64)] {
+                    self.extra.insert(name.into(), val);
+                }
+            }
+            MavMessage::DISTANCE_SENSOR(d) => {
+                if d.id < 10 { self.extra.insert(format!("rangefinder{}", d.id + 1), d.current_distance as f64); }
+                let down = d.orientation == MavSensorOrientation::MAV_SENSOR_ROTATION_PITCH_270;
+                if down && (d.id as i32) < self.rangefinder_alt_index { self.rangefinder_alt_index = d.id as i32; }
+                if d.id as i32 == self.rangefinder_alt_index {
+                    if down { self.rangefinder = (d.current_distance / 100) as f32; }
+                    else { self.rangefinder_alt_index = i32::MAX; }
+                }
+            }
+            MavMessage::SCALED_PRESSURE(p) => {
+                self.press_temp = p.temperature as f32;
+                self.extra.insert("press_abs".into(), p.press_abs as f64);
+                self.extra.insert("airspeed1_temp".into(), p.temperature_press_diff as f64);
+            }
+            MavMessage::SCALED_PRESSURE2(p) => {
+                self.extra.insert("press_abs2".into(), p.press_abs as f64);
+                self.extra.insert("press_temp2".into(), p.temperature as f64);
+                self.extra.insert("airspeed2_temp".into(), p.temperature_press_diff as f64);
+            }
+            MavMessage::AHRS2(a) => {
+                self.extra.insert("ahrs2_lat".into(), a.lat as f64 / 1e7);
+                self.extra.insert("ahrs2_lng".into(), a.lng as f64 / 1e7);
+                self.extra.insert("ahrs2_alt".into(), a.altitude as f64);
+                self.extra.insert("ahrs2_roll".into(), a.roll.to_degrees() as f64);
+                self.extra.insert("ahrs2_pitch".into(), a.pitch.to_degrees() as f64);
+                self.extra.insert("ahrs2_yaw".into(), (a.yaw.to_degrees() as f64 + 360.0) % 360.0);
+            }
+            MavMessage::SCALED_IMU2(s) => {
+                self.extra.insert("ax2".into(), s.xacc as f64);
+                self.extra.insert("ay2".into(), s.yacc as f64);
+                self.extra.insert("az2".into(), s.zacc as f64);
+                self.extra.insert("gx2".into(), s.xgyro as f64);
+                self.extra.insert("gy2".into(), s.ygyro as f64);
+                self.extra.insert("gz2".into(), s.zgyro as f64);
+                self.extra.insert("mx2".into(), s.xmag as f64);
+                self.extra.insert("my2".into(), s.ymag as f64);
+                self.extra.insert("mz2".into(), s.zmag as f64);
+                self.extra.insert("imu2_temp".into(), s.temperature as f64 / 100.0);
+            }
+            MavMessage::SCALED_IMU3(s) => {
+                self.extra.insert("ax3".into(), s.xacc as f64);
+                self.extra.insert("ay3".into(), s.yacc as f64);
+                self.extra.insert("az3".into(), s.zacc as f64);
+                self.extra.insert("gx3".into(), s.xgyro as f64);
+                self.extra.insert("gy3".into(), s.ygyro as f64);
+                self.extra.insert("gz3".into(), s.zgyro as f64);
+                self.extra.insert("mx3".into(), s.xmag as f64);
+                self.extra.insert("my3".into(), s.ymag as f64);
+                self.extra.insert("mz3".into(), s.zmag as f64);
+                self.extra.insert("imu3_temp".into(), s.temperature as f64 / 100.0);
+            }
+            MavMessage::GPS2_RAW(g) => {
+                self.extra.insert("gpsstatus2".into(), g.fix_type as u8 as f64);
+                self.extra.insert("satcount2".into(), g.satellites_visible as f64);
+                self.extra.insert("gpshdop2".into(), g.eph as f64 / 100.0);
+                self.extra.insert("altasl2".into(), g.alt as f64 / 1000.0);
+                self.extra.insert("groundspeed2".into(), g.vel as f64 / 100.0);
+                self.extra.insert("groundcourse2".into(), g.cog as f64 / 100.0);
+                self.extra.insert("lat2".into(), g.lat as f64 / 1e7);
+                self.extra.insert("lng2".into(), g.lon as f64 / 1e7);
+            }
+            MavMessage::TERRAIN_REPORT(t) => {
+                self.extra.insert("ter_alt".into(), t.terrain_height as f64);
+                self.extra.insert("ter_curalt".into(), t.current_height as f64);
+                self.extra.insert("ter_space".into(), t.spacing as f64);
+                self.extra.insert("ter_load".into(), t.loaded as f64);
+                self.extra.insert("ter_pend".into(), t.pending as f64);
+            }
+            MavMessage::OPTICAL_FLOW(o) => {
+                self.extra.insert("opt_x".into(), o.flow_x as f64);
+                self.extra.insert("opt_y".into(), o.flow_y as f64);
+                self.extra.insert("opt_qua".into(), o.quality as f64);
+                self.extra.insert("opt_m_x".into(), o.flow_comp_m_x as f64);
+                self.extra.insert("opt_m_y".into(), o.flow_comp_m_y as f64);
+            }
             MavMessage::STATUSTEXT(s) => {
                 let sev = s.severity as u8;
                 if sev <= 4 {
@@ -623,5 +796,63 @@ impl CurrentState {
             }
             _ => {}
         }
+    }
+}
+
+/// Port of CurrentState.StringCompareTo, including natural channel/cell ordering.
+fn property_order(a: &str, b: &str) -> std::cmp::Ordering {
+    let (aa, bb) = (a.as_bytes(), b.as_bytes());
+    let (mut i, mut j) = (0, 0);
+    while i < aa.len() && j < bb.len() {
+        let order = if aa[i].is_ascii_digit() && bb[j].is_ascii_digit() {
+            let (mut av, mut bv) = (0u64, 0u64);
+            while i < aa.len() && aa[i].is_ascii_digit() { av = av * 10 + (aa[i] - b'0') as u64; i += 1; }
+            while j < bb.len() && bb[j].is_ascii_digit() { bv = bv * 10 + (bb[j] - b'0') as u64; j += 1; }
+            av.cmp(&bv)
+        } else {
+            let order = aa[i].to_ascii_lowercase().cmp(&bb[j].to_ascii_lowercase());
+            i += 1; j += 1; order
+        };
+        if !order.is_eq() { return order; }
+    }
+    aa.len().cmp(&bb.len())
+}
+
+#[cfg(test)]
+mod property_tests {
+    use super::*;
+    #[test]
+    fn registry_filters_types_sorts_naturally_and_preserves_values() {
+        let cs = CurrentState { mode: "Guided".into(), armed: true, ..Default::default() };
+        let names = cs.get_item_list(true, false);
+        assert!(names.iter().position(|n| *n == "ch2in").unwrap() < names.iter().position(|n| *n == "ch10in").unwrap());
+        assert!(!names.contains(&"accelerometer")); // nested sensor helper, not a CurrentState property
+        assert!(!names.contains(&"Mavlink_Sensors"));
+        let numbers = cs.get_item_list(false, true);
+        assert!(!numbers.contains(&"mode") && !numbers.contains(&"armed") && !numbers.contains(&"HomeLocation"));
+        assert_eq!(cs.property("mode"), "Guided");
+        assert_eq!(cs.property("armed"), true);
+        assert!(cs.property("gen_speed").is_null());
+        assert!(cs.field("gen_speed").is_none());
+    }
+    #[test]
+    fn sensor_and_battery_packets_use_original_names_units_and_precedence() {
+        let mut cs = CurrentState::default();
+        cs.update(&MavMessage::DISTANCE_SENSOR(DISTANCE_SENSOR_DATA { id: 1, current_distance: 367, orientation: MavSensorOrientation::MAV_SENSOR_ROTATION_PITCH_270, ..Default::default() }));
+        assert_eq!(cs.field("rangefinder2"), Some(367.0));
+        assert_eq!(cs.field("sonarrange"), Some(3.0));
+        cs.update(&MavMessage::RANGEFINDER(RANGEFINDER_DATA { distance: 4.5, voltage: 2.0 }));
+        cs.update(&MavMessage::DISTANCE_SENSOR(DISTANCE_SENSOR_DATA { current_distance: 900, orientation: MavSensorOrientation::MAV_SENSOR_ROTATION_PITCH_270, ..Default::default() }));
+        assert_eq!(cs.field("sonarrange"), Some(4.5));
+        cs.update(&MavMessage::SCALED_PRESSURE2(SCALED_PRESSURE2_DATA { temperature: 2345, press_abs: 1013.0, ..Default::default() }));
+        assert_eq!(cs.field("press_temp2"), Some(2345.0));
+        cs.update(&MavMessage::TERRAIN_REPORT(TERRAIN_REPORT_DATA { spacing: 100, ..Default::default() }));
+        assert_eq!(cs.field("ter_space"), Some(100.0));
+        let mut volts = [u16::MAX; 10]; volts[0] = 4000; volts[1] = 4100;
+        cs.update(&MavMessage::BATTERY_STATUS(BATTERY_STATUS_DATA { id: 1, voltages: volts, voltages_ext: [u16::MAX; 4], current_battery: 1234, temperature: 2500, ..Default::default() }));
+        assert!((cs.field("battery_voltage2").unwrap() - 8.1).abs() < 0.001);
+        assert_eq!(cs.field("current2"), Some(12.34));
+        assert_eq!(cs.field("battery_temp2"), Some(25.0));
+        assert!(cs.field("capabilities").is_none());
     }
 }

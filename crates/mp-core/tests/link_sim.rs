@@ -387,7 +387,7 @@ fn guided_fly_to_switches_mode_and_moves_the_copter() {
     link.send(LinkCommand::SetMode(5));
     ack(&link);
     wait_for("Loiter", 5, &|cs| cs.mode == "Loiter");
-    link.send(LinkCommand::Guided { lat: 0.0, lng: 0.0, alt: 20.0 });
+    link.send(LinkCommand::Guided { lat: 0.0, lng: 0.0, alt: 20.0, frame: 3 });
     std::thread::sleep(Duration::from_millis(600));
     assert_eq!(link.shared.read().cs.mode, "Loiter", "a zero target is ignored");
     // fly to a point about 60 m north: GUIDED again and closing on the target
@@ -396,7 +396,7 @@ fn guided_fly_to_switches_mode_and_moves_the_copter() {
         (cs.lat, cs.lng)
     };
     let target = (lat0 + 60.0 / 111_320.0, lng0);
-    link.send(LinkCommand::Guided { lat: target.0, lng: target.1, alt: 15.0 });
+    link.send(LinkCommand::Guided { lat: target.0, lng: target.1, alt: 15.0, frame: 3 });
     wait_for("Guided", 5, &|cs| cs.mode == "Guided");
     let dist = |cs: &mp_core::state::CurrentState| ((cs.lat - target.0) * 111_320.0).hypot((cs.lng - target.1) * 111_320.0 * target.0.to_radians().cos());
     let start = dist(&link.shared.read().cs);

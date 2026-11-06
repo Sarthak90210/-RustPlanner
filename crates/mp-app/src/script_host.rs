@@ -156,7 +156,8 @@ fn handle(req: &Value, shared: &Arc<RwLock<LinkShared>>, tx: &crossbeam_channel:
             json!({ "v": true })
         }
         "guided" => {
-            let _ = tx.send(LinkCommand::Guided { lat: n("lat"), lng: n("lng"), alt: n("alt") as f32 });
+            let f = if req.get("frame").is_some() { n("frame") as u8 } else { 3 };
+            let _ = tx.send(LinkCommand::Guided { lat: n("lat"), lng: n("lng"), alt: n("alt") as f32, frame: f });
             json!({ "v": true })
         }
         "rc" => {

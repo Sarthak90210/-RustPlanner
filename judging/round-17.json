@@ -1,0 +1,341 @@
+{
+  "round": 17,
+  "review_type": "fresh independent targeted source and evidence review, evaluating the three swarm commits closing Priority 5 (Sequence Swarm LayoutEditor, FollowPathControl, WaypointLeader WPControl)",
+  "reviewed_head": "d84ca5f598dc64ff47c6566b9e93a8d351dda2d2",
+  "date": "2026-11-06",
+  "verdict": "Major progress on swarm tooling. Priority 5 (high severity) is now fully closed across three dedicated commits (7e6b0c0, 0a6bad1, d84ca5f): Sequence Swarm LayoutEditor, Follow the leader (FollowPathControl / FollowPath), and Follow Swarm (WaypointLeader WPControl / DroneGroup / Path) have all been ported with high fidelity to the C# originals. All four swarm tools now open distinct WinForms-accurate dialogs instead of placeholder windows. The workspace test suite passes 130 tests (including 5 new swarm unit and simulator tests). Four visual receipts confirm the rendered forms. High-severity gaps in video, plugins, and custom transports, plus medium gaps in CurrentState coverage and localization, remain open. Not 10/10.",
+  "scores": {
+    "overall": 8.1,
+    "ui_ux": 8.5,
+    "features": 7.7,
+    "scale": "Qualitative exact-C#-parity judgments, not completion percentages. Overall gives equal weight to UI/UX and features."
+  },
+  "rationale": "Round 17 resolves the long-standing Swarm tools gap (retained Priority 5, high severity), which was only partly addressed in Round 16 by FormationControl. Across commits 7e6b0c0, 0a6bad1, and d84ca5f, the three remaining swarm applications were ported from reference/MissionPlanner/Swarm/ into crates/mp-app/src/swarm.rs, wired through more_tools.rs and app.rs, backed by mission storage in mp-core/src/link.rs, and verified with visual captures and tests.\n\n1. Sequence Swarm (7e6b0c0): The LayoutEditor form reproduces the 899x494 designer geometry. It includes the full header row (Load, Layouts combo, New Layout with name prompt and offset inheritance, num_drones NumericUpDown with C# sysid addition/removal rules, Add Step, Takeoff with GUIDED/Arm/2m takeoff, Reset step, Run Step with bearing/distance projection and SET_POSITION_TARGET_GLOBAL_INT, 'label1' step status, 'set image' background loader, and Save). Grid dragging updates working layout offsets, mouse wheel zooms, and the right-hand steps listbox supports selection, drag-and-drop reordering, and Delete. Serialization matches Sequence.cs JSON format exactly. An end-to-end simulator test (run_step_sends_each_drone_to_its_layout_offset) verifies that three simulated copters take off and fly to their configured offsets within 3 m.\n\n2. Follow the leader (0a6bad1): FollowPathControl faithfully implements the 551x171 'Control' window with Arm (exl leader), Disarm (exl leader), CMB_mavs, Connect MAVs (triggering Auto link scan), Set Leader, and Start/Stop toggle. The 5 Hz loop records the leader's 3D trail, computes 2 m spaced trail waypoints (FollowPath.cs PlanMove), and commands followers using guided_wp (relative altitude position targets for copters, MISSION_ITEM_INT current=2 for planes). The status panel draws per-connection cards showing vehicle id, port name, Armed, Mode, GPS, and wrapped Guided coordinates. Unit test plan_walks_the_trail_in_two_metre_steps_from_its_start confirms the trail distance-stepping algorithm.\n\n3. Follow Swarm (d84ca5f): WaypointLeader WPControl reproduces the 783x509 TopMost form. It features Set Ground Master and Set Air Master buttons, numeric inputs for Line Separation (5.0 m), Lead (20.0 m), User Offline trigger (10.0 m), alt separation (2.0 m), and WPNAV_ACCEL (1.0), plus V formation and Alt Interleave check boxes. Mode controls (Reset Mode, set mode rth, RTL abandon mission) and the verbatim 'How to Use' instructions are present. The underlying DroneGroup state machine (Idle -> Takeoff -> FlyToUser -> FollowUser -> RTH -> LandAlt -> Land) runs at 10 Hz, checks collisions, projects V-formation coordinates, and aborts to RTH when crosstrack error exceeds off_path_trigger. LinkShared now caches uploaded and downloaded missions, allowing WPControl to generate 0.1 m resolution paths from Waypoint items 16 and 82. The status panel renders multi-vehicle cards with Location and Speed captions and red highlights for masters, and a ZedGraph Distance vs Altitude chart renders axis gridlines, red flight path curves, and colored vehicle markers.\n\nFeatures rise +0.4 (from 7.3 to 7.7) due to the complete closure of Priority 5 (three separate complex sub-applications and algorithms). UI/UX rises +0.2 (from 8.3 to 8.5) because all four swarm entries in More Tools now open authentic, fully functional windows matching the C# reference layout and controls rather than placeholder stubs.",
+  "scope": {
+    "inspected": [
+      "git diff 6ed492a..d84ca5f (7e6b0c0, 0a6bad1, d84ca5f): crates/mp-app/src/swarm.rs (+1540 lines), crates/mp-app/src/more_tools.rs, crates/mp-app/src/app.rs, crates/mp-core/src/link.rs",
+      "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs (whole) and LayoutEditor.Designer.cs",
+      "reference/MissionPlanner/Swarm/Sequence/Sequence.cs, Layout.cs",
+      "reference/MissionPlanner/Swarm/FollowPathControl.cs (whole), FollowPathControl.Designer.cs, FollowPath.cs (whole)",
+      "reference/MissionPlanner/Swarm/WaypointLeader/WPControl.cs (whole), WPControl.Designer.cs, DroneGroup.cs, Path.cs, Drone.cs",
+      "reference/MissionPlanner/Swarm/Status.cs, Status.Designer.cs, Grid.cs",
+      "reference/MissionPlanner/temp.cs:204-222, 684-687, 807-810 (menu mapping for Swarm, Sequence Swarm, Follow the leader, Follow Swarm)",
+      "Existing open-gap reference anchors: GCSViews/FlightData.cs:3186-3213 (video), Plugin/PluginLoader.cs:146-329 (plugins), CurrentState.cs:4556-4580 (state fields), GCSViews/ConfigurationView/ConfigPlanner.cs:106-128 (localization), MainV2.cs:3629-3641 (transports)"
+    ],
+    "rust_render_images_viewed": [
+      "D:\\MY DOCUMENTS\\Projects\\rust planner\\target\\judging\\round17\\53_swarm_formation.png",
+      "D:\\MY DOCUMENTS\\Projects\\rust planner\\target\\judging\\round17\\54_swarm_sequence.png",
+      "D:\\MY DOCUMENTS\\Projects\\rust planner\\target\\judging\\round17\\55_swarm_follow_leader.png",
+      "D:\\MY DOCUMENTS\\Projects\\rust planner\\target\\judging\\round17\\56_swarm_follow_swarm.png"
+    ],
+    "render_evidence": "All four captures in target/judging/round17/ (1280x800) demonstrate genuine UI parity. 53_swarm_formation.png shows the 931x471 FormationControl dialog with centered 'this is beta, use at own risk' alert, full button row, Stage 1 grid, and vehicle status blocks. 54_swarm_sequence.png shows the 899x494 LayoutEditor form with top toolbar (Load, Layouts combo, New Layout, num_drones, Add Step, Takeoff, Reset, Run Step, label1, set image, Save), full grid, and steps listbox. 55_swarm_follow_leader.png shows the 551x171 FollowPathControl dialog with beta toast, Arm/Disarm (exl leader), CMB_mavs, Connect MAVs, Set Leader, Start buttons, and 'MAV 3 on UDP' status block. 56_swarm_follow_swarm.png shows the 783x509 WPControl dialog with Set Ground/Air Master, line separation, lead, offline trig, alt separation, WPNAV_ACCEL, V and Alt Interleave checks, Reset/RTH/RTL buttons, verbatim multiline How-to-Use text, status cards for MAVs 1-1, 2-1, 3-1, and the ZedGraph Distance vs Altitude chart with axis scales, gridlines, and MAV 2 plotted in blue.",
+    "reviewer_executed_verification": [
+      "cargo test --workspace executed: 130 tests passed across all crates (79 mp-app, 34 mp-core, 4 altitude_change, 9 link_sim, 4 mavserial, 0 failures, 0 ignored).",
+      "Detailed source comparison between Rust ports and C# originals in reference/MissionPlanner/Swarm/.",
+      "Visual verification of all four round 17 captures."
+    ],
+    "reported_evidence_not_rerun": [
+      "None; test suite was executed locally and ran to completion in 43s."
+    ],
+    "verification_limits": [
+      "No physical multi-drone swarm flight or multi-transceiver hardware setup was tested.",
+      "The ZedGraph plot was evaluated for visual layout and dynamic rendering rather than interactive pan/zoom mouse gestures.",
+      "Hardware video feeds, plugin assemblies, and native mobile platforms remain unverified."
+    ],
+    "reviewer_actions": "Executed workspace test suite, performed comprehensive diff and reference code analysis, examined render artifacts, and authored judging/round-17.json."
+  },
+  "run17_dispositions": [
+    {
+      "change": "7e6b0c0: Port the Sequence Swarm LayoutEditor (layouts, steps, JSON format, takeoff and run step)",
+      "status": "closed (minor residuals)",
+      "closed_parts": "The 899x494 'Layout Editor' form reproduces LayoutEditor.Designer.cs. Layout, Xyz and Sequence structs serialize and deserialize to Newtonsoft-compatible JSON matching Sequence.cs. ComboBox lists layouts by Id and switches working layout; New Layout prompts for name and copies previous offsets; num_drones ValueChanged removes the highest sysid on decrement and inserts (sysid, 0, 0) at sysid as f64 on increment; Add Step appends current layout to steps list; Takeoff arms and commands TAKEOFF 2m in GUIDED mode for all vehicles; Reset resets step to 0; Run Step projects offsets (x east, y north) from startpos via newpos, sends SET_POSITION_TARGET_GLOBAL_INT with mask 0xFFFF - (1 << 9) - 0b111 - 0b111_000, updates label1 to '{name} : {step}', and requests 10 Hz position streams; Save writes formatted JSON; set image loads texture onto grid; grid drag updates layout offsets; steps listbox supports click selection, drag-and-drop reordering, and Delete key removal. Verified by sequence_sim_tests::run_step_sends_each_drone_to_its_layout_offset.",
+      "remaining": "Minor: The 'Move Image' button strip shown in C# when an image is loaded is simplified; individual drone telemetry status is not displayed on LayoutEditor (faithful to C# LayoutEditor.cs, which contains only the grid and steps list).",
+      "rust_refs": [
+        "crates/mp-app/src/swarm.rs:1066-1456",
+        "crates/mp-app/src/swarm.rs:1504-1560",
+        "crates/mp-app/src/more_tools.rs:54",
+        "crates/mp-app/src/more_tools.rs:82",
+        "crates/mp-app/src/app.rs:1130"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:18-350",
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.Designer.cs:52-272",
+        "reference/MissionPlanner/Swarm/Sequence/Sequence.cs:12-45",
+        "reference/MissionPlanner/Swarm/Sequence/Layout.cs:11-38",
+        "reference/MissionPlanner/temp.cs:684-687"
+      ]
+    },
+    {
+      "change": "0a6bad1: Port FollowPathControl / Follow the leader (trail planning, per-connection status and guided followers)",
+      "status": "closed (minor residuals)",
+      "closed_parts": "FollowPathControl reproduces the 551x171 'Control' window from FollowPathControl.Designer.cs. Shown event displays 'this is beta, use at own risk' toast; Arm (exl leader) and Disarm (exl leader) send MAV_CMD_COMPONENT_ARM_DISARM to non-leader vehicles; Connect MAVs requests Auto link scan; Set Leader designates active vehicle and enables Start; Start/Stop toggles 5 Hz (200 ms) execution. The FollowPath trail buffer appends leader coordinates; PlanMove / find_trail_point finds trail points separated by 2 m (FollowDistance); guided_wp commands followers in GUIDED mode (SET_POSITION_TARGET_GLOBAL_INT with relative frame for copters, MISSION_ITEM_INT current=2 for planes). Status cards draw sysid, port name, Armed, Mode, GPS (OK/Bad), and Guided coordinates with text wrapping. Unit test follow_path_tests::plan_walks_the_trail_in_two_metre_steps_from_its_start verifies the 2 m trail-stepping logic.",
+      "remaining": "Minor: CMB_mavs selection does not retarget the active connection link (in C#, CMB_mavs had a comparison quirk between port.ToString() and CMB_mavs.Text); Connect MAVs dispatches an async connection action rather than showing the blocking 50-second CommsSerialScan modal dialog.",
+      "rust_refs": [
+        "crates/mp-app/src/swarm.rs:1562-1780",
+        "crates/mp-app/src/swarm.rs:2511-2528",
+        "crates/mp-app/src/more_tools.rs:56",
+        "crates/mp-app/src/more_tools.rs:83",
+        "crates/mp-app/src/app.rs:1131"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/Swarm/FollowPathControl.cs:7-189",
+        "reference/MissionPlanner/Swarm/FollowPathControl.Designer.cs:29-170",
+        "reference/MissionPlanner/Swarm/FollowPath.cs:9-132",
+        "reference/MissionPlanner/temp.cs:219-222"
+      ]
+    },
+    {
+      "change": "d84ca5f: Port WaypointLeader WPControl / Follow Swarm (ground/air master pair, DroneGroup controller, ZedGraph elevation plot, per-vehicle status cards, LinkShared mission storage)",
+      "status": "closed (minor residuals)",
+      "closed_parts": "WPControl reproduces the 783x509 TopMost form from WPControl.Designer.cs. LinkShared now holds mission and per-vehicle missions (BTreeMap<(u8, u8), Vec<Locationwp>>) updated on mission upload and download. Set Ground Master and Set Air Master assign master vehicles and populate drone states; Air Master loads the flight plan and calls generate_path (0.1 m resolution interpolation along WAYPOINT 16/82 items). Controls match designer coordinates: Line Separation (5.0), Lead (20.0), User Offline trig (10.0), alt separation (2.0), WPNAV_ACCEL (1.0), V formation checkbox, Alt Interleave checkbox. Buttons support Start/Stop, Reset Mode (returns to Idle), set mode rth (RTH), and RTL abandon mission (LandAlt). Multi-line textBox1 displays exact 'How to Use' instructions. DroneGroup state machine runs at 10 Hz: Idle requests 5 Hz POSITION streams; Takeoff arms, sets GUIDED, sends 2m altitude-staggered takeoff and moves drones to starting slots; FlyToUser advances along path toward air master lead; FollowUser tracks ground master with lead/separation, supports V-formation offsets via get_locations_v, applies altitude interleaving, and triggers RTH if crosstrack error exceeds off_path_trigger; RTH/LandAlt/Land transition vehicles safely down. Status panel displays vehicle cards with red labels for air/ground masters, Armed, Mode, GPS with sat count, Guided, Location, and Speed. ZedGraph pane renders Distance vs Altitude plot with axis labels, gridlines, red path line, and color-coded drone triangle markers. Unit tests wp_control_tests verify 0.1 m path interpolation, V-offset geometry, and crosstrack measurement.",
+      "remaining": "Minor: The elevation chart is auto-scaled and drawn statically on UI repaint without ZedGraph's interactive pan/zoom mouse handlers; airborne confirmation dialog on Start/Reset is skipped; mission path requires pre-existing mission cache on the connection.",
+      "rust_refs": [
+        "crates/mp-app/src/swarm.rs:1782-2509",
+        "crates/mp-app/src/swarm.rs:2531-2576",
+        "crates/mp-core/src/link.rs:91-94",
+        "crates/mp-core/src/link.rs:126-129",
+        "crates/mp-core/src/link.rs:610-612",
+        "crates/mp-core/src/link.rs:1304-1306",
+        "crates/mp-app/src/more_tools.rs:58",
+        "crates/mp-app/src/more_tools.rs:84",
+        "crates/mp-app/src/app.rs:1132"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/Swarm/WaypointLeader/WPControl.cs:8-354",
+        "reference/MissionPlanner/Swarm/WaypointLeader/WPControl.Designer.cs:30-411",
+        "reference/MissionPlanner/Swarm/WaypointLeader/DroneGroup.cs:14-410",
+        "reference/MissionPlanner/Swarm/WaypointLeader/Path.cs:11-85",
+        "reference/MissionPlanner/temp.cs:807-810"
+      ]
+    }
+  ],
+  "new_or_remaining_affected_gaps": [
+    {
+      "priority": 1,
+      "severity": "medium",
+      "area": "DATA Status tab / CurrentState coverage",
+      "title": "Expose the full CurrentState property set and the original Status-tab layout",
+      "finding": "Carried from round 16, unchanged. CurrentState::fields() exposes ~100 values, while C# GetItemList(true) exposes ~270 properties alphabetized in 120/50 px rows with 190 px columns and horizontal scrolling. Status tab, Quick View chooser, HUD items, and websocket state depend on this list.",
+      "rust_refs": [
+        "crates/mp-core/src/state.rs:288-341",
+        "crates/mp-app/src/views/flight_data.rs:816-830",
+        "crates/mp-app/src/httpserver.rs:520-537"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightData.cs:6178-6220",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4682-4700",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:4556-4580"
+      ],
+      "next_fix": "Generate the complete field list from CurrentState covering all original properties, alphabetize, draw column layout, and reuse across choosers and websocket."
+    },
+    {
+      "priority": 2,
+      "severity": "low-medium",
+      "area": "DATA guided callers (Fly To Here / Fly To Here Alt / guided API)",
+      "title": "Model GuidedMode.z/frame and original Fly To Here Alt semantics",
+      "finding": "Carried from round 16, unchanged. guided_alt is hardcoded to 100 and unpersisted without frame selection. Fly To Here Alt flies immediately and forces GUIDED, whereas original only updates alt/frame and retargets when already in Guided mode. HTTP /guided uses relative frame rather than frame 0.",
+      "rust_refs": [
+        "crates/mp-core/src/link.rs:769-805",
+        "crates/mp-app/src/views/flight_data.rs:176",
+        "crates/mp-app/src/views/flight_data.rs:1217-1229",
+        "crates/mp-app/src/views/flight_data.rs:1391-1397",
+        "crates/mp-app/src/httpserver.rs:676-680"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightData.cs:2930-2973",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3113-3151",
+        "reference/MissionPlanner/Utilities/httpserver.cs:905-931",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4447-4486"
+      ],
+      "next_fix": "Add frame to LinkCommand::Guided, prompt with alt+frame box when altitude unconfigured, persist guided_alt/guided_alt_frame, make Fly To Here Alt update altitude and only resend when in GUIDED."
+    },
+    {
+      "priority": 3,
+      "severity": "low",
+      "area": "DisplayView consumers / CONFIG navigation",
+      "title": "Apply remaining DisplayView flags and SoftwareConfig start page",
+      "finding": "Carried from round 16, unchanged. Commit Params and Auto Commit Params remain visible where displayParamCommitButton hides them. autoHideMenuForce, lockQuickView, displayPreFlightTabEdit, and standardFlightModesOnly are unapplied. CONFIG opens on Full Parameter List rather than SoftwareConfig start page (Basic Tuning, Extended Tuning, Loading, or Planner).",
+      "rust_refs": [
+        "crates/mp-app/src/views/config.rs:186",
+        "crates/mp-app/src/views/config.rs:200",
+        "crates/mp-app/src/views/config.rs:429",
+        "crates/mp-app/src/views/config.rs:498",
+        "crates/mp-app/src/views/config.rs:1237",
+        "crates/mp-app/src/app.rs:988",
+        "crates/mp-app/src/display.rs:247-252"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigRawParams.cs:61-62",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:192",
+        "reference/MissionPlanner/MainV2.cs:604-615",
+        "reference/MissionPlanner/MainV2.cs:4400-4405",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4684",
+        "reference/MissionPlanner/Controls/PreFlight/CheckListControl.cs:244-247",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigFlightModes.cs:119-130",
+        "reference/MissionPlanner/GCSViews/SoftwareConfig.cs:144-316"
+      ],
+      "next_fix": "Gate commit controls on displayParamCommitButton, hook checklist Edit and simple flight mode checks, persist menu_autohide, and select SoftwareConfig start page."
+    },
+    {
+      "priority": 4,
+      "severity": "low",
+      "area": "Swarm residuals across ported tools",
+      "title": "Refine FormationControl status panel, Grid hover retention, and ZedGraph interactions",
+      "finding": "New consolidated residual. FormationControl status cards still lack Location and Speed captions and do not scroll past 3 vehicles (though WPControl status cards do include them). Grid context menu loses hover pos when clicking popups. ZedGraph in WPControl is rendered as a static paint rather than supporting mouse drag/zoom. FollowPathControl does not re-target link on combo selection.",
+      "rust_refs": [
+        "crates/mp-app/src/swarm.rs:786-836",
+        "crates/mp-app/src/swarm.rs:1720-1730",
+        "crates/mp-app/src/swarm.rs:2433-2502"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/Swarm/Status.Designer.cs:120-180",
+        "reference/MissionPlanner/Swarm/Grid.cs",
+        "reference/MissionPlanner/Swarm/FollowPathControl.cs:42-51",
+        "reference/MissionPlanner/Swarm/WaypointLeader/WPControl.cs:243-274"
+      ],
+      "next_fix": "Add scrolling and Location/Speed labels to FormationControl status, latch icon hover target during context popup, and support mouse zoom on the ZedGraph chart."
+    },
+    {
+      "priority": 5,
+      "severity": "low",
+      "area": "Web service / direct-write residuals",
+      "title": "Close remaining httpserver and timer details",
+      "finding": "Carried from round 16, unchanged. DATA map jpgs refresh only while DATA is rendered, state JSON is a subset of full telemetry, websocket/raw disconnects without link, numeric flush requires active form rendering.",
+      "rust_refs": [
+        "crates/mp-app/src/httpserver.rs:357-370",
+        "crates/mp-app/src/httpserver.rs:538-550",
+        "crates/mp-app/src/forms.rs:185",
+        "crates/mp-app/src/forms.rs:279"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/Utilities/httpserver.cs:788-806",
+        "reference/MissionPlanner/Utilities/httpserver.cs:843-876",
+        "reference/MissionPlanner/Controls/MavlinkNumericUpDown.cs:162-177"
+      ],
+      "next_fix": "Flush delayed writes from app update loop, render map offscreen for background HTTP streams, and align JSON packet formats."
+    },
+    {
+      "priority": 6,
+      "severity": "low",
+      "area": "PLAN Coords / grid residuals",
+      "title": "ProjNet-accurate grid UTM, typed zone retention, Ocean altsource",
+      "finding": "Carried from round 16, unchanged.",
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_plan.rs:713-763"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/ExtLibs/Utilities/PointLatLngAlt.cs:255-292",
+        "reference/MissionPlanner/ExtLibs/Utilities/srtm.cs:32-33"
+      ],
+      "next_fix": "Use full-accuracy TM for grid, preserve typed cell strings, and add Ocean elevation source."
+    }
+  ],
+  "retained_baseline_gaps": [
+    {
+      "priority": 3,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "DATA video and payload",
+      "title": "Implement advertised GStreamer, HereLink and gimbal video paths",
+      "finding": "Unchanged. GStreamer Source and HereLink Video report GStreamer not found; Gimbal Video and Payload Video Control report no stream configured.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3186-3213",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4946-4972",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:6667-6841"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_data.rs:475-482",
+        "crates/mp-app/src/views/flight_data.rs:1283",
+        "crates/mp-app/src/views/fd_tabs.rs:346"
+      ],
+      "next_fix": "Add backend pipeline discovery, stream initialization, and gimbal video controls.",
+      "disposition": "open; unchanged by run17."
+    },
+    {
+      "priority": 5,
+      "severity": "high",
+      "status": "closed by run17 across 3 commits (7e6b0c0, 0a6bad1, d84ca5f)",
+      "area": "Tools / swarm",
+      "title": "Restore distinct swarm workflows: Sequence Swarm, Follow the leader, Follow Swarm",
+      "finding": "Fully closed. FormationControl was ported in round 16. In round 17, LayoutEditor (Sequence Swarm), FollowPathControl (Follow the leader), and WPControl (Follow Swarm) were ported and hooked to more_tools.rs, app.rs, and link.rs mission storage. All four swarm workflows now run dedicated, WinForms-accurate windows with appropriate algorithms, file formats, status panels, and tests.",
+      "csharp_refs": [
+        "reference/MissionPlanner/temp.cs:204-222",
+        "reference/MissionPlanner/temp.cs:684-687",
+        "reference/MissionPlanner/temp.cs:807-810",
+        "reference/MissionPlanner/Swarm/FormationControl.cs",
+        "reference/MissionPlanner/Swarm/FollowPathControl.cs",
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:18-150",
+        "reference/MissionPlanner/Swarm/WaypointLeader/WPControl.cs"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/swarm.rs:62-2509",
+        "crates/mp-app/src/more_tools.rs:51-84",
+        "crates/mp-app/src/app.rs:1128-1132",
+        "crates/mp-core/src/link.rs:91-1306"
+      ],
+      "next_fix": "None required for workflow separation; minor display and interaction details tracked in priority 4 residuals.",
+      "disposition": "closed by run17."
+    },
+    {
+      "priority": 7,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "Plugins",
+      "title": "Provide original plugin loading and lifecycle compatibility",
+      "finding": "Unchanged. The plugin manager notes .NET plugins cannot be loaded.",
+      "csharp_refs": [
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:146-179",
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:256-329",
+        "reference/MissionPlanner/MainV2.cs:2527-2581"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/hotkey_tools.rs:103-112"
+      ],
+      "next_fix": "Implement plugin compatibility host or formal parity boundary.",
+      "disposition": "open; unchanged by run17."
+    },
+    {
+      "priority": 8,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "Localization / Planner",
+      "title": "Restore original language selector and translated resources",
+      "finding": "Unchanged. The language dropdown provides only 'English (en-US)'.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:106-128",
+        "reference/MissionPlanner/MainV2.cs:4227-4235"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/config.rs:1075"
+      ],
+      "next_fix": "Load satellite translations, persist culture string, and update UI on change.",
+      "disposition": "open; unchanged by run17."
+    },
+    {
+      "priority": 9,
+      "severity": "high",
+      "status": "confirmed unsupported paths; native platform execution otherwise unverified",
+      "area": "Platform and connections",
+      "title": "Complete missing transport and mobile import paths",
+      "finding": "Unchanged. BLE, WinUSB, and websocket transports missing; mobile serial and file imports return Unsupported.",
+      "csharp_refs": [
+        "reference/MissionPlanner/MainV2.cs:3629-3641",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4484-4488"
+      ],
+      "rust_refs": [
+        "crates/mp-core/src/comms.rs:26-46",
+        "crates/mp-app/src/platform.rs:76-79"
+      ],
+      "next_fix": "Implement missing custom transports and produce mobile receipts.",
+      "disposition": "open; unchanged by run17."
+    }
+  ],
+  "prioritized_next_fixes": [
+    "Expose the full CurrentState property set (~270 items), alphabetized, in the original Status-tab column layout with horizontal scroll, and share across Display This, HUD user items, and websocket (FlightData.cs:6178-6220, 4682-4700; CurrentState.cs:4556-4580).",
+    "Implement actual GStreamer discovery/pipelines, HereLink and payload gimbal video display modes, verified with local video fixtures (FlightData.cs:3186-3213, 4946-4972, 6667-6841).",
+    "Model GuidedMode z/frame: AltInputBox prompt with frame and persisted guided_alt/guided_alt_frame, Fly To Here Alt that stores altitude and only resends when already Guided, and frame 0 for /guided (FlightData.cs:2930-2973, 3113-3151; httpserver.cs:905-931; MAVLinkInterface.cs:4447-4486).",
+    "Apply remaining DisplayView consumers and CONFIG start page: hide commit controls by displayParamCommitButton, gate checklist Edit, lockQuickView, standardFlightModesOnly, autoHideMenuForce, and use SoftwareConfig's start page (ConfigRawParams.cs:61-62; ConfigPlanner.cs:192; CheckListControl.cs:244; FlightData.cs:4684; ConfigFlightModes.cs:119; MainV2.cs:604-615; SoftwareConfig.cs:304-315).",
+    "Address plugins, localization, and custom transports/mobile (PluginLoader.cs:146-329; ConfigPlanner.cs:106-128; MainV2.cs:3629-3641), followed by swarm residuals (FormationControl status captions/scroll, Grid hover latch, ZedGraph mouse zoom)."
+  ],
+  "ten_out_of_ten_criterion": "No known material UI/UX or feature discrepancy in an adequately reviewed software scope, with original interactions and promised native platforms verified. With Priority 5 fully closed, three high-severity areas (video, plugins, transports/mobile) and two medium areas (CurrentState coverage, localization) remain open, precluding a 10/10 rating."
+}

@@ -240,6 +240,7 @@ pub struct MissionPlannerApp {
     speech: crate::speech::SpeechRules,
     vario: Option<std::time::Instant>,
     menu_hidden: bool,
+    menu_reveal_height: f32,
     last_title: String,
     pub readonly: bool,
     assets: crate::assets::Assets,
@@ -296,6 +297,8 @@ impl MissionPlannerApp {
                 _ => View::FlightData,
             };
         }
+        let menu_hidden = crate::display::flag(&settings.planner, "autoHideMenuForce")
+            || settings.planner.get("menu_autohide").map(|s| s.eq_ignore_ascii_case("true")).unwrap_or(false);
         Self {
             settings,
             link: None,
@@ -329,7 +332,8 @@ impl MissionPlannerApp {
             joystick: Default::default(),
             speech: Default::default(),
             vario: None,
-            menu_hidden: false,
+            menu_hidden,
+            menu_reveal_height: 0.0,
             last_title: String::new(),
             readonly: false,
             assets: crate::assets::Assets::load(&cc.egui_ctx),
@@ -985,8 +989,11 @@ impl MissionPlannerApp {
     /// CTX_mainmenu: AutoHide, Full Screen, Readonly, Connection Options, Connection List.
     fn main_menu_ctx(&mut self, resp: &egui::Response, _actions: &mut Vec<AppAction>) {
         resp.context_menu(|ui| {
-            if ui.checkbox(&mut self.menu_hidden, "AutoHide").clicked() {
-                ui.close();
+            if !crate::display::flag(&self.settings.planner, "autoHideMenuForce") {
+                if ui.checkbox(&mut self.menu_hidden, "AutoHide").clicked() {
+                    self.settings.planner.insert("menu_autohide".into(), self.menu_hidden.to_string());
+                    ui.close();
+                }
             }
             let fs = ui.ctx().input(|i| i.viewport().fullscreen.unwrap_or(false));
             let mut full = fs;
@@ -1184,9 +1191,12 @@ impl eframe::App for MissionPlannerApp {
             egui::Panel::top("menu").frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| self.top_bar(ui, &mut actions));
         } else {
             // AutoHide: the menu reappears when the pointer reaches the top edge
-            let near_top = ctx.input(|i| i.pointer.hover_pos().map(|p| p.y < 6.0).unwrap_or(false));
+            let near_top = ctx.input(|i| i.pointer.hover_pos().map(|p| p.y < self.menu_reveal_height.max(6.0)).unwrap_or(false));
             if near_top {
-                egui::Panel::top("menu").frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| self.top_bar(ui, &mut actions));
+                let shown = egui::Panel::top("menu").frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| self.top_bar(ui, &mut actions));
+                self.menu_reveal_height = shown.response.rect.max.y;
+            } else {
+                self.menu_reveal_height = 0.0;
             }
         }
 
