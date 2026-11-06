@@ -1,0 +1,173 @@
+{
+  "round": 25,
+  "review_type": "independent fixed-revision source/reference review, image inspection, CI status check and regression test suite audit",
+  "reviewed_head": "1dff23b7df563c22c65511ed0c3aeaa1e551bd57",
+  "reviewed_base": "eb9252e182f8afb19c37c6d89c66ad8da5df901e",
+  "date": "2026-11-06",
+  "verdict": "Round 25 achieves substantial parity advancement across both features and UI/UX. Both visible regressions introduced in round 24 are fully eliminated: tab strip labels now preserve caller view resources so zh-Hans 'Actions' translates to 动作 as in FlightData.resx, and Arabic mixed-direction runs now adhere to Unicode bidi rules so numbers and Latin acronyms maintain proper LTR ordering ('0.9500 km :المسافة' and 'عرض KML'). FlightPlanner grid column headers now use control-based lookup, rendering blank Up/Down headers matching the original WinForms resx. In features, the native plugin subsystem is operational with a C ABI (mp-plugin), PluginLoader lifecycle (Init, Loaded, Loop, Exit), PluginHost services (CurrentState, config, commands, waypoints, context menus), and a faithful PluginManager (Ctrl+P) UI with status coloring and error diagnostics. GimbalVideoControl is fully ported with Full Sized (with mini map overlay), Mini, and Pop Out modes, map context submenu, payload tab button integration, and camera/gimbal context commands. Furthermore, HUD GStreamer now maintains an independent video source from MJPEG with cancellation support in the download dialog, the MAVLink 2/4 identity sighting rule is implemented, and CurrentState getters (alt-derivative verticalspeed and reverse thrust throttle) match reference behavior. All 162 workspace tests pass.",
+  "scores": {
+    "overall": 9.2,
+    "ui_ux": 9.2,
+    "features": 9.2,
+    "scale": "Qualitative exact-original parity scores on a 0-10 scale, not feature completion percentages. Overall equally weights UI/UX and features (9.2). UI/UX credits the resolution of the tab strip caller bug, the working Arabic bidi implementation, and control-keyed FlightPlanner headers. Features credits the native plugin subsystem, the GimbalVideoControl subsystem with Full Sized/Mini/Pop Out modes, GStreamer source isolation with download cancellation, MAVLink 2/4 vehicle selection, and CurrentState alt-derivative verticalspeed/ch3percent reverse thrust. Scores are held back by mobile packaging/runtime verification, missing CI runs on unpushed local commits, and remaining native transports (BLE, WinUSB, Android USB serial)."
+  },
+  "rationale": "Localization & UI: In 46a8faa, theme::tab_strip and tab_strip_multiline replace closure mapping with an explicit for loop. Because #[track_caller] does not propagate through closures, this allows Location::caller() to correctly resolve the caller view (flight_data.rs), returning 动作 for zh-Hans tabActions instead of falling back to English (verified in render 58). Arabic bidi ordering is solved in i18n.rs with visual() implementing W2, W4, N1/N2, and L2 rules, while fonts.rs keeps Latin and Arabic in distinct font faces so egui shapes each direction properly; render 62 confirms '0.9500 km :المسافة' and 'عرض KML' retain logical ordering rather than reversed characters. FlightPlanner grid headers map control names via export_translations.py, correctly leaving Up/Down empty (render 60) per FlightPlanner.resx. Plugins: 98001c3 introduces crates/mp-plugin and crates/mp-app/src/plugins.rs. The C ABI exports mp_plugin_entry(api_version, host, out), providing thread-safe Host callbacks for cs_field, config_get/set, do_command, add_wp, add_menu, and log. PluginLoader mirrors PluginLoader.cs: libraries are scanned in plugins/, Init filters active plugins, Loaded runs once all are initialized, Loop executes at loop_rate_hz on a dedicated background thread, and Exit executes on shutdown. DisabledPlugins comma-separated list is respected. PluginManager (hotkey_tools.rs, Ctrl+P) replicates PluginUI.cs in a 673x373 window with Save & Close, Show Errors, and colored rows (green=active, orange=disabled, dark red=missing/unloadable). Clear diagnostics explain why .NET assemblies or .cs files cannot be loaded. Gimbal Video: 1dff23b and 642db86 port Controls/GimbalVideoControl.cs and FlightData.cs:6666-6845. GimbalPlacement supports FullSized (with mini map overlay), Mini (docked on map), and PopOut (independent 'Gimbal Control' window). BUT_GimbalVideo in fd_tabs.rs Payload tab switches to PopOut mode (render 40). Context menus on the video box support Retract (cmd 205), Neutral, Point Down, Point Home (cmd 195 ROI), Yaw Lock, Take Picture (cmd 2000), Start/Stop Recording (cmd 2500/2501), Shortcuts modal, Custom Settings modal (HFOV/VFOV), and mini map swap/close. GStreamer: FlightDataView now holds a separate gst: Option<Mjpeg> slot from MJPEG video. GStreamer Stop and prompt cancellation only stop gst (FlightData.cs:4979-4982). GStreamer download window includes a Cancel button, calling download_cancellable with an atomic cancel flag reporting 'User Request' (render 61). MAVLink & State: a3f8bab implements MAVLinkInterface.cs:921-923 getHeartBeat hbhistory rule (preference compid 1 seen >= 2, failover to any compid seen >= 4, counting HEARTBEAT and HIGH_LATENCY2). 0f657de ports CurrentState.cs:336-349 alt setter: verticalspeed is computed from altitude differences with dt >= 0.2s; climbrate updates from verticalspeed only until VFR_HUD is received (got_vfr guard); ch3percent applies the REVERSE_MOTOR (1<<23) bitmask inversion.",
+  "scope": {
+    "inspected": [
+      "git diff eb9252e..1dff23b: link.rs, state.rs, plugins.rs, hotkey_tools.rs, gimbal_video.rs, flight_data.rs, fd_tabs.rs, flight_plan.rs, i18n.rs, theme.rs, fonts.rs, gstreamer.rs, export_translations.py, crates/mp-plugin, crates/mp-plugin-example",
+      "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:905-935 (hbhistory 2/4 selection)",
+      "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:330-360 (alt setter, verticalspeed, climbrate), 960-1005 (ch3percent, SERVO params), 3910-3940 (VFR_HUD, gotVFR, reverse thrust)",
+      "reference/MissionPlanner/Plugin/PluginLoader.cs:146-185, PluginHost.cs, PluginUI.cs",
+      "reference/MissionPlanner/Controls/GimbalVideoControl.cs:1-350, FlightData.cs:6666-6845 (gimbal video placement, context menus)",
+      "reference/MissionPlanner/GCSViews/FlightPlanner.resx, FlightPlanner.ko-KR.resx:317-342, 943-958, FlightPlanner.ar.resx",
+      "reference/MissionPlanner/GCSViews/FlightData.zh-Hans.resx:295-296 (tabActions)",
+      "judging/round-24.json"
+    ],
+    "rust_render_images_viewed": [
+      "target/judging/round25/40_data_payload.png",
+      "target/judging/round25/58_data_zh_hans.png",
+      "target/judging/round25/60_plan_ko_kr.png",
+      "target/judging/round25/61_data_gstreamer_hud.png",
+      "target/judging/round25/62_plan_ar.png"
+    ],
+    "capture_integrity": {
+      "finding": "Renders 40, 58, 61, and 62 were captured between 12:49:58Z and 12:51:03Z with binary sha256 5237969A488CC71E8F9F5592A389D80B255DAFF12B50B0147CE457E4AB8A4AF5, which exactly matches target/debug/missionplanner.exe built from HEAD commit 1dff23b. Render 60 was captured at 12:31:49Z with binary sha256 650CB001..., representing commit 46a8faa during the development sequence. All manifests are authentic and confirm production rendering.",
+      "observed": "40: DATA Payload tab with green 'Video Control' button, Roll/Pan/Tilt trackbars and values. 58: zh-Hans DATA view with '动作' correctly translated on tabActions alongside '快速' (Quick), '消息' (Messages), '起飞前检查' (PreFlight), '仪表' (Gauges). 60: ko-KR PLAN view with empty column headers above the Up/Down row buttons as in FlightPlanner.resx. 61: Progress dialog during GStreamer download displaying 'Downloading..', green progress bar, and 'Cancel' button. 62: ar PLAN view with '0.9500 km :المسافة' and 'عرض KML' rendered with digits and Latin letters in proper left-to-right sequence."
+    },
+    "reviewer_executed_verification": [
+      "Ran full workspace test suite (cargo test --workspace): 162 passed, 0 failed, 1 ignored (real runtime GStreamer download test).",
+      "Audited source diff git diff eb9252e..1dff23b across all 46 changed files.",
+      "Verified binary hash of target/debug/missionplanner.exe (5237969A...) against capture manifests.",
+      "Inspected all 5 rendered images in target/judging/round25/ at 100% and magnified crops.",
+      "Checked GitHub Actions CI status via gh run list (last remote push was 04ae5af; local branch is ahead by 11 unpushed commits)."
+    ],
+    "verification_limits": [
+      "Local commits eb9252e..1dff23b have not been pushed to remote origin, so GitHub Actions CI has not run for these commits.",
+      "Physical gimbal hardware and live video streams were verified via synthetic videotestsrc and unit tests rather than physical cameras.",
+      "Mobile APK and iOS bundle execution remains unverified on physical mobile devices.",
+      "Setup pages without dedicated .resx definitions continue to use shared unanimous translations."
+    ],
+    "reviewer_actions": "Conducted independent fixed-revision evaluation, audited diffs, verified test suite execution, inspected UI captures against reference WinForms source code, and authored judging/round-25.json. No product code modified or pushed."
+  },
+  "run25_dispositions": [
+    {
+      "area": "Localization regressions and header parity (46a8faa)",
+      "status": "closed",
+      "closed_parts": "Tab strips in theme.rs replaced closure iterators with a direct for loop, restoring #[track_caller] resolution to caller views so zh-Hans tabActions renders as 动作. Arabic bidi reordering in i18n.rs applies visual() algorithm (W2, W4, N1/N2, L2 rules) and fonts.rs isolates Arabic from Latin faces, preventing reversed Latin/numeric strings. export_translations.py supports control-keyed resources, rendering blank Up/Down column headers in FlightPlanner as in the original resx.",
+      "remaining": "Minor: Setup views not listed in views_for fallback to unanimous shared map keys.",
+      "evidence": [
+        "crates/mp-app/src/theme.rs:314-323, 390-399",
+        "crates/mp-app/src/i18n.rs:242-430",
+        "crates/mp-app/src/fonts.rs:37-67",
+        "crates/mp-app/src/views/flight_plan.rs:35-39, 634-637, 1504-1518",
+        "scripts/export_translations.py:48-51, 113-138",
+        "target/judging/round25/58_data_zh_hans.png",
+        "target/judging/round25/60_plan_ko_kr.png",
+        "target/judging/round25/62_plan_ar.png"
+      ]
+    },
+    {
+      "area": "Gimbal and payload video control (1dff23b, 642db86)",
+      "status": "closed",
+      "closed_parts": "GimbalVideoControl ported in crates/mp-app/src/views/gimbal_video.rs with Full Sized, Mini, and Pop Out modes. BUT_GimbalVideo in fd_tabs.rs Payload tab opens Pop Out mode. Right-click map context menu includes Gimbal Video submenu (Full Sized, Mini, Pop Out). VideoBoxContextMenu provides Retract (cmd 205), Neutral, Point Down, Point Home (cmd 195), Yaw Lock, Take Picture (cmd 2000), Start/Stop Recording (cmd 2500/2501), Shortcuts modal, Custom Settings modal (HFOV/VFOV), Mini map toggle, Swap with map, and Close. Drag-to-track rectangle is drawn on primary drag.",
+      "remaining": "Autoconnect to first reported video stream from MAVLink CAMERA_INFORMATION / VIDEO_STREAM_INFORMATION (currently connects to saved gimbal_video_stream pipeline or manual prompt).",
+      "evidence": [
+        "crates/mp-app/src/views/gimbal_video.rs:1-352",
+        "crates/mp-app/src/views/flight_data.rs:1223-1250, 1354-1375, 1470-1476, 1506-1517",
+        "crates/mp-app/src/views/fd_tabs.rs:32, 52, 344-348",
+        "reference/MissionPlanner/Controls/GimbalVideoControl.cs:1-350",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:6666-6845",
+        "target/judging/round25/40_data_payload.png"
+      ]
+    },
+    {
+      "area": "Native plugin lifecycle and management UI (98001c3)",
+      "status": "closed",
+      "closed_parts": "Native plugin architecture implemented via crates/mp-plugin and crates/mp-app/src/plugins.rs. Host struct provides C ABI callbacks for cs_field, config_get, config_set, do_command, add_wp, add_menu, and log. PluginLoader scans plugins/, validates ABI version, invokes Init, Loaded, Loop on a dedicated thread at loop_rate_hz, and Exit at shutdown. Settings DisabledPlugins comma-separated list is supported. PluginManager window (Ctrl+P) in hotkey_tools.rs displays 673x373 dialog with Save & Close, Show Errors, restart banner, and color-coded rows matching PluginUI.cs. Full lifecycle verified by mp-plugin-example and tests.",
+      "remaining": "Running legacy .NET assembly or .cs source plugins directly (documented and diagnosed with explicit error dialogs).",
+      "evidence": [
+        "crates/mp-plugin/src/lib.rs:1-69",
+        "crates/mp-app/src/plugins.rs:1-350",
+        "crates/mp-app/src/hotkey_tools.rs:85-160",
+        "crates/mp-plugin-example/src/lib.rs:1-84",
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:146-185",
+        "reference/MissionPlanner/Plugin/PluginHost.cs",
+        "reference/MissionPlanner/Plugin/PluginUI.cs"
+      ]
+    },
+    {
+      "area": "HUD GStreamer source isolation and download cancellation (642db86)",
+      "status": "closed",
+      "closed_parts": "FlightDataView separates GStreamer (gst: Option<Mjpeg>) from MJPEG camera video (video: Option<Mjpeg>). GStreamer Stop and cancelled GStreamer prompts stop only gst. Download progress dialog adds Cancel button linked to download_cancellable with atomic cancel flag and 'User Request' cancellation string matching ProgressReporterDialogue.cs:10-19.",
+      "remaining": "Android bundled libgstreamer_android.so discovery.",
+      "evidence": [
+        "crates/mp-app/src/gstreamer.rs:113-160, 201-224",
+        "crates/mp-app/src/views/flight_data.rs:149-152, 417-435, 505-510, 545-585, 664-675",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4979-4982",
+        "reference/MissionPlanner/Utilities/GStreamerUI.cs:8-22",
+        "target/judging/round25/61_data_gstreamer_hud.png"
+      ]
+    },
+    {
+      "area": "MAVLink vehicle selection and CurrentState computed getters (a3f8bab, 0f657de)",
+      "status": "closed",
+      "closed_parts": "link.rs implements MAVLinkInterface.cs:921-923 getHeartBeat rule: compid 1 selected after 2 sightings, non-1 compid selected after 4 sightings, counting HEARTBEAT and HIGH_LATENCY2 together. state.rs implements CurrentState.cs:336-349 alt setter: verticalspeed calculated from altitude differences sampled >= 0.2s apart; climbrate updated from altitude changes only until VFR_HUD is received (got_vfr guard); ch3percent inverted when REVERSE_MOTOR (1<<23) is set in sensors_present/enabled/health.",
+      "remaining": "SERVOx_TRIM/MIN/MAX parameter scaling for ch1percent and ch3percent when SERVO parameters are present on the link.",
+      "evidence": [
+        "crates/mp-core/src/link.rs:433-436, 1075-1092",
+        "crates/mp-core/src/state.rs:135-142, 482-506, 676-688",
+        "crates/mp-core/tests/high_latency.rs:92-121",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:905-935",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:336-349, 976-1005, 3910-3920"
+      ]
+    }
+  ],
+  "new_regression_findings": [],
+  "remaining_software_gaps": [
+    {
+      "priority": 1,
+      "status": "open",
+      "area": "Native packages, mobile runtime and CI on latest commits",
+      "next_fix": "Push local commits eb9252e..1dff23b to origin and ensure GitHub Actions build succeeds across Windows, macOS, Linux, Android APK and iOS. Install and launch the debug APK on Android device/emulator, exercising Sequence Swarm file loading and viewport scaling. Add the iOS app wrapper, bundle metadata, signing, and SAF/document picker integrations.",
+      "evidence": [
+        "crates/mp-app/src/platform.rs:176-213",
+        "judging/platform-build-22.json",
+        "README.md:115-121"
+      ],
+      "limits": "Desktop builds and tests pass locally; mobile packaging and device runtime remain unverified."
+    },
+    {
+      "priority": 2,
+      "status": "open",
+      "area": "Native transports and hardware adapters",
+      "next_fix": "Add platform adapters for BLE, WinUSB/custom USB devices, and Android USB-serial communication in mp-core/src/comms.rs. Support direct hardware flashing and SiK radio configurator over physical USB ports.",
+      "evidence": [
+        "crates/mp-core/src/comms.rs:26-46",
+        "reference/MissionPlanner/Comms/CommsSerial.cs",
+        "reference/MissionPlanner/Comms/CommsSerialWinUSB.cs"
+      ]
+    },
+    {
+      "priority": 3,
+      "status": "open",
+      "area": "Setup and calibration view-specific translations",
+      "next_fix": "Expand views_for mapping in export_translations.py to include individual setup and configuration pages (ConfigAccelerometerCalibration, ConfigFailSafe, ConfigBatteryMonitoring, ConfigFrameType, ConfigMount, ConfigHWCompass) so ambiguous keys resolve to their view-specific .resx translations rather than staying in English.",
+      "evidence": [
+        "scripts/export_translations.py:45-52",
+        "crates/mp-app/src/i18n.rs:54-84",
+        "crates/mp-app/src/views/setup.rs:760-811"
+      ]
+    },
+    {
+      "priority": 4,
+      "status": "open",
+      "area": "GDAL georeferenced raster loading and place-name geocoder",
+      "next_fix": "Add GDAL raster map layer loading with opacity slider and place-name geocoding in the map navigation bar to match Mission Planner's offline imagery and location search capabilities.",
+      "evidence": [
+        "README.md:111-113",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:1810-1845"
+      ]
+    }
+  ],
+  "ten_out_of_ten_criterion": "An honest 10 requires no known material software discrepancy within the promised exact-clone scope, plus adequate interaction and native-platform evidence. Round 25 closes both Round 24 localization regressions (tab strips, Arabic bidi), ports GimbalVideoControl across Full Sized, Mini and Pop Out modes, introduces the native plugin subsystem with PluginManager UI and background execution, separates GStreamer HUD streaming with download cancellation, and implements MAVLink 2/4 identity selection and CurrentState alt-derivative verticalspeed. Reaching 10 requires verifying the mobile runtime (Android APK and iOS bundle), pushing and verifying CI on latest commits, adding platform transports (BLE, WinUSB, Android USB serial), and integrating GDAL/geocoder capabilities. Physical flight qualification is separate from this software parity score."
+}
