@@ -61,6 +61,90 @@ pub fn tile_cache_dir() -> PathBuf {
 
 pub const HAS_NATIVE_DIALOGS: bool = cfg!(not(any(target_os = "android", target_os = "ios")));
 
+/// Desktop OS dialog, or a deferred browser of the mobile app's files.
+pub struct FilePicker {
+    title: String,
+    root: PathBuf,
+    exts: Vec<String>,
+    name: String,
+    save: bool,
+    overwrite: bool,
+    ready: Option<Option<PathBuf>>,
+}
+
+impl FilePicker {
+    pub fn new(title: &str, exts: &[&str], save_name: Option<&str>) -> Self {
+        let mut picker = Self::in_directory(title, files_dir(), exts, save_name);
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            let dialog = rfd::FileDialog::new().set_title(title).add_filter(title, exts);
+            picker.ready = Some(if let Some(name) = save_name { dialog.set_file_name(name).save_file() } else { dialog.pick_file() });
+        }
+        picker
+    }
+
+    fn in_directory(title: &str, root: PathBuf, exts: &[&str], save_name: Option<&str>) -> Self {
+        Self { title: title.into(), root, exts: exts.iter().map(|s| s.to_string()).collect(), name: save_name.unwrap_or_default().into(), save: save_name.is_some(), overwrite: false, ready: None }
+    }
+
+    fn selected_path(&self) -> Option<PathBuf> {
+        let name = self.name.trim();
+        if name.is_empty() || name == "." || name == ".." || name.chars().any(|c| matches!(c, '/' | '\\' | ':' | '\0')) { return None; }
+        Some(self.root.join(name))
+    }
+
+    /// Some(None) means Cancel; None means the browser is still open.
+    pub fn show(&mut self, ctx: &egui::Context) -> Option<Option<PathBuf>> {
+        if let Some(done) = self.ready.take() { return Some(done); }
+        let mut done = None;
+        egui::Modal::new(egui::Id::new("app_file_picker")).show(ctx, |ui| {
+            ui.set_min_width(280.0);
+            crate::theme::label(ui, &self.title);
+            let exts: Vec<_> = self.exts.iter().map(String::as_str).collect();
+            egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
+                let files = list_files_in(&self.root, &exts);
+                if files.is_empty() { crate::theme::label(ui, "No files"); }
+                for path in files {
+                    let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+                    if ui.selectable_label(self.name == name, &name).clicked() { self.name = name; self.overwrite = false; }
+                }
+            });
+            if self.save && ui.text_edit_singleline(&mut self.name).changed() { self.overwrite = false; }
+            let path = self.selected_path();
+            let valid = path.as_ref().is_some_and(|p| self.save || p.is_file());
+            ui.horizontal(|ui| {
+                let text = if self.overwrite { "Overwrite" } else if self.save { "Save" } else { "Open" };
+                if ui.add_enabled(valid, egui::Button::new(text)).clicked() {
+                    if self.save && path.as_ref().is_some_and(|p| p.exists()) && !self.overwrite { self.overwrite = true; }
+                    else { done = Some(path); }
+                }
+                if crate::theme::button(ui, "Cancel").clicked() { done = Some(None); }
+            });
+        });
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) { done = Some(None); }
+        done
+    }
+}
+
+#[cfg(test)]
+mod file_picker_tests {
+    use super::*;
+    #[test]
+    fn app_browser_keeps_names_in_its_directory_and_cancel_returns_no_file() {
+        let root = std::env::temp_dir().join("mp-picker-no-files");
+        let mut picker = FilePicker::in_directory("Save sequence", root.clone(), &["txt"], Some("sequence.txt"));
+        assert_eq!(picker.selected_path(), Some(root.join("sequence.txt")));
+        for bad in ["", ".", "..", "../other.txt", "a/b.txt", "a\\b.txt", "C:other.txt"] {
+            picker.name = bad.into(); assert!(picker.selected_path().is_none(), "{bad}");
+        }
+        let ctx = egui::Context::default();
+        let mut done = None;
+        let mut out = ctx.run_ui(egui::RawInput { events: vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }], ..Default::default() }, |ui| { done = picker.show(ui.ctx()); });
+        out.textures_delta.clear();
+        assert_eq!(done, Some(None));
+    }
+}
+
 /// Returns (file name, contents).
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn open_text(title: &str, filter: &str, exts: &[&str]) -> Option<(String, String)> {

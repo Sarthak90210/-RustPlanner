@@ -1149,6 +1149,8 @@ pub fn step_targets(layout: &Layout, start: (f64, f64)) -> Vec<(u32, f64, f64, f
 }
 
 /// Sequence/LayoutEditor ("Sequence Swarm")
+enum SequenceFile { Load, Image, Save }
+
 #[derive(Default)]
 pub struct LayoutEditor {
     pub open: bool,
@@ -1168,6 +1170,7 @@ pub struct LayoutEditor {
     image_buttons: bool,
     /// DroneGroup.CurrentMode: position streams requested once per Controller.Start
     streams_requested: bool,
+    file_picker: Option<(SequenceFile, crate::platform::FilePicker)>,
 }
 
 impl LayoutEditor {
@@ -1268,16 +1271,7 @@ impl LayoutEditor {
             let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));
             let button = |ui: &mut egui::Ui, rect: Rect, text: &str| ui.put(rect, |ui: &mut egui::Ui| theme::button_sized(ui, text, rect.size())).clicked();
             if button(ui, r(12.0, 3.0, 75.0, 23.0), "Load") {
-                if let Some(path) = rfd::FileDialog::new().add_filter("txt", &["txt"]).pick_file() {
-                    if let Some(load) = Sequence::load(&path) {
-                        self.seq = load;
-                        if let Some(first) = self.seq.layouts.first() {
-                            self.num_drones = first.offset.len() as u32;
-                            self.known = first.offset.keys().copied().collect();
-                            self.select_layout(0);
-                        }
-                    }
-                }
+                self.file_picker = Some((SequenceFile::Load, crate::platform::FilePicker::new("Load sequence", &["txt", "json"], None)));
             }
             // comboBox1: the layouts by Id
             let cur = self.working.and_then(|i| self.seq.layouts.get(i)).map(|l| l.id.clone()).unwrap_or_default();
@@ -1319,23 +1313,10 @@ impl LayoutEditor {
             }
             ui.painter().text(o + Vec2::new(691.0, 10.0), egui::Align2::LEFT_TOP, &self.label, crate::fonts::ui_id(crate::fonts::UI_SIZE), Color32::WHITE);
             if button(ui, r(690.0, 26.0, 75.0, 23.0), "set image") {
-                match rfd::FileDialog::new().pick_file().and_then(|p| image::open(p).ok()) {
-                    Some(img) => {
-                        let rgba = img.to_rgba8();
-                        let size = [rgba.width() as usize, rgba.height() as usize];
-                        let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
-                        self.grid.bg = Some(ui.ctx().load_texture("swarm_bg", color, Default::default()));
-                        self.image_buttons = true;
-                    }
-                    None => self.grid.bg = None,
-                }
+                self.file_picker = Some((SequenceFile::Image, crate::platform::FilePicker::new("Background image", &["png", "jpg", "jpeg"], None)));
             }
             if button(ui, r(812.0, 3.0, 75.0, 23.0), "Save") {
-                if let Some(path) = rfd::FileDialog::new().add_filter("txt", &["txt"]).set_file_name("sequence.txt").save_file() {
-                    if let Err(e) = self.seq.save(&path) {
-                        toasts.error(e.to_string());
-                    }
-                }
+                self.file_picker = Some((SequenceFile::Save, crate::platform::FilePicker::new("Save sequence", &["txt"], Some("sequence.txt"))));
             }
             let grid_rect = r(12.0, 52.0, 725.0, 430.0);
             if ui.rect_contains_pointer(grid_rect) {
@@ -1430,6 +1411,35 @@ impl LayoutEditor {
                     self.select_layout(i);
                 }
                 None => self.name_prompt = Some(name),
+            }
+        }
+        if let Some((action, mut picker)) = self.file_picker.take() {
+            match picker.show(ctx) {
+                None => self.file_picker = Some((action, picker)),
+                Some(path) => match action {
+                    SequenceFile::Load => {
+                        if let Some(load) = path.and_then(|p| Sequence::load(&p)) {
+                            self.seq = load;
+                            if let Some(first) = self.seq.layouts.first() {
+                                self.num_drones = first.offset.len() as u32;
+                                self.known = first.offset.keys().copied().collect();
+                                self.select_layout(0);
+                            }
+                        }
+                    }
+                    SequenceFile::Save => {
+                        if let Some(path) = path { if let Err(e) = self.seq.save(&path) { toasts.error(e.to_string()); } }
+                    }
+                    SequenceFile::Image => {
+                        if let Some(img) = path.and_then(|p| image::open(p).ok()) {
+                            let rgba = img.to_rgba8();
+                            let size = [rgba.width() as usize, rgba.height() as usize];
+                            let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+                            self.grid.bg = Some(ctx.load_texture("swarm_bg", color, Default::default()));
+                            self.image_buttons = true;
+                        } else { self.grid.bg = None; }
+                    }
+                },
             }
         }
         if self.image_buttons {

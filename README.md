@@ -252,6 +252,12 @@ generator and EFI values, and voltage/current/RPM/temperature for all sixteen ES
 cover scales, ECU/MCU selection, unavailable fuel pressure, memory fallback, and all ESC channels.
 This extends the decoder; unsupported properties and the wider parity gaps remain open.
 
+Run 21 repairs the platform build paths found by CI: Android setup requests `platform-tools` rather
+than the removed `tools` package, and iOS uses WGPU without pulling in the desktop OpenGL backend.
+Sequence Swarm uses a platform file chooser. Desktop keeps OS dialogs; mobile can load/save sequences
+and choose background images in the app's files directory. This browser does not implement Android
+SAF or iOS document-provider access. CI caches Rust dependencies and cancels superseded branch builds.
+
 ## License
 
 GPL-3.0, like Mission Planner. Icons and marker images are Mission Planner / GMap.NET assets under the same license.
