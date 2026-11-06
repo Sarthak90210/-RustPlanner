@@ -440,7 +440,7 @@ mod parameter_file_tests {
             }],
             ..Default::default()
         }, |ui| {
-            editor.write_confirm_window(ui.ctx(), None);
+            editor.write_confirm_window(ui.ctx(), None, Firmware::ArduCopter2);
         });
         out.textures_delta.clear();
 
@@ -477,6 +477,63 @@ mod parameter_file_tests {
         assert!(!editor.failed.contains("ANGLE_MAX"));
         assert!(editor.confirmed.contains("ANGLE_MAX"));
         assert!(!editor.edits.contains_key("ANGLE_MAX"));
+    }
+
+    #[test]
+    fn write_confirm_detects_reboot_required_and_prompts_after_save() {
+        let mut editor = ParamEditor::default();
+        let mut toasts = Toasts::default();
+        let ctx = egui::Context::default();
+
+        // Stage a parameter that requires reboot (e.g. INS_ACC_ID or simulate via staged flag)
+        editor.reboot_required_staged = true;
+        editor.pending.insert("INS_ACC_ID".into());
+
+        // Once all pending parameter writes complete, on_event activates show_reboot_prompt
+        editor.on_event(&LinkEvent::ParamSet { name: "INS_ACC_ID".into(), ok: true }, &mut toasts);
+        assert!(!editor.reboot_required_staged);
+        assert!(editor.show_reboot_prompt);
+
+        // Render reboot prompt window and dismiss with Escape
+        let mut out = ctx.run_ui(egui::RawInput {
+            events: vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            ..Default::default()
+        }, |ui| {
+            editor.reboot_prompt_window(ui.ctx(), None, &mut toasts);
+        });
+        out.textures_delta.clear();
+
+        // Reboot prompt should be dismissed cleanly
+        assert!(!editor.show_reboot_prompt);
+    }
+
+    #[test]
+    fn param_tree_search_synchronization_and_group_filtering() {
+        let mut editor = ParamEditor::default();
+        let mut params: BTreeMap<String, mp_core::link::Param> = BTreeMap::new();
+        params.insert("WPNAV_SPEED".to_string(), mp_core::link::Param { value: 500.0, ptype: 9, index: 0 });
+        params.insert("WPNAV_RADIUS".to_string(), mp_core::link::Param { value: 200.0, ptype: 9, index: 1 });
+        params.insert("AHRS_EKF_TYPE".to_string(), mp_core::link::Param { value: 3.0, ptype: 9, index: 2 });
+        params.insert("BATT_MONITOR".to_string(), mp_core::link::Param { value: 4.0, ptype: 9, index: 3 });
+
+        editor.search = "wpnav".into();
+        let q = editor.search.trim().to_lowercase();
+        let mut matching_groups: BTreeMap<String, usize> = BTreeMap::new();
+        for (k, _) in params.iter() {
+            let g = group_of(k);
+            if k.to_lowercase().contains(&q) {
+                *matching_groups.entry(g).or_default() += 1;
+            }
+        }
+        // Only WPNAV matches
+        assert_eq!(matching_groups.len(), 1);
+        assert_eq!(matching_groups.get("WPNAV").copied(), Some(2));
     }
 }
 
@@ -535,6 +592,10 @@ pub struct ParamEditor {
     pub failed: BTreeSet<String>,
     /// Set of parameter names whose write was confirmed during session
     pub confirmed: BTreeSet<String>,
+    /// Staged flag indicating whether reboot is required after current save completes
+    pub reboot_required_staged: bool,
+    /// Whether to display the post-save reboot confirmation prompt
+    pub show_reboot_prompt: bool,
 }
 
 impl ParamEditor {
@@ -599,7 +660,16 @@ impl ParamEditor {
                     toasts.error(format!("Set {name} Failed"));
                 }
                 if self.pending.is_empty() {
-                    toasts.info("Parameters successfully saved.");
+                    if self.failed.is_empty() {
+                        toasts.info("Parameters successfully saved.");
+                    } else {
+                        toasts.error("Not all parameters successfully saved.");
+                    }
+                    if self.reboot_required_staged {
+                        self.reboot_required_staged = false;
+                        self.show_reboot_prompt = true;
+                        toasts.info("Reboot is required for some parameters to take effect.");
+                    }
                 }
             }
         }
@@ -767,19 +837,57 @@ impl ParamEditor {
 
         // splitContainer1.Panel1: treeView1 (180px) with the "<" collapse button
         let show_tree = tree_page || !self.tree_collapsed;
+        let q = self.search.trim().to_lowercase();
         if show_tree {
             let mut groups: BTreeMap<String, usize> = BTreeMap::new();
-            for k in params.keys() {
-                *groups.entry(group_of(k)).or_default() += 1;
+            let mut matching_groups: BTreeMap<String, usize> = BTreeMap::new();
+            let mut total_matches = 0usize;
+            for (k, _) in params.iter() {
+                let g = group_of(k);
+                *groups.entry(g.clone()).or_default() += 1;
+                let matches_q = q.is_empty()
+                    || k.to_lowercase().contains(&q)
+                    || param_meta::get(fw, k).map(|m| m.description.to_lowercase().contains(&q) || m.display_name.to_lowercase().contains(&q)).unwrap_or(false);
+                if matches_q {
+                    *matching_groups.entry(g).or_default() += 1;
+                    total_matches += 1;
+                }
+            }
+            if !q.is_empty() {
+                if let Some(sel) = self.selected_group.as_ref() {
+                    if matching_groups.get(sel).copied().unwrap_or(0) == 0 && total_matches > 0 {
+                        if matching_groups.len() == 1 {
+                            self.selected_group = Some(matching_groups.keys().next().unwrap().clone());
+                        } else {
+                            self.selected_group = None;
+                        }
+                    }
+                } else if matching_groups.len() == 1 {
+                    self.selected_group = Some(matching_groups.keys().next().unwrap().clone());
+                }
             }
             egui::Panel::left("raw_tree").resizable(true).default_size(180.0).frame(egui::Frame::new().fill(theme::control_bg())).show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    if ui.selectable_label(self.selected_group.is_none(), RichText::new("All").color(Color32::WHITE)).clicked() {
+                    let all_label = if q.is_empty() {
+                        RichText::new("All").color(Color32::WHITE)
+                    } else {
+                        RichText::new(format!("All ({total_matches})")).color(Color32::WHITE)
+                    };
+                    if ui.selectable_label(self.selected_group.is_none(), all_label).clicked() {
                         self.selected_group = None;
                     }
-                    for (g, _) in &groups {
+                    for (g, total_cnt) in &groups {
+                        let match_cnt = matching_groups.get(g).copied().unwrap_or(0);
+                        if !q.is_empty() && match_cnt == 0 {
+                            continue;
+                        }
+                        let label_text = if q.is_empty() {
+                            format!("+ {g} ({total_cnt})")
+                        } else {
+                            format!("+ {g} ({match_cnt})")
+                        };
                         let sel = self.selected_group.as_deref() == Some(g);
-                        if ui.selectable_label(sel, RichText::new(format!("+ {g}")).color(Color32::WHITE)).clicked() {
+                        if ui.selectable_label(sel, RichText::new(label_text).color(Color32::WHITE)).clicked() {
                             self.selected_group = Some(g.clone());
                         }
                     }
@@ -865,13 +973,17 @@ impl ParamEditor {
         }
         self.compare_window(ui.ctx());
         self.missing_window(ui.ctx());
-        self.write_confirm_window(ui.ctx(), app.link);
+        self.write_confirm_window(ui.ctx(), app.link, fw);
+        self.reboot_prompt_window(ui.ctx(), app.link, app.toasts);
     }
 
     /// Confirmation dialog for parameter changes, matching C# ConfigRawParams BUT_writePIDS_Click
-    fn write_confirm_window(&mut self, ctx: &egui::Context, link: Option<&Link>) {
+    fn write_confirm_window(&mut self, ctx: &egui::Context, link: Option<&Link>, fw: Firmware) {
         let Some(changes) = self.write_confirm.as_ref() else { return };
         let mut answer = None;
+        let reboot_needed = changes.iter().any(|(name, _, _)| {
+            param_meta::get(fw, name).map(|m| m.reboot_required).unwrap_or(false)
+        });
         egui::Modal::new(egui::Id::new("confirm_write_params")).show(ctx, |ui| {
             ui.set_width(380.0);
             ui.label(RichText::new(crate::i18n::t("Confirm Parameter Changes")).strong());
@@ -883,15 +995,25 @@ impl ParamEditor {
                 egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
                     egui::Grid::new("confirm_write_grid").num_columns(1).striped(true).show(ui, |ui| {
                         for (name, old, new) in changes {
-                            ui.label(RichText::new(format!("{name}: {} -> {}", paramfile::format_value(*old), paramfile::format_value(*new))).monospace());
+                            let is_reboot = param_meta::get(fw, name).map(|m| m.reboot_required).unwrap_or(false);
+                            let tag = if is_reboot { " [Reboot Required]" } else { "" };
+                            ui.label(RichText::new(format!("{name}: {} -> {}{tag}", paramfile::format_value(*old), paramfile::format_value(*new))).monospace());
                             ui.end_row();
                         }
                     });
                 });
+                if reboot_needed {
+                    ui.add_space(6.0);
+                    ui.colored_label(Color32::from_rgb(255, 180, 0), "⚠️ Note: One or more parameters require an autopilot reboot to take effect.");
+                }
                 ui.add_space(6.0);
                 ui.label(crate::i18n::t("Do you want to proceed?"));
             } else {
                 ui.label(format!("You are about to change {count} parameters. Are you sure you want to proceed?"));
+                if reboot_needed {
+                    ui.add_space(6.0);
+                    ui.colored_label(Color32::from_rgb(255, 180, 0), "⚠️ Note: One or more parameters require an autopilot reboot to take effect.");
+                }
             }
             ui.add_space(10.0);
             ui.horizontal(|ui| {
@@ -909,11 +1031,47 @@ impl ParamEditor {
         if let Some(yes) = answer {
             let changes = self.write_confirm.take().unwrap();
             if yes {
+                if reboot_needed {
+                    self.reboot_required_staged = true;
+                }
                 if let Some(link) = link {
                     for (name, _, new) in changes {
                         link.send(LinkCommand::SetParam { name: name.clone(), value: new });
                         self.pending.insert(name);
                     }
+                }
+            }
+        }
+    }
+
+    /// Prompt modal to reboot autopilot after saving reboot-required parameters (matching C# ConfigRawParams.cs L374-L377)
+    fn reboot_prompt_window(&mut self, ctx: &egui::Context, link: Option<&Link>, toasts: &mut Toasts) {
+        if !self.show_reboot_prompt { return; }
+        let mut dismiss = None;
+        egui::Modal::new(egui::Id::new("reboot_required_prompt")).show(ctx, |ui| {
+            ui.set_width(360.0);
+            ui.label(RichText::new(crate::i18n::t("Reboot Required")).strong());
+            ui.add_space(8.0);
+            ui.label("Reboot is required for some parameters to take effect.\nDo you want to reboot the autopilot now?");
+            ui.add_space(12.0);
+            ui.horizontal(|ui| {
+                if theme::button(ui, "Reboot Now").clicked() {
+                    dismiss = Some(true);
+                }
+                if theme::button(ui, "Later").clicked() {
+                    dismiss = Some(false);
+                }
+            });
+        });
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            dismiss = Some(false);
+        }
+        if let Some(reboot_now) = dismiss {
+            self.show_reboot_prompt = false;
+            if reboot_now {
+                if let Some(link) = link {
+                    link.send(LinkCommand::CommandLong { command: 246, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
+                    toasts.info("Reboot command sent to autopilot.");
                 }
             }
         }

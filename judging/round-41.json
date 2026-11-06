@@ -1,0 +1,93 @@
+{
+  "round": 41,
+  "date": "2026-11-06",
+  "review_type": "Independent adversarial source, parity, and UI/UX review of mobile document roots and directory navigation, multi-state parameter row styling, and hover metadata tooltips",
+  "reviewed_head": "64fe4dfda715bff4dcab2ef5a3e00805e8606d69",
+  "reviewed_uncommitted_worktree": false,
+  "reviewed_files": [
+    "crates/mp-app/src/platform.rs",
+    "crates/mp-app/src/views/config.rs",
+    "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigRawParams.cs"
+  ],
+  "verdict": "REJECTED for exact-clone parity (Score: 6.0/10). Critical UI/UX and cross-platform navigation capabilities verified: FilePicker supports mobile document roots (Android /sdcard/Download, /sdcard/Documents, /storage/emulated/0, iOS Documents) and nested subdirectory navigation with '📁 .. (Up)' directory traversal; ParamEditor parameter grid delivers complete multi-state visual indicators matching C# ConfigRawParams (green for staged edits, yellow for writes pending ACK, red for failed writes, and reverted background for confirmed writes); right-click context menus support 'Set to default' and 'Revert changes'; and rich multi-line documentation tooltips display on hover with parameter names, descriptions, ranges, units, defaults, options, bitmasks, and live autopilot state badges. All 203 workspace tests pass cleanly with zero warnings. However, modern Android Scoped Storage (API 30+) and iOS sandboxing continue to restrict posix filesystem access without OS-level SAF/UIDocumentPicker dialogs, and parameter write post-completion reboot prompting remains unhandled.",
+  "scores": {
+    "overall": 6.0,
+    "ui_ux": 6.5,
+    "features": 6.8,
+    "cross_platform_delivery": 4.0,
+    "scale": "Adversarial parity evaluation on a 0-10 exact-clone scale. 10/10 requires 100% feature, UI/UX, behavioral, and architectural equivalence to Mission Planner C# across all target platforms."
+  },
+  "independent_validation": [
+    {
+      "command": "cargo test --workspace",
+      "result": "PASS: 203 passed, 0 failed, 1 ignored (64 mp-core unit, 25 mp-core integration, 114 mp-app unit)",
+      "scope": "Reviewer independently executed the full workspace test suite locally on Windows. Zero test failures, zero regressions, zero hangs across all crates."
+    },
+    {
+      "command": "cargo test -p mp-app --lib mobile_document_roots_and_subdirectory_navigation",
+      "result": "PASS: 1 passed, 0 failed",
+      "scope": "Independently verified document_roots resolution, list_entries_in directory and file separation, and nested subdirectory navigation."
+    },
+    {
+      "command": "cargo test -p mp-app --lib param_grid_row_styling_and_ack_state_lifecycle",
+      "result": "PASS: 1 passed, 0 failed",
+      "scope": "Independently verified staged edits retention, pending write queuing, failed write transition with toast error, and confirmed write ACK removal."
+    },
+    {
+      "command": "gh run view 42252767867",
+      "result": "PASS: Android debug APK succeeded (1m41s), Ubuntu desktop succeeded (3m51s), Windows desktop succeeded (5m45s), macOS desktop succeeded (4m31s)",
+      "scope": "Verified remote multi-platform GitHub Actions CI run 42252767867 triggered on commit 64fe4df."
+    }
+  ],
+  "verified_improvements": [
+    "R40-01 resolved: FilePicker in platform.rs implements document_roots() providing platform storage targets (Android /sdcard/Download, /sdcard/Documents, /storage/emulated/0; iOS Documents; App Storage fallback). In-app browser supports directory listings via list_entries_in(), nested subdirectory exploration, and '📁 .. (Up)' directory traversal.",
+    "R40-02 resolved: ParamEditor grid in config.rs implements full multi-state row highlight styling matching C# ConfigRawParams.cs: staged edits in Green (rgb(0, 128, 0) matching C# Color.Green), pending writes awaiting vehicle ACK in Yellow (rgb(180, 160, 0)), failed writes in Red (rgb(180, 40, 40)), and confirmed writes restored to default background. Right-click context menus on parameter rows offer 'Set to default (<val>)' and 'Revert changes'.",
+    "R40-03 resolved: Rich multi-line parameter metadata tooltips appear on hover across parameter name, value, and description cells. Tooltips present formatted parameter display name, full description, range [min, max], engineering units, default value, discrete options enum, bitmask breakdown, and live vehicle modification/pending/failure status badges.",
+    "Workspace test expansion: test suite expanded from 201 to 203 passing tests with two dedicated unit tests validating mobile directory navigation and parameter ACK state lifecycle transitions.",
+    "Multi-platform CI health: Windows, Ubuntu, macOS, and Android builds completed successfully with full binary and debug APK artifacts generated."
+  ],
+  "findings": [
+    {
+      "id": "R41-01",
+      "priority": "P1",
+      "subsystem": "Mobile Scoped Storage & Native SAF File Picker Bridge",
+      "status": "architectural limitation",
+      "evidence": [
+        "document_roots() in crates/mp-app/src/platform.rs queries posix filesystem paths (/sdcard/Download, /storage/emulated/0).",
+        "On Android 11+ (API level 30+), Scoped Storage enforces SELinux isolation where direct posix access to /storage/emulated/0 is blocked for non-manager apps without using the Storage Access Framework (SAF / Intent.ACTION_OPEN_DOCUMENT). Similarly, iOS external file access requires UIDocumentPickerViewController to issue security-scoped resource bookmarks."
+      ],
+      "impact": "On modern Android and iOS devices, operators cannot access files in shared device storage or third-party cloud drives without OS SAF/DocumentPicker delegation.",
+      "required_fix": "Implement JNI intent dispatch for Android SAF (ACTION_OPEN_DOCUMENT / ACTION_CREATE_DOCUMENT) and Objective-C/Swift UIDocumentPickerViewController bindings on iOS."
+    },
+    {
+      "id": "R41-02",
+      "priority": "P2",
+      "subsystem": "Parameter reboot required detection and post-write prompt",
+      "status": "missing feature",
+      "evidence": [
+        "In C# ConfigRawParams.cs (BUT_writePIDS_Click lines 324-328), parameter writes check ParameterMetaDataRepository.GetParameterRebootRequired(value). If any modified parameter requires reboot, reboot is flagged, and the user is prompted to reboot the autopilot after writing.",
+        "In Rust ParamEditor::write_confirm_window, written parameters are sent over the link, but reboot requirement metadata is not checked, and no post-write reboot prompt is displayed."
+      ],
+      "impact": "Operators modifying parameters that require flight controller reboot (e.g. communication baud rates, sensor configurations) may fly with unapplied parameters unaware that a reboot is necessary.",
+      "required_fix": "Inspect param_meta::get(fw, name).reboot_required during write_confirm_window execution, track reboot requirement, and prompt the operator to reboot the autopilot upon completion."
+    },
+    {
+      "id": "R41-03",
+      "priority": "P2",
+      "subsystem": "Parameter tree view search synchronization",
+      "status": "UI/UX synchronization gap",
+      "evidence": [
+        "In C# ConfigRawParams.cs, searching for a parameter or typing in the search box dynamically expands the corresponding category node in the left-hand TreeView and scrolls the selected node into view.",
+        "In Rust ParamEditor, entering text in self.search filters the parameter table rows, but does not auto-select or expand the matching group in the category tree."
+      ],
+      "impact": "Operators using the search bar must manually find and navigate the corresponding tree category.",
+      "required_fix": "When self.search matches a single parameter group, automatically expand and highlight that group in treeView1."
+    }
+  ],
+  "next_concrete_task": "Implement parameter reboot requirement detection in ParamEditor::write_confirm_window matching ConfigRawParams.cs lines 324-328, prompting the user to reboot the autopilot when reboot-required parameters are successfully written.",
+  "not_verified": [
+    "No physical flight controller was connected via hardware USB/telemetry radios.",
+    "Mobile APK was compiled in CI but not executed on physical Android 11+ or iOS 17+ hardware.",
+    "Pixel-level font rendering and GDI+ anti-aliasing were not diffed against WinForms."
+  ]
+}
