@@ -1,0 +1,195 @@
+{
+  "round": 20,
+  "review_type": "independent fixed-revision diff/reference review, native image inspection and focused test reruns",
+  "reviewed_head": "fde8670d2e504928f9926a85c6b9f50ecc2cae51",
+  "date": "2026-11-06",
+  "verdict": "Run 20 closes the specific guided-cache variants/guards and blank final-column capture defects from round 19. The new telemetry group matches the inspected C# assignments after messages arrive. Exact software parity remains incomplete, with concrete CurrentState defaults, derived values and high-latency handling gaps as well as the known video, plugin, localization and native transport/platform gaps. No 10/10.",
+  "scores": {
+    "overall": 8.5,
+    "ui_ux": 8.7,
+    "features": 8.3,
+    "scale": "Qualitative exact-original software parity scores, not completion percentages. Overall equally weights UI/UX and features. Prior reports provide gap context, not fresh verification of every earlier implementation claim."
+  },
+  "rationale": "The last-column native capture now displays watts through yaw and a bottom scrollbar. Its receipt matches the current executable. The guided observer now handles legacy and integer mission items only for current=2 and mission_type=MISSION, and observes position-target coordinates regardless of ignore bits like the original. Wire tests pass. Generator, EFI, hardware, primary MCU, memory, RPM, AOA/SSA, fence and sixteen ESC channels add real state behavior. However, an empty extra map still yields null/absent numeric properties before telemetry, unlike the original numeric defaults, and derived acceleration magnitude and HIGH_LATENCY/HIGH_LATENCY2 decoding remain missing. The wider explicit software gaps prevent a 10.",
+  "scope": {
+    "inspected": [
+      "git diff HEAD^..HEAD at the fixed HEAD, including README, flight_data.rs, link.rs, state.rs, altitude_change.rs and the prior report",
+      "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs observed guided-cache branches",
+      "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs generator, EFI, hardware, MCU, memory, RPM, AOA/SSA, fence and ESC assignments",
+      "CurrentState default/property fallback and derived-value/high-latency discrepancies",
+      "Current source implementations of DATA video controls, plugin listing, language selection, connection types and mobile text-file picking",
+      "judging/round-19.json for prior gap context"
+    ],
+    "rust_render_images_viewed": [
+      "target/judging/round20/05_data_status.png",
+      "target/judging/round20/57_data_status_last_column.png"
+    ],
+    "capture_integrity": {
+      "binary": "target/debug/missionplanner.exe",
+      "independently_verified_sha256": "57C5B6A6E36158430EA0574124CBB8D1CA48C72801AB36020A49E879A998CA60",
+      "manifests": [
+        "target/judging/round20/05_data_status.manifest.json",
+        "target/judging/round20/57_data_status_last_column.manifest.json"
+      ],
+      "captured_utc": [
+        "2026-11-06T09:53:09.7214786Z",
+        "2026-11-06T09:53:18.3392212Z"
+      ],
+      "receipt_scope": "Both manifests match the independently hashed executable and identify native eframe viewport captures at 1280x800 with simulator connection and completed 3115-parameter download. The final image visibly contains the final status labels. MP_STATUS_END sets a developer offset; it does not replay a desktop scrollbar drag."
+    },
+    "reviewer_executed_verification": [
+      "Fixed HEAD matched; initial worktree was clean.",
+      "cargo test -p mp-core --test altitude_change -- --nocapture passed 7 tests.",
+      "cargo test -p mp-app guided_tests -- --nocapture passed 3 tests, including pointer-event scrollbar dragging at 300x400 and 260x220.",
+      "cargo test -p mp-core engine_hardware_and_all_sixteen_esc_values_follow_reference_scaling -- --nocapture passed its 1 matching test.",
+      "Viewed both screenshots using view_image and compared both receipt hashes against Get-FileHash of the current executable.",
+      "Compared the changed guided-cache conditions and telemetry assignments with the local original C# reference."
+    ],
+    "author_reported_verification": [
+      "Parent reports cargo test --workspace passing all 139 tests and a successful native build for this revision.",
+      "Parent reports one earlier round-19 tlog wait timeout followed by passing isolated and full reruns. Its root cause remains unproven."
+    ],
+    "verification_limits": [
+      "This reviewer ran 11 focused tests, not the full workspace suite.",
+      "Original Mission Planner was not launched for equal-state native pixel or interaction comparison.",
+      "No desktop scrollbar drag was replayed. Native final labels and egui pointer-event behavior are distinct pieces of evidence.",
+      "No native HTTP/script-to-DATA marker update or MAV/connection-switch workflow was driven in this review.",
+      "The decoder test verifies selected hardware/generator/EFI values and all 64 ESC outputs through field lookup, numeric lists and JSON. It does not assert every newly added RPM, AOA/SSA or fence output, nor all generator/EFI fields.",
+      "No exhaustive fresh review of earlier pages, swarm algorithms, all CurrentState properties or all original message branches was performed.",
+      "Non-Windows runs and mobile packages/devices remain unverified. Physical flight, camera and radio qualification is separate from the software score."
+    ],
+    "reviewer_actions": "Read-only inspection and focused tests; authored judging/round-20.json only. No implementation edits, commit, push or subagents."
+  },
+  "run20_dispositions": [
+    {
+      "area": "Observed guided-cache message forms and guards",
+      "status": "closed",
+      "closed_parts": "Both MISSION_ITEM and MISSION_ITEM_INT require current=2 and mission_type=MISSION. SET_POSITION_TARGET_GLOBAL_INT has the original mask-independent cache observation. The production-link test rejects fence/rally cache overwrites for both item forms and accepts a legacy mission item and a position target with ignored position bits.",
+      "remaining": "Closure concerns the specific round-19 observer discrepancies. Native selected-MAV marker/altitude/frame interactions still lack a desktop workflow replay.",
+      "evidence": [
+        "crates/mp-core/src/link.rs:138-148",
+        "crates/mp-core/tests/altitude_change.rs:108-132",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5683-5692",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5706-5715",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5737-5742"
+      ]
+    },
+    {
+      "area": "Status final-column capture and scrollbar",
+      "status": "closed",
+      "closed_parts": "A finite content-width minus available-width offset replaces f32::MAX. The native image shows watts, wind fields, transponder fields, xtrack_error and yaw. Both normal and final captures show the bottom bar. The independent egui rerun actually drags the scrollbar at two small sizes.",
+      "remaining": "No native desktop drag at normal or small window size was replayed. This closes the blank-capture defect and supplies final-label proof, not an original/native interaction comparison.",
+      "evidence": [
+        "crates/mp-app/src/views/flight_data.rs:2020-2037",
+        "crates/mp-app/src/views/flight_data.rs:2138-2159",
+        "target/judging/round20/05_data_status.png",
+        "target/judging/round20/57_data_status_last_column.png",
+        "target/judging/round20/57_data_status_last_column.manifest.json"
+      ]
+    },
+    {
+      "area": "Added hardware, engine, fence and ESC telemetry",
+      "status": "partial",
+      "closed_parts": "Inspected assignments match the original scales and primary ECU/MCU selection, freemem32 fallback, EFI zero-fuel-pressure sentinel and all sixteen ESC channels. The focused test passes and checks all 64 ESC values through field, fields and property JSON.",
+      "remaining": "This is a coherent decoded-message subset. Original defaults and other numeric/derived properties remain incomplete; not every new assignment has a behavioral assertion.",
+      "evidence": [
+        "crates/mp-core/src/state.rs:446-454",
+        "crates/mp-core/src/state.rs:708-742",
+        "crates/mp-core/src/state.rs:869-907",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:2416-2443",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:2660-2667",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:2855-2878",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:3525-3532",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:3592-3698",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:3955-3973",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:4239-4247"
+      ]
+    }
+  ],
+  "remaining_software_gaps": [
+    {
+      "priority": 1,
+      "status": "open",
+      "area": "CurrentState defaults, derived numeric values and missing decoder branches",
+      "next_fix": "Match explicit original numeric defaults and chooser membership before telemetry, implement accelsq/accelsq2/accelsq3 from the decoded axes, then port HIGH_LATENCY/HIGH_LATENCY2 state updates. Use original-derived fixtures for defaults and message output, and audit remaining properties/message branches rather than treating registered names as complete behavior.",
+      "concrete_discrepancies": [
+        "Rust starts extra empty and returns null or omits an unresolved numeric field. The existing test explicitly expects default gen_speed to be null; the original float property begins at zero.",
+        "The original acceleration magnitudes compute sqrt(ax^2+ay^2+az^2)/1000 for each IMU. Rust registers these names but provides no field computation or update assignment.",
+        "The C# reference updates state from HIGH_LATENCY and HIGH_LATENCY2; Rust's CurrentState update match has no corresponding branches."
+      ],
+      "evidence": [
+        "crates/mp-core/src/state.rs:239",
+        "crates/mp-core/src/state.rs:308-318",
+        "crates/mp-core/src/state.rs:434-444",
+        "crates/mp-core/src/state.rs:920-921",
+        "crates/mp-core/src/state_properties.rs:78",
+        "crates/mp-core/src/state_properties.rs:91",
+        "crates/mp-core/src/state_properties.rs:104",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:556",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:624",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:692",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:2187",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:2445-2497",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:2498-2589"
+      ]
+    },
+    {
+      "priority": 2,
+      "status": "open",
+      "area": "DATA video pipelines",
+      "next_fix": "Implement actual GStreamer discovery/source/stop behavior and HereLink plus payload/gimbal video flows. Verify a deterministic stream through visible DATA controls.",
+      "evidence": [
+        "crates/mp-app/src/views/flight_data.rs:479-486",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3186-3213",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:6667-6841"
+      ]
+    },
+    {
+      "priority": 3,
+      "status": "open",
+      "area": "Plugin execution",
+      "next_fix": "Implement the original plugin lifecycle and callback/page capability through a compatibility host. The current file listing and disabled controls do not load .NET plugins.",
+      "evidence": [
+        "crates/mp-app/src/hotkey_tools.rs:103-112",
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:146-179",
+        "README.md:113"
+      ]
+    },
+    {
+      "priority": 4,
+      "status": "open",
+      "area": "Localization",
+      "next_fix": "Apply translated resources and persisted culture and verify non-English language switching against the original.",
+      "evidence": [
+        "crates/mp-app/src/views/config.rs:1087",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:106-128"
+      ]
+    },
+    {
+      "priority": 5,
+      "status": "open",
+      "area": "Native transports and mobile software",
+      "next_fix": "Add BLE/WinUSB/custom transport behavior and mobile file/USB serial adapters, then build and exercise native packages. Windows tests alone do not establish these platform flows.",
+      "evidence": [
+        "crates/mp-core/src/comms.rs:26-46",
+        "crates/mp-app/src/platform.rs:76-79",
+        "reference/MissionPlanner/MainV2.cs:3629-3641",
+        "README.md:115-118"
+      ]
+    },
+    {
+      "priority": 6,
+      "status": "open",
+      "area": "Native interaction and remaining map/tool parity evidence",
+      "next_fix": "Drive DATA scrollbar, HTTP/script guided target, altitude edits and MAV/connection switches through the desktop. Track the documented GDAL raster/opacity and place-name geocoder gaps separately and resolve them before claiming exact parity.",
+      "evidence": [
+        "crates/mp-app/src/views/flight_data.rs:1083-1084",
+        "crates/mp-app/src/views/flight_data.rs:1447",
+        "target/judging/round20/57_data_status_last_column.manifest.json",
+        "README.md:111-112",
+        "README.md:114"
+      ]
+    }
+  ],
+  "ten_out_of_ten_criterion": "An honest 10 requires no known material software discrepancy in the promised exact-clone scope and adequate decoder, interaction and native-platform evidence. This run makes verified progress but leaves concrete missing behavior, so a 10 is not supportable."
+}
