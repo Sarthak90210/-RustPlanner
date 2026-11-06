@@ -61,12 +61,13 @@ $cases = @(
  @('49_dronecan','setup',0,0,0,25,4),
  @('50_antenna_tracker','setup',0,0,0,39,4),
  @('51_plan_utm','plan',1,1,0,0,12,'MP_COORDS','UTM'),
- @('52_plan_mgrs','plan',1,1,0,0,12,'MP_COORDS','MGRS')
+ @('52_plan_mgrs','plan',1,1,0,0,12,'MP_COORDS','MGRS'),
+ @('53_swarm_formation','data',0,0,0,0,14,'MP_SWARM','1','MP_TOOL','Swarm')
 )
 $last = [Math]::Min($cases.Count, $From - 1 + $Count) - 1
 for ($ci = $From - 1; $ci -le $last; $ci++) {
     $case = $cases[$ci]
-    foreach ($name in @('MP_AUTOSIM','MP_DEMO','MP_SURVEY','MP_INSPECTOR','MP_TEMP','MP_SWARM','MP_COORDS')) {
+    foreach ($name in @('MP_AUTOSIM','MP_DEMO','MP_SURVEY','MP_INSPECTOR','MP_TEMP','MP_SWARM','MP_COORDS','MP_TOOL')) {
         Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
     }
     $env:MP_COORDS = 'GEO'
@@ -80,6 +81,7 @@ for ($ci = $From - 1; $ci -le $last; $ci++) {
     $env:MP_CAPTURE_AFTER = [string]$case[6]
     $env:MP_CAPTURE = Join-Path $captureRoot ($case[0] + '.png')
     if ($case.Count -gt 7) { Set-Item -Path ('Env:' + $case[7]) -Value $case[8] }
+    if ($case.Count -gt 9) { Set-Item -Path ('Env:' + $case[9]) -Value $case[10] }
     for ($attempt = 1; $attempt -le 2; $attempt++) {
       try {
         $started = [DateTime]::UtcNow

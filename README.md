@@ -201,6 +201,15 @@ are ignored, the vehicle is switched to GUIDED first, Plane gets MISSION_ITEM cu
 vehicles get SET_POSITION_TARGET_GLOBAL_INT. The simulator now accepts guided targets only in GUIDED,
 as ArduPilot does. A Copter test flies from Loiter to a target this way.
 
+temp > Swarm now opens a port of FormationControl. It has the original button row, the vehicle selector
+over every connection, Set Leader offset rebasing, Update Pos (offsets measured in the leader's UTM
+frame) and Start/Stop. While running it sends Formation.SendCommand at 10 Hz: position+velocity targets
+with CONDITION_YAW for multicopters, and the PID SET_ATTITUDE_TARGET path for ArduPlane. The offsets
+Grid supports dragging, panning, wheel zoom, Change Alt and the Vertical view, and the Status panel
+shows each vehicle. A three-Copter simulator test flies the followers into their slots.
+`MP_TOOL=<button>` opens a temp tool once the startup simulators connect, and capture case 53 renders
+the window. Follow the leader, Sequence Swarm and Follow Swarm still share the simpler window.
+
 ## License
 
 GPL-3.0, like Mission Planner. Icons and marker images are Mission Planner / GMap.NET assets under the same license.

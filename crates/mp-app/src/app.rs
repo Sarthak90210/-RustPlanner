@@ -244,6 +244,8 @@ pub struct MissionPlannerApp {
     pub readonly: bool,
     assets: crate::assets::Assets,
     startup: Vec<AppAction>,
+    /// MP_TOOL=<temp button text>: opened once the startup simulators are connected
+    startup_tool: Option<String>,
     demo: Option<crate::demo::Demo>,
 }
 
@@ -332,6 +334,7 @@ impl MissionPlannerApp {
             readonly: false,
             assets: crate::assets::Assets::load(&cc.egui_ctx),
             startup,
+            startup_tool: std::env::var("MP_TOOL").ok(),
             demo: None,
         }
     }
@@ -1109,12 +1112,21 @@ impl eframe::App for MissionPlannerApp {
         let ctx = ui.ctx().clone();
         self.drain_events();
         let mut actions = std::mem::take(&mut self.startup);
+        let simulated = std::env::var_os("MP_AUTOSIM").is_some() || std::env::var_os("MP_SWARM").is_some();
+        let ready = !simulated || self.link.as_ref().is_some_and(|l| l.shared.read().mavs.len() >= if std::env::var_os("MP_SWARM").is_some() { 3 } else { 1 });
+        if ready {
+            if let Some(tool) = self.startup_tool.take() {
+                actions.push(AppAction::Tool(tool));
+            }
+        }
 
         self.hotkeys(&ctx, &mut actions);
         self.password_ui(&ctx);
         self.inspector.show(&ctx, self.link.as_ref(), &mut self.toasts);
         self.tools.ui(&ctx, self.link.as_ref(), &mut self.toasts);
         self.more_tools.ui(&ctx, self.link.as_ref(), &mut self.toasts);
+        let links: Vec<&Link> = self.link.iter().chain(self.extra_links.iter()).collect();
+        self.more_tools.formation.ui(&ctx, &links, &mut self.toasts);
         // ThemeManager.LoadTheme(CMB_theme.Text)
         let want = (
             self.settings.planner.get("theme").cloned().unwrap_or_else(|| "BurntKermit".into()),

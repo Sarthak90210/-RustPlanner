@@ -14,6 +14,7 @@ pub mod hotkey_tools;
 pub mod hud;
 pub mod joystick;
 pub mod httpserver;
+pub mod swarm;
 pub mod log_browse;
 pub mod map;
 pub mod mjpeg;

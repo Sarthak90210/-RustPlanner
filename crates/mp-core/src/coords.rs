@@ -141,6 +141,17 @@ pub fn to_utm_signed(lat: f64, lng: f64) -> (i32, f64, f64) {
     (zone, e, n)
 }
 
+/// UTM in a given signed zone (ProjNet's WGS84_UTM(zone, north)), for points near that zone.
+pub fn to_utm_in_zone(zone: i32, lat: f64, lng: f64) -> (i32, f64, f64) {
+    let (e, n) = tm_forward(lat, lng, zone.abs());
+    let n = match (zone < 0, lat < 0.0) {
+        (true, false) => n + 10e6,
+        (false, true) => n - 10e6,
+        _ => n,
+    };
+    (zone, e, n)
+}
+
 /// `new utmpos(east, north, zone).ToLLA()`: a negative zone is southern.
 pub fn utm_signed_to_geo(zone: i32, east: f64, north: f64) -> (f64, f64) {
     tm_inverse(zone.abs(), zone < 0, east, north)
