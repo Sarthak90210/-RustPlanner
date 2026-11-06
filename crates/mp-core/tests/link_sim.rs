@@ -175,9 +175,27 @@ fn tlog_logs_and_playback() {
     let _sim = sim::spawn(port).unwrap();
     wait_event(&link, Duration::from_secs(30), |e| matches!(e, LinkEvent::ParamsLoaded(_)));
 
-    // DataFlash log list + download over MAVLink
+    // DataFlash log list + download over MAVLink (resend LogList if UDP packet was dropped)
+    let start = Instant::now();
+    let mut last_send = Instant::now();
     link.send(LinkCommand::LogList);
-    wait_event(&link, Duration::from_secs(15), |e| matches!(e, LinkEvent::LogList(2)));
+    let mut got = false;
+    while start.elapsed() < Duration::from_secs(20) {
+        if last_send.elapsed() >= Duration::from_millis(1500) {
+            link.send(LinkCommand::LogList);
+            last_send = Instant::now();
+        }
+        match link.events.recv_timeout(Duration::from_millis(200)) {
+            Ok(ref e) if matches!(e, LinkEvent::LogList(2)) => {
+                got = true;
+                break;
+            }
+            Ok(_) => {}
+            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
+            Err(crossbeam_channel::RecvTimeoutError::Disconnected) => panic!("link rx disconnected"),
+        }
+    }
+    assert!(got, "timed out waiting for LogList(2)");
     let entries = link.shared.read().log_entries.clone();
     assert_eq!(entries.len(), 2);
     let out = dir.join("log2.bin");
