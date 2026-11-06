@@ -149,9 +149,11 @@ pub struct FlightDataView {
     quick_count: Option<(String, String)>,
     tabs_customize: bool,
     pub(crate) video: Option<crate::mjpeg::Mjpeg>,
+    /// FlightData.hudGStreamer: its own source, stopped by GStreamer Stop and a cancelled prompt
+    gst: Option<crate::mjpeg::Mjpeg>,
     hud_prompt: Option<HudPrompt>,
     /// GStreamerUI.DownloadGStreamer in progress: (percent, status), finished, the pipeline to start
-    gst_download: Option<(std::sync::Arc<std::sync::Mutex<(i32, String)>>, std::sync::Arc<std::sync::atomic::AtomicBool>, String)>,
+    gst_download: Option<(std::sync::Arc<std::sync::Mutex<(i32, String)>>, std::sync::Arc<std::sync::atomic::AtomicBool>, String, std::sync::Arc<std::sync::atomic::AtomicBool>)>,
     log_browse: crate::log_browse::LogBrowse,
     analysis: Option<(String, Vec<(String, String, String)>)>,
     raw_sensor: bool,
@@ -198,6 +200,7 @@ impl Default for FlightDataView {
             quick_count: None,
             tabs_customize: false,
             video: None,
+            gst: None,
             hud_prompt: None,
             gst_download: None,
             log_browse: Default::default(),
@@ -414,15 +417,21 @@ impl FlightDataView {
 
     fn hud_ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, cs: &CurrentState, connected: bool, size: Vec2) {
         // developer switch for captures: MP_GSTREAMER=1 starts the configured GStreamer source
-        if self.video.is_none() && self.gst_download.is_none() && std::env::var_os("MP_GSTREAMER").is_some() && !ui.ctx().data(|d| d.get_temp::<bool>(egui::Id::new("mp_gst_auto"))).unwrap_or(false) {
+        if self.gst.is_none() && self.gst_download.is_none() && std::env::var_os("MP_GSTREAMER").is_some() && !ui.ctx().data(|d| d.get_temp::<bool>(egui::Id::new("mp_gst_auto"))).unwrap_or(false) {
             ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("mp_gst_auto"), true));
             let url = app.settings.planner.get("gstreamer_url").cloned().unwrap_or_else(|| crate::gstreamer::DEFAULT_URL.to_string());
             self.start_gstreamer(&url, app, ui.ctx());
         }
-        let video = self.video.as_mut().and_then(|v| v.texture(ui.ctx()));
+        // both sources draw into the HUD background; the GStreamer frame wins while it runs
+        let gst_frame = self.gst.as_mut().and_then(|v| v.texture(ui.ctx()));
+        let video = gst_frame.or_else(|| self.video.as_mut().and_then(|v| v.texture(ui.ctx())));
         if let Some(e) = self.video.as_ref().and_then(|v| v.error.lock().unwrap().take()) {
             app.toasts.error(format!("Video source failed\n{e}"));
             self.video = None;
+        }
+        if let Some(e) = self.gst.as_ref().and_then(|v| v.error.lock().unwrap().take()) {
+            app.toasts.error(e);
+            self.gst = None;
         }
         let opts = app.settings.hud.clone();
         let (click, resp) = hud::show(
@@ -496,7 +505,8 @@ impl FlightDataView {
                 ui.close();
             }
             if ui.button(crate::i18n::t("GStreamer Stop")).clicked() {
-                self.video = None;
+                // hudGStreamer.Stop(): the MJPEG camera keeps running
+                self.gst = None;
                 ui.close();
             }
         });
@@ -535,22 +545,23 @@ impl FlightDataView {
         match crate::gstreamer::look_for_gstreamer(&data) {
             Some(lib) => {
                 app.settings.planner.insert("gstlaunchexe".into(), lib.display().to_string());
-                self.video = Some(crate::mjpeg::Mjpeg::gstreamer(lib, pipeline, ctx));
+                self.gst = Some(crate::mjpeg::Mjpeg::gstreamer(lib, pipeline, ctx));
             }
             None if self.gst_download.is_none() => {
                 let status = std::sync::Arc::new(std::sync::Mutex::new((0, "Downloading..".to_string())));
                 let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-                let (s, d, c) = (status.clone(), done.clone(), ctx.clone());
+                let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                let (s, d, c, k) = (status.clone(), done.clone(), ctx.clone(), cancel.clone());
                 std::thread::spawn(move || {
                     let report = |p: i32, t: &str| {
                         *s.lock().unwrap() = (p, t.to_string());
                         c.request_repaint();
                     };
-                    let _ = crate::gstreamer::download(&data, &report);
+                    let _ = crate::gstreamer::download_cancellable(&data, &report, &k);
                     d.store(true, std::sync::atomic::Ordering::Relaxed);
                     c.request_repaint();
                 });
-                self.gst_download = Some((status, done, pipeline.to_string()));
+                self.gst_download = Some((status, done, pipeline.to_string(), cancel));
             }
             None => {}
         }
@@ -558,14 +569,23 @@ impl FlightDataView {
 
     /// ProgressReporterDialogue for the GStreamer download.
     fn gst_download_ui(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
-        let Some((status, done, pipeline)) = self.gst_download.clone() else { return };
+        let Some((status, done, pipeline, cancel)) = self.gst_download.clone() else { return };
         let (pct, text) = status.lock().unwrap().clone();
-        egui::Window::new(crate::i18n::t("Progress")).collapsible(false).resizable(false).fixed_size(Vec2::new(370.0, 90.0)).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Progress")).collapsible(false).resizable(false).fixed_size(Vec2::new(370.0, 110.0)).show(ctx, |ui| {
             theme::label(ui, &text);
             theme::progress(ui, pct.max(0) as f32 / 100.0, Vec2::new(358.0, 23.0), "");
+            // ProgressReporterDialogue's Cancel: "User Request"
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                if theme::button(ui, "Cancel").clicked() {
+                    cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            });
         });
         if done.load(std::sync::atomic::Ordering::Relaxed) {
             self.gst_download = None;
+            if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                return;
+            }
             match crate::gstreamer::look_for_gstreamer(&crate::platform::data_dir()) {
                 Some(_) => self.start_gstreamer(&pipeline, app, ctx),
                 None => app.toasts.error(text),
@@ -644,9 +664,14 @@ impl FlightDataView {
         let p = self.hud_prompt.take().unwrap();
         if !ok {
             // InputBox.Show's result is ignored for HereLink: the address is saved and used
-            if let HudPrompt::HereLink(ip) = p {
-                app.settings.planner.insert("herelinkip".into(), ip.clone());
-                self.start_gstreamer(&crate::gstreamer::herelink_url(&ip), app, ctx);
+            match p {
+                HudPrompt::HereLink(ip) => {
+                    app.settings.planner.insert("herelinkip".into(), ip.clone());
+                    self.start_gstreamer(&crate::gstreamer::herelink_url(&ip), app, ctx);
+                }
+                // setGStreamerSource: a cancelled prompt stops hudGStreamer
+                HudPrompt::GStreamer(_) => self.gst = None,
+                _ => {}
             }
             return;
         }

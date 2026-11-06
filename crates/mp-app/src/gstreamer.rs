@@ -107,6 +107,11 @@ fn set_gst_path(lib: &Path) {
 
 /// DownloadGStreamer: the original's runtime zip, extracted into the data directory.
 pub fn download(data_dir: &Path, status: &dyn Fn(i32, &str)) -> Result<(), String> {
+    download_cancellable(data_dir, status, &AtomicBool::new(false))
+}
+
+/// DownloadGStreamer with the progress dialog's Cancel ("User Request").
+pub fn download_cancellable(data_dir: &Path, status: &dyn Fn(i32, &str), cancel: &AtomicBool) -> Result<(), String> {
     if cfg!(any(target_arch = "arm", target_arch = "aarch64")) {
         return Err("No GStreamer download for this architecture".into());
     }
@@ -121,6 +126,9 @@ pub fn download(data_dir: &Path, status: &dyn Fn(i32, &str)) -> Result<(), Strin
     let mut last = String::new();
     for _ in 0..3 {
         let attempt = (|| -> Result<(), String> {
+            if cancel.load(Ordering::Relaxed) {
+                return Err("User Request".into());
+            }
             let resp = ureq::get(url).call().map_err(|e| e.to_string())?;
             let total = resp.headers().get("content-length").and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
             let mut reader = resp.into_body().into_reader();
@@ -128,6 +136,11 @@ pub fn download(data_dir: &Path, status: &dyn Fn(i32, &str)) -> Result<(), Strin
             let mut buf = vec![0u8; 1 << 16];
             let mut done = 0u64;
             loop {
+                if cancel.load(Ordering::Relaxed) {
+                    drop(file);
+                    let _ = std::fs::remove_file(&output);
+                    return Err("User Request".into());
+                }
                 let n = std::io::Read::read(&mut reader, &mut buf).map_err(|e| e.to_string())?;
                 if n == 0 {
                     break;
@@ -146,6 +159,10 @@ pub fn download(data_dir: &Path, status: &dyn Fn(i32, &str)) -> Result<(), Strin
         })();
         match attempt {
             Ok(()) => return Ok(()),
+            Err(e) if e == "User Request" => {
+                status(-1, &e);
+                return Err(e);
+            }
             Err(e) => {
                 status(-1, &format!("Error downloading file {e}"));
                 let _ = std::fs::remove_file(&output);
@@ -407,6 +424,16 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         assert!(error2.lock().unwrap().as_ref().unwrap().contains("gst_parse_launch"));
+    }
+
+    #[test]
+    fn a_cancelled_download_stops_with_user_request() {
+        let dir = std::env::temp_dir().join(format!("mp-gst-cancel-{}", std::process::id()));
+        let seen = Mutex::new(Vec::new());
+        let r = download_cancellable(&dir, &|p, t| seen.lock().unwrap().push((p, t.to_string())), &AtomicBool::new(true));
+        assert_eq!(r, Err("User Request".to_string()));
+        assert_eq!(seen.lock().unwrap().last(), Some(&(-1, "User Request".to_string())));
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
