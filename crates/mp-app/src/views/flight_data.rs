@@ -424,6 +424,7 @@ impl FlightDataView {
             },
             size,
         );
+        crate::httpserver::set_hud_region(resp.rect);
         resp.context_menu(|ui| self.hud_menu(ui, app));
         self.hud_prompt_ui(ui.ctx(), app, cs);
         if let Some(c) = click {
@@ -1163,6 +1164,7 @@ impl FlightDataView {
             false
         });
         let mrect = out.view.rect;
+        crate::httpserver::set_map_region(mrect);
         if let Some(ll) = context_latlng {
             ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("fd_ctx_ll"), ll));
         }

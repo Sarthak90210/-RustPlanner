@@ -225,6 +225,8 @@ pub struct MissionPlannerApp {
     more_tools: crate::more_tools::MoreTools,
     hotkey_tools: crate::hotkey_tools::HotkeyTools,
     capture: Option<crate::capture::Capture>,
+    /// last renderer frame taken for the web service's image streams
+    stream_shot: Instant,
     skip_params_once: bool,
     /// MainV2.Comports besides comPort (the active `link`)
     extra_links: Vec<Link>,
@@ -263,6 +265,8 @@ impl MissionPlannerApp {
             }
             cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
         }
+        // MainV2: "start http" - the web service on port 56781
+        crate::httpserver::start();
         // Developer switches: MP_AUTOSIM=1 starts the simulator, MP_VIEW picks the screen.
         let mut startup = Vec::new();
         if std::env::var_os("MP_AUTOSIM").is_some() {
@@ -312,6 +316,7 @@ impl MissionPlannerApp {
             more_tools: Default::default(),
             hotkey_tools: Default::default(),
             capture: crate::capture::Capture::from_env(),
+            stream_shot: Instant::now(),
             skip_params_once: false,
             extra_links: Vec::new(),
             conn_form: None,
@@ -1205,7 +1210,7 @@ impl eframe::App for MissionPlannerApp {
                     View::Help => help::ui(ui),
                 }
                 setup.dialogs(ui.ctx(), &mut app);
-                flight_plan.update_kml(app.link, app.extra_links);
+                flight_plan.update_kml(app.link, app.extra_links, app.settings);
             });
 
         self.progress_window(&ctx);
@@ -1233,6 +1238,17 @@ impl eframe::App for MissionPlannerApp {
         if self.link.is_some() {
             // live telemetry
             ctx.request_repaint_after(Duration::from_millis(50));
+        }
+        // hud.jpg / map.jpg / both.jpg clients: 5 Hz renderer frames while one is connected
+        if self.capture.is_none() && crate::httpserver::frames_wanted() && self.stream_shot.elapsed() >= Duration::from_millis(200) {
+            self.stream_shot = Instant::now();
+            let ppp = ctx.pixels_per_point();
+            ctx.request_screenshot(move |image| {
+                std::thread::spawn(move || crate::httpserver::publish_screenshot(&image, ppp));
+            });
+        }
+        if crate::httpserver::frames_wanted() {
+            ctx.request_repaint_after(Duration::from_millis(200));
         }
         if let Some(capture) = &mut self.capture {
             let (connected, params_complete, parameters) = self.link.as_ref().map(|l| {

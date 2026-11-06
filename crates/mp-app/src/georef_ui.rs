@@ -119,6 +119,8 @@ impl GeorefWindow {
                     self.log(format!("{} {:.7} {:.7} {:.1}", m.file.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(), m.fix.lat, m.fix.lng, m.fix.alt));
                 }
                 self.log(format!("Matched {} of {} photos", self.matches.len(), photos.len()));
+                // CreateReportFiles -> httpGeoRefKML: /georefnetwork.kml and the photos it links
+                crate::httpserver::set_georef(georef::location_kml(&self.matches), std::path::PathBuf::from(self.st.get("TXT_jpgdir")));
             }
             "BUT_networklinkgeoref" => {
                 if self.matches.is_empty() {

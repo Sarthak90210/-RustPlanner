@@ -155,11 +155,25 @@ Run 13 corrects Rover's direct-edit workflow and its Avoidance visibility predic
 tooltips to vehicle tuning combo boxes. Separate egui/simulator tests exercise Plane staged edits and
 Rover direct edits through actual numeric clicks and parameter readback.
 
-PLAN's View KML starts the loopback KML service at `http://127.0.0.1:56781/network.kml`.
-It links to live `location.kml` and mission `wps.kml` documents and serves Mission Planner's aircraft
-model. Active/extra links supply vehicle poses; mission changes update the next KML response. An HTTP
-test validates network links, waypoint absolute/relative heights, mission/aircraft updates, the model,
-HEAD responses, missing resources and server shutdown. Google Earth itself has not been exercised.
+The web service from `Utilities/httpserver.cs` starts with the application on port 56781 on every
+interface, with the original 200-connection and 20-per-address limits. It serves:
+
+- Google Earth links: `network.kml` (opened by PLAN's View KML), `location.kml`, `wps.kml`, the aircraft
+  model and `georefnetwork.kml` with its 640x480 photos from the georef tool.
+- `/websocket/server` (CurrentState and waypoints as JSON at 5 Hz) and `/websocket/raw` (MAVLink frames
+  in both directions), plus the original `hud.html` that uses them.
+- `hud.jpg`, `map.jpg` and `both.jpg` MJPEG streams of the live DATA HUD and map, taken from renderer
+  frames only while a client is connected.
+- `/guided` and `POST /guide`, restricted to loopback and same-site requests as in the original.
+- Mavelous `/mavlink/` JSON and `/mav/` files with path-traversal protection, the index page, and the
+  original 404 stubs for `command_long`, `rcoverride` and `get_mission`.
+
+Socket tests cover every route, the RFC 6455 handshake vector, masked client frames and CSRF rejection.
+A run against the simulator returned real HUD/map JPEG frames and live packet JSON. Google Earth and a
+Mavelous checkout have not been exercised.
+
+On Windows a socket read timeout can surface as ERROR_IO_PENDING (997). All transports now treat it as
+a timeout instead of dropping the link. This was the cause of the intermittent SiK test failure.
 
 Run 14 adds PLAN's coordinate systems. The Coords selector switches the mouse readout between GEO,
 UTM and MGRS (with SRTM altitude and source) and persists as `fpcoordmouse`. The waypoint grid swaps

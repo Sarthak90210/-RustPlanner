@@ -129,7 +129,6 @@ pub struct FlightPlanView {
     coord_edit: Option<(usize, usize, String)>,
     /// MainMap_OnCurrentPositionChanged also moves coords1 to the map centre
     last_center: Option<(f64, f64)>,
-    kml_server: Option<crate::kml_server::KmlServer>,
 }
 
 #[derive(Clone, Copy)]
@@ -181,7 +180,6 @@ impl Default for FlightPlanView {
             measure: None,
             coord_edit: None,
             last_center: None,
-            kml_server: None,
         }
     }
 }
@@ -191,14 +189,20 @@ fn put_button(ui: &mut egui::Ui, r: Rect, text: &str) -> bool {
 }
 
 impl FlightPlanView {
-    pub fn update_kml(&mut self, link: Option<&mp_core::link::Link>, extra: &[mp_core::link::Link]) {
-        if let Some(server) = &self.kml_server {
-            let mut links = Vec::new();
-            if let Some(link) = link { links.push(link.shared.clone()); }
-            links.extend(extra.iter().map(|l| l.shared.clone()));
-            let mission = if self.mission_type == 0 { self.items.clone() } else { self.stash[0].clone() };
-            server.update(crate::kml_server::Snapshot { home: self.home, mission, links });
-        }
+    /// The web service's view of the planner: mission, home, links and stream rates.
+    pub fn update_kml(&mut self, link: Option<&mp_core::link::Link>, extra: &[mp_core::link::Link], settings: &crate::app::Settings) {
+        let mut links = Vec::new();
+        if let Some(link) = link { links.push(link.shared.clone()); }
+        links.extend(extra.iter().map(|l| l.shared.clone()));
+        let mission = if self.mission_type == 0 { self.items.clone() } else { self.stash[0].clone() };
+        let rate = |k: &str, d: u16| settings.planner.get(k).and_then(|v| v.parse().ok()).unwrap_or(d);
+        crate::httpserver::update(crate::httpserver::Snapshot {
+            home: self.home,
+            mission,
+            links,
+            command: link.map(|l| l.sender()),
+            rates: [rate("rateattitude", 4), rate("rateposition", 2), rate("ratestatus", 2), rate("raterc", 2), rate("ratesensors", 2)],
+        });
     }
 
     pub fn on_event(&mut self, e: &LinkEvent, toasts: &mut Toasts) {
@@ -391,15 +395,9 @@ impl FlightPlanView {
         let px = 3.0;
         let py = 64.0;
         ui.put(r(px + 3.0, py + 3.0, 50.0, 17.0), egui::Checkbox::new(&mut self.grid, "Grid"));
+        // label1_Click: the network link served by MainV2's web service
         if ui.put(r(px + 62.0, py + 3.0, 60.0, 13.0), egui::Link::new("View KML")).clicked() {
-            if self.kml_server.is_none() {
-                match crate::kml_server::KmlServer::bind(56781, Default::default()) {
-                    Ok(server) => self.kml_server = Some(server),
-                    Err(e) => app.toasts.error(format!("Failed to open url http://127.0.0.1:56781/network.kml\n{e}")),
-                }
-            }
-            self.update_kml(app.link, app.extra_links);
-            if let Some(server) = &self.kml_server { ui.ctx().open_url(egui::OpenUrl::new_tab(server.network_url())); }
+            ui.ctx().open_url(egui::OpenUrl::new_tab("http://127.0.0.1:56781/network.kml"));
         }
         ui.put(r(px + 3.0, py + 22.0, 111.0, 21.0), |ui: &mut egui::Ui| {
             let mut prov = app.settings.fp_map.provider;

@@ -209,6 +209,8 @@ pub enum LinkCommand {
     SubscribeRaw { msgid: u32, tx: Sender<(u8, u8, Vec<u8>)> },
     /// Make another vehicle on the link the current one (sysid selector).
     SetTarget { sysid: u8, compid: u8 },
+    /// OnPacketReceived: every received frame's bytes, until the receiver is dropped.
+    TapFrames(Sender<Vec<u8>>),
 }
 
 /// Handle to a running link (equivalent of `MainV2.comPort`).
@@ -396,13 +398,11 @@ struct Worker {
     subscribers: Vec<(u32, Sender<MavMessage>)>,
     source_subscribers: Vec<(u32, u8, u8, Sender<MavMessage>)>,
     raw_subscribers: Vec<(u32, Sender<(u8, u8, Vec<u8>)>)>,
+    frame_taps: Vec<Sender<Vec<u8>>>,
 }
 
 fn is_timeout(e: &io::Error) -> bool {
-    matches!(
-        e.kind(),
-        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
-    )
+    crate::comms::is_timeout(e)
 }
 
 fn param_name(id: &mavlink::types::CharArray<16>) -> String {
@@ -448,6 +448,7 @@ impl Worker {
             subscribers: Vec::new(),
             source_subscribers: Vec::new(),
             raw_subscribers: Vec::new(),
+            frame_taps: Vec::new(),
         }
     }
 
@@ -471,6 +472,9 @@ impl Worker {
                     }
                     if let Some((sock, to, _)) = &self.mirror {
                         let _ = sock.send_to(bytes, to);
+                    }
+                    if !self.frame_taps.is_empty() {
+                        self.frame_taps.retain(|tx| tx.send(bytes.to_vec()).is_ok());
                     }
                     if !self.raw_subscribers.is_empty() {
                         let id = raw.message_id();
@@ -682,6 +686,7 @@ impl Worker {
             LinkCommand::Subscribe { msgid, tx } => self.subscribers.push((msgid, tx)),
             LinkCommand::SubscribeFrom { msgid, sysid, compid, tx } => self.source_subscribers.push((msgid, sysid, compid, tx)),
             LinkCommand::SubscribeRaw { msgid, tx } => self.raw_subscribers.push((msgid, tx)),
+            LinkCommand::TapFrames(tx) => self.frame_taps.push(tx),
             LinkCommand::SetTarget { sysid, compid } => {
                 if sysid != self.target_sys || compid != self.target_comp {
                     self.pending_cmd = None;

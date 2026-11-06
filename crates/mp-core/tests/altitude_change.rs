@@ -8,7 +8,7 @@ use mp_core::{
     link::{Link, LinkCommand, LinkEvent},
     mavlink,
 };
-use std::io::{self, Write};
+use std::io::Write;
 use std::net::{TcpListener, TcpStream};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -64,10 +64,7 @@ impl Peer {
         match self.reader.lock().unwrap().read_any_message::<MavMessage>() {
             Ok((_, message)) => Some(message),
             Err(mavlink::error::MessageReadError::Io(e))
-                if matches!(
-                    e.kind(),
-                    io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
-                ) =>
+                if mp_core::comms::is_timeout(&e) =>
             {
                 None
             }

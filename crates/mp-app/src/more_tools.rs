@@ -735,12 +735,12 @@ fn run_serial_pass(
             match sock.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => port.write_all(&buf[..n])?,
-                Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
+                Err(e) if mp_core::comms::is_timeout(&e) => {}
                 Err(_) => break,
             }
             match port.read(&mut buf) {
                 Ok(n) => if sock.write_all(&buf[..n]).is_err() { break; },
-                Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
+                Err(e) if mp_core::comms::is_timeout(&e) => {}
                 Err(e) => return Err(e),
             }
         }

@@ -10,6 +10,12 @@ use std::time::Duration;
 
 pub const READ_TIMEOUT: Duration = Duration::from_millis(20);
 
+/// A read that ended without data: a timeout, a would-block, or on Windows a socket read
+/// whose timeout elapsed while the overlapped receive was still pending (ERROR_IO_PENDING).
+pub fn is_timeout(e: &io::Error) -> bool {
+    matches!(e.kind(), io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock) || (cfg!(windows) && e.raw_os_error() == Some(997))
+}
+
 /// Baud rates offered by Mission Planner's baud combo.
 pub const BAUD_RATES: &[u32] = &[
     4800, 9600, 14400, 19200, 28800, 38400, 57600, 111100, 115200, 230400, 256000, 460800, 500000,
@@ -273,7 +279,7 @@ fn probe_heartbeat(t: Box<dyn Transport>, wait: std::time::Duration) -> bool {
         match r.read_any_message::<MavMessage>() {
             Ok((_, MavMessage::HEARTBEAT(_))) => return true,
             Ok(_) => {}
-            Err(mavlink::error::MessageReadError::Io(e)) if matches!(e.kind(), io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock) => {}
+            Err(mavlink::error::MessageReadError::Io(e)) if crate::comms::is_timeout(&e) => {}
             Err(mavlink::error::MessageReadError::Io(_)) => return false,
             Err(_) => {}
         }

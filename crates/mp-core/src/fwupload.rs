@@ -141,7 +141,7 @@ impl Uploader {
             }
             match self.t.read(&mut buf[..(n - out.len()).min(64)]) {
                 Ok(k) => out.extend_from_slice(&buf[..k]),
-                Err(e) if matches!(e.kind(), io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock) => {}
+                Err(e) if crate::comms::is_timeout(&e) => {}
                 Err(e) => return Err(e),
             }
         }

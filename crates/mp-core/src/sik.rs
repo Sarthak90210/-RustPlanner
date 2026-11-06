@@ -77,7 +77,7 @@ impl Sik {
                         }
                     }
                 }
-                Err(e) if matches!(e.kind(), io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock) => std::thread::sleep(Duration::from_millis(5)),
+                Err(e) if crate::comms::is_timeout(&e) => std::thread::sleep(Duration::from_millis(5)),
                 Err(e) => return Err(e),
             }
         }

@@ -70,10 +70,7 @@ impl Peer {
         match self.reader.read_any_message::<MavMessage>() {
             Ok((_, m)) => Some(m),
             Err(mavlink::error::MessageReadError::Io(e))
-                if matches!(
-                    e.kind(),
-                    io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
-                ) =>
+                if mp_core::comms::is_timeout(&e) =>
             {
                 None
             }
