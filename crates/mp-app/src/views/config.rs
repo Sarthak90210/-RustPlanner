@@ -204,17 +204,14 @@ pub fn param_control(ui: &mut egui::Ui, link: &Link, fw: Firmware, name: &str, v
             });
         }
         None => {
-            let mut v = val;
-            let mut dv = egui::DragValue::new(&mut v).speed(meta.and_then(|m| m.increment).unwrap_or(0.01)).max_decimals(6);
-            if let Some((lo, hi)) = meta.and_then(|m| m.range) {
-                dv = dv.range(lo..=hi).clamp_existing_to_range(false);
-            }
-            let r = ui.add_sized(Vec2::new(width.min(100.0), 20.0), dv);
-            if (r.drag_stopped() || r.lost_focus()) && v != val {
-                link.send(LinkCommand::SetParam { name: name.into(), value: v });
-            }
-            if let Some((lo, hi)) = meta.and_then(|m| m.range) {
-                theme::label(ui, format!("{lo} .. {hi}"));
+            // MavlinkNumericUpDown: range and increment from the metadata
+            let inc = meta.and_then(|m| m.increment).filter(|i| *i > 0.0).unwrap_or(if val.fract() == 0.0 { 1.0 } else { 0.01 });
+            let (lo, hi) = meta.and_then(|m| m.range).unwrap_or((f64::MIN, f64::MAX));
+            let (lo, hi) = (lo.min(val as f64), hi.max(val as f64));
+            let mut v = val as f64;
+            let (r, _) = ui.allocate_exact_size(Vec2::new(width.min(100.0), 20.0), Sense::hover());
+            if theme::numeric_updown(ui, r, &mut v, lo, hi, inc, theme::decimals_for(inc).max(theme::value_decimals(val))).changed() {
+                link.send(LinkCommand::SetParam { name: name.into(), value: v as f32 });
             }
         }
     }

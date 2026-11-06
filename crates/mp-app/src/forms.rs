@@ -270,9 +270,11 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
                     Some(n) => {
                         let cur = params[n].value as f64;
                         let mut v = cur / scale;
-                        let inc = c.nums.get(3).copied().unwrap_or(1.0);
-                        let resp = ui.put(r, egui::DragValue::new(&mut v).range(lo..=hi).speed(inc.max(0.01)));
-                        if (resp.drag_stopped() || resp.lost_focus()) && (v * scale - cur).abs() > 1e-9 && !app.readonly {
+                        let inc = c.nums.get(3).copied().filter(|i| *i > 0.0).unwrap_or(1.0);
+                        let (lo, hi) = (lo.min(v), hi.max(v));
+                        let dec = theme::decimals_for(inc).max(theme::value_decimals(v as f32));
+                        let resp = theme::numeric_updown(ui, r, &mut v, lo, hi, inc, dec);
+                        if resp.changed() && (v * scale - cur).abs() > 1e-9 && !app.readonly {
                             if let Some(l) = link {
                                 l.send(LinkCommand::SetParam { name: n.clone(), value: (v * scale) as f32 });
                             }
@@ -320,6 +322,17 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
                 if *cur != before {
                     clicked.push(c.name.clone());
                 }
+            }
+            "num" if st.text.get(&c.name).map(|t| t.trim().parse::<f64>().is_ok()).unwrap_or(text.trim().parse::<f64>().is_ok() || text.is_empty()) => {
+                // NumericUpDown
+                let t = st.text.entry(c.name.clone()).or_insert_with(|| if text.is_empty() { "0".into() } else { text.clone() });
+                let mut v: f64 = t.trim().parse().unwrap_or(0.0);
+                let dec = t.split_once('.').map(|(_, f)| f.len()).unwrap_or(0);
+                ui.add_enabled_ui(enabled, |ui| {
+                    if theme::numeric_updown(ui, r, &mut v, f64::MIN, f64::MAX, if dec > 0 { 10f64.powi(-(dec as i32)) } else { 1.0 }, dec).changed() {
+                        *t = format!("{v:.dec$}");
+                    }
+                });
             }
             "num" | "text" => {
                 let v = st.text.entry(c.name.clone()).or_insert_with(|| text.clone());

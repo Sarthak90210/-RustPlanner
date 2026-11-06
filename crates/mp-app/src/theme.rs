@@ -566,3 +566,75 @@ mod tests {
         assert_eq!(back.control_bg, p.control_bg);
     }
 }
+
+// ------------------------------------------------------------------ NumericUpDown
+
+/// Decimal places Mission Planner shows for an increment (MavlinkNumericUpDown.setup).
+pub fn decimals_for(increment: f64) -> usize {
+    let mut d = 0;
+    let mut inc = increment.abs();
+    while d < 6 && inc > 0.0 && (inc - inc.round()).abs() > 1e-9 {
+        inc *= 10.0;
+        d += 1;
+    }
+    d
+}
+
+/// WinForms NumericUpDown: a text box with up/down arrows on the right. `changed()` is set
+/// when the value is committed (Enter, focus lost, an arrow click or the mouse wheel).
+pub fn numeric_updown(ui: &mut Ui, rect: Rect, value: &mut f64, min: f64, max: f64, increment: f64, decimals: usize) -> Response {
+    let id = ui.id().with(("nud", (rect.left() as i32, rect.top() as i32)));
+    let inc = if increment > 0.0 { increment } else { 1.0 };
+    let p = ui.painter().clone();
+    let enabled = ui.is_enabled();
+    p.rect_filled(rect, 0.0, control_bg());
+    p.rect_stroke(rect, 0.0, Stroke::new(1.0, Color32::from_gray(0x80)), StrokeKind::Inside);
+    let arrows = Rect::from_min_max(Pos2::new(rect.right() - 17.0, rect.top() + 1.0), rect.max - Vec2::new(1.0, 1.0));
+    let up = Rect::from_min_max(arrows.min, Pos2::new(arrows.right(), arrows.center().y));
+    let down = Rect::from_min_max(Pos2::new(arrows.left(), arrows.center().y), arrows.max);
+    let fmt = |v: f64| format!("{v:.decimals$}");
+    let mut buf: String = ui.data(|d| d.get_temp::<String>(id)).unwrap_or_else(|| fmt(*value));
+    let text_rect = Rect::from_min_max(rect.min + Vec2::new(2.0, 1.0), Pos2::new(arrows.left() - 1.0, rect.bottom() - 1.0));
+    let te = ui.put(text_rect, egui::TextEdit::singleline(&mut buf).frame(egui::Frame::NONE).text_color(self::text()).vertical_align(Align::Center));
+    let mut commit = None;
+    if te.has_focus() {
+        ui.data_mut(|d| d.insert_temp(id, buf.clone()));
+        let wheel = ui.input(|i| i.smooth_scroll_delta.y);
+        if wheel != 0.0 {
+            commit = Some(buf.trim().parse::<f64>().unwrap_or(*value) + inc * wheel.signum() as f64);
+        }
+    } else {
+        ui.data_mut(|d| d.remove::<String>(id));
+    }
+    if te.lost_focus() {
+        commit = buf.trim().parse::<f64>().ok().or(Some(*value));
+    }
+    for (r, dir) in [(up, 1.0), (down, -1.0)] {
+        let resp = ui.interact(r, id.with(dir as i32), Sense::click());
+        let fill = if resp.is_pointer_button_down_on() { mouse_down() } else if resp.hovered() { mouse_over() } else { bg() };
+        p.rect_filled(r, 0.0, fill);
+        let c = r.center();
+        let col = if enabled { self::text() } else { Color32::GRAY };
+        let tri = if dir > 0.0 { vec![c + Vec2::new(-3.0, 1.5), c + Vec2::new(3.0, 1.5), c + Vec2::new(0.0, -1.5)] } else { vec![c + Vec2::new(-3.0, -1.5), c + Vec2::new(3.0, -1.5), c + Vec2::new(0.0, 1.5)] };
+        p.add(egui::Shape::convex_polygon(tri, col, Stroke::NONE));
+        if resp.clicked() {
+            commit = Some(*value + inc * dir);
+        }
+    }
+    let mut out = te;
+    if let Some(v) = commit {
+        let v = v.clamp(min.min(max), max.max(min));
+        let rounded = (v * 10f64.powi(decimals as i32)).round() / 10f64.powi(decimals as i32);
+        ui.data_mut(|d| d.remove::<String>(id));
+        if (rounded - *value).abs() > 1e-12 {
+            *value = rounded;
+            out.mark_changed();
+        }
+    }
+    out
+}
+
+/// MavlinkNumericUpDown.Value: DecimalPlaces grows to the value's own decimals.
+pub fn value_decimals(v: f32) -> usize {
+    format!("{v}").split_once('.').map(|(_, f)| f.len()).unwrap_or(0).min(6)
+}

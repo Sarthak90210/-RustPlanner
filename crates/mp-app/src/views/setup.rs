@@ -1255,8 +1255,8 @@ fn mav_num(ui: &mut egui::Ui, app: &AppCtx, link: &Link, name: &str, r: Rect, ra
     let Some(cur) = link.shared.read().params.get(name).map(|p| p.value) else { return false };
     let mut v = cur as f64;
     let dec = if inc >= 1.0 { 0 } else { (-inc.log10()).ceil() as usize };
-    let resp = ui.put(r, egui::DragValue::new(&mut v).range(range.0..=range.1).speed(inc).max_decimals(dec).min_decimals(dec));
-    if (resp.drag_stopped() || resp.lost_focus() || (resp.changed() && !resp.dragged() && !resp.has_focus())) && (v as f32) != cur && !app.readonly {
+    let resp = theme::numeric_updown(ui, r, &mut v, range.0.min(cur as f64), range.1.max(cur as f64), inc, dec.max(theme::value_decimals(cur)));
+    if resp.changed() && (v as f32) != cur && !app.readonly {
         link.send(LinkCommand::SetParam { name: name.into(), value: v as f32 });
     }
     true

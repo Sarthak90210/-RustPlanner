@@ -172,9 +172,8 @@ fn block(ui: &mut egui::Ui, link: &Link, pending: &mut Option<&mut BTreeMap<Stri
             if out {
                 p.rect_filled(nr, 0.0, Color32::from_rgb(0xff, 0xa5, 0x00));
             }
-            let dv = egui::DragValue::new(&mut v).speed(inc / scale).max_decimals(3);
-            let nresp = ui.put(nr, dv);
-            if (nresp.drag_stopped() || nresp.lost_focus()) && (v * scale - cur as f64).abs() > 1e-9 {
+            let nresp = theme::numeric_updown(ui, nr, &mut v, (lo / scale).min(cur as f64 / scale), (hi / scale).max(cur as f64 / scale), inc / scale, 3);
+            if nresp.changed() && (v * scale - cur as f64).abs() > 1e-9 {
                 change(link, pending, n, (v * scale) as f32);
             }
             // trackBar1 at (69, 58), anchored left and right

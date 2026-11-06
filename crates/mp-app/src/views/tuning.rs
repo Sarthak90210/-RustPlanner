@@ -103,13 +103,13 @@ pub fn basic_tuning(ui: &mut egui::Ui, app: &mut AppCtx) {
                 pp.galley(r.min + Vec2::new(3.0, 15.0), g, Color32::WHITE);
                 let mut v = val;
                 let nr = Rect::from_min_size(r.min + Vec2::new(6.0, 58.0), Vec2::new(57.0, 20.0));
-                let dv = ui.put(nr, egui::DragValue::new(&mut v).range(min..=max).speed(inc).max_decimals(3));
+                let dv = theme::numeric_updown(ui, nr, &mut v, min.min(val), max.max(val), inc, theme::decimals_for(inc).max(theme::value_decimals(val as f32)));
                 let tr = Rect::from_min_size(r.min + Vec2::new(69.0, 58.0), Vec2::new(293.0, 45.0));
                 let tb = theme::htrackbar(ui, tr, &mut v, min, max, 10);
                 let pp = ui.painter();
                 pp.text(Pos2::new(tr.left(), tr.bottom()), egui::Align2::LEFT_BOTTOM, format!("{min}"), f.clone(), Color32::WHITE);
                 pp.text(Pos2::new(tr.right(), tr.bottom()), egui::Align2::RIGHT_BOTTOM, format!("{max}"), f.clone(), Color32::WHITE);
-                let commit = (tb.drag_stopped() || tb.clicked() || dv.lost_focus() || (dv.changed() && !dv.has_focus())) && (v - val).abs() > 1e-9;
+                let commit = (tb.drag_stopped() || tb.clicked() || dv.changed()) && (v - val).abs() > 1e-9;
                 if commit && !app.readonly {
                     let v = ((v / inc).round() * inc) as f32;
                     link.send(LinkCommand::SetParam { name: it.name.clone(), value: v });
@@ -249,12 +249,19 @@ fn number_box(ui: &mut egui::Ui, r: Rect, name: &str, cur: f32, changed: bool, f
             w.bg_fill = Color32::from_rgb(0, 128, 0);
         }
     }
-    let mut v = cur;
-    let resp = child.put(r, egui::DragValue::new(&mut v).speed(meta.and_then(|m| m.increment).unwrap_or(0.001)).max_decimals(4));
+    // MavlinkNumericUpDown: increment from the metadata, decimals from it and the value
+    let inc = meta.and_then(|m| m.increment).filter(|i| *i > 0.0).unwrap_or(0.001);
+    let mut v = cur as f64;
+    let (lo, hi) = meta.and_then(|m| m.range).unwrap_or((f64::MIN, f64::MAX));
+    let resp = theme::numeric_updown(&mut child, r, &mut v, lo.min(cur as f64), hi.max(cur as f64), inc, theme::decimals_for(inc).max(theme::value_decimals(cur)));
+    if changed {
+        child.painter().rect_stroke(r, 0.0, egui::Stroke::new(2.0, Color32::from_rgb(0, 128, 0)), egui::StrokeKind::Inside);
+    }
+    let changed_now = resp.changed();
     if let Some(m) = meta {
         resp.on_hover_text(format!("{}\n{}", m.display_name, m.description));
     }
-    (v != cur).then_some(v)
+    (changed_now && v as f32 != cur).then_some(v as f32)
 }
 
 impl ExtendedTuning {

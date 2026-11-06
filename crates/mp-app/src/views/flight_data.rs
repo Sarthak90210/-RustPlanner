@@ -77,6 +77,22 @@ enum Prompt {
 enum Confirmed {
     DoAction(usize),
     Arm(bool),
+    /// "Force Arm" / "Force Disarm" after the vehicle refused
+    ForceArm(bool),
+    /// Common.MessageShowAgain("Resume Mission", ...)
+    ResumeWarn,
+}
+
+/// BUT_resumemis_Click as a state machine driven by frames and link events.
+#[derive(Clone)]
+enum Resume {
+    Download { wp: u16 },
+    Upload { wp: u16, target_alt: f32, items: Vec<mp_core::mission::Locationwp> },
+    Uploading { target_alt: f32 },
+    Guided { target_alt: f32, next: Instant, tries: u32 },
+    Arm { target_alt: f32, next: Instant, tries: u32 },
+    Takeoff { target_alt: f32, next: Instant, tries: u32 },
+    Auto { next: Instant, tries: u32 },
 }
 
 #[derive(Clone, Copy)]
@@ -87,6 +103,7 @@ enum Inputted {
     AddPoi(f64, f64),
     SendMessage,
     JumpTag,
+    ResumeAt,
 }
 
 const MOUNT_MODES: &[&str] = &["RETRACT", "NEUTRAL", "MAVLINK_TARGETING", "RC_TARGETING", "GPS_POINT"];
@@ -109,6 +126,13 @@ pub struct FlightDataView {
     last_mode: String,
     mode_changed: Instant,
     last_armed: bool,
+    /// doARM in flight: (arm, message count when sent)
+    arm_pending: Option<(bool, usize)>,
+    /// the vehicle refused: (arm, collected STATUSTEXT)
+    arm_failed: Option<(bool, String)>,
+    /// CurrentState.lastautowp: the last waypoint reached in AUTO
+    last_auto_wp: i32,
+    resume: Option<Resume>,
     armed_at: Instant,
     left_w: f32,
     prompt: Option<Prompt>,
@@ -154,6 +178,10 @@ impl Default for FlightDataView {
             last_mode: String::new(),
             mode_changed: Instant::now(),
             last_armed: false,
+            arm_pending: None,
+            arm_failed: None,
+            last_auto_wp: -1,
+            resume: None,
             armed_at: Instant::now(),
             left_w: 300.0,
             prompt: None,
@@ -192,7 +220,126 @@ impl FlightDataView {
     pub fn on_event(&mut self, e: &LinkEvent) {
         if let LinkEvent::MissionDownloaded { mission_type: 0, items } = e {
             self.mission = items.clone();
+            if let Some(Resume::Download { wp }) = self.resume.clone() {
+                // keep home, takeoff and DO commands before the resume point; drop skipped NAV items
+                let target_alt = items.get(wp as usize).map(|w| w.alt).unwrap_or(0.0);
+                let cmds: Vec<_> = items
+                    .iter()
+                    .enumerate()
+                    .filter(|(a, w)| !(*a < wp as usize && *a != 0 && ((w.id != 22 && w.id < 95) || w.id > 240)))
+                    .map(|(_, w)| *w)
+                    .collect();
+                self.resume = Some(Resume::Upload { wp, target_alt, items: cmds });
+            }
         }
+        if let LinkEvent::MissionUploaded { mission_type: 0, result } = e {
+            if let Some(Resume::Uploading { target_alt }) = self.resume.clone() {
+                self.resume = match result {
+                    Ok(()) => Some(Resume::Guided { target_alt, next: Instant::now(), tries: 0 }),
+                    Err(_) => None,
+                };
+            }
+        }
+        if let LinkEvent::CommandAck { command: 400, ok, .. } = e {
+            if let Some((arm, _)) = self.arm_pending {
+                if !ok {
+                    self.arm_failed = Some((arm, String::new()));
+                } else {
+                    self.arm_pending = None;
+                }
+            }
+        }
+    }
+
+    /// The arm result and the Resume Mission steps, once per frame.
+    fn actions_tick(&mut self, app: &mut AppCtx, cs: &CurrentState) {
+        if cs.mode.eq_ignore_ascii_case("auto") && cs.wpno > 0 {
+            self.last_auto_wp = cs.wpno as i32;
+        }
+        let Some(l) = app.link else {
+            self.resume = None;
+            return;
+        };
+        if let (Some((arm, _)), Some((arm2, reasons))) = (self.arm_pending, self.arm_failed.as_mut()) {
+            if arm == *arm2 && reasons.is_empty() {
+                let start = self.arm_pending.map(|p| p.1).unwrap_or(0);
+                let msgs = l.shared.read().messages.iter().skip(start).map(|m| m.text.clone()).collect::<Vec<_>>().join("\n");
+                *reasons = if msgs.is_empty() { " ".into() } else { msgs };
+                let action = if arm { "Arm" } else { "Disarm" };
+                self.prompt = Some(Prompt::Confirm {
+                    title: "Error".into(),
+                    text: format!("{action} failed.\n{}\nForce {action} can bypass safety checks,\nwhich can lead to the vehicle crashing\nand causing serious injuries.\n\nDo you wish to Force {action}?", reasons.trim()),
+                    then: Confirmed::ForceArm(arm),
+                });
+                self.arm_pending = None;
+                self.arm_failed = None;
+            }
+        }
+        let find = |name: &str| cs.firmware.modes().into_iter().find(|(_, n)| n.eq_ignore_ascii_case(name)).map(|(k, _)| k);
+        let copter = cs.firmware == mp_core::firmware::Firmware::ArduCopter2;
+        let fail = |toasts: &mut crate::app::Toasts| toasts.error("No response from the vehicle");
+        self.resume = match self.resume.take() {
+            Some(Resume::Upload { wp, target_alt, items }) => {
+                l.send(LinkCommand::WriteMission { mission_type: 0, items });
+                let _ = wp;
+                Some(Resume::Uploading { target_alt })
+            }
+            Some(Resume::Guided { target_alt, next, tries }) if Instant::now() >= next => {
+                if tries == 0 {
+                    // set index back to 1
+                    l.send(LinkCommand::SetCurrentWp(1));
+                }
+                if !copter {
+                    Some(Resume::Auto { next: Instant::now(), tries: 0 })
+                } else if cs.mode.eq_ignore_ascii_case("guided") {
+                    Some(Resume::Arm { target_alt, next: Instant::now(), tries: 0 })
+                } else if tries > 30 {
+                    fail(app.toasts);
+                    None
+                } else {
+                    if let Some(k) = find("Guided") {
+                        l.send(LinkCommand::SetMode(k));
+                    }
+                    Some(Resume::Guided { target_alt, next: Instant::now() + std::time::Duration::from_secs(1), tries: tries + 1 })
+                }
+            }
+            Some(Resume::Arm { target_alt, next, tries }) if Instant::now() >= next => {
+                if cs.armed {
+                    Some(Resume::Takeoff { target_alt, next: Instant::now(), tries: 0 })
+                } else if tries > 30 {
+                    fail(app.toasts);
+                    None
+                } else {
+                    l.send(LinkCommand::Arm { arm: true, force: false });
+                    Some(Resume::Arm { target_alt, next: Instant::now() + std::time::Duration::from_secs(1), tries: tries + 1 })
+                }
+            }
+            Some(Resume::Takeoff { target_alt, next, tries }) if Instant::now() >= next => {
+                if cs.alt >= target_alt - 2.0 {
+                    Some(Resume::Auto { next: Instant::now(), tries: 0 })
+                } else if tries > 40 {
+                    fail(app.toasts);
+                    None
+                } else {
+                    l.send(LinkCommand::CommandLong { command: 22, params: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, target_alt] });
+                    Some(Resume::Takeoff { target_alt, next: Instant::now() + std::time::Duration::from_secs(1), tries: tries + 1 })
+                }
+            }
+            Some(Resume::Auto { next, tries }) if Instant::now() >= next => {
+                if cs.mode.eq_ignore_ascii_case("auto") {
+                    None
+                } else if tries > 30 {
+                    fail(app.toasts);
+                    None
+                } else {
+                    if let Some(k) = find("Auto") {
+                        l.send(LinkCommand::SetMode(k));
+                    }
+                    Some(Resume::Auto { next: Instant::now() + std::time::Duration::from_secs(1), tries: tries + 1 })
+                }
+            }
+            other => other,
+        };
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
@@ -206,6 +353,7 @@ impl FlightDataView {
             self.armed_at = Instant::now();
         }
         self.last_armed = cs.armed;
+        self.actions_tick(app, &cs);
 
         let narrow = ui.available_width() < 700.0;
         if narrow {
@@ -692,10 +840,11 @@ impl FlightDataView {
     fn actions_ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, cs: &CurrentState) {
         let link = app.link.filter(|l| l.status() == LinkStatus::Connected);
         let modes = cs.firmware.modes();
-        // tableLayoutPanel1: 287 x 181, 5 columns x 5 rows
+        // tableLayoutPanel1: anchored left/right, 5 columns of 20% and 5 rows of 36 px
         let origin = ui.available_rect_before_wrap().min;
-        let col_x = [0.0, 57.0, 114.0, 171.0, 228.0];
-        let col_w = [57.0, 57.0, 57.0, 57.0, 59.0];
+        let cw = ui.available_width().max(287.0) / 5.0;
+        let col_x = [0.0, cw, cw * 2.0, cw * 3.0, cw * 4.0];
+        let col_w = [cw; 5];
         let row_y = [0.0, 36.0, 72.0, 108.0, 144.0];
         let cell = |c: usize, r: usize| Rect::from_min_size(origin + Vec2::new(col_x[c], row_y[r]), Vec2::new(col_w[c], 36.0)).shrink(3.0);
         let mut clicked: Option<&str> = None;
@@ -790,7 +939,10 @@ impl FlightDataView {
             } else {
                 Rect::from_min_size(Pos2::new(cellr.left(), cellr.top() + 20.0), Vec2::new(68.0, 23.0))
             };
-            ui.put(num, egui::DragValue::new(val).speed(0.5).max_decimals(1));
+            let mut v = *val as f64;
+            if theme::numeric_updown(ui, num, &mut v, 0.0, 100000.0, 1.0, 1).changed() {
+                *val = v as f32;
+            }
             // the panel clips its children: a wrapped button shows only its top part
             let clip = cellr.intersect(ui.clip_rect());
             let resp = ui
@@ -827,20 +979,19 @@ impl FlightDataView {
                     link.send(LinkCommand::SetMode(k));
                 }
             }
+            // BUT_ARM_Click: only disarming asks first
             "Arm/ Disarm" => {
-                let action = if cs.armed { "Disarm" } else { "Arm" };
-                self.prompt = Some(Prompt::Confirm { title: action.into(), text: format!("Are you sure you want to {action}"), then: Confirmed::Arm(!cs.armed) });
-            }
-            "Restart Mission" => {
-                link.send(LinkCommand::SetCurrentWp(0));
-                if let Some(k) = find("Auto") {
-                    link.send(LinkCommand::SetMode(k));
+                if cs.armed {
+                    self.prompt = Some(Prompt::Confirm { title: "Disarm".into(), text: "Are you sure you want to Disarm".into(), then: Confirmed::Arm(false) });
+                } else {
+                    self.arm_pending = Some((true, link.shared.read().messages.len()));
+                    link.send(LinkCommand::Arm { arm: true, force: false });
                 }
             }
+            // BUTrestartmission_Click: setWPCurrent(0)
+            "Restart Mission" => link.send(LinkCommand::SetCurrentWp(0)),
             "Resume Mission" => {
-                if let Some(k) = find("Auto") {
-                    link.send(LinkCommand::SetMode(k));
-                }
+                self.prompt = Some(Prompt::Confirm { title: "Resume Mission".into(), text: "Warning this will reprogram your mission, arm and issue a takeoff command (copter)".into(), then: Confirmed::ResumeWarn });
             }
             "Clear Track" => link.shared.write().cs.track.clear(),
             "Change Speed" => link.send(LinkCommand::CommandLong { command: 178, params: [0.0, self.change_speed, 0.0, 0.0, 0.0, 0.0, 0.0] }),
@@ -860,12 +1011,12 @@ impl FlightDataView {
             }
             "Abort Landing" => link.send(LinkCommand::CommandLong { command: 191, params: [0.0; 7] }),
             "Set Home Alt" => {
-                // BUT_Homealt: zero the displayed altitude here (toggle back to reset)
+                // BUT_Homealt: altoffsethome = -HomeAlt, so alt reads above sea level (toggle back)
                 let mut s = link.shared.write();
                 if s.cs.altoffsethome != 0.0 {
                     s.cs.altoffsethome = 0.0;
                 } else {
-                    s.cs.altoffsethome = s.cs.alt;
+                    s.cs.altoffsethome = -(s.cs.home.map(|h| h.alt as f32).unwrap_or(0.0));
                 }
             }
             "Raw Sensor View" => self.raw_sensor = true,
@@ -1223,7 +1374,15 @@ impl FlightDataView {
                             l.send(LinkCommand::CommandLong { command: cmd, params: p });
                         }
                     }
-                    Confirmed::Arm(arm) => l.send(LinkCommand::Arm { arm, force: false }),
+                    Confirmed::Arm(arm) => {
+                        self.arm_pending = Some((arm, l.shared.read().messages.len()));
+                        l.send(LinkCommand::Arm { arm, force: false });
+                    }
+                    Confirmed::ForceArm(arm) => l.send(LinkCommand::Arm { arm, force: true }),
+                    Confirmed::ResumeWarn => {
+                        let last = if self.last_auto_wp < 0 { 1 } else { self.last_auto_wp };
+                        self.prompt = Some(Prompt::Input { title: "Resume at".into(), fields: vec![("Resume mission at waypoint#".into(), last.to_string())], then: Inputted::ResumeAt });
+                    }
                 }
             }
             Prompt::Input { fields, then, .. } => match then {
@@ -1243,6 +1402,13 @@ impl FlightDataView {
                 Inputted::PointCameraCoords => {
                     if let (Some(l), Some(lat), Some(lng), Some(alt)) = (link, num(&fields, 0), num(&fields, 1), num(&fields, 2)) {
                         l.send(LinkCommand::CommandLong { command: mavcmd::DO_SET_ROI, params: [0.0, 0.0, 0.0, 0.0, lat as f32, lng as f32, alt as f32] });
+                    }
+                }
+                Inputted::ResumeAt => {
+                    if let (Some(l), Some(Ok(wp))) = (link, fields.first().map(|(_, t)| t.trim().parse::<u16>())) {
+                        // get all: the current mission from the vehicle, then trim and re-upload
+                        l.send(LinkCommand::ReadMission { mission_type: 0 });
+                        self.resume = Some(Resume::Download { wp });
                     }
                 }
                 Inputted::JumpTag => {
