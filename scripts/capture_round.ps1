@@ -26,7 +26,7 @@ $cases = @(
  @('14_config_fullparams','config',1,0,0,8,8),
  @('15_config_basictuning','config',1,0,0,1,7),
  @('16_config_extendedtuning','config',1,0,0,2,7),
- @('17_config_standard','config',1,0,0,3,7),
+ @('17_config_geofence','config',1,0,0,0,7),
  @('18_config_planner','config',0,0,0,10,4),
  @('19_simulation','sim',0,0,0,0,4),
  @('20_help','help',0,0,0,0,4),
