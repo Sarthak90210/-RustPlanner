@@ -3,6 +3,7 @@
 
 pub mod app;
 pub mod assets;
+pub mod display;
 mod capture;
 pub mod firmware_ui;
 pub mod fonts;

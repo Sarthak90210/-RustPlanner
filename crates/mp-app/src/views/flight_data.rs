@@ -28,6 +28,9 @@ const TABS: [&str; 13] = [
     "DataFlash Logs",
 ];
 
+/// Index of tabActionsSimple (not in TABS: it shares the "Actions" text).
+const SIMPLE_ACTIONS: usize = 13;
+
 /// quickView1..6 numberColor from FlightData.Designer.cs
 const QUICK_COLORS: [Color32; 6] = [
     Color32::from_rgb(209, 151, 248),
@@ -489,10 +492,15 @@ impl FlightDataView {
     // ------------------------------------------------------------------ tabControlactions
 
     fn tabs_ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, cs: &CurrentState) {
-        // Customize: only the tabs that were not hidden; self.tab stays an index into TABS
-        let visible: Vec<usize> = (0..TABS.len()).filter(|i| !app.settings.fd_hidden_tabs.iter().any(|h| h == TABS[*i])).collect();
+        // tabControlactions order (tabActionsSimple after Messages); the DisplayView layout and
+        // Customize decide which are shown. self.tab is an index into TABS, SIMPLE_ACTIONS for
+        // the simple Actions tab.
+        let order: Vec<usize> = [0usize, 1, 2, SIMPLE_ACTIONS].into_iter().chain(3..TABS.len()).collect();
+        let key = |i: usize| if i == SIMPLE_ACTIONS { "ActionsSimple" } else { TABS[i] };
+        let pl = &app.settings.planner;
+        let visible: Vec<usize> = order.into_iter().filter(|i| crate::display::fd_tab(pl, key(*i)) && !app.settings.fd_hidden_tabs.iter().any(|h| h == key(*i))).collect();
         let visible = if visible.is_empty() { vec![0] } else { visible };
-        let labels: Vec<&str> = visible.iter().map(|i| TABS[*i]).collect();
+        let labels: Vec<&str> = visible.iter().map(|i| if *i == SIMPLE_ACTIONS { "Actions" } else { TABS[*i] }).collect();
         let mut sel = visible.iter().position(|i| *i == self.tab).unwrap_or(0);
         let strip_top = ui.available_rect_before_wrap().min;
         let strip = if app.settings.fd_tabs_multiline {
@@ -536,6 +544,7 @@ impl FlightDataView {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| match self.tab {
                 0 => self.quick_ui(ui, app, cs),
                 1 => self.actions_ui(ui, app, cs),
+                SIMPLE_ACTIONS => self.simple_actions_ui(ui, app),
                 2 => messages_ui(ui, app),
                 3 => self.checklist.ui(ui, cs),
                 4 => gauges_ui(ui, cs, app.assets),
@@ -549,6 +558,27 @@ impl FlightDataView {
                 _ => self.dflogs_ui(ui, app),
             });
         });
+    }
+
+    /// tabActionsSimple (Basic layout): Auto, Loiter and RTL.
+    fn simple_actions_ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
+        let o = ui.max_rect().min;
+        for (y, text, mode) in [(20.0, "Auto", "Auto"), (49.0, "Loiter", "Loiter"), (78.0, "RTL", "RTL")] {
+            let r = Rect::from_min_size(o + Vec2::new(150.0, y), Vec2::new(47.0, 23.0));
+            if ui.put(r, |ui: &mut egui::Ui| theme::button_sized(ui, text, r.size())).clicked() {
+                match app.link {
+                    Some(l) => {
+                        let fw = l.shared.read().cs.firmware;
+                        match fw.modes().into_iter().find(|(_, n)| n.eq_ignore_ascii_case(mode)) {
+                            Some((k, _)) => l.send(LinkCommand::SetMode(k)),
+                            None => app.toasts.error("Command Failed"),
+                        }
+                    }
+                    None => app.toasts.error("Command Failed"),
+                }
+            }
+        }
+        ui.allocate_rect(Rect::from_min_size(o, Vec2::new(287.0, 110.0)), Sense::hover());
     }
 
     fn quick_ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, cs: &CurrentState) {

@@ -93,6 +93,16 @@ fn page_visible(v: Vis, app: &AppCtx) -> bool {
     }
 }
 
+/// DisplayView flags: the Advanced group needs isAdvancedMode, Terminal displayTerminal.
+fn layout_allows(page: &str, app: &AppCtx) -> bool {
+    let pl = &app.settings.planner;
+    match page {
+        "Advanced" | "Script REPL" => crate::display::advanced_mode(pl),
+        "Terminal" => crate::display::advanced_mode(pl) && crate::display::terminal(pl),
+        _ => true,
+    }
+}
+
 pub struct SetupView {
     page: usize,
     forms: std::collections::HashMap<&'static str, crate::forms::FormState>,
@@ -186,7 +196,7 @@ impl SetupView {
 
     pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
         // map visible pages to BackstageView items (parents keep their indices)
-        let visible: Vec<usize> = (0..PAGES.len()).filter(|i| page_visible(PAGES[*i].2, app)).collect();
+        let visible: Vec<usize> = (0..PAGES.len()).filter(|i| page_visible(PAGES[*i].2, app) && layout_allows(PAGES[*i].0, app)).collect();
         let items: Vec<BsvItem> = visible
             .iter()
             .map(|i| BsvItem { label: PAGES[*i].0.to_string(), parent: PAGES[*i].1.and_then(|p| visible.iter().position(|v| *v == p)) })

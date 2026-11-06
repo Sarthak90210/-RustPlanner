@@ -60,8 +60,10 @@ fn pages(app: &AppCtx) -> Vec<Page> {
             if matches!(fw, Firmware::ArduCopter2 | Firmware::ArduPlane) {
                 v.push(Page::ExtendedTuning);
             }
-            v.push(Page::StandardParams);
-            v.push(Page::AdvancedParams);
+            if crate::display::friendly_params(&app.settings.planner) {
+                v.push(Page::StandardParams);
+                v.push(Page::AdvancedParams);
+            }
             if has("OSD") {
                 v.push(Page::OnboardOsd);
             }
