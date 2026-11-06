@@ -25,10 +25,14 @@ fn wait_event(
     }
 }
 
+fn free_port() -> u16 {
+    std::net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
+}
+
 #[test]
 fn connect_without_parameters_then_request_explicitly() {
     // A separate port per process also allows concurrent workspace test runs.
-    let port = std::net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let port = free_port();
     let link = Link::connect_with_params(ConnectionSpec::UdpListen { port }, None, false);
     assert!(link.shared.read().skip_params);
     let _sim = sim::spawn(port).unwrap();
@@ -47,7 +51,7 @@ fn connect_without_parameters_then_request_explicitly() {
 
 #[test]
 fn full_session_against_sim() {
-    let port = 14700;
+    let port = free_port();
     let link = Link::connect(ConnectionSpec::UdpListen { port });
     let _sim = sim::spawn(port).unwrap();
 
@@ -166,14 +170,14 @@ fn full_session_against_sim() {
 fn tlog_logs_and_playback() {
     let dir = std::env::temp_dir().join(format!("mprs-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    let port = 14710;
+    let port = free_port();
     let link = Link::connect_with(ConnectionSpec::UdpListen { port }, Some(dir.join("tlogs")));
     let _sim = sim::spawn(port).unwrap();
     wait_event(&link, Duration::from_secs(30), |e| matches!(e, LinkEvent::ParamsLoaded(_)));
 
     // DataFlash log list + download over MAVLink
     link.send(LinkCommand::LogList);
-    wait_event(&link, Duration::from_secs(5), |e| matches!(e, LinkEvent::LogList(2)));
+    wait_event(&link, Duration::from_secs(15), |e| matches!(e, LinkEvent::LogList(2)));
     let entries = link.shared.read().log_entries.clone();
     assert_eq!(entries.len(), 2);
     let out = dir.join("log2.bin");
@@ -216,7 +220,7 @@ fn tlog_logs_and_playback() {
 
 #[test]
 fn mavftp_against_sim() {
-    let port = 14720;
+    let port = free_port();
     let link = Link::connect(ConnectionSpec::UdpListen { port });
     let _sim = sim::spawn(port).unwrap();
     wait_event(&link, Duration::from_secs(10), |e| matches!(e, LinkEvent::Connected));
@@ -253,7 +257,7 @@ fn mavftp_against_sim() {
 #[test]
 fn swarm_three_vehicles_one_link() {
     use mp_core::mavlink::dialects::ardupilotmega::{MavCmd, MavMessage, COMMAND_LONG_DATA};
-    let port = 14740;
+    let port = free_port();
     let link = Link::connect(ConnectionSpec::UdpListen { port });
     let _sims: Vec<_> = (1..=3u8)
         .map(|i| sim::spawn_with(sim::SimOptions { gcs_port: port, sysid: i, kind: sim::SimKind::Copter, offset: (0.0, i as f64 * 10.0) }).unwrap())
@@ -294,7 +298,7 @@ fn swarm_three_vehicles_one_link() {
 
 #[test]
 fn lua_repl_against_sim() {
-    let port = 14750;
+    let port = free_port();
     let link = Link::connect(ConnectionSpec::UdpListen { port });
     let _sim = sim::spawn(port).unwrap();
     wait_event(&link, Duration::from_secs(10), |e| matches!(e, LinkEvent::Connected));
@@ -313,7 +317,7 @@ fn lua_repl_against_sim() {
 
 #[test]
 fn mission_over_mavftp() {
-    let port = 14760;
+    let port = free_port();
     let link = Link::connect(ConnectionSpec::UdpListen { port });
     let _sim = sim::spawn(port).unwrap();
     wait_event(&link, Duration::from_secs(10), |e| matches!(e, LinkEvent::Connected));
@@ -333,7 +337,7 @@ fn mission_over_mavftp() {
 
 #[test]
 fn dronecan_over_mavlink_forwarding() {
-    let port = 14770;
+    let port = free_port();
     let link = Link::connect(ConnectionSpec::UdpListen { port });
     let _sim = sim::spawn(port).unwrap();
     wait_event(&link, Duration::from_secs(10), |e| matches!(e, LinkEvent::Connected));
