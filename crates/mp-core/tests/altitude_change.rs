@@ -105,6 +105,55 @@ fn send(peer: &Peer, component: u8, message: MavMessage) {
     .unwrap();
     peer.writer.lock().unwrap().write_all(&bytes).unwrap();
 }
+
+#[test]
+fn parameter_clear_then_reassign_waits_for_each_readback_and_cancels_on_target_change() {
+    let (link, peer) = Peer::connect();
+    for value in [0.0, 10.0] { link.send(LinkCommand::SetParam { name: "SERVO9_FUNCTION".into(), value }); }
+    let next = || {
+        let MavMessage::PARAM_SET(p) = receive(&peer, Duration::from_secs(3), |m| matches!(m, MavMessage::PARAM_SET(_))) else { unreachable!() };
+        assert_eq!((p.target_system, p.target_component), (42, 1));
+        p
+    };
+    let first = next();
+    assert_eq!(first.param_value, 0.0);
+    let end = Instant::now() + Duration::from_millis(150);
+    while Instant::now() < end { assert!(!matches!(peer.message(), Some(MavMessage::PARAM_SET(_))), "A second value overtook its pending readback"); }
+    let ack = |p: PARAM_SET_DATA, value: f32| {
+        send(&peer, 1, MavMessage::PARAM_VALUE(PARAM_VALUE_DATA { param_id: p.param_id, param_value: value, param_type: MavParamType::MAV_PARAM_TYPE_REAL32, param_count: 1, param_index: 0 }));
+    };
+    let result = || {
+        loop {
+            if let LinkEvent::ParamSet { name, ok } = link.events.recv_timeout(Duration::from_secs(3)).unwrap() {
+                assert_eq!(name, "SERVO9_FUNCTION");
+                return ok;
+            }
+        }
+    };
+    ack(first, 0.0);
+    assert!(result());
+    let second = next();
+    assert_eq!(second.param_value, 10.0);
+    ack(second, 10.0);
+    assert!(result());
+    assert_eq!(link.shared.read().params["SERVO9_FUNCTION"].value, 10.0);
+
+    for value in [0.0, 10.0] { link.send(LinkCommand::SetParam { name: "SERVO9_FUNCTION".into(), value }); }
+    let first = next();
+    ack(first, 3.0); // The autopilot rejects the requested value.
+    assert!(!result());
+    let second = next();
+    assert_eq!(second.param_value, 10.0);
+    ack(second, 10.0);
+    assert!(result());
+
+    for value in [0.0, 10.0] { link.send(LinkCommand::SetParam { name: "SERVO9_FUNCTION".into(), value }); }
+    assert_eq!(next().param_value, 0.0);
+    link.send(LinkCommand::SetTarget { sysid: 43, compid: 1 });
+    assert!(!result());
+    let end = Instant::now() + Duration::from_millis(850);
+    while Instant::now() < end { assert!(!matches!(peer.message(), Some(MavMessage::PARAM_SET(_))), "An old parameter write survived the vehicle switch"); }
+}
 fn wait_result(link: &Link) -> Result<(), String> {
     let end = Instant::now() + Duration::from_secs(7);
     loop {

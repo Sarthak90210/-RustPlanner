@@ -387,6 +387,7 @@ struct Worker {
     got_heartbeat: bool,
     param_fetch: Option<ParamFetch>,
     pending_sets: HashMap<String, PendingSet>,
+    queued_sets: HashMap<String, VecDeque<f32>>,
     mission: Option<MissionOp>,
     pending_cmd: Option<PendingCmd>,
     command_queue: VecDeque<(MavCmd, [f32; 7])>,
@@ -438,6 +439,7 @@ impl Worker {
             got_heartbeat: false,
             param_fetch: None,
             pending_sets: HashMap::new(),
+            queued_sets: HashMap::new(),
             mission: None,
             pending_cmd: None,
             command_queue: VecDeque::new(),
@@ -543,6 +545,10 @@ impl Worker {
             LinkCommand::Send(m) => self.send(*m)?,
             LinkCommand::RequestParams => self.start_param_fetch()?,
             LinkCommand::SetParam { name, value } => {
+                if self.pending_sets.contains_key(&name) || self.queued_sets.get(&name).is_some_and(|q| !q.is_empty()) {
+                    self.queued_sets.entry(name).or_default().push_back(value);
+                    return Ok(());
+                }
                 self.send_param_set(&name, value)?;
                 self.pending_sets.insert(
                     name,
@@ -684,6 +690,7 @@ impl Worker {
                     for (name, _) in std::mem::take(&mut self.pending_sets) {
                         self.event(LinkEvent::ParamSet { name, ok: false });
                     }
+                    self.queued_sets.clear();
                     if let Some(operation) = self.mission.take() {
                         match operation {
                             MissionOp::Upload { mission_type, .. } => self.event(LinkEvent::MissionUploaded {
@@ -1527,6 +1534,17 @@ impl Worker {
                 }))?;
             }
         }
+
+        // Preserve write order for a parameter that is cleared and then reassigned
+        // (ConfigMount). Each value gets its own readback, retry and result.
+        let ready: Vec<String> = self.queued_sets.keys().filter(|n| !self.pending_sets.contains_key(*n)).cloned().collect();
+        for name in ready {
+            if let Some(value) = self.queued_sets.get_mut(&name).and_then(VecDeque::pop_front) {
+                self.send_param_set(&name, value)?;
+                self.pending_sets.insert(name.clone(), PendingSet { value, sent: now, tries: 1 });
+            }
+        }
+        self.queued_sets.retain(|_, q| !q.is_empty());
 
         // Param set retries
         let retry: Vec<(String, f32)> = self

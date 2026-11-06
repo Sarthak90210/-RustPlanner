@@ -122,13 +122,20 @@ Independent parity reviews are recorded under `judging/`. Round 09 rates the sam
 6.8/10 overall and lists the next confirmed gaps. Reviews are qualitative scores, not measured feature
 completion percentages, and do not establish parity for unreviewed screens or platforms.
 
-The next implementation run adds ConfigMount's RC/SERVO output choices, RC input choices, dynamic
+Run 10 adds ConfigMount's RC/SERVO output choices, RC input choices, dynamic
 PWM/reverse bindings and shutter routing on the original Camera Gimbal layout. Compass rows now map
 priority IDs to the matching detected device, include unprioritized devices, and rewrite the first three
 priorities after reordering or removing missing entries. The initial-parameter calculator selects 3.x
 or 4.x filter names using the reported firmware major version, with parameter-based fallback if absent.
-These changes have six new regression tests; the Windows workspace suite passes 87 tests. Fresh
-Compass and Camera Gimbal renderer receipts are under `target/judging/round10`.
+These changes have six new regression tests; run 10 passed 87 Windows workspace tests. Its independent
+review is `judging/round-10.json`, scoring 6.9/10 and recording the remaining gaps. Fresh Compass and
+Camera Gimbal renderer receipts are under `target/judging/round10`.
+
+Run 11 preserves the complete compass row list during page activity, adds the reboot prompt and
+calibration gate, and performs the gimbal page's activation writes. Writes to the same parameter now
+queue behind its pending readback, preserving clear/reassign operations. Verification includes a real
+egui selector click through the production MAVLink link to simulator readback, an independent TCP peer
+checking parameter ACK/rejection and target-switch cancellation, and five-device compass lifecycle tests.
 
 ## License
 

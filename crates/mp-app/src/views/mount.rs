@@ -121,7 +121,11 @@ impl MountPage {
 
     /// ConfigMount.SelectedIndexChanged: clear previous assignments, set MODE=3,
     /// then update shutter, pitch, roll and yaw in the reference order.
-    fn routing_writes(&self, params: &BTreeMap<String, Param>) -> Vec<(String, f32)> {
+    fn routing_writes(
+        &self,
+        params: &BTreeMap<String, Param>,
+        selection_changed: bool,
+    ) -> Vec<(String, f32)> {
         let mut writes = Vec::new();
         let channels = outputs(params.contains_key("SERVO1_MIN"));
         let clear = |writes: &mut Vec<(String, f32)>, function: f32, keep: &str| {
@@ -132,11 +136,19 @@ impl MountPage {
                 }
             }
         };
-        for (ctl, _, function) in AXES {
-            clear(&mut writes, function as f32, self.st.get(ctl));
-        }
-        if let Some(mode) = forms::resolve(params, "MNT_MODE") {
-            writes.push((mode, 3.0));
+        if selection_changed {
+            for (ctl, _, function) in AXES {
+                clear(&mut writes, function as f32, self.st.get(ctl));
+            }
+            if let Some(mode) = forms::resolve(params, "MNT_MODE") {
+                writes.push((mode, 3.0));
+            }
+        } else {
+            for (ctl, _, function) in AXES {
+                if self.st.get(ctl) == "Disable" {
+                    clear(&mut writes, function as f32, "");
+                }
+            }
         }
         let shutter = self.st.get("CMB_shuttertype");
         clear(&mut writes, 10.0, "");
@@ -159,6 +171,18 @@ impl MountPage {
         writes
     }
 
+    fn write(&self, params: &BTreeMap<String, Param>, changed: bool, app: &mut AppCtx) {
+        let writes = self.routing_writes(params, changed);
+        if let Some((missing, _)) = writes.iter().find(|(name, _)| !params.contains_key(name)) {
+            app.toasts
+                .error(format!("Failed to set Param\n{missing} is not available"));
+        } else if let Some(link) = app.link {
+            for (name, value) in writes {
+                link.send(LinkCommand::SetParam { name, value });
+            }
+        }
+    }
+
     pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
         let Some(link) = app.link else { return };
         let (params, target) = {
@@ -168,7 +192,11 @@ impl MountPage {
                 (s.cs.sysid, s.cs.compid, s.params.contains_key("SERVO1_MIN")),
             )
         };
+        let activating = self.target != Some(target);
         self.prepare(&params, target);
+        if activating && !app.readonly && params.contains_key("CAM_TRIGG_TYPE") {
+            self.write(&params, false, app);
+        }
         let clicks = ui
             .add_enabled_ui(params.contains_key("CAM_TRIGG_TYPE"), |ui| {
                 forms::show(ui, app, "mount", &mut self.st)
@@ -180,17 +208,7 @@ impl MountPage {
             } else if !app.readonly
                 && (AXES.iter().any(|(c, _, _)| *c == ctl) || ctl == "CMB_shuttertype")
             {
-                let writes = self.routing_writes(&params);
-                if let Some((missing, _)) =
-                    writes.iter().find(|(name, _)| !params.contains_key(name))
-                {
-                    app.toasts
-                        .error(format!("Failed to set Param\n{missing} is not available"));
-                } else {
-                    for (name, value) in writes {
-                        link.send(LinkCommand::SetParam { name, value });
-                    }
-                }
+                self.write(&params, true, app);
                 self.bind(&params);
             }
         }
@@ -200,6 +218,7 @@ impl MountPage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, Instant};
     fn fixture(modern: bool) -> BTreeMap<String, Param> {
         let mut p = BTreeMap::new();
         let prefix = if modern { "SERVO" } else { "RC" };
@@ -241,6 +260,179 @@ mod tests {
     }
 
     #[test]
+    fn rendered_selector_click_updates_the_simulator_and_receives_parameter_readback() {
+        use mp_core::{
+            comms::ConnectionSpec,
+            link::{Link, LinkEvent},
+            mavlink::dialects::ardupilotmega::MavMessage,
+        };
+        let port = std::net::UdpSocket::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let link = Link::connect_with_params(ConnectionSpec::UdpListen { port }, None, false);
+        let _sim = mp_core::sim::spawn(port).unwrap();
+        loop {
+            if matches!(
+                link.events.recv_timeout(Duration::from_secs(5)).unwrap(),
+                LinkEvent::Connected
+            ) {
+                break;
+            }
+        }
+        for (name, value) in [("SERVO6_FUNCTION", 7.0), ("SERVO9_FUNCTION", 10.0)] {
+            link.send(LinkCommand::SetParam {
+                name: name.into(),
+                value,
+            });
+            loop {
+                if let LinkEvent::ParamSet { name: n, ok } =
+                    link.events.recv_timeout(Duration::from_secs(4)).unwrap()
+                {
+                    if n == name {
+                        assert!(ok);
+                        break;
+                    }
+                }
+            }
+        }
+        let mut params = fixture(true);
+        params.get_mut("SERVO6_FUNCTION").unwrap().value = 7.0;
+        params.get_mut("SERVO9_FUNCTION").unwrap().value = 10.0;
+        link.shared.write().params = params;
+        let (tx, rx) = crossbeam_channel::unbounded();
+        link.send(LinkCommand::Subscribe { msgid: 22, tx });
+
+        let ctx = egui::Context::default();
+        let assets = crate::assets::Assets::load(&ctx);
+        let mut tiles = crate::map::TileCache::offline();
+        let mut toasts = crate::app::Toasts::default();
+        let mut settings = crate::app::Settings::default();
+        let mut joystick = crate::joystick::Joystick::default();
+        let mut page = MountPage::default();
+        let mut frame = |events| {
+            let mut actions = Vec::new();
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::Vec2::new(900.0, 700.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    let mut app = AppCtx {
+                        link: Some(&link),
+                        extra_links: &[],
+                        tiles: &mut tiles,
+                        toasts: &mut toasts,
+                        settings: &mut settings,
+                        actions: &mut actions,
+                        sim_running: true,
+                        assets: &assets,
+                        readonly: false,
+                        joystick: &mut joystick,
+                    };
+                    page.ui(ui, &mut app);
+                },
+            );
+            fn labels(shape: &egui::Shape, out: &mut Vec<(String, egui::Pos2)>) {
+                match shape {
+                    egui::Shape::Text(t) => {
+                        out.push((t.galley.text().to_string(), t.pos + t.galley.size() / 2.0))
+                    }
+                    egui::Shape::Vec(v) => {
+                        for s in v {
+                            labels(s, out);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            out.textures_delta.clear();
+            let mut text = Vec::new();
+            for s in out.shapes {
+                labels(&s.shape, &mut text);
+            }
+            text
+        };
+        let readback = |name: &str, value: f32| {
+            let end = Instant::now() + Duration::from_secs(5);
+            while Instant::now() < end {
+                if let Ok(MavMessage::PARAM_VALUE(p)) = rx.recv_timeout(Duration::from_millis(100))
+                {
+                    let bytes = &p.param_id[..];
+                    let n = String::from_utf8_lossy(bytes)
+                        .trim_end_matches('\0')
+                        .to_string();
+                    if n == name && p.param_value == value {
+                        return;
+                    }
+                }
+            }
+            panic!("No readback for {name}={value}");
+        };
+        frame(Vec::new()); // Actual page activation emits clear/reassign and trigger writes.
+        readback("SERVO9_FUNCTION", 0.0);
+        readback("SERVO9_FUNCTION", 10.0);
+        frame(Vec::new());
+        let click_events = |pos, pressed| {
+            vec![
+                egui::Event::PointerMoved(pos),
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ]
+        };
+        let (at, size) = forms::ctl_rect("mount", "mavlinkComboBoxTilt").unwrap();
+        let control = egui::Pos2::ZERO + at + size / 2.0;
+        frame(click_events(control, true));
+        frame(click_events(control, false));
+        let labels = frame(Vec::new());
+        let pos = labels
+            .iter()
+            .find(|(s, _)| s == "SERVO7")
+            .unwrap_or_else(|| panic!("Missing output choice: {labels:?}"))
+            .1;
+        frame(click_events(pos, true));
+        frame(click_events(pos, false));
+        frame(Vec::new());
+        readback("SERVO7_FUNCTION", 7.0);
+        drop(frame);
+        assert_eq!(page.st.get("mavlinkComboBoxTilt"), "SERVO7");
+        assert_eq!(page.st.bindings["mavlinkNumericUpDownTSM"], "SERVO7_MIN");
+        assert_eq!(link.shared.read().params["SERVO7_FUNCTION"].value, 7.0);
+    }
+
+    #[test]
+    fn activation_updates_functions_and_trigger_without_forcing_mount_mode() {
+        let mut params = fixture(true);
+        params.get_mut("SERVO6_FUNCTION").unwrap().value = 7.0;
+        params.get_mut("SERVO7_FUNCTION").unwrap().value = 7.0;
+        params.get_mut("SERVO9_FUNCTION").unwrap().value = 10.0;
+        let mut page = MountPage::default();
+        page.prepare(&params, (1, 1, true));
+        let writes = page.routing_writes(&params, false);
+        assert_eq!(
+            writes,
+            vec![
+                ("SERVO9_FUNCTION".into(), 0.0),
+                ("SERVO9_FUNCTION".into(), 10.0),
+                ("CAM_TRIGG_TYPE".into(), 0.0),
+                ("SERVO7_FUNCTION".into(), 7.0)
+            ]
+        );
+        assert!(!writes
+            .iter()
+            .any(|(n, _)| n == "MNT_MODE" || n == "SERVO6_FUNCTION"));
+    }
+
+    #[test]
     fn mount_reassigns_outputs_without_leaving_old_functions_and_binds_servo_controls() {
         let mut params = fixture(true);
         params.get_mut("SERVO6_FUNCTION").unwrap().value = 7.0;
@@ -254,7 +446,7 @@ mod tests {
         assert_eq!(page.st.check_values["mavlinkCheckBoxTR"], (1.0, 0.0));
         page.st.set("mavlinkComboBoxTilt", "SERVO7");
         page.st.set("CMB_shuttertype", "Relay");
-        let writes = page.routing_writes(&params);
+        let writes = page.routing_writes(&params, true);
         assert_eq!(
             writes,
             vec![
@@ -287,7 +479,7 @@ mod tests {
         );
         page.st.set("mavlinkComboBoxPan", "Disable");
         assert!(page
-            .routing_writes(&params)
+            .routing_writes(&params, true)
             .contains(&("RC5_FUNCTION".into(), 0.0)));
         page.leave();
         params.get_mut("RC5_FUNCTION").unwrap().value = 0.0;

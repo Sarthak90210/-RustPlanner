@@ -1192,6 +1192,7 @@ impl eframe::App for MissionPlannerApp {
                     View::Simulation => simulation.ui(ui, &mut app),
                     View::Help => help::ui(ui),
                 }
+                setup.dialogs(ui.ctx(), &mut app);
             });
 
         self.progress_window(&ctx);

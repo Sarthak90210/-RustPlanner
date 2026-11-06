@@ -10,6 +10,135 @@ pub struct Row {
     pub orientation: Option<i64>,
 }
 
+#[derive(Default)]
+pub struct PageState {
+    pub rows: Vec<Row>,
+    target: Option<(u8, u8)>,
+    active: bool,
+    pub reboot_required: bool,
+    pub reboot_prompt: bool,
+    pub calibrate_after_reboot: bool,
+}
+
+impl PageState {
+    /// Preserve the complete row order until deactivation, including rows outside
+    /// the three priority parameters that are written back to the autopilot.
+    pub fn activate(&mut self, target: (u8, u8), params: &BTreeMap<String, Param>) -> bool {
+        if !self.active || self.target != Some(target) {
+            if self.target != Some(target) {
+                self.reboot_required = false;
+                self.reboot_prompt = false;
+                self.calibrate_after_reboot = false;
+            }
+            self.target = Some(target);
+            self.rows = rows(params);
+            self.active = true;
+            return self.rows.iter().any(|r| r.missing);
+        }
+        false
+    }
+
+    pub fn leave(&mut self) {
+        if self.active && self.reboot_required {
+            self.reboot_prompt = true;
+        }
+        self.active = false;
+    }
+
+    pub fn move_row(&mut self, a: usize, b: usize) -> Vec<(String, f32)> {
+        self.rows.swap(a, b);
+        self.reboot_required = true;
+        priority_writes(&self.rows)
+    }
+
+    pub fn remove_missing(&mut self) -> Vec<(String, f32)> {
+        self.rows.retain(|r| !r.missing);
+        self.reboot_required = true;
+        priority_writes(&self.rows)
+    }
+
+    pub fn start_calibration(&mut self) -> bool {
+        if self.reboot_required {
+            self.reboot_prompt = true;
+            self.calibrate_after_reboot = true;
+            false
+        } else {
+            true
+        }
+    }
+
+    pub fn answer_reboot(&mut self, yes: bool) -> bool {
+        self.reboot_prompt = false;
+        let calibrate = yes && self.calibrate_after_reboot;
+        self.calibrate_after_reboot = false;
+        if yes {
+            self.reboot_required = false;
+        }
+        calibrate
+    }
+
+    pub fn dialogs(&mut self, ctx: &egui::Context, app: &mut crate::app::AppCtx) {
+        if !self.reboot_prompt {
+            return;
+        }
+        if !app.connected() {
+            self.reboot_prompt = false;
+            self.calibrate_after_reboot = false;
+            return;
+        }
+        if app.link.is_some_and(|link| {
+            let s = link.shared.read();
+            self.target != Some((s.cs.sysid, s.cs.compid))
+        }) {
+            self.reboot_prompt = false;
+            self.calibrate_after_reboot = false;
+            self.reboot_required = false;
+            return;
+        }
+        let mut answer = None;
+        egui::Window::new("Reboot")
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.label("Reboot required, reboot now?");
+                ui.horizontal(|ui| {
+                    if ui.button("Yes").clicked() {
+                        answer = Some(true);
+                    }
+                    if ui.button("No").clicked() {
+                        answer = Some(false);
+                    }
+                });
+            });
+        if let Some(yes) = answer {
+            let calibrate = self.answer_reboot(yes);
+            if let Some(link) = app.link.filter(|_| app.connected() && !app.readonly) {
+                if yes {
+                    link.send(mp_core::link::LinkCommand::CommandLong {
+                        command: 246,
+                        params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                    });
+                }
+                if calibrate {
+                    begin_calibration(link);
+                }
+            }
+        }
+    }
+}
+
+pub fn begin_calibration(link: &mp_core::link::Link) {
+    {
+        let mut s = link.shared.write();
+        s.mag_progress = [0; 3];
+        s.mag_report = Default::default();
+    }
+    link.send(mp_core::link::LinkCommand::CommandLong {
+        command: 42424,
+        params: [0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+    });
+}
+
 fn value(params: &BTreeMap<String, Param>, names: &[&str]) -> Option<f32> {
     names.iter().find_map(|n| params.get(*n).map(|p| p.value))
 }
@@ -92,6 +221,48 @@ mod tests {
                 )
             })
             .collect()
+    }
+
+    #[test]
+    fn five_device_order_survives_frames_and_moves_into_the_first_three() {
+        let p = fixture(&[
+            ("COMPASS_PRIO1_ID", 101.0),
+            ("COMPASS_PRIO2_ID", 202.0),
+            ("COMPASS_PRIO3_ID", 303.0),
+            ("COMPASS_DEV_ID", 101.0),
+            ("COMPASS_DEV_ID2", 202.0),
+            ("COMPASS_DEV_ID3", 303.0),
+            ("COMPASS_DEV_ID4", 404.0),
+            ("COMPASS_DEV_ID5", 505.0),
+        ]);
+        let mut page = PageState::default();
+        page.activate((1, 1), &p);
+        page.move_row(4, 3);
+        page.activate((1, 1), &p); // A subsequent frame must retain the local list.
+        assert_eq!(page.rows[3].id, 505);
+        let writes = page.move_row(3, 2);
+        assert_eq!(writes[2], ("COMPASS_PRIO3_ID".into(), 505.0));
+        assert!(!page.start_calibration());
+        assert!(page.reboot_prompt && page.reboot_required);
+        assert!(!page.answer_reboot(false));
+        assert!(page.reboot_required);
+        assert!(!page.start_calibration());
+        assert!(page.answer_reboot(true));
+        assert!(page.start_calibration());
+    }
+
+    #[test]
+    fn leaving_after_reorder_prompts_and_another_vehicle_resets_pending_state() {
+        let p = fixture(&[("COMPASS_DEV_ID", 101.0), ("COMPASS_DEV_ID2", 202.0)]);
+        let mut page = PageState::default();
+        page.activate((1, 1), &p);
+        page.move_row(1, 0);
+        page.leave();
+        assert!(page.reboot_prompt);
+        page.answer_reboot(false);
+        page.activate((2, 1), &p);
+        assert!(!page.reboot_prompt && !page.reboot_required);
+        assert_eq!(page.rows[0].id, 101);
     }
 
     #[test]

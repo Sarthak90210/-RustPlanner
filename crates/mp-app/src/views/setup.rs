@@ -136,6 +136,7 @@ pub struct SetupView {
     extra: crate::views::setup_pages::ExtraPages,
     dev: crate::views::device_pages::DevicePages,
     mount: crate::views::mount::MountPage,
+    compass: crate::views::compass::PageState,
 }
 
 struct Terminal {
@@ -285,6 +286,7 @@ impl Default for SetupView {
             extra: Default::default(),
             dev: Default::default(),
             mount: Default::default(),
+            compass: Default::default(),
         }
     }
 }
@@ -298,9 +300,12 @@ impl SetupView {
     pub fn close_terminal(&mut self) {
         self.term = None;
         self.mount.leave();
+        self.compass.leave();
     }
 
     /// Select a page by its BackstageView label.
+    pub fn dialogs(&mut self, ctx: &egui::Context, app: &mut AppCtx) { self.compass.dialogs(ctx, app); }
+
     pub fn goto(&mut self, name: &str) {
         if let Some(i) = PAGES.iter().position(|p| p.0 == name) {
             self.page = i;
@@ -329,6 +334,7 @@ impl SetupView {
         let name = PAGES[if sel != before { self.page } else { shown }].0;
         if name != "Terminal" { self.term = None; }
         if name != "Camera Gimbal" { self.mount.leave(); }
+        if name != "Compass" { self.compass.leave(); }
         egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::bg()).inner_margin(6)).show(ui, |ui| {
             match name {
                 "Install Firmware" if app.connected() => return self.extra.fw_disabled(ui, app),
@@ -364,7 +370,7 @@ impl SetupView {
                 "Heli Setup" => self.extra.heli(ui, app, link),
                 "Frame Type" => frame_type(ui, app, link),
                 "Accel Calibration" => accel(ui, self, link),
-                "Compass" => compass(ui, app, link),
+                "Compass" => compass(ui, app, link, &mut self.compass),
                 "Radio Calibration" => self.radio(ui, app, link),
                 "Servo Output" => servo_output(ui, app),
                 "Serial Ports" => self.serial_ports(ui, app, link),
@@ -1853,7 +1859,7 @@ fn frame_type(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
 }
 
 /// ConfigHWCompass2: priority table, use-compass checkboxes, onboard mag calibration.
-fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
+fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link, state: &mut super::compass::PageState) {
     let (params, progress, report, fw) = {
         let s = link.shared.read();
         (s.params.clone(), s.mag_progress, s.mag_report.clone(), s.cs.firmware)
@@ -1877,7 +1883,9 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
         x += w;
     }
     let orient_opts = mp_core::param_meta::options(fw, "COMPASS_ORIENT");
-    let mut compass_rows = super::compass::rows(&params);
+    let target = { let s = link.shared.read(); (s.cs.sysid, s.cs.compid) };
+    if state.activate(target, &params) { app.toasts.error("Your compass configuration has changed, please review the missing compass"); }
+    let compass_rows = &state.rows;
     let mut swap: Option<(usize, usize)> = None;
     for (i, row) in compass_rows.iter().enumerate() {
         let raw = row.id;
@@ -1924,18 +1932,16 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
             x += w;
         }
     }
-    let mut rewrite = false;
+    let mut rewrite = None;
     if let Some((a, b)) = swap {
-        compass_rows.swap(a, b);
-        rewrite = true;
+        if !app.readonly { rewrite = Some(state.move_row(a, b)); }
     }
     let rm = r(560.0, 261.0, 115.0, 23.0);
     if ui.put(rm, |ui: &mut egui::Ui| theme::button_sized(ui, "Remove Missing", rm.size())).clicked() {
-        compass_rows.retain(|r| !r.missing);
-        rewrite = true;
+        if !app.readonly { rewrite = Some(state.remove_missing()); }
     }
-    if rewrite && !app.readonly {
-        for (name, value) in super::compass::priority_writes(&compass_rows) {
+    if let Some(writes) = rewrite {
+        for (name, value) in writes {
             if params.contains_key(&name) { link.send(LinkCommand::SetParam { name, value }); }
         }
     }
@@ -1956,7 +1962,8 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
     }
     p.text(o + Vec2::new(0.0, 297.0), egui::Align2::LEFT_TOP, "A reboot is required to adjust the ordering.", f.clone(), Color32::WHITE);
     let rb = r(3.0, 313.0, 75.0, 23.0);
-    if ui.put(rb, |ui: &mut egui::Ui| theme::button_sized(ui, "Reboot", rb.size())).clicked() {
+    if ui.put(rb, |ui: &mut egui::Ui| theme::button_sized(ui, "Reboot", rb.size())).clicked() && !app.readonly {
+        state.reboot_required = false;
         link.send(LinkCommand::CommandLong { command: 246, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
     }
     p.text(o + Vec2::new(0.0, 339.0), egui::Align2::LEFT_TOP, "A mag calibration is required to remap the above changes.", f.clone(), Color32::WHITE);
@@ -1966,15 +1973,12 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
     let gr = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(g.min + Vec2::new(x, y), Vec2::new(w, h));
     for (x, t, cmd) in [(44.0, "Start", 42424u16), (125.0, "Accept", 42425), (206.0, "Cancel", 42426)] {
         let br = gr(x, 20.0, 75.0, 23.0);
-        if ui.put(br, |ui: &mut egui::Ui| theme::button_sized(ui, t, br.size())).clicked() {
+        if ui.put(br, |ui: &mut egui::Ui| theme::button_sized(ui, t, br.size())).clicked() && !app.readonly {
             if cmd == 42424 {
-                let mut s = link.shared.write();
-                s.mag_progress = [0; 3];
-                s.mag_report = Default::default();
+                if state.start_calibration() { super::compass::begin_calibration(link); }
+                continue;
             }
-            // DO_START_MAG_CAL: all compasses, retry, autosave
-            let params = if cmd == 42424 { [0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0] } else { [0.0; 7] };
-            link.send(LinkCommand::CommandLong { command: cmd, params });
+            link.send(LinkCommand::CommandLong { command: cmd, params: [0.0; 7] });
         }
     }
     for i in 0..3 {
