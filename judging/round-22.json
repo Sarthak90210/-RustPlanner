@@ -1,0 +1,204 @@
+{
+  "round": 22,
+  "review_type": "independent fixed-revision source/reference review, native image inspection, full Windows test rerun and live CI status verification",
+  "reviewed_head": "04ae5afb27e0ec8ac263aaefe56b76033dcd2d7c",
+  "reviewed_base": "0e4a905c4d97b619380da2c2fa2485cd473f4e01",
+  "date": "2026-11-06",
+  "evidence_cutoff_utc": "2026-11-06T10:21:36Z",
+  "verdict": "Run 22 closes both source-confirmed chooser defects from round 21. Extensionless mobile Sequence saves now produce loadable .txt files, unsupported extensions are rejected, and background selection cancellation preserves the existing texture. Android CI now requests a debug APK, but that job has not reached packaging at cutoff. Known software and native-platform gaps still prevent 10/10.",
+  "scores": {
+    "overall": 8.6,
+    "ui_ux": 8.8,
+    "features": 8.4,
+    "scale": "Qualitative exact-original software parity scores, not completion percentages. Overall equally weights UI/UX and features. The small increase credits two verified behavior corrections. Pending CI and a desktop screenshot do not count as mobile package or runtime proof. Prior reports provide context, not a fresh exhaustive audit."
+  },
+  "rationale": "The independent full workspace rerun passes all 142 tests. The new filesystem test proves that formation becomes formation.txt, is listed by the Load filter and deserializes through Sequence::load. An egui Escape event reaches the editor handler and leaves the existing background texture intact. Source now also preserves the background on decode failure and reports the error. The native Sequence capture matches the current executable hash and retains the editor layout. These are narrow, supported improvements. The chooser still lacks complete Save/Open/overwrite interaction evidence, mobile provider access remains absent, the iOS wrapper and application package are unfinished, and no mobile runtime was exercised. CurrentState, video, plugins, localization and transport omissions remain material to exact-clone parity.",
+  "scope": {
+    "inspected": [
+      "Fixed HEAD and HEAD^..HEAD diff in platform.rs, swarm.rs, build.yml and README",
+      "Original LayoutEditor.cs sequence load/save and background-image selection handlers",
+      "Current mobile entry points, data-directory fallback, file listing and platform text-file paths",
+      "CurrentState property defaults and acceleration/high-latency coverage, DATA video controls, plugin controls, language selector and transports",
+      "Original CurrentState, HereLink video, PluginLoader, language list and BLE/WinUSB registration reference paths",
+      "judging/round-21.json and judging/round-20.json for earlier gap context"
+    ],
+    "rust_render_images_viewed": [
+      "target/judging/round22/54_swarm_sequence.png"
+    ],
+    "capture_integrity": {
+      "binary": "target/debug/missionplanner.exe",
+      "independently_verified_sha256": "23A9B4EBDA714A3FA7F250818792635C4005B1857C8C6570184792B39FD52816",
+      "manifest": "target/judging/round22/54_swarm_sequence.manifest.json",
+      "captured_utc": "2026-11-06T10:19:26.8267887Z",
+      "receipt_scope": "The manifest hash matches an independent Get-FileHash of the current executable. Receipt identifies a native eframe viewport at 1280x800 with a connected simulator and completed 3115-parameter download. The image visibly shows an empty Layout Editor. It proves retained rendering, not picker interaction or original/native visual equivalence."
+    },
+    "reviewer_executed_verification": [
+      "Fixed HEAD matched; worktree was initially clean.",
+      "cargo test --workspace passed all 142 tests: 85 mp-app unit tests, 37 mp-core unit tests, 7 altitude_change tests, 9 link_sim tests and 4 mavserial tests. No failures or ignored tests.",
+      "The rerun includes the real-filesystem extensionless save/load test, picker name/Escape test, editor background-cancel event test and three-vehicle Sequence simulator test.",
+      "Viewed the current native capture and matched its receipt hash to the executable.",
+      "git diff --check completed without errors.",
+      "Fetched the current GitHub Actions run, jobs and artifacts through the GitHub connector. Run 42201707835 has the exact reviewed HEAD."
+    ],
+    "ci": {
+      "run_url": "https://github.com/Sarthak90210/-RustPlanner/actions/runs/42201707835",
+      "verified_head_sha": "04ae5afb27e0ec8ac263aaefe56b76033dcd2d7c",
+      "status_at_cutoff": "in_progress",
+      "artifacts_at_cutoff": [],
+      "android": {
+        "job_id": 127839169994,
+        "status": "in_progress",
+        "conclusion": null,
+        "configured_command": "cargo apk build -p mp-app --lib --target aarch64-linux-android",
+        "observed": "Android setup and SDK/NDK installation succeeded. cargo-apk installation is in progress. The debug APK build and artifact upload are pending.",
+        "claim_limit": "The workflow avoids the prior release-signing requirement by choosing debug packaging. A produced APK, valid debug signature, installation and launch are not yet verified."
+      },
+      "ios": {
+        "job_id": 127839170445,
+        "status": "in_progress",
+        "conclusion": null,
+        "configured_command": "cargo build -p mp-app --lib --release --target aarch64-apple-ios",
+        "observed": "Current release-library build is in progress. Prior-revision success is context only; no current build completion or installable app is credited."
+      },
+      "desktop": {
+        "windows": "Job 127839170341 is restoring the cache. Tests/build/upload are pending. Local Windows reviewer tests passed separately.",
+        "macos": "Job 127839170533 is running cargo test --workspace. Release build and upload are pending.",
+        "linux": "Job 127839170309 completed dependency setup and is running cargo test --workspace. Release build and upload are pending."
+      }
+    },
+    "verification_limits": [
+      "Original Mission Planner was not launched for an equal-state native interaction or pixel comparison.",
+      "The real-filesystem test calls selected_path and Sequence save/load directly. It does not click the picker Save/Open controls or test a populated formation.",
+      "The cancellation test injects Escape into egui with a preloaded synthetic texture. It does not drive the OS dialog or mobile app. Pointer Cancel, overwrite confirmation, image-decode failure and changing the name after overwrite confirmation lack focused interaction tests.",
+      "No mobile emulator/device, Android APK installation, iOS app wrapper, lifecycle, file persistence or USB serial workflow was exercised.",
+      "All five current CI jobs remain in progress at cutoff. No current platform build or package success is inferred from configuration or earlier revisions.",
+      "No exhaustive fresh audit of every original page, property, message decoder or tool was performed."
+    ],
+    "reviewer_actions": "Read-only source/reference/CI/image inspection and a full test rerun; authored judging/round-22.json only. No implementation changes, commit, push or subagents."
+  },
+  "run22_dispositions": [
+    {
+      "area": "Mobile Sequence save-name round trip",
+      "status": "closed",
+      "closed_parts": "Missing extensions acquire the first allowed extension, .txt for Sequence Save. Unsupported extensions return no valid path; case-insensitive .TXT remains valid. The filesystem test saves formation.txt, finds it under the Load filter and loads the same Sequence. This closes the round-21 formation/formation.dat invisibility finding.",
+      "remaining": "Complete picker event and overwrite coverage remains a separate evidence gap. The chooser still supports only the app files directory.",
+      "evidence": [
+        "crates/mp-app/src/platform.rs:90-101",
+        "crates/mp-app/src/platform.rs:142-156",
+        "crates/mp-app/src/swarm.rs:1273-1274",
+        "crates/mp-app/src/swarm.rs:1318-1319",
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:366-373"
+      ]
+    },
+    {
+      "area": "Background-image cancellation",
+      "status": "closed",
+      "closed_parts": "Some(None) now leaves the existing background untouched, consistent with the original OK-only assignment. The egui Escape test reaches the real editor handler and checks the texture ID, image-controls state and absence of an error. Decode failure also preserves the image and adds an error toast by source inspection.",
+      "remaining": "Decode-error and pointer-Cancel paths have not been replayed in the native app or a mobile runtime.",
+      "evidence": [
+        "crates/mp-app/src/swarm.rs:1433-1445",
+        "crates/mp-app/src/swarm.rs:1487-1505",
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:559-564"
+      ]
+    },
+    {
+      "area": "Normalized name before overwrite confirmation",
+      "status": "partial",
+      "closed_parts": "The Save click copies the resolved filename into the displayed name before enabling the second Overwrite action. Editing the name resets overwrite state.",
+      "remaining": "No test clicks through existing formation.txt from an extensionless name, verifies displayed formation.txt, cancels without altering bytes, and then confirms exactly one overwrite. Source is consistent, but the requested workflow has not been demonstrated.",
+      "evidence": [
+        "crates/mp-app/src/platform.rs:120-130"
+      ]
+    },
+    {
+      "area": "Android debug APK workflow",
+      "status": "partial",
+      "closed_parts": "CI no longer requests an unsigned release build. It requests cargo-apk's debug build and uploads target/debug/apk/*.apk under an explicit debug artifact name. README distinguishes this from distribution signing.",
+      "remaining": "Current job is still installing cargo-apk; build and upload are pending. Verify the resulting artifact, signature, manifest and installation/launch. Distribution release signing remains unconfigured.",
+      "evidence": [
+        ".github/workflows/build.yml:51-57",
+        "README.md:264-265",
+        "https://github.com/Sarthak90210/-RustPlanner/actions/runs/42201707835/job/127839169994"
+      ]
+    }
+  ],
+  "new_regression_findings": [],
+  "new_regression_findings_limit": "No new material regression was found in the inspected diff. This is not an exhaustive no-defects claim.",
+  "remaining_software_gaps": [
+    {
+      "priority": 1,
+      "status": "open",
+      "area": "Native packages, runtime and mobile file access",
+      "next_fix": "Finish current CI and inspect the Android debug APK, then install and launch it. Exercise Sequence save/load, overwrite, cancellation and restart persistence at a mobile viewport. Add the iOS wrapper, stable application-data path, signing and package workflow. Implement Android SAF and iOS document providers and port remaining mobile file-open paths.",
+      "evidence": [
+        ".github/workflows/build.yml:51-57",
+        ".github/workflows/build.yml:69",
+        "crates/mp-app/src/lib.rs:46",
+        "crates/mp-app/src/lib.rs:60-62",
+        "crates/mp-app/src/lib.rs:78-79",
+        "crates/mp-app/src/lib.rs:93-99",
+        "crates/mp-app/src/platform.rs:38-55",
+        "crates/mp-app/src/platform.rs:186-189",
+        "crates/mp-app/src/swarm.rs:1268-1269",
+        "README.md:47-49",
+        "README.md:257-259"
+      ],
+      "limits": "The fixed 899x494 editor and iOS temp-directory fallback are source risks requiring runtime checks. They are not device-tested failures."
+    },
+    {
+      "priority": 2,
+      "status": "open",
+      "area": "CurrentState defaults, acceleration magnitudes and high-latency decoding",
+      "next_fix": "Match original numeric defaults before telemetry, implement accelsq/accelsq2/accelsq3 and HIGH_LATENCY/HIGH_LATENCY2 updates, then audit the remaining registered properties against original-derived fixtures. Rust still initializes extra empty and explicitly tests gen_speed as null; the original float property begins at zero.",
+      "evidence": [
+        "crates/mp-core/src/state.rs:239",
+        "crates/mp-core/src/state.rs:307-318",
+        "crates/mp-core/src/state.rs:434-444",
+        "crates/mp-core/src/state.rs:920-921",
+        "crates/mp-core/src/state_properties.rs:78",
+        "crates/mp-core/src/state_properties.rs:91",
+        "crates/mp-core/src/state_properties.rs:104",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:556",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:624",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:692",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:2187",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:2445-2589"
+      ]
+    },
+    {
+      "priority": 3,
+      "status": "open",
+      "area": "DATA video pipelines",
+      "next_fix": "Implement GStreamer discovery/source/stop, HereLink and payload/gimbal video behavior. The current source actions always report missing GStreamer. Verify deterministic video through visible DATA controls.",
+      "evidence": [
+        "crates/mp-app/src/views/flight_data.rs:479-486",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3186-3213"
+      ]
+    },
+    {
+      "priority": 4,
+      "status": "open",
+      "area": "Plugin execution and localization",
+      "next_fix": "Implement a compatible plugin lifecycle and callbacks, then apply translated resources and persisted culture. The plugin page still lists files with disabled controls, and the language selector still contains only English.",
+      "evidence": [
+        "crates/mp-app/src/hotkey_tools.rs:103-112",
+        "crates/mp-app/src/views/config.rs:1087",
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:146-179",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:106-128"
+      ]
+    },
+    {
+      "priority": 5,
+      "status": "open",
+      "area": "Native transports and remaining map/tool parity",
+      "next_fix": "Add BLE/WinUSB/custom and Android USB-serial adapters. Close documented GDAL raster/opacity and place-name geocoder gaps, and drive native DATA/guided/MAV-switch workflows. A configured cross-platform CI matrix does not establish native runtime parity.",
+      "evidence": [
+        "crates/mp-core/src/comms.rs:26-46",
+        "crates/mp-core/src/comms.rs:131-135",
+        "reference/MissionPlanner/MainV2.cs:3629-3641",
+        "README.md:111-118"
+      ]
+    }
+  ],
+  "ten_out_of_ten_criterion": "An honest 10 requires no known material software discrepancy within the promised exact-clone scope and adequate decoder, interaction and native-platform evidence. This run fixes two real defects, but pending packaging, absent mobile runtime proof and known missing behavior make 10 unsupported. Physical flight qualification is separate from this software parity score."
+}

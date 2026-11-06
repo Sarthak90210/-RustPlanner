@@ -112,8 +112,9 @@ Known gaps include:
 - Mission Planner's place-name geocoder. The current Zoom To dialog takes latitude and longitude.
 - Loading or executing existing .NET plugins. The plugin tool lists files only.
 - Complete source-by-source behavior and visual parity across all pages and tools.
-- Native macOS/Linux verification and Android/iOS packaging and device runs. CI jobs are configured,
-  but local Windows tests do not establish that these platforms build or run.
+- Native GUI verification outside Windows and Android/iOS device runs. Run 22 CI passed desktop
+  tests/release builds on Windows/macOS/Linux, Android debug APK packaging and the iOS release library.
+  The iOS app bundle and mobile runtime behavior remain unverified. See `judging/platform-build-22.json`.
 - Mobile file picking and Android USB serial integration. Mobile serial and some desktop-only tools
   need platform adapters; several mobile file-open paths currently return no selection.
 - Real flight-controller, firmware-flashing, camera, radio and tracker qualification for the implemented tools.

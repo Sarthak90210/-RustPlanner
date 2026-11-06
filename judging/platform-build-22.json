@@ -1,0 +1,113 @@
+{
+  "round": 22,
+  "head": "04ae5afb27e0ec8ac263aaefe56b76033dcd2d7c",
+  "workflow": "https://github.com/Sarthak90210/-RustPlanner/actions/runs/42201707835",
+  "jobs": [
+    {
+      "name": "android",
+      "id": 127839169994,
+      "conclusion": "success",
+      "validation_steps": [
+        {
+          "name": "Run cargo install cargo-apk",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run cargo apk build -p mp-app --lib --target aarch64-linux-android",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/upload-artifact@v4",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "desktop (ubuntu-latest)",
+      "id": 127839170309,
+      "conclusion": "success",
+      "validation_steps": [
+        {
+          "name": "Run cargo test --workspace",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run cargo build -p mp-app --release",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/upload-artifact@v4",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "desktop (windows-latest)",
+      "id": 127839170341,
+      "conclusion": "success",
+      "validation_steps": [
+        {
+          "name": "Run cargo test --workspace",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run cargo build -p mp-app --release",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/upload-artifact@v4",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "ios",
+      "id": 127839170445,
+      "conclusion": "success",
+      "validation_steps": [
+        {
+          "name": "Run cargo build -p mp-app --lib --release --target aarch64-apple-ios",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "desktop (macos-latest)",
+      "id": 127839170533,
+      "conclusion": "success",
+      "validation_steps": [
+        {
+          "name": "Run cargo test --workspace",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run cargo build -p mp-app --release",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/upload-artifact@v4",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "android": {
+    "artifact_id": 13495685236,
+    "artifact_url": "https://github.com/Sarthak90210/-RustPlanner/actions/runs/42201707835/artifacts/13495685236",
+    "archive_sha256": "sha256:fd471d6438f6478656e17c5644dff0d737329a1bd28cb52de41e52da9ab4fdec",
+    "local_apk": "target/packages/round22/MissionPlannerRS.apk",
+    "apk_sha256": "920cd1de45725f769ac6aba6e2f786e88ec2b9ab3fb8b363f7c6bcec4a5d07b4",
+    "apk_size_bytes": 371925350,
+    "application_id": "org.ardupilot.missionplanner.rs",
+    "abi": "arm64-v8a",
+    "native_library": "libmp_app.so",
+    "apk_signing_block_present": true
+  },
+  "limits": [
+    "Android artifact is a debug build; release distribution signing is not configured.",
+    "APK structure inspected; no device installation or application runtime exercise.",
+    "iOS job builds the release library, not an application bundle or signed IPA.",
+    "Desktop CI tests and release builds are separate from native GUI runtime verification.",
+    "The source parity judge's 8.6 rating and documented feature gaps remain unchanged."
+  ]
+}
