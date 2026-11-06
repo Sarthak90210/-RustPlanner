@@ -19,6 +19,7 @@ pub mod mjpeg;
 pub mod more_tools;
 pub mod platform;
 pub mod rtcm;
+pub mod script_host;
 pub mod sitl;
 pub mod speech;
 pub mod srtm;

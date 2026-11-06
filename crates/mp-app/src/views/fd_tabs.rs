@@ -228,7 +228,21 @@ impl ExtraTabs {
                     let mut cmd = match ext.as_str() {
                         "py" => {
                             let mut c = Command::new(if cfg!(windows) { "python" } else { "python3" });
-                            c.arg(path);
+                            // Script.cs scope: cs, Script, MAV, mavutil, Ports through the host
+                            match (app.link, crate::script_host::prelude_path()) {
+                                (Some(l), Ok(prelude)) => match crate::script_host::start(l.shared.clone(), l.sender()) {
+                                    Ok(port) => {
+                                        c.env("MP_SCRIPT_PORT", port.to_string()).arg(prelude).arg(path);
+                                    }
+                                    Err(e) => {
+                                        app.toasts.error(format!("Script host: {e}"));
+                                        c.arg(path);
+                                    }
+                                },
+                                _ => {
+                                    c.arg(path);
+                                }
+                            }
                             c
                         }
                         "bat" => {
