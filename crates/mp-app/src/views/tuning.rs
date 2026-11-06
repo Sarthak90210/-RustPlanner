@@ -309,6 +309,7 @@ impl ExtendedTuning {
             lab(183.0, 332.0, "Tune");
             lab(183.0, 357.0, "Min");
             for (y, t, names) in [
+                (334.0, "RC6 Opt", &["CH6_OPT", "CH6_OPTION", "RC6_OPTION"][..]),
                 (361.0, "RC7 Opt", &["CH7_OPT", "CH7_OPTION", "RC7_OPTION"][..]),
                 (388.0, "RC8 Opt", &["CH8_OPT", "CH8_OPTION", "RC8_OPTION"][..]),
                 (415.0, "RC9 Opt", &["CH9_OPT", "CH9_OPTION", "RC9_OPTION"][..]),

@@ -455,6 +455,11 @@ impl Vehicle {
                 }
             }
         }
+        // AP_OSD_Screen defaults the metadata does not carry
+        for i in 1..=4 {
+            params.entry(format!("OSD{i}_CHAN_MIN")).or_insert(900.0);
+            params.entry(format!("OSD{i}_CHAN_MAX")).or_insert(2100.0);
+        }
         // outputs the defaults file does not assign are disabled
         for i in 1..=16 {
             params.entry(format!("SERVO{i}_FUNCTION")).or_insert(0.0);

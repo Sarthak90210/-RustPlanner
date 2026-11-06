@@ -135,8 +135,8 @@ impl OsdEditor {
             self.screen = screens[0];
         }
         let o = ui.max_rect().min;
-        // panel1 (right, 182 wide at x=957)
-        let px = o.x + 957.0;
+        // panel1: 182 wide, docked right (x=957 at the 1140px design size)
+        let px = (ui.max_rect().right() - 182.0).max(o.x + 912.0).min(o.x + 957.0);
         let btn = |ui: &mut egui::Ui, y: f32, h: f32, t: &str| {
             let r = Rect::from_min_size(Pos2::new(px + 20.0, o.y + 8.0 + y), Vec2::new(145.0, h));
             ui.put(r, |ui: &mut egui::Ui| theme::button_sized(ui, t, r.size())).clicked()
@@ -297,7 +297,7 @@ impl OsdEditor {
                 }
             }
         }
-        ui.allocate_rect(Rect::from_min_size(o, Vec2::new(1140.0, 705.0)), Sense::hover());
+        ui.allocate_rect(Rect::from_min_size(o, Vec2::new(px + 182.0 - o.x, 705.0)), Sense::hover());
     }
 
     /// cbAutoWriteOnLeave: called when the page is left.
