@@ -1,0 +1,210 @@
+{
+  "round": 44,
+  "date": "2026-11-06",
+  "review_type": "Independent adversarial source review of the raw parameter grid edit path (cell_value, ReadOnly, Out of range, Commit Params) against ConfigRawParams.cs, plus the Flight Plan screen against FlightPlanner.cs",
+  "reviewed_head": "198fbf2be697f220bc4e9833dfb5d1a578230079",
+  "reviewed_uncommitted_worktree": false,
+  "reviewed_files": [
+    "crates/mp-app/src/views/config.rs",
+    "crates/mp-app/src/app.rs",
+    "crates/mp-app/src/views/flight_plan.rs",
+    "crates/mp-app/src/views/flight_plan/menu.rs",
+    "crates/mp-app/src/platform.rs",
+    "crates/mp-core/src/link.rs",
+    "crates/mp-core/src/param_meta.rs",
+    "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigRawParams.cs",
+    "reference/MissionPlanner/GCSViews/FlightPlanner.cs",
+    "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs",
+    "reference/MissionPlanner/ExtLibs/Utilities/MissionPlanner.Utilities.csproj"
+  ],
+  "verdict": "REJECTED for exact-clone parity (Score: 6.5/10). The typed-text path of the params grid now follows Params_CellValueChanged closely: RC/HS _REV 0 to -1, comma as decimal point, an arithmetic expression evaluator, NaN/infinity rejection, the ReadOnly message, and the Out of range Yes/No modal. Commit Params now shows its message as a modal. But the grid has three other ways to change a value (the Options combo, the bitmask window, and the Set to default context menu). All three write the edit directly and skip the ReadOnly and range checks, which C# never skips because every control there writes through the Value cell. Escape commits a typed edit instead of cancelling it. The Options column has no NumericUpDown for ranged parameters. Commit Params reports success without waiting for the ack. Several C# message boxes are routed to Toasts::info, which only logs, so the user never sees them. On Flight Plan, the context menu is close to complete, but there is no undo history and no Ctrl+Z/O/S or Ctrl+Shift+W/R/F hotkeys. Write and Write Fast are the same action and skip every pre-write check C# runs (absolute-alt confirm, invalid home, grid errors, Low alt on WP#, zero-alt warning). Read does not confirm before clearing the list. Changing the command does not apply the C# defaults for TAKEOFF, LAND, DO_DIGICAM_CONTROL or UNKNOWN. Tests: 209 passed, 0 failed, 1 ignored, 0 warnings. Mobile file access is still limited to POSIX paths.",
+  "scores": {
+    "overall": 6.5,
+    "ui_ux": 6.8,
+    "features": 7.2,
+    "cross_platform_delivery": 4.0,
+    "scale": "Adversarial parity evaluation on a 0-10 exact-clone scale. 10/10 requires indistinguishable feature and UI/UX parity with Mission Planner C# on Windows, macOS, Linux, Android and iOS."
+  },
+  "independent_validation": [
+    {
+      "command": "git merge --ff-only 198fbf2 (worktree was at 536ceb9; 198fbf2 is its direct child on master)",
+      "result": "Fast-forwarded; reviewed tree is exactly 198fbf2",
+      "scope": "Ensured the review targets the requested head."
+    },
+    {
+      "command": "cargo test --workspace",
+      "result": "PASS: 209 passed, 0 failed, 1 ignored (mp-app lib 120 + 1 ignored, mp-core lib 64, altitude_change 7, high_latency 3, link_sim 9, maiden_flight 1, mavserial 4, proximity_wire 1, mp-plugin 0, mp-plugin-example 0, doctests 0); 0 compiler warnings in the log",
+      "scope": "Run locally on Windows 11. Two new tests since round 43: cell_values_follow_cellvaluechanged and disconnect_marks_in_flight_writes_failed."
+    },
+    {
+      "command": "gh run list --commit 198fbf2be697f220bc4e9833dfb5d1a578230079",
+      "result": "No CI run exists for 198fbf2 (latest run 42258215491 is for 536ceb9)",
+      "scope": "Cross-platform build of the reviewed head is unverified."
+    }
+  ],
+  "verified_improvements": [
+    "Typed-value parsing follows Params_CellValueChanged: cell_value() (config.rs:594-606) converts RC*/HS*_REV '0' to '-1', treats ',' as a decimal point, evaluates an arithmetic expression and rejects NaN/infinity, matching ConfigRawParams.cs:460-478. Covered by cell_values_follow_cellvaluechanged (config.rs:566-581).",
+    "The check order on the typed path is parse, then ReadOnly, then range (config.rs:1610-1626), as in ConfigRawParams.cs:474-516. The ReadOnly text matches C#: '<name> is marked as ReadOnly, and will not be changed' (config.rs:1616 vs ConfigRawParams.cs:488-491).",
+    "There is now an 'Out of range' Yes/No modal with the C# text '<name> value is out of range. Do you want to continue?' (config.rs:1224-1251). Answering No leaves the cell at its old value, matching ConfigRawParams.cs:499-516.",
+    "R43-02 partly resolved: Commit Params now shows 'Parameters committed to non-volatile memory' as a modal message box (config.rs:1001; Toasts::error renders the CustomMessageBox modal at app.rs:1116-1135), matching ConfigRawParams.cs:1105. The failure path is still missing (see R44-07).",
+    "Disconnecting during a parameter write now marks the in-flight writes as failed (config.rs:901-904, 1220-1222), with a test at config.rs:584-591."
+  ],
+  "findings": [
+    {
+      "id": "R44-01",
+      "priority": "P1",
+      "subsystem": "Flight Plan: write/read validation and confirmation",
+      "status": "missing feature",
+      "evidence": [
+        "C# BUT_write_Click (FlightPlanner.cs:645-710) asks 'Absolute Alt is selected are you sure?' when the alt mode is Absolute, rejects an invalid home ('Your home location is invalid'), rejects non-numeric cells ('There are errors in your mission'), blocks with 'Low alt on WP#n' when Alt < TXT_altwarn for anything except TAKEOFF/LAND/RTL, and runs checkZeroAlts (FlightPlanner.cs:8555+) for Plane/Copter. It then shows the 'Sending WP's' ProgressReporterDialogue (712-724).",
+        "C# but_writewpfast_Click (FlightPlanner.cs:1883-1899+) is a separate path: it says 'Only available for missions' for fence/rally and repeats the same validation.",
+        "C# BUT_read_Click (FlightPlanner.cs:606-637) asks 'This will clear your existing points, Continue?' (OK/Cancel) when rows exist, then shows the 'Receiving WP's' progress dialog.",
+        "Rust flight_plan.rs:471-483 ORs Write and Write Fast into one `write` flag and sends LinkCommand::WriteMission directly, with none of these checks or dialogs. Read sends ReadMission and overwrites the list without asking. A grep for 'Low alt on WP', 'errors in your mission', 'Absolute Alt is selected', 'clear your existing points' and 'ZeroAlt' in crates/mp-app/src finds nothing."
+      ],
+      "impact": "A mission with a below-minimum or zero-altitude waypoint uploads silently, which C# blocks. One click on Read wipes an unsaved plan. Write Fast is a duplicate button.",
+      "required_fix": "Add a shared pre-write validator that mirrors FlightPlanner.cs:647-710 and checkZeroAlts, with the C# texts and Yes/No/OK boxes. Add the Read confirm from FlightPlanner.cs:608-621. Make Write Fast a separate partial-write path that refuses non-mission types with 'Only available for missions'. Add a modal progress dialog for Sending/Receiving WP's. Add tests for each blocking case."
+    },
+    {
+      "id": "R44-02",
+      "priority": "P1",
+      "subsystem": "Flight Plan: undo history and hotkeys",
+      "status": "missing feature",
+      "evidence": [
+        "C# keeps List<List<Locationwp>> history (FlightPlanner.cs:112), fills it through updateUndoBuffer (FlightPlanner.cs:1038-1074, called at 19 sites including delete/up/down at 2247, 2258, 2267), and FlightPlanner.ProcessCmdKey (FlightPlanner.cs:345-413) binds Ctrl+Z to undo, Ctrl+O to load the WP file, Ctrl+S to save it, Ctrl+Shift+F to Write Fast, Ctrl+Shift+W to Write and Ctrl+Shift+R to Read.",
+        "Rust has no undo in flight_plan.rs or flight_plan/*.rs (grep -i undo finds nothing). Global Ctrl+Z is bound to the camera test (app.rs:972-983) on every screen, so pressing Ctrl+Z in Plan sends camera COMMAND_LONGs instead of undoing."
+      ],
+      "impact": "A deleted or moved waypoint cannot be restored. Muscle-memory shortcuts do something else or nothing.",
+      "required_fix": "Add a history stack to the planner, pushed before every grid/map mutation that C# calls updateUndoBuffer for. When View::FlightPlan is active and no text field has focus, handle Ctrl+Z/O/S and Ctrl+Shift+F/W/R in the planner before MainV2-level hotkeys run, matching WinForms ProcessCmdKey precedence."
+    },
+    {
+      "id": "R44-03",
+      "priority": "P2",
+      "subsystem": "Params grid: ReadOnly and range checks bypassed by non-text editors",
+      "status": "parity bug",
+      "evidence": [
+        "In C#, every editor writes into the Value cell, so Params_CellValueChanged (ConfigRawParams.cs:454-533) runs the ReadOnly and range checks for each one: bitmask ValueChanged sets Cells[Value].Value (1192-1196), the options combo sets it in SelectedIndexChanged (1262-1266), and the NumericUpDown sets it on TextChanged (1302-1306).",
+        "Rust's Options-column combo writes self.edits directly (config.rs:1664-1683) with no ReadOnly check.",
+        "The bitmask window writes self.edits directly (config.rs:1705-1736), with no ReadOnly check.",
+        "The 'Set to default' context menu sets v and changed=true (config.rs:1530-1536, 1562-1568, 1630-1633), with no ReadOnly or range check.",
+        "Only the typed path (1610-1626) and the value-cell combo (1589-1590) check read_only."
+      ],
+      "impact": "A parameter marked ReadOnly in the metadata can be queued and written to the autopilot through three UI paths that C# guards.",
+      "required_fix": "Send every value change (typed text, value combo, Options combo, bitmask, set-to-default) through one function equivalent to Params_CellValueChanged: ReadOnly box, then range Yes/No, then queue the edit. Add tests that the Options combo and bitmask window cannot edit a read_only param."
+    },
+    {
+      "id": "R44-04",
+      "priority": "P2",
+      "subsystem": "Params grid: Options column controls and Value cell editor",
+      "status": "UI divergence",
+      "evidence": [
+        "C# Params_RowEnter (ConfigRawParams.cs:1270-1316) puts a NumericUpDown in the Options cell for ranged numeric params. Its Minimum and Maximum come from the metadata range, its Increment from metadata or range/1000 rounded to a power of 10, and its DecimalPlaces from the increment.",
+        "C#'s Value column is always a plain text cell. The enum dropdown exists only in the Options column (1207-1266).",
+        "Rust renders the Options cell of a ranged param as static text 'lo hi' (config.rs:1650-1651, 1684-1686). There is no spinner.",
+        "Rust turns the Value cell itself into a ComboBox when meta.values is non-empty (config.rs:1580-1603), so an enum param cannot be typed into the Value cell as it can in C#."
+      ],
+      "impact": "Ranged parameters lose the bounded spin control operators use. Enum parameters behave differently from Mission Planner in the Value column.",
+      "required_fix": "Add a NumericUpDown-equivalent in the Options cell of the current row, with the C# min, max, increment, decimal places and clamping, routed through the R44-03 funnel. Keep the Value cell a text editor for every parameter type."
+    },
+    {
+      "id": "R44-05",
+      "priority": "P2",
+      "subsystem": "Params grid: Escape commits instead of cancelling",
+      "status": "parity bug",
+      "evidence": [
+        "In C#, CellBeginEdit saves cellEditValue (ConfigRawParams.cs:1114-1117), and the DataGridView cancels an edit on Escape, so CellValueChanged never fires.",
+        "Rust commits whenever the TextEdit loses focus (config.rs:1609-1628). egui's TextEdit gives up focus on Escape, so Escape runs cell_value() on the typed buffer and queues it. flight_plan.rs:760-762 already checks key_pressed(Escape) to cancel, so the fix pattern exists in the codebase."
+      ],
+      "impact": "An operator who presses Escape to back out of a typo gets the typo queued as a change, or an Out of range prompt.",
+      "required_fix": "In the config.rs value editor, check ui.input(|i| i.key_pressed(Key::Escape)) when focus is lost and drop the buffer. Add a UI-harness test like the flight_plan one at flight_plan.rs:1498-1499."
+    },
+    {
+      "id": "R44-06",
+      "priority": "P2",
+      "subsystem": "Message boxes routed to the log-only Toasts::info",
+      "status": "parity bug",
+      "evidence": [
+        "Toasts::info only calls log::info! (app.rs:154-156). Only Toasts::error reaches the CustomMessageBox modal (app.rs:159-165, 1116-1135). There are 30 info call sites.",
+        "Write Params success: C# shows '{n} parameters successfully saved.' titled 'Saved' (ConfigRawParams.cs:369). Rust config.rs:877 calls toasts.info('Parameters successfully saved.'), which is invisible and has no count.",
+        "No changes: C# shows 'No parameters were changed.' titled 'No changes' (ConfigRawParams.cs:371). Rust config.rs:969 calls toasts.info('No changes'), which is invisible.",
+        "Parameter count changed while unarmed: C# shows a message box (ConfigRawParams.cs:389). Rust config.rs:916 calls info, which is invisible.",
+        "Flight Plan Area: C# shows 'Area: N m2 / Acre / Hectare / sqf' titled 'Area' (FlightPlanner.cs:1758-1760). Rust flight_plan/menu.rs:204 calls info with different text, which is invisible."
+      ],
+      "impact": "Clicking Write Params, or Write Params with nothing changed, gives no visible result. The Area tool shows nothing.",
+      "required_fix": "Audit every toasts.info call against its C# counterpart. Where C# calls CustomMessageBox.Show, use the modal with the exact C# text and title (add a title parameter to Toasts). Keep info only where C# merely logs."
+    },
+    {
+      "id": "R44-07",
+      "priority": "P2",
+      "subsystem": "Commit Params: no failure path",
+      "status": "parity bug",
+      "evidence": [
+        "C# BUT_commitToFlash_Click (ConfigRawParams.cs:1093-1107) calls doCommand, which waits for COMMAND_ACK and throws TimeoutException('Timeout on read - doCommand') (MAVLinkInterface.cs:2829). On an exception it shows 'Invalid command' and returns. Only on success does it show 'Parameters committed to non-volatile memory'.",
+        "Rust config.rs:997-1002 sends LinkCommand::CommandLong{245} and shows the success box immediately. A grep for CommandAck in config.rs finds nothing."
+      ],
+      "impact": "The operator is told the parameters are in flash even when the autopilot rejected the command or never answered.",
+      "required_fix": "Track the pending PREFLIGHT_STORAGE command and show the success box only on a MAV_RESULT_ACCEPTED LinkEvent::CommandAck for 245. Show 'Invalid command' on timeout or rejection."
+    },
+    {
+      "id": "R44-08",
+      "priority": "P2",
+      "subsystem": "Flight Plan grid: command change defaults and Alt Warn behaviour",
+      "status": "missing feature",
+      "evidence": [
+        "C# Commands_SelectionChangeCommitted (FlightPlanner.cs:2485-2538) applies defaults when the command changes. TAKEOFF sets Alt to TXT_DefaultAlt if it was 0 and zeroes Lat/Lon. LAND sets Alt to 0. DO_DIGICAM_CONTROL sets Param1 to 1 if it was 0. UNKNOWN prompts with an InputBox ('Mavlink ID', 'Please enter the command ID').",
+        "Rust flight_plan.rs:684-702 only sets w.id = id. Its combo items use selectable_label(false, ...), so the current command is never highlighted.",
+        "C# Alt Warn is a write-time block ('Low alt on WP#', FlightPlanner.cs:695-705) comparing the grid Alt with TXT_altwarn. C# paints a cell red only for 'Invalid Home or wp Alt' (1227-1228).",
+        "Rust instead paints the Alt cell red from SRTM terrain clearance (flight_plan.rs:662-676) and never blocks the write."
+      ],
+      "impact": "A TAKEOFF row can keep a 0 alt and stale lat/lon. Custom command IDs cannot be entered. Alt Warn behaves differently from Mission Planner.",
+      "required_fix": "Port Commands_SelectionChangeCommitted's per-command defaults and the UNKNOWN InputBox. Highlight the current command in the combo. Make Alt Warn a write-time check with the C# message (shared with R44-01) and drop the SRTM-based red cell."
+    },
+    {
+      "id": "R44-09",
+      "priority": "P3",
+      "subsystem": "Flight Plan grid: distance column and cell editors",
+      "status": "UI divergence",
+      "evidence": [
+        "C# setgradanddistandaz (FlightPlanner.cs:6597-6624) shows Dist as the 3D slant distance sqrt(d^2+h^2)*multiplierdist, formatted '0.0'.",
+        "Rust flight_plan.rs:812-815 shows the horizontal distance, formatted '{:.0}'.",
+        "The C# Param1-4/Lat/Lon/Alt cells are DataGridView text cells. Rust uses egui DragValue (flight_plan.rs:704-780), so a click-drag on a cell changes lat/lon/alt."
+      ],
+      "impact": "Displayed leg distances differ from Mission Planner. Waypoints can be nudged by accident with the mouse.",
+      "required_fix": "Compute Dist as slant distance with one decimal. Replace the DragValue cells with click-to-edit text cells that commit on Enter or focus loss and cancel on Escape, with the 'Invalid Lat/Long, please fix' box (FlightPlanner.cs:2296-2309)."
+    },
+    {
+      "id": "R44-10",
+      "priority": "P3",
+      "subsystem": "Params grid: smaller divergences and non-C# additions",
+      "status": "UI divergence",
+      "evidence": [
+        "The ReadOnly box is titled 'Mission Planner' (app.rs:1122). C# titles it 'ReadOnly' (ConfigRawParams.cs:490).",
+        "An unparsable entry is added to self.failed (config.rs:1612-1614), so the tooltip reads '[Status: Set Failed on Autopilot]' (config.rs:1508-1509). C# only paints the cell red (ConfigRawParams.cs:526-529).",
+        "The expression evaluator treats '%' as modulo (config.rs:648-649) and has no functions. C# uses mXparser 4.3.3 (MissionPlanner.Utilities.csproj:47), whose modulo operator is '#' and which supports functions such as sqrt and sin.",
+        "Additions that C# does not have: a Reboot Now/Later prompt that sends a reboot (config.rs:1321-1351; C# shows an OK-only box at ConfigRawParams.cs:374-377), a '⚠️ Note' line and '[Reboot Required]' tags in the write confirm (config.rs:1272, 1280, 1288), and 'Set to default'/'Revert changes' context menus (config.rs:1530-1575)."
+      ],
+      "impact": "Small visual and behavioural differences from Mission Planner. Extra controls a Mission Planner user would not recognise.",
+      "required_fix": "Pass the C# titles to the modal. Track parse errors separately from write failures. Match mXparser operator semantics, or at least reject '%'. Remove or setting-gate the non-C# additions."
+    },
+    {
+      "id": "R44-11",
+      "priority": "P1",
+      "subsystem": "Mobile storage access (carried over from R43-01)",
+      "status": "architectural limitation",
+      "evidence": [
+        "platform.rs:63-90 document_roots() still lists hard-coded POSIX paths (/sdcard/Download, /sdcard/Documents on Android). There is no SAF or UIDocumentPicker bridge (no ACTION_OPEN_DOCUMENT, UIDocumentPicker or jni in platform.rs).",
+        "On mobile, the Flight Plan 'Inject Custom Map' button is a silent no-op: the rfd call is cfg-gated out (flight_plan.rs:423-438) and there is no fallback or message."
+      ],
+      "impact": "On Android 11+ and iOS, users cannot reach files in shared storage or cloud providers. Some buttons do nothing.",
+      "required_fix": "Add Android SAF intents (ACTION_OPEN_DOCUMENT, ACTION_CREATE_DOCUMENT, ACTION_OPEN_DOCUMENT_TREE) through JNI and an iOS UIDocumentPickerViewController bridge, and route every picker, including Inject Custom Map, through them."
+    }
+  ],
+  "next_concrete_task": "Port the Flight Plan pre-write validator and read confirm (FlightPlanner.cs:606-710, 1883-1899, checkZeroAlts at 8555) into flight_plan.rs:471-483 with the exact C# texts, and split Write Fast from Write. After that, send every params-grid value change through one Params_CellValueChanged-equivalent function so the Options combo, bitmask window and Set to default can no longer skip the ReadOnly and range checks (R44-03).",
+  "not_verified": [
+    "No CI run exists for 198fbf2, so the Android, iOS and macOS builds of this head are unverified.",
+    "No flight controller or SITL was connected. COMMAND_ACK handling for PREFLIGHT_STORAGE and the param write round-trip were checked by reading the source only.",
+    "The Escape-commits-edit behaviour (R44-05) is inferred from egui's TextEdit giving up focus on Escape and the missing Escape check at config.rs:1609. It was not reproduced in a running app.",
+    "mXparser 4.3.3 operator semantics ('#' for modulo, '%' not modulo) are from the library's documented operator set. The C# evaluator was not executed.",
+    "Flight Data was only spot-checked (the Arm/Disarm confirmation and Force Arm flow match FlightData.cs:1043-1089 at flight_data.rs:281-285 and 1114-1119). It was not reviewed in full.",
+    "Pixel-level layout and font rendering were not compared with WinForms."
+  ]
+}

@@ -81,6 +81,11 @@ impl Mjpeg {
         self.texture.as_ref().map(|t| t.id())
     }
 
+    /// The latest frame's pixel size.
+    pub fn size(&self) -> Option<[usize; 2]> {
+        self.texture.as_ref().map(|t| t.size())
+    }
+
     pub fn record(&self, path: Option<std::path::PathBuf>) -> std::io::Result<()> {
         let mut r = self.recorder.lock().unwrap();
         if let Some(w) = r.take() {

@@ -83,6 +83,12 @@ pub struct LinkShared {
     /// MAVLink Inspector: last message per (sysid, compid, msgid) with rate.
     pub inspector: BTreeMap<(u8, u8, u32), MsgStat>,
     pub proximity: crate::proximity::Proximity,
+    /// MAV.GimbalManager (GimbalManagerProtocol)
+    pub gimbal: crate::gimbal::GimbalManager,
+    /// MAV.Camera (CameraProtocol) of the selected vehicle's autopilot component
+    pub camera: crate::gimbal::Camera,
+    /// CameraProtocol.VideoStreams by (sysid, compid, stream_id)
+    pub video_streams: BTreeMap<(u8, u8, u8), crate::gimbal::VideoStream>,
     /// ADSB_VEHICLE reports by ICAO address: (callsign, lat, lng, alt m, heading deg, last seen)
     pub adsb: BTreeMap<u32, (String, f64, f64, f32, f32, Instant)>,
     /// MainV2.comPort.MAVlist: every vehicle heard on this link, by (sysid, compid)
@@ -249,6 +255,10 @@ pub enum LinkCommand {
     /// Forward the raw payload (sysid, compid, bytes) of a message id, for messages the
     /// dialect cannot decode (REMOTE_LOG_DATA_BLOCK carries plain u32 sequence numbers).
     SubscribeRaw { msgid: u32, tx: Sender<(u8, u8, Vec<u8>)> },
+    /// doCommandInt: a COMMAND_INT to the current vehicle, sent once.
+    CommandInt(crate::gimbal::CommandInt),
+    /// doCommand(..., requireack: false): a COMMAND_LONG sent once, outside the ACK queue.
+    CommandNoAck { command: u16, params: [f32; 7] },
     /// Make another vehicle on the link the current one (sysid selector).
     SetTarget { sysid: u8, compid: u8 },
     /// OnPacketReceived: every received frame's bytes, until the receiver is dropped.
@@ -685,6 +695,30 @@ impl Worker {
                     ok: false,
                 }),
             },
+            LinkCommand::CommandInt(c) => {
+                if let Some(command) = MavCmd::from_u16(c.command) {
+                    self.send(MavMessage::COMMAND_INT(COMMAND_INT_DATA {
+                        param1: c.params[0],
+                        param2: c.params[1],
+                        param3: c.params[2],
+                        param4: c.params[3],
+                        x: c.x,
+                        y: c.y,
+                        z: c.z,
+                        command,
+                        target_system: self.target_sys,
+                        target_component: self.target_comp,
+                        frame: MavFrame::from_u8(c.frame).unwrap_or(MavFrame::MAV_FRAME_GLOBAL),
+                        current: 0,
+                        autocontinue: 0,
+                    }))?
+                }
+            }
+            LinkCommand::CommandNoAck { command, params } => {
+                if let Some(c) = MavCmd::from_u16(command) {
+                    self.send_command_long(c, params, 0)?
+                }
+            }
             LinkCommand::SetCurrentWp(seq) => {
                 self.send(MavMessage::MISSION_SET_CURRENT(MISSION_SET_CURRENT_DATA {
                     seq,
@@ -712,6 +746,7 @@ impl Worker {
                         start_stop: if r > 0 { 1 } else { 0 },
                     }))?;
                 }
+                self.camera_and_gimbal_requests(status as i32)?;
             }
             LinkCommand::LogList => {
                 self.shared.write().log_entries.clear();
@@ -750,6 +785,12 @@ impl Worker {
                         self.event(LinkEvent::ParamSet { name, ok: false });
                     }
                     self.queued_sets.clear();
+                    {
+                        // each MAVState has its own Camera and GimbalManager
+                        let mut sh = self.shared.write();
+                        sh.camera = Default::default();
+                        sh.gimbal = Default::default();
+                    }
                     if let Some(operation) = self.mission.take() {
                         match operation {
                             MissionOp::Upload { mission_type, .. } => self.event(LinkEvent::MissionUploaded {
@@ -968,6 +1009,19 @@ impl Worker {
         }))
     }
 
+    /// CurrentState's rate request: MAV.Camera.RequestMessageIntervals(ratestatus) and
+    /// MAV.GimbalManager.Discover(), both without waiting for an ACK.
+    fn camera_and_gimbal_requests(&mut self, ratestatus: i32) -> io::Result<()> {
+        let mut cmds = self.shared.read().camera.message_intervals(ratestatus);
+        cmds.push(crate::gimbal::GimbalManager::discover());
+        for (command, params) in cmds {
+            if let Some(c) = MavCmd::from_u16(command) {
+                self.send_command_long(c, params, 0)?;
+            }
+        }
+        Ok(())
+    }
+
     fn request_datastreams(&mut self) -> io::Result<()> {
         // Mission Planner's default rates (CurrentState.rate*), attitude bumped for a smooth HUD.
         let streams = [
@@ -989,6 +1043,7 @@ impl Worker {
                 start_stop: 1,
             }))?;
         }
+        self.camera_and_gimbal_requests(2)?;
         // ask for AUTOPILOT_VERSION and HOME_POSITION
         self.send_command_long(
             MavCmd::MAV_CMD_REQUEST_MESSAGE,
@@ -1022,6 +1077,7 @@ impl Worker {
             let mut s = self.shared.write();
             let yaw = if hdr.system_id == s.cs.sysid as u32 { s.cs.yaw } else { s.mavs.get(&(hdr.system_id as u8, hdr.component_id)).map(|m| m.heading).unwrap_or(0.0) };
             s.proximity.update(hdr.system_id as u8, hdr.component_id, &msg, yaw, now);
+            s.gimbal.on_message(&msg);
             if hdr.system_id != 255 {
                 match &msg {
                     MavMessage::HEARTBEAT(hb) if hb.mavtype != MavType::MAV_TYPE_GCS && hb.autopilot != MavAutopilot::MAV_AUTOPILOT_INVALID => {
@@ -1119,6 +1175,9 @@ impl Worker {
             if from_ap {
                 s.cs.note_packet(hdr.sequence);
                 s.cs.update(&msg);
+                if let Some(v) = s.camera.on_message(&msg, hdr.system_id as u8, hdr.component_id) {
+                    s.video_streams.insert((v.sysid, v.compid, v.stream_id), v);
+                }
             }
             if let MavMessage::STATUSTEXT(t) = &msg {
                 let text = t

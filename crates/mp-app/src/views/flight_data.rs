@@ -1232,13 +1232,14 @@ impl FlightDataView {
             length: pl.get("GMapMarkerBase_length").and_then(|v| v.parse().ok()).unwrap_or(500.0),
         };
         let track_len: usize = pl.get("NUM_tracklength").and_then(|v| v.parse().ok()).unwrap_or(200);
+        if let Some(p) = super::gimbal_video::env_placement() {
+            self.gimbal.set_placement(p, app, ui.ctx());
+        }
         if self.gimbal.placement == GimbalPlacement::FullSized {
             let mrect = ui.available_rect_before_wrap();
             self.gimbal.render_video_box(ui, mrect, app);
             if self.gimbal.show_mini_map {
-                let mw = (mrect.width() * 0.3).min(320.0).max(120.0);
-                let mh = (mrect.height() * 0.3).min(240.0).max(90.0);
-                let mini_map_rect = Rect::from_min_size(mrect.max - Vec2::new(mw, mh), Vec2::new(mw, mh));
+                let mini_map_rect = super::gimbal_video::mini_map_rect(mrect);
                 let mut mini_ui = ui.new_child(egui::UiBuilder::new().max_rect(mini_map_rect));
                 map::show(&mut mini_ui, &mut app.settings.fd_map, app.tiles, |_ui, view, _resp, painter| {
                     if let Some(h) = home {
@@ -1256,6 +1257,7 @@ impl FlightDataView {
             return;
         }
         let mut context_latlng = None;
+        let gimbal_marker = self.gimbal.mouse_marker;
         let out = map::show(ui, &mut app.settings.fd_map, app.tiles, |_ui, view, resp, painter| {
             let pts: Vec<Pos2> = mission
                 .iter()
@@ -1279,6 +1281,12 @@ impl FlightDataView {
             }
             if let Some((lat, lng)) = guided {
                 map::draw_pin(painter, assets.marker_red.id(), assets.marker_shadow.id(), view.to_screen(lat, lng));
+            }
+            // GimbalVideoControl's mouseMapMarker: GMarkerGoogle blue_small, bottom centre on the point
+            if let Some((lat, lng)) = gimbal_marker {
+                let p = view.to_screen(lat, lng);
+                let sz = assets.marker_blue_small.size_vec2();
+                painter.image(assets.marker_blue_small.id(), Rect::from_min_size(p - Vec2::new(sz.x / 2.0, sz.y), sz), Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
             }
             for (callsign, lat, lng, alt, hdg) in &adsb {
                 // GMapMarkerADSBPlane: plane silhouette rotated to the heading, label below
@@ -1510,9 +1518,7 @@ impl FlightDataView {
         p.rect_filled(gr, 0.0, Color32::BLACK);
         p.galley(gr.min, gl, Color32::WHITE);
         if self.gimbal.placement == GimbalPlacement::Mini {
-            let mw = (mrect.width() * 0.3).min(320.0).max(120.0);
-            let mh = (mrect.height() * 0.3).min(240.0).max(90.0);
-            let mini_vid_rect = Rect::from_min_size(Pos2::new(mrect.right() - mw - 45.0, mrect.bottom() - mh), Vec2::new(mw, mh));
+            let mini_vid_rect = super::gimbal_video::mini_video_rect(mrect, self.gimbal.aspect());
             let mut vid_ui = ui.new_child(egui::UiBuilder::new().max_rect(mini_vid_rect));
             self.gimbal.render_video_box(&mut vid_ui, mini_vid_rect, app);
             ui.painter().rect_stroke(mini_vid_rect, 0.0, Stroke::new(1.0, Color32::from_gray(80)), egui::StrokeKind::Inside);

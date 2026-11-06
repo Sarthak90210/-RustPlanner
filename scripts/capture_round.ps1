@@ -72,12 +72,15 @@ $cases = @(
  @('60_plan_ko_kr','plan',1,1,0,0,12,'MP_LANGUAGE','ko-KR'),
  @('61_data_gstreamer_hud','data',1,1,0,0,14,'MP_GSTREAMER','1'),
  @('62_plan_ar','plan',1,1,0,0,12,'MP_LANGUAGE','ar'),
- @('63_plan_zh_hans','plan',1,1,0,0,12,'MP_LANGUAGE','zh-Hans')
+ @('63_plan_zh_hans','plan',1,1,0,0,12,'MP_LANGUAGE','zh-Hans'),
+ @('64_data_gimbal_full','data',1,1,0,0,14,'MP_GIMBAL','full'),
+ @('65_data_gimbal_mini','data',1,1,0,0,14,'MP_GIMBAL','mini'),
+ @('66_data_gimbal_popout','data',1,1,0,0,14,'MP_GIMBAL','popout')
 )
 $last = [Math]::Min($cases.Count, $From - 1 + $Count) - 1
 for ($ci = $From - 1; $ci -le $last; $ci++) {
     $case = $cases[$ci]
-    foreach ($name in @('MP_AUTOSIM','MP_DEMO','MP_SURVEY','MP_INSPECTOR','MP_TEMP','MP_SWARM','MP_COORDS','MP_TOOL','MP_STATUS_END','MP_LANGUAGE','MP_GSTREAMER')) {
+    foreach ($name in @('MP_AUTOSIM','MP_DEMO','MP_SURVEY','MP_INSPECTOR','MP_TEMP','MP_SWARM','MP_COORDS','MP_TOOL','MP_STATUS_END','MP_LANGUAGE','MP_GSTREAMER','MP_GIMBAL')) {
         Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
     }
     $env:MP_COORDS = 'GEO'

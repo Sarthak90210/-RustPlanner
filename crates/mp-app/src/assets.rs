@@ -18,6 +18,8 @@ pub struct Assets {
     pub marker_green: TextureHandle,
     pub marker_red: TextureHandle,
     pub marker_shadow: TextureHandle,
+    /// GMarkerGoogleType.blue_small
+    pub marker_blue_small: TextureHandle,
     pub sitl_plane: TextureHandle,
     pub sitl_plane_over: TextureHandle,
     pub sitl_rover: TextureHandle,
@@ -89,6 +91,7 @@ impl Assets {
             marker_green: asset!(ctx, "marker_green.png"),
             marker_red: asset!(ctx, "marker_red.png"),
             marker_shadow: asset!(ctx, "marker_shadow.png"),
+            marker_blue_small: asset!(ctx, "blue_small.png"),
             sitl_plane: asset!(ctx, "sitl_plane_ImageNormal.png"),
             sitl_plane_over: asset!(ctx, "sitl_plane_ImageOver.png"),
             sitl_rover: asset!(ctx, "sitl_rover_ImageNormal.png"),

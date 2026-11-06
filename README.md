@@ -356,6 +356,26 @@ and disabled files with the original colours. Save & Close stores "DisabledPlugi
 restart warning. Show Errors explains files that could not load, including .NET `.dll` and `.cs`
 plugins. `crates/mp-plugin-example` is a working plugin, and a test runs its whole lifecycle.
 
+Gimbal Video (DATA map menu, and the Payload tab's button) follows GimbalVideoControl and
+FlightData.cs:
+- Placement: Full Sized puts the video in the map panel with a 30% mini map. Mini puts a 30% video, sized
+  to the picture's aspect, left of the zoom bar. Pop Out opens the 600x400 "Gimbal Control" window.
+- Connection: the first time it opens it checks for GStreamer, offering the download. A second later it
+  connects to the camera's VIDEO_STREAM_INFORMATION stream (the saved "gimbal_video_stream" URI, else the
+  first) through CameraProtocol.GStreamerPipeline. Video Stream opens VideoStreamSelector.
+- Commands: `mp-core::gimbal` ports GimbalManagerProtocol and CameraProtocol. Gimbal commands go
+  through DO_GIMBAL_MANAGER_PITCHYAW and need GIMBAL_MANAGER_INFORMATION capabilities. Point Home and the
+  POI click send DO_SET_ROI_LOCATION as COMMAND_INT.
+- Camera: picture and recording are enabled from CAMERA_INFORMATION, and the camera reports tracking.
+- Keys: held keys slew and zoom (WASD/E/Q, Shift fast, Ctrl slow). Pressed keys run the actions
+  (Alt+F, Alt+R, L, N, H).
+- Mouse: a click aims the camera; Ctrl+click sets the ROI; Alt+click or Alt+drag starts tracking. Moving
+  the pointer puts a blue marker on the map where it meets the ground.
+- Shortcuts: opens GimbalControlSettingsForm. It stores "GimbalControlPreferences" in Json.NET's format,
+  with WinForms key codes, and asks before applying a clashing binding.
+- Not ported yet: Custom Settings (camera definition settings).
+- Captures: cases 64-66 (`MP_GIMBAL=full|mini|popout`).
+
 ## License
 
 GPL-3.0, like Mission Planner. Icons and marker images are Mission Planner / GMap.NET assets under the same license.
