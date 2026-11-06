@@ -35,8 +35,9 @@ const COLS: [(&str, f32); 21] = [
     ("Northing", 72.0),
     ("MGRS", 64.0),
     ("Delete", 40.0),
-    ("Up", 30.0),
-    ("Down", 30.0),
+    // Up.HeaderText / Down.HeaderText are empty in FlightPlanner.resx
+    ("", 30.0),
+    ("", 30.0),
     ("Grad %", 35.0),
     ("Angle", 35.0),
     ("Dist", 35.0),
@@ -634,7 +635,7 @@ impl FlightPlanView {
             }
             let r = Rect::from_min_size(Pos2::new(x, area.top()), Vec2::new(*w, hdr_h));
             p.rect_stroke(r, 0.0, Stroke::new(1.0, grid_line), StrokeKind::Inside);
-            p.with_clip_rect(r).text(r.left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, crate::i18n::t(&headers[i]), f.clone(), Color32::WHITE);
+            p.with_clip_rect(r).text(r.left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, header_text(i, &headers[i]), f.clone(), Color32::WHITE);
             x += w;
         }
 
@@ -1502,6 +1503,18 @@ mod coord_tests {
     }
 }
 
+
+/// Commands columns by their control names in FlightPlanner.resx.
+const COL_CONTROLS: [&str; 21] = ["", "Command", "Param1", "Param2", "Param3", "Param4", "Lat", "Lon", "Alt", "Frame", "coordZone", "coordEasting", "coordNorthing", "MGRS", "Delete", "Up", "Down", "Grad", "Angle", "Dist", "AZ"];
+
+/// A column header: P1-P4/Lat/Lon/Alt come from the command's parameter names
+/// (ChangeColumnHeader, untranslated); the rest from the column's own resource.
+fn header_text(col: usize, english: &str) -> String {
+    if (2..=8).contains(&col) {
+        return english.to_string();
+    }
+    COL_CONTROLS.get(col).and_then(|c| crate::i18n::control_text("FlightPlanner", &format!("{c}.HeaderText"))).unwrap_or_else(|| english.to_string())
+}
 
 /// FlightPlanner.FormatDistance: metres/kilometres, or feet/miles with Settings "distunits".
 fn format_distance(planner: &std::collections::BTreeMap<String, String>, km: f64, to_meter_or_feet: bool) -> String {

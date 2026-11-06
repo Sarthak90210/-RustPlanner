@@ -75,9 +75,17 @@ pub fn install(ctx: &egui::Context) {
         chain.extend(defaults.iter().cloned());
         defs.families.insert(family, chain);
     };
-    add(UI, ui_font(), FontFamily::Proportional);
-    add(ARIAL, arial(), FontFamily::Name(ARIAL.into()));
-    add(BOLD, arial_bold(), FontFamily::Name(BOLD.into()));
+    if crate::i18n::is_rtl(crate::i18n::culture()) {
+        // egui shapes each font-face run in one direction, so Latin comes from a face with no
+        // Arabic (egui's own) and Arabic from the script font; i18n::visual orders the runs
+        for family in [FontFamily::Proportional, FontFamily::Name(ARIAL.into()), FontFamily::Name(BOLD.into())] {
+            defs.families.insert(family, defaults.clone());
+        }
+    } else {
+        add(UI, ui_font(), FontFamily::Proportional);
+        add(ARIAL, arial(), FontFamily::Name(ARIAL.into()));
+        add(BOLD, arial_bold(), FontFamily::Name(BOLD.into()));
+    }
     ctx.set_fonts(defs);
 }
 
@@ -92,3 +100,4 @@ pub fn bold_id(size: f32) -> egui::FontId {
 pub fn ui_id(size: f32) -> egui::FontId {
     egui::FontId::proportional(size)
 }
+

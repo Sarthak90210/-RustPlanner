@@ -45,6 +45,10 @@ FORM_CLASSES = {
 }
 
 
+# views whose Rust port draws some controls by their original names
+CONTROL_VIEWS = {"FlightPlanner", "FlightData", "MainV2", "InitialSetup", "SoftwareConfig", "ConfigPlanner"}
+
+
 def mnemonic(text):
     """WinForms shows "&x" as an underlined access key and "&&" as "&" (MyButton strips it)."""
     return text.replace("&&", "\0").replace("&", "").replace("\0", "&").strip()
@@ -61,8 +65,9 @@ def read_resx(path):
         if data.get("type") or data.get("mimetype"):
             continue
         value = data.find("value")
-        if value is not None and value.text is not None:
-            out[data.get("name")] = value.text
+        if value is not None:
+            # an empty <value/> still applies: WinForms shows the control with no text
+            out[data.get("name")] = value.text or ""
     return out
 
 
@@ -108,6 +113,8 @@ def main():
                 forms[form] = texts
         # per view (ComponentResourceManager is per type): English -> translation in that .resx
         views = collections.defaultdict(dict)
+        # ComponentResourceManager keys for hand-built views drawn by control name
+        controls = collections.defaultdict(dict)
         votes = collections.defaultdict(collections.Counter)
         for base, tr in files.items():
             src = neutral.get(base, {})
@@ -119,6 +126,8 @@ def main():
                     continue
                 if not (strings or k.endswith(".Text") or k.endswith(".HeaderText") or k.endswith(".ToolTipText")):
                     continue
+                if view in CONTROL_VIEWS and not strings:
+                    controls[view][k] = mnemonic(v)
                 key, value = mnemonic(english), mnemonic(v)
                 # data-like keys ("0", "-", "1.0") are never UI text
                 if len(key) <= 1 or not re.search(r"[^\W\d_]", key) or key == value:
@@ -128,7 +137,7 @@ def main():
         # the fallback for views without a table: only text every .resx translates the same way
         text = {e: next(iter(c)) for e, c in sorted(votes.items()) if len(c) == 1}
         with open(os.path.join(OUT, f"{culture}.json"), "w", encoding="utf-8") as fh:
-            json.dump({"culture": culture, "forms": forms, "views": views, "text": text}, fh, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+            json.dump({"culture": culture, "forms": forms, "views": views, "controls": controls, "text": text}, fh, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         total += len(text)
         print(f"{culture}: {len(text)} unambiguous texts, {len(views)} views, {sum(len(v) for v in forms.values())} form controls in {len(forms)} forms")
     print("forms matched:", json.dumps(form_resx and {k: os.path.relpath(v, REF) for k, v in sorted(form_resx.items())}, indent=0))

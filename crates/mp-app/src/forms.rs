@@ -292,7 +292,7 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
         let r = Rect::from_min_size(at, Vec2::new(c.w.max(1.0), c.h.max(1.0)));
         maxy = maxy.max(r.bottom() - o.y);
         // ComponentResourceManager.ApplyResources: this form's culture resources
-        let text = crate::i18n::form_text(name, &c.name).map(str::to_string).or_else(|| c.text.clone()).unwrap_or_default();
+        let text = crate::i18n::form_text(name, &c.name).or_else(|| c.text.clone()).unwrap_or_default();
         let bound = if let Some(name) = st.bindings.get(&c.name) { resolve(&params, name) }
             else { c.aliases.iter().find_map(|n| resolve(&params, n)).or_else(|| c.param.as_deref().and_then(|n| resolve(&params, n))) };
         let enabled = !st.disabled.contains(&c.name);

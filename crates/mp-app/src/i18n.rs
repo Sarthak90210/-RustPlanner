@@ -47,6 +47,9 @@ pub struct Table {
     /// text every .resx translates the same way, for views without their own table
     #[serde(default)]
     pub text: HashMap<String, String>,
+    /// per view: "<control>.<property>" -> the culture's value (ApplyResources by name)
+    #[serde(default)]
+    pub controls: HashMap<String, HashMap<String, String>>,
 }
 
 /// The original types (resx) whose resources apply to the UI drawn by a source file, as
@@ -141,7 +144,7 @@ fn lookup(table: &Table, file: &str, text: &str, fallback: bool) -> Option<Strin
 pub fn tr(text: &str) -> Cow<'_, str> {
     let file = std::panic::Location::caller().file();
     match ACTIVE.get().and_then(|t| t.as_ref()).and_then(|t| lookup(t, file, text, true)) {
-        Some(t) => Cow::Owned(t),
+        Some(t) => Cow::Owned(visual(t)),
         None => Cow::Borrowed(text),
     }
 }
@@ -158,7 +161,7 @@ pub fn t(text: &str) -> String {
 pub fn tr_view(text: &str) -> Cow<'_, str> {
     let file = std::panic::Location::caller().file();
     match ACTIVE.get().and_then(|t| t.as_ref()).and_then(|t| lookup(t, file, text, false)) {
-        Some(t) => Cow::Owned(t),
+        Some(t) => Cow::Owned(visual(t)),
         None => Cow::Borrowed(text),
     }
 }
@@ -200,9 +203,170 @@ pub fn os_ui_culture() -> String {
     ["LC_ALL", "LC_MESSAGES", "LANG"].iter().find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty() && v != "C" && v != "POSIX")).unwrap_or_else(|| "en-US".into())
 }
 
+/// ComponentResourceManager.ApplyResources for a control a hand-built view draws itself:
+/// `key` is "<control>.HeaderText" / "<control>.Text" in the original view's .resx.
+pub fn control_text(view: &str, key: &str) -> Option<String> {
+    ACTIVE.get()?.as_ref()?.controls.get(view)?.get(key).map(|t| visual(t.clone()))
+}
+
 /// ComponentResourceManager.ApplyResources: a Designer form control's translated Text.
-pub fn form_text(form: &str, control: &str) -> Option<&'static str> {
-    ACTIVE.get()?.as_ref()?.forms.get(form)?.get(control).map(String::as_str)
+pub fn form_text(form: &str, control: &str) -> Option<String> {
+    ACTIVE.get()?.as_ref()?.forms.get(form)?.get(control).map(|t| visual(t.clone()))
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Class {
+    L,
+    R,
+    En,
+    An,
+    N,
+}
+
+fn class(c: char) -> Class {
+    match c as u32 {
+        0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF => Class::R,
+        _ if c.is_ascii_digit() => Class::En,
+        _ if c.is_alphabetic() => Class::L,
+        _ => Class::N,
+    }
+}
+
+/// What GDI's Uniscribe does for a left-to-right WinForms label holding Arabic: the Unicode
+/// bidi algorithm's run levels (W2: numbers after Arabic letters are Arabic numbers; N1/N2:
+/// neutrals take the direction of matching neighbours, else the paragraph's), with the runs
+/// reordered into visual order (L2). Each run keeps its logical text for the shaper, and a
+/// zero-width space keeps egui from shaping two runs as one.
+pub fn bidi_runs(text: &str) -> Vec<(String, u8)> {
+    let chars: Vec<char> = text.chars().collect();
+    if !chars.iter().any(|c| class(*c) == Class::R) {
+        return vec![(text.to_string(), 0)];
+    }
+    let mut cls: Vec<Class> = chars.iter().map(|c| class(*c)).collect();
+    // number separators between digits belong to the number (W4)
+    for i in 1..cls.len().saturating_sub(1) {
+        if matches!(chars[i], '.' | ',' | ':') && cls[i - 1] == Class::En && cls[i + 1] == Class::En {
+            cls[i] = Class::En;
+        }
+    }
+    // W2: EN after the last strong being R becomes AN
+    let mut last_strong = Class::L;
+    for c in cls.iter_mut() {
+        match *c {
+            Class::L | Class::R => last_strong = *c,
+            Class::En if last_strong == Class::R => *c = Class::An,
+            _ => {}
+        }
+    }
+    // N1/N2: a neutral run takes R when both sides are R (AN/EN count as R), else L
+    let strong = |c: Class| match c {
+        Class::L => Some(false),
+        Class::R | Class::An => Some(true),
+        Class::En => Some(false),
+        Class::N => None,
+    };
+    let mut level: Vec<u8> = cls.iter().map(|c| match c {
+        Class::L | Class::En => 0,
+        Class::R => 1,
+        Class::An => 2,
+        Class::N => 0,
+    }).collect();
+    let mut i = 0;
+    while i < cls.len() {
+        if cls[i] != Class::N {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < cls.len() && cls[i] == Class::N {
+            i += 1;
+        }
+        let before = cls[..start].iter().rev().find_map(|c| strong(*c)).unwrap_or(false);
+        let after = cls[i..].iter().find_map(|c| strong(*c)).unwrap_or(false);
+        let l = if before && after { 1 } else { 0 };
+        for lv in &mut level[start..i] {
+            *lv = l;
+        }
+    }
+    // runs of equal level
+    let mut runs: Vec<(String, u8)> = Vec::new();
+    for (c, lv) in chars.iter().zip(&level) {
+        match runs.last_mut() {
+            Some((t, l)) if l == lv => t.push(*c),
+            _ => runs.push((c.to_string(), *lv)),
+        }
+    }
+    // L2: from the highest level down, reverse every maximal sequence at or above it
+    let max = runs.iter().map(|r| r.1).max().unwrap_or(0);
+    for lv in (1..=max).rev() {
+        let mut k = 0;
+        while k < runs.len() {
+            if runs[k].1 < lv {
+                k += 1;
+                continue;
+            }
+            let start = k;
+            while k < runs.len() && runs[k].1 >= lv {
+                k += 1;
+            }
+            runs[start..k].reverse();
+        }
+    }
+    runs
+}
+
+fn mirror(c: char) -> char {
+    match c {
+        '(' => ')',
+        ')' => '(',
+        '[' => ']',
+        ']' => '[',
+        '{' => '}',
+        '}' => '{',
+        '<' => '>',
+        '>' => '<',
+        _ => c,
+    }
+}
+
+/// The text in the order egui should draw it. egui lays out font-face runs left to right
+/// and shapes each with one direction, so the UI fonts of right-to-left cultures keep
+/// Arabic and Latin in different faces (see fonts::install) and this emits the segments in
+/// visual order: Arabic words in logical order (the shaper draws them right to left), the
+/// neutrals of a right-to-left run reversed and mirrored, everything else left to right.
+pub fn visual(text: String) -> String {
+    if !text.chars().any(|c| class(c) == Class::R) {
+        return text;
+    }
+    let mut out = String::new();
+    for (run, level) in bidi_runs(&text) {
+        if level % 2 == 0 {
+            out.push_str(&run);
+            continue;
+        }
+        // split the right-to-left run into Arabic words and the rest, last segment first
+        let mut segments: Vec<(bool, String)> = Vec::new();
+        for c in run.chars() {
+            let arabic = class(c) == Class::R;
+            match segments.last_mut() {
+                Some((a, s)) if *a == arabic => s.push(c),
+                _ => segments.push((arabic, c.to_string())),
+            }
+        }
+        for (arabic, s) in segments.into_iter().rev() {
+            if arabic {
+                out.push_str(&s);
+            } else {
+                out.extend(s.chars().rev().map(mirror));
+            }
+        }
+    }
+    out
+}
+
+/// Cultures whose text is right to left (their UI fonts keep Latin and Arabic apart).
+pub fn is_rtl(culture: &str) -> bool {
+    culture.to_ascii_lowercase().starts_with("ar")
 }
 
 /// The script font a culture needs beyond the Latin UI fonts (Windows links these itself).
@@ -313,6 +477,22 @@ mod tests {
         assert_eq!(resolve("de-AT"), "en-US", "no neutral de resources");
         assert_eq!(resolve("en-GB"), "en-US");
         assert_eq!(resolve("C"), "en-US");
+    }
+
+    #[test]
+    fn mixed_arabic_follows_the_bidi_algorithm_in_a_left_to_right_label() {
+        // "Distance: 0.9500 km": the number follows Arabic, so it is an Arabic number and the
+        // Arabic run with it reads right to left; "km" continues left to right
+        let runs = bidi_runs("مسافة: 0.9500 km");
+        assert_eq!(runs, [("0.9500".to_string(), 2), ("مسافة: ".into(), 1), (" km".into(), 0)]);
+        assert_eq!(bidi_runs("عرض KML"), [("عرض".to_string(), 1), (" KML".into(), 0)]);
+        assert_eq!(bidi_runs("GPS: حالة"), [("GPS: ".to_string(), 0), ("حالة".into(), 1)]);
+        assert_eq!(bidi_runs("كلمة واحدة"), [("كلمة واحدة".to_string(), 1)]);
+        assert_eq!(visual("Plain".into()), "Plain");
+        assert_eq!(visual("عرض KML".into()), "عرض KML");
+        assert_eq!(visual("كلمة واحدة".into()), "واحدة كلمة");
+        assert_eq!(visual("مسافة: 0.9500 km".into()), "0.9500 :مسافة km");
+        assert_eq!(visual("خطأ (GPS)".into()), "خطأ (GPS)", "brackets before Latin stay left to right");
     }
 
     #[test]

@@ -314,7 +314,11 @@ pub fn button_fill(ui: &mut Ui, text: &str) -> Response {
 /// tabs overflow.
 #[track_caller]
 pub fn tab_strip(ui: &mut Ui, id: &str, labels: &[&str], selected: &mut usize) {
-    let owned: Vec<String> = labels.iter().map(|l| crate::i18n::t(l)).collect();
+    // a plain loop: #[track_caller] does not reach through closures
+    let mut owned: Vec<String> = Vec::with_capacity(labels.len());
+    for l in labels {
+        owned.push(crate::i18n::t(l));
+    }
     let labels: Vec<&str> = owned.iter().map(String::as_str).collect();
     let labels = labels.as_slice();
     let font = fonts::ui_id(fonts::UI_SIZE);
@@ -389,7 +393,11 @@ pub fn tab_strip(ui: &mut Ui, id: &str, labels: &[&str], selected: &mut usize) {
 /// Returns the strip rect (for its context menu).
 #[track_caller]
 pub fn tab_strip_multiline(ui: &mut Ui, id: &str, labels: &[&str], selected: &mut usize) -> Rect {
-    let owned: Vec<String> = labels.iter().map(|l| crate::i18n::t(l)).collect();
+    // a plain loop: #[track_caller] does not reach through closures
+    let mut owned: Vec<String> = Vec::with_capacity(labels.len());
+    for l in labels {
+        owned.push(crate::i18n::t(l));
+    }
     let labels: Vec<&str> = owned.iter().map(String::as_str).collect();
     let labels = labels.as_slice();
     let font = fonts::ui_id(fonts::UI_SIZE);

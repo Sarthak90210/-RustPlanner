@@ -281,6 +281,10 @@ translates the same way. Labels, which also carry data, use only their view's re
 is stripped and numeric keys are dropped. Without a saved language the OS display language is used,
 with .NET resource fallback. Toasts translate exact Strings.resx messages. PLAN's distance overlay
 measures Prev/Home to the pointer as SetMouseDisplay does, with FormatDistance units.
+Arabic follows Uniscribe in a left-to-right WinForms label: a simplified Unicode bidi algorithm (W2,
+W4, N1/N2, L2) orders the runs. Latin and Arabic come from different font faces, so egui shapes each run
+in its own direction. Grid headers that the original sets per control (e.g. PLAN's blank Up/Down) use
+control-keyed resources.
 Strings the original never translated stay English. A system CJK or Arabic font is added as a fallback,
 standing in for GDI font linking. `MP_LANGUAGE=<culture>` overrides the setting for captures 58-60.
 Quick view captions follow CurrentState.GetNameandUnit: [DisplayText] (exported with the property table)
