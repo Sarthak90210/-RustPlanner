@@ -1902,6 +1902,7 @@ name = "mp-app"
 version = "0.1.0"
 dependencies = [
  "android_logger",
+ "base64 0.22.1",
  "crossbeam-channel",
  "eframe",
  "egui",

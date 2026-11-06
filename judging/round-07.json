@@ -1,0 +1,27 @@
+{
+  "round": 7,
+  "commit": "5d4b971bef659b2b204588311aaf73e2d60994c8",
+  "reviewer": "independent agent judge_round7",
+  "score": 6.3,
+  "ui_ux_score": 6.9,
+  "feature_score": 5.9,
+  "ui_ux_provisional": false,
+  "evidence": "Source review against C# plus 50 fresh app-rendered captures in target/judging/round07; no build or run by the judge.",
+  "top_gaps": [
+    "Single link: no multiple simultaneous comPorts / Connection List links; swarm vehicles overlap",
+    "DroneCAN page layout only (no SLCAN over MAVLink)",
+    "Plugins listed but not executed",
+    "Scripts tab lacks the IronPython cs/MAV/Script object model",
+    "GStreamer / HereLink / gimbal video not implemented",
+    "RTK/GPS Inject page minimal (no survey-in, base pos, M8P/F9 config, RTCM status)",
+    "Bitmask parameters lack checkbox editors (Standard/Advanced/ADSB/Full list)",
+    "Standard/Advanced params and ADSB layout misaligned and clipped",
+    "Planner password/language/layout stored but inert",
+    "PLAN MAVFTP checkbox inert",
+    "Onboard OSD editor right panel clipped at 1280px",
+    "Extended Tuning Ch6 Opt group misplaced; invented Filter Logs group",
+    "Several Ctrl+F tools still fall through to 'not available'",
+    "Joystick lacks raw calibration, firmware profiles, gimbal point tracking",
+    "Simulator: SERVOn_FUNCTION all Disabled; HEARTBEAT 0.7 Hz; Sik group titles overlapped"
+  ]
+}

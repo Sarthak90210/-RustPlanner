@@ -222,6 +222,10 @@ pub struct MissionPlannerApp {
     hotkey_tools: crate::hotkey_tools::HotkeyTools,
     capture: Option<crate::capture::Capture>,
     skip_params_once: bool,
+    /// InputBox "Enter Password": Some(view) to open a protected screen, None to set it
+    pw_prompt: Option<(Option<View>, String)>,
+    /// last seen value of the "Password Protect Config" box
+    pw_protect_seen: Option<bool>,
     joystick: crate::joystick::Joystick,
     speech: crate::speech::SpeechRules,
     vario: Option<std::time::Instant>,
@@ -298,6 +302,8 @@ impl MissionPlannerApp {
             hotkey_tools: Default::default(),
             capture: crate::capture::Capture::from_env(),
             skip_params_once: false,
+            pw_prompt: None,
+            pw_protect_seen: None,
             joystick: Default::default(),
             speech: Default::default(),
             vario: None,
@@ -528,7 +534,7 @@ impl MissionPlannerApp {
         for (v, label, tex, w) in items {
             let (clicked, w) = item(ui, x, w, tex, label, self.settings.view == v, label);
             if clicked {
-                self.settings.view = v;
+                self.goto_view(v);
             }
             x += w;
         }
@@ -743,6 +749,70 @@ impl MissionPlannerApp {
         }
     }
 
+    /// MenuSetup_Click / MenuTuning_Click: ask for the password when "password_protect" is set.
+    fn goto_view(&mut self, v: View) {
+        let protected = self.settings.planner.get("password_protect").map(|s| s == "True").unwrap_or(false);
+        if protected && matches!(v, View::Setup | View::Config) && self.settings.view != v {
+            self.pw_prompt = Some((Some(v), String::new()));
+        } else {
+            self.settings.view = v;
+        }
+    }
+
+    /// Password.GenerateSaltedHash: SHA-256 of the UTF-8 password followed by "MP", base64.
+    pub fn password_hash(pw: &str) -> String {
+        use base64::Engine;
+        use sha2::Digest;
+        let mut h = sha2::Sha256::new();
+        h.update(pw.as_bytes());
+        h.update(b"MP");
+        base64::engine::general_purpose::STANDARD.encode(h.finalize())
+    }
+
+    fn password_ui(&mut self, ctx: &egui::Context) {
+        let now = self.settings.planner.get("password_protect").map(|s| s == "True").unwrap_or(false);
+        match self.pw_protect_seen {
+            // CHK_Password_CheckedChanged: ticking the box asks for the new password
+            Some(false) if now && self.pw_prompt.is_none() => self.pw_prompt = Some((None, String::new())),
+            _ => {}
+        }
+        self.pw_protect_seen = Some(now);
+        let Some((target, pw)) = self.pw_prompt.as_mut() else { return };
+        let target = *target;
+        let mut done = None;
+        egui::Modal::new(egui::Id::new("pw_prompt")).show(ctx, |ui| {
+            ui.label(egui::RichText::new("Enter Password").strong().color(Color32::WHITE));
+            theme::label(ui, if target.is_some() { "Please enter your password" } else { "Please enter a password" });
+            let r = ui.add(egui::TextEdit::singleline(pw).password(true).desired_width(220.0));
+            r.request_focus();
+            let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            ui.horizontal(|ui| {
+                if theme::button(ui, "OK").clicked() || enter {
+                    done = Some(true);
+                }
+                if theme::button(ui, "Cancel").clicked() {
+                    done = Some(false);
+                }
+            });
+        });
+        let Some(ok) = done else { return };
+        let (target, pw) = self.pw_prompt.take().unwrap_or_default();
+        match target {
+            None => {
+                // Cancel on InputBox still stores the (empty) password, as MP does
+                self.settings.planner.insert("password".into(), Self::password_hash(&pw));
+            }
+            Some(v) if ok => {
+                if self.settings.planner.get("password").map(|h| *h == Self::password_hash(&pw)).unwrap_or(false) {
+                    self.settings.view = v;
+                } else {
+                    self.toasts.error("Bad Password");
+                }
+            }
+            Some(_) => {}
+        }
+    }
+
     /// MainV2.ProcessCmdKey: F12 connect, F2 DATA, F3 PLAN, F4 CONFIG, F5 refresh params.
     fn hotkeys(&mut self, ctx: &egui::Context, actions: &mut Vec<AppAction>) {
         use egui::Key;
@@ -768,7 +838,7 @@ impl MissionPlannerApp {
             self.settings.view = View::FlightPlan;
         }
         if f4 {
-            self.settings.view = View::Config;
+            self.goto_view(View::Config);
         }
         if f5 {
             if let Some(l) = &self.link {
@@ -931,6 +1001,7 @@ impl eframe::App for MissionPlannerApp {
         let mut actions = std::mem::take(&mut self.startup);
 
         self.hotkeys(&ctx, &mut actions);
+        self.password_ui(&ctx);
         self.inspector.show(&ctx, self.link.as_ref(), &mut self.toasts);
         self.tools.ui(&ctx, self.link.as_ref(), &mut self.toasts);
         self.more_tools.ui(&ctx, self.link.as_ref(), &mut self.toasts);
