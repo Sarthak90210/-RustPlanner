@@ -92,3 +92,30 @@ fn high_latency2_non_autopilot_component_waits_for_four_identity_packets() {
     connected(&link);
     let s=link.shared.read(); assert_eq!(s.cs.compid,9); assert_eq!(s.cs.mode,"Guided");
 }
+
+#[test]
+fn heartbeats_follow_the_same_two_and_four_sighting_rule() {
+    let hb = |mavtype| MavMessage::HEARTBEAT(HEARTBEAT_DATA { mavtype, autopilot: MavAutopilot::MAV_AUTOPILOT_ARDUPILOTMEGA, ..Default::default() });
+    // one autopilot heartbeat is not enough; a GCS and a broadcast component never count
+    let (link, mut peer) = Peer::connect();
+    for _ in 0..4 {
+        peer.send(1, MavMessage::HEARTBEAT(HEARTBEAT_DATA { mavtype: MavType::MAV_TYPE_GCS, ..Default::default() }));
+        peer.send(0, hb(MavType::MAV_TYPE_QUADROTOR));
+    }
+    peer.send(1, hb(MavType::MAV_TYPE_QUADROTOR));
+    std::thread::sleep(Duration::from_millis(200));
+    assert_ne!(link.status(), LinkStatus::Connected);
+    peer.send(1, hb(MavType::MAV_TYPE_QUADROTOR));
+    connected(&link);
+    assert_eq!(link.shared.read().cs.compid, 1);
+    // another component is chosen only after four
+    let (link, mut peer) = Peer::connect();
+    for _ in 0..3 {
+        peer.send(154, MavMessage::HEARTBEAT(HEARTBEAT_DATA { mavtype: MavType::MAV_TYPE_GIMBAL, autopilot: MavAutopilot::MAV_AUTOPILOT_INVALID, ..Default::default() }));
+    }
+    std::thread::sleep(Duration::from_millis(200));
+    assert_ne!(link.status(), LinkStatus::Connected);
+    peer.send(154, MavMessage::HEARTBEAT(HEARTBEAT_DATA { mavtype: MavType::MAV_TYPE_GIMBAL, autopilot: MavAutopilot::MAV_AUTOPILOT_INVALID, ..Default::default() }));
+    connected(&link);
+    assert_eq!(link.shared.read().cs.compid, 154);
+}

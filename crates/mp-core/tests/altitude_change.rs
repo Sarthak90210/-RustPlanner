@@ -41,16 +41,19 @@ impl Peer {
         receive(&peer, Duration::from_secs(3), |m| {
             matches!(m, MavMessage::HEARTBEAT(_))
         });
-        send(
-            &peer,
-            1,
-            MavMessage::HEARTBEAT(HEARTBEAT_DATA {
-                mavtype: MavType::MAV_TYPE_FIXED_WING,
-                autopilot: MavAutopilot::MAV_AUTOPILOT_ARDUPILOTMEGA,
-                base_mode: MavModeFlag::empty(),
-                ..Default::default()
-            }),
-        );
+        // compid 1 is selected after two heartbeats, as getHeartBeat does
+        for _ in 0..2 {
+            send(
+                &peer,
+                1,
+                MavMessage::HEARTBEAT(HEARTBEAT_DATA {
+                    mavtype: MavType::MAV_TYPE_FIXED_WING,
+                    autopilot: MavAutopilot::MAV_AUTOPILOT_ARDUPILOTMEGA,
+                    base_mode: MavModeFlag::empty(),
+                    ..Default::default()
+                }),
+            );
+        }
         loop {
             if matches!(
                 link.events.recv_timeout(Duration::from_secs(3)).unwrap(),

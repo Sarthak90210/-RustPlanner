@@ -433,6 +433,7 @@ struct Worker {
     started: Instant,
     last_heartbeat_tx: Instant,
     got_heartbeat: bool,
+    /// identity packets seen per (sysid, compid) before a vehicle is selected
     high_latency_seen: BTreeMap<(u8, u8), u8>,
     param_fetch: Option<ParamFetch>,
     pending_sets: HashMap<String, PendingSet>,
@@ -1075,15 +1076,18 @@ impl Worker {
         // HIGH_LATENCY2 is an identity message in MAVLinkInterface as well.
         let mut newly_connected = false;
         if !self.got_heartbeat {
-            let identity = match &msg {
-                MavMessage::HEARTBEAT(hb) if hb.autopilot != MavAutopilot::MAV_AUTOPILOT_INVALID && hb.mavtype != MavType::MAV_TYPE_GCS && hdr.component_id != 0 => Some((hb.autopilot, hb.mavtype)),
-                MavMessage::HIGH_LATENCY2(h) if h.mavtype != MavType::MAV_TYPE_GCS && hdr.component_id != 0 => {
-                    let count = self.high_latency_seen.entry((hdr.system_id as u8, hdr.component_id)).or_default();
-                    *count = count.saturating_add(1);
-                    if *count >= if hdr.component_id == 1 { 2 } else { 4 } { Some((h.autopilot, h.mavtype)) } else { None }
-                }
+            // getHeartBeat's hbhistory: HEARTBEAT and HIGH_LATENCY2 from anything but a GCS or a
+            // broadcast component; compid 1 is chosen after 2 sightings, anything else after 4
+            let seen = match &msg {
+                MavMessage::HEARTBEAT(hb) if hb.mavtype != MavType::MAV_TYPE_GCS && hdr.component_id != 0 => Some((hb.autopilot, hb.mavtype)),
+                MavMessage::HIGH_LATENCY2(h) if h.mavtype != MavType::MAV_TYPE_GCS && hdr.component_id != 0 => Some((h.autopilot, h.mavtype)),
                 _ => None,
             };
+            let identity = seen.and_then(|id| {
+                let count = self.high_latency_seen.entry((hdr.system_id as u8, hdr.component_id)).or_default();
+                *count = count.saturating_add(1);
+                (*count >= if hdr.component_id == 1 { 2 } else { 4 }).then_some(id)
+            });
             if let Some((autopilot, mavtype)) = identity {
                     self.got_heartbeat = true;
                     self.target_sys = hdr.system_id as u8;

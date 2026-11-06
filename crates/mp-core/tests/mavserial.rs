@@ -34,15 +34,18 @@ impl Peer {
             writer: stream.try_clone().unwrap(),
             reader: mavlink::MavlinkReader::new(stream),
         };
-        peer.send(
-            42,
-            1,
-            MavMessage::HEARTBEAT(HEARTBEAT_DATA {
-                mavtype: MavType::MAV_TYPE_QUADROTOR,
-                autopilot: MavAutopilot::MAV_AUTOPILOT_ARDUPILOTMEGA,
-                ..Default::default()
-            }),
-        );
+        // compid 1 is selected after two heartbeats, as getHeartBeat does
+        for _ in 0..2 {
+            peer.send(
+                42,
+                1,
+                MavMessage::HEARTBEAT(HEARTBEAT_DATA {
+                    mavtype: MavType::MAV_TYPE_QUADROTOR,
+                    autopilot: MavAutopilot::MAV_AUTOPILOT_ARDUPILOTMEGA,
+                    ..Default::default()
+                }),
+            );
+        }
         while !matches!(
             link.events.recv_timeout(Duration::from_secs(3)).unwrap(),
             LinkEvent::Connected
