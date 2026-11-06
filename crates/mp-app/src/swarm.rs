@@ -1558,3 +1558,242 @@ mod sequence_sim_tests {
         assert_eq!(ed.step, 1);
     }
 }
+
+/// MAVLinkInterface.setGuidedModeWP(sysid, compid, ...) for one vehicle on a connection.
+/// The frame is GLOBAL_RELATIVE_ALT: FollowPath's Locationwp leaves frame 0 (absolute) while
+/// carrying the trail's relative altitude, which would send real followers to the ground.
+fn guided_wp(l: &Link, m: &Mav, lat: f64, lng: f64, alt: f64) {
+    if alt == 0.0 || lat == 0.0 || lng == 0.0 {
+        return;
+    }
+    if !m.mode.eq_ignore_ascii_case("GUIDED") {
+        set_mode(l, m, "GUIDED");
+    }
+    if m.firmware == Firmware::ArduPlane {
+        let wp = mp_core::mission::Locationwp::waypoint(lat, lng, alt as f32, 3);
+        if let Some(mut item) = wp.to_mission_item_int(0, m.key.1, m.key.2, MavMissionType::MAV_MISSION_TYPE_MISSION) {
+            item.current = 2;
+            l.send(LinkCommand::Send(Box::new(MavMessage::MISSION_ITEM_INT(item))));
+        }
+    } else {
+        l.send(LinkCommand::Send(Box::new(MavMessage::SET_POSITION_TARGET_GLOBAL_INT(SET_POSITION_TARGET_GLOBAL_INT_DATA {
+            lat_int: (lat * 1e7) as i32,
+            lon_int: (lng * 1e7) as i32,
+            alt: alt as f32,
+            target_system: m.key.1,
+            target_component: m.key.2,
+            coordinate_frame: MavFrame::MAV_FRAME_GLOBAL_RELATIVE_ALT_INT,
+            type_mask: PositionTargetTypemask::from_bits_truncate(u16::MAX - (1 << 9) - 0b111),
+            ..Default::default()
+        }))));
+    }
+}
+
+/// FollowPath.cs: the active vehicle's trail and the points 2 m apart along it.
+#[derive(Default)]
+pub struct FollowPath {
+    pub trail: Vec<(f64, f64, f64)>,
+}
+
+impl FollowPath {
+    const FOLLOW_DISTANCE: f64 = 2.0;
+
+    /// FindTrailPnt: the next trail point more than FollowDistance (2D) from `from`.
+    fn find_trail_point(&self, from: usize) -> Option<usize> {
+        let f = self.trail[from];
+        (from + 1..self.trail.len()).find(|i| distance((f.0, f.1), (self.trail[*i].0, self.trail[*i].1)) > Self::FOLLOW_DISTANCE)
+    }
+
+    /// PlanMove: up to 20 points from the start of the trail.
+    pub fn plan(&self) -> Vec<(f64, f64, f64)> {
+        let mut out = Vec::new();
+        if self.trail.is_empty() {
+            return out;
+        }
+        let mut current = 0;
+        for _ in 0..20 {
+            if let Some(next) = self.find_trail_point(current) {
+                out.push(self.trail[next]);
+                current = next;
+            }
+        }
+        out
+    }
+}
+
+/// FollowPathControl ("Follow the leader")
+pub struct FollowPathControl {
+    pub open: bool,
+    shown: bool,
+    leader: Option<Key>,
+    selected: Option<Key>,
+    running: bool,
+    start_enabled: bool,
+    last: Instant,
+    path: FollowPath,
+    /// MAVState.GuidedMode per connection's current vehicle
+    guided: HashMap<usize, (f64, f64, f64)>,
+}
+
+impl Default for FollowPathControl {
+    fn default() -> Self {
+        Self { open: false, shown: false, leader: None, selected: None, running: false, start_enabled: false, last: Instant::now(), path: FollowPath::default(), guided: HashMap::new() }
+    }
+}
+
+impl FollowPathControl {
+    pub fn show(&mut self) {
+        *self = Self { open: true, ..Default::default() };
+    }
+
+    /// MainV2.comPort.MAV: the active connection's current vehicle.
+    fn current(links: &[&Link], mavs: &[Mav]) -> Option<Mav> {
+        let l = links.first()?;
+        let (sys, comp) = {
+            let s = l.shared.read();
+            (s.cs.sysid, s.cs.compid)
+        };
+        mavs.iter().find(|m| m.key == (0, sys, comp)).cloned()
+    }
+
+    /// Update + SendCommand
+    pub fn tick(&mut self, links: &[&Link], mavs: &[Mav]) {
+        let Some(cur) = Self::current(links, mavs) else { return };
+        if cur.lat == 0.0 || cur.lng == 0.0 {
+            return;
+        }
+        if self.leader.is_none() {
+            self.leader = Some(cur.key);
+        }
+        self.path.trail.push((cur.lat, cur.lng, cur.alt));
+        let positions = self.path.plan();
+        for m in mavs.iter().filter(|m| Some(m.key) != self.leader) {
+            // the original never advances its index: every follower takes the first point
+            if let Some(&(lat, lng, alt)) = positions.first() {
+                guided_wp(links[m.key.0], m, lat, lng, alt);
+                self.guided.insert(m.key.0, (lat, lng, alt));
+            }
+        }
+    }
+
+    pub fn ui(&mut self, ctx: &egui::Context, links: &[&Link], toasts: &mut Toasts, actions: &mut Vec<crate::app::AppAction>) {
+        if !self.open {
+            self.running = false;
+            return;
+        }
+        let mavs = vehicles(links);
+        if !self.shown {
+            self.shown = true;
+            if !mavs.is_empty() {
+                self.selected = mavs.first().map(|m| m.key);
+                toasts.error("this is beta, use at own risk");
+            }
+        }
+        if self.running && self.last.elapsed() >= Duration::from_millis(200) {
+            self.last = Instant::now();
+            self.tick(links, &mavs);
+        }
+        if self.running {
+            ctx.request_repaint_after(Duration::from_millis(200));
+        }
+        let mut open = true;
+        egui::Window::new("Control").id(egui::Id::new("swarm_follow_path")).open(&mut open).collapsible(false).resizable(false).order(egui::Order::Foreground).fixed_size([551.0, 171.0]).show(ctx, |ui| {
+            let (area, _) = ui.allocate_exact_size(Vec2::new(551.0, 171.0), Sense::hover());
+            let o = area.min;
+            let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));
+            let button = |ui: &mut egui::Ui, rect: Rect, text: &str, enabled: bool| -> bool {
+                ui.put(rect, |ui: &mut egui::Ui| ui.add_enabled_ui(enabled, |ui| theme::button_sized(ui, text, rect.size())).inner).clicked()
+            };
+            if button(ui, r(12.0, 12.0, 75.0, 23.0), "Arm (exl leader)", true) {
+                for m in mavs.iter().filter(|m| Some(m.key) != self.leader) {
+                    command(links[m.key.0], m.key.1, m.key.2, MavCmd::MAV_CMD_COMPONENT_ARM_DISARM, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+                }
+            }
+            if button(ui, r(93.0, 12.0, 75.0, 23.0), "Disarm (exl leader)", true) {
+                for m in mavs.iter().filter(|m| Some(m.key) != self.leader) {
+                    command(links[m.key.0], m.key.1, m.key.2, MavCmd::MAV_CMD_COMPONENT_ARM_DISARM, [0.0; 7]);
+                }
+            }
+            // CMB_mavs: its handler compares "MAV x on PORT" with "PORT x y", so choosing an
+            // entry never changes the active vehicle
+            let label = |m: &Mav| format!("{} {} {}", m.port, m.key.1, m.key.2);
+            let cur = self.selected.and_then(|k| mavs.iter().find(|m| m.key == k)).map(label).unwrap_or_default();
+            let cr = r(174.0, 12.0, 121.0, 21.0);
+            ui.put(cr, |ui: &mut egui::Ui| {
+                egui::ComboBox::from_id_salt("CMB_mavs_follow").width(cr.width() - 8.0).selected_text(cur).show_ui(ui, |ui| {
+                    for m in &mavs {
+                        if ui.selectable_label(self.selected == Some(m.key), label(m)).clicked() {
+                            self.selected = Some(m.key);
+                        }
+                    }
+                }).response
+            });
+            if button(ui, r(301.0, 12.0, 75.0, 23.0), "Connect MAVs", true) {
+                // CommsSerialScan.Scan: find another MAVLink port
+                actions.push(crate::app::AppAction::ConnectExtra(ConnectionSpec::Auto));
+            }
+            if button(ui, r(382.0, 12.0, 75.0, 23.0), "Set Leader", true) {
+                if let Some(c) = Self::current(links, &mavs) {
+                    self.leader = Some(c.key);
+                    self.start_enabled = true;
+                }
+            }
+            if button(ui, r(463.0, 12.0, 75.0, 23.0), if self.running { "Stop" } else { "Start" }, self.start_enabled) {
+                self.running = !self.running;
+                self.last = Instant::now() - Duration::from_millis(200);
+            }
+            // PNL_status: one Status block per connection, for its current vehicle
+            let f = crate::fonts::ui_id(crate::fonts::UI_SIZE);
+            for (i, l) in links.iter().enumerate() {
+                let b = r(12.0 + i as f32 * 113.0, 41.0, 113.0, 116.0);
+                if b.right() > o.x + 539.0 {
+                    break;
+                }
+                let s = l.shared.read();
+                let m = mavs.iter().find(|m| m.key == (i, s.cs.sysid, s.cs.compid));
+                let guided = self.guided.get(&i).copied().unwrap_or_default();
+                let at = |x: f32, y: f32| b.min + Vec2::new(x, y);
+                let port = port_name(s.spec.as_ref());
+                for (x, y, t) in [
+                    (3.0, 0.0, format!("MAV {} on {port}", s.cs.sysid)),
+                    (3.0, 13.0, "Armed".into()),
+                    (46.0, 13.0, if s.cs.armed { "True" } else { "False" }.into()),
+                    (3.0, 26.0, "Mode".into()),
+                    (46.0, 26.0, m.map(|m| m.mode.clone()).unwrap_or_else(|| s.cs.mode.clone())),
+                    (3.0, 39.0, "GPS".into()),
+                    (46.0, 39.0, if s.cs.gpsstatus >= 3 { "OK" } else { "Bad" }.into()),
+                    (3.0, 52.0, "Guided".into()),
+                ] {
+                    ui.painter().text(at(x, y), egui::Align2::LEFT_TOP, t, f.clone(), Color32::WHITE);
+                }
+                let mut job = egui::text::LayoutJob::simple(format!("{},{},{}", guided.0, guided.1, guided.2), f.clone(), Color32::WHITE, 67.0);
+                job.wrap.break_anywhere = true;
+                let galley = ui.painter().layout_job(job);
+                ui.painter().with_clip_rect(Rect::from_min_size(at(46.0, 52.0), Vec2::new(67.0, 30.0))).galley(at(46.0, 52.0), galley, Color32::WHITE);
+            }
+        });
+        if !open {
+            self.open = false;
+            self.running = false;
+        }
+    }
+}
+
+#[cfg(test)]
+mod follow_path_tests {
+    use super::*;
+
+    #[test]
+    fn plan_walks_the_trail_in_two_metre_steps_from_its_start() {
+        let mut p = FollowPath::default();
+        assert!(p.plan().is_empty());
+        // a straight trail north, one point every metre
+        for i in 0..30 {
+            p.trail.push((-35.0 + i as f64 / 111_320.0, 149.0, 10.0));
+        }
+        let plan = p.plan();
+        assert_eq!(plan.len(), 9, "20 searches, but the trail ends after 9 hops of 3 m");
+        let first = plan[0];
+        assert!((distance((p.trail[0].0, p.trail[0].1), (first.0, first.1)) - 3.0).abs() < 0.01, "the first point beyond 2 m");
+    }
+}

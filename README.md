@@ -212,8 +212,10 @@ the window. temp > Sequence Swarm opens the LayoutEditor. Sequences load and sav
 (Layouts with Id/DelayStart/DelayEnd/Offset, and Steps). The editor has the layout selector, New Layout
 (copies the current offsets), the drone count rule, Add Step, a steps list (select, Delete, drag to
 reorder), Takeoff (GUIDED, arm, 2 m), Run Step/Reset and a background image with its Move Image buttons.
-A simulator test flies three Copters through a step. Follow the leader and Follow Swarm still share the
-simpler window.
+A simulator test flies three Copters through a step. temp > Follow the leader opens FollowPathControl. It records the active vehicle's trail at 5 Hz and plans
+2 m steps from the trail start. Every follower gets setGuidedModeWP to the first planned point, as in the
+original. Deliberate deviation: targets use the relative-altitude frame, because the original's frame-0
+Locationwp would send its relative altitude as AMSL. Follow Swarm still uses the simpler window.
 
 ## License
 

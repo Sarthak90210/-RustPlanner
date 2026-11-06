@@ -63,7 +63,8 @@ $cases = @(
  @('51_plan_utm','plan',1,1,0,0,12,'MP_COORDS','UTM'),
  @('52_plan_mgrs','plan',1,1,0,0,12,'MP_COORDS','MGRS'),
  @('53_swarm_formation','data',0,0,0,0,14,'MP_SWARM','1','MP_TOOL','Swarm'),
- @('54_swarm_sequence','data',0,0,0,0,14,'MP_SWARM','1','MP_TOOL','Sequence Swarm')
+ @('54_swarm_sequence','data',0,0,0,0,14,'MP_SWARM','1','MP_TOOL','Sequence Swarm'),
+ @('55_swarm_follow_leader','data',0,0,0,0,14,'MP_SWARM','1','MP_TOOL','Follow the leader')
 )
 $last = [Math]::Min($cases.Count, $From - 1 + $Count) - 1
 for ($ci = $From - 1; $ci -le $last; $ci++) {

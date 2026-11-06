@@ -52,6 +52,8 @@ pub struct MoreTools {
     pub formation: crate::swarm::FormationControl,
     /// temp > Sequence Swarm: LayoutEditor
     pub layout_editor: crate::swarm::LayoutEditor,
+    /// temp > Follow the leader: FollowPathControl
+    pub follow_path: crate::swarm::FollowPathControl,
     swarm_open: Option<&'static str>,
     leader: Option<(u8, u8)>,
     follow: bool,
@@ -76,7 +78,8 @@ impl MoreTools {
         match name {
             "Swarm" => self.formation.show(),
             "Sequence Swarm" => self.layout_editor.show(),
-            "Follow the leader" | "Follow Swarm" => {
+            "Follow the leader" => self.follow_path.show(),
+            "Follow Swarm" => {
                 self.swarm_open = Some(match name {
                     "Swarm" => "Swarm",
                     "Follow the leader" => "Follow the leader",
