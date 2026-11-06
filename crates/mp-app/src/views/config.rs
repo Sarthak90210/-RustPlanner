@@ -310,9 +310,67 @@ pub fn param_control(ui: &mut egui::Ui, link: &Link, fw: Firmware, name: &str, v
 
 // ------------------------------------------------------------------ ConfigRawParams
 
+#[cfg(test)]
+mod parameter_file_tests {
+    use super::*;
+    use crate::platform::{FilePicker, picker_test_support as picker};
+    #[test]
+    fn explicit_parameter_selection_stages_load_and_compare_cancel_and_errors_preserve_state() {
+        let root = picker::root();
+        std::fs::write(root.join("a.param"), "ALT,5\nKEEP,2\nUNKNOWN,7\n").unwrap();
+        std::fs::write(root.join("z.param"), "ALT,99\n").unwrap();
+        std::fs::write(root.join("bad.txt"), "ALT,6\nKEEP,invalid\n").unwrap();
+        let params = BTreeMap::from([
+            ("ALT".into(), mp_core::link::Param { value: 1.0, ptype: 9, index: 0 }),
+            ("KEEP".into(), mp_core::link::Param { value: 2.0, ptype: 9, index: 1 }),
+        ]);
+        let ctx = egui::Context::default();
+        let mut editor = ParamEditor::default(); let mut toasts = Toasts::default();
+        editor.file_target = Some((42,1));
+        editor.file_request = Some((ParamFileAction::Load, FilePicker::in_directory("Parameters", root.clone(), &["param", "txt"], None)));
+        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts); picker::click(&ctx, &mut draw, "a.param"); picker::click(&ctx, &mut draw, "Open"); }
+        assert_eq!(editor.edits, BTreeMap::from([("ALT".into(), 5.0)]));
+        assert!(editor.modified_only && editor.pending.is_empty());
+        assert_eq!(editor.missing_dialog, Some(vec!["UNKNOWN".to_string()]));
+        assert!(editor.file_request.is_none() && editor.file_target.is_none());
+        editor.file_target = Some((42,1));
+        editor.file_request = Some((ParamFileAction::Compare, FilePicker::in_directory("Compare", root.clone(), &["param"], None)));
+        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts); picker::click(&ctx, &mut draw, "Cancel"); }
+        assert!(editor.compare.is_none()); assert_eq!(editor.edits["ALT"], 5.0);
+        editor.file_target = Some((42,1));
+        editor.file_request = Some((ParamFileAction::Compare, FilePicker::in_directory("Compare", root.clone(), &["param"], None)));
+        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts); picker::click(&ctx, &mut draw, "z.param"); picker::click(&ctx, &mut draw, "Open"); }
+        assert_eq!(editor.compare, Some(vec![("ALT".into(), 1.0, 99.0, true)]));
+        assert_eq!(editor.edits["ALT"], 5.0); assert!(editor.pending.is_empty());
+        editor.file_target = Some((42,1));
+        editor.file_request = Some((ParamFileAction::Load, FilePicker::in_directory("Parameters", root.clone(), &["txt"], None)));
+        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts); picker::click(&ctx, &mut draw, "bad.txt"); picker::click(&ctx, &mut draw, "Open"); }
+        assert_eq!(editor.edits["ALT"], 5.0); assert!(editor.file_target.is_none());
+        assert!(toasts.0.last().unwrap().contains("bad.txt"));
+        for name in ["a.param", "z.param", "bad.txt"] { std::fs::remove_file(root.join(name)).unwrap(); } std::fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn changing_vehicle_cancels_a_pending_parameter_file() {
+        let root = picker::root(); let ctx = egui::Context::default();
+        let mut editor = ParamEditor::default(); let mut toasts = Toasts::default();
+        editor.file_target = Some((42,1));
+        editor.file_request = Some((ParamFileAction::Load, FilePicker::in_directory("Parameters", root.clone(), &["param"], None)));
+        picker::frame(&ctx, &mut |ctx| editor.file_ui(ctx, &BTreeMap::new(), (43,1), &mut toasts), Vec::new());
+        assert!(editor.file_request.is_none() && editor.edits.is_empty());
+        assert!(toasts.0.last().unwrap().contains("Vehicle changed"));
+        std::fs::remove_dir(root).unwrap();
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ParamFileAction { Load, Compare }
+
 #[derive(Default)]
 pub struct ParamEditor {
     search: String,
+    file_request: Option<(ParamFileAction, platform::FilePicker)>,
+    file_target: Option<(u8, u8)>,
     edits: BTreeMap<String, f32>,
     pending: BTreeSet<String>,
     selected_group: Option<String>,
@@ -335,9 +393,45 @@ pub struct ParamEditor {
     current: Option<String>,
     /// MavlinkCheckBoxBitMask shown by "Set Bitmask" (param name)
     bitmask_edit: Option<String>,
+    missing_dialog: Option<Vec<String>>,
 }
 
 impl ParamEditor {
+    fn file_ui(&mut self, ctx: &egui::Context, params: &BTreeMap<String, mp_core::link::Param>, target: (u8, u8), toasts: &mut Toasts) {
+        if self.file_request.is_some() && self.file_target != Some(target) {
+            self.file_request = None; self.file_target = None;
+            toasts.error("Vehicle changed while selecting a parameter file");
+            return;
+        }
+        if let Some((action, path)) = platform::poll_file_action(&mut self.file_request, ctx) {
+            self.file_target = None;
+            let values = match paramfile::read(&path) { Ok(values) => values, Err(e) => { toasts.error(format!("{}: {e}", path.display())); return; } };
+            match action {
+                ParamFileAction::Load => {
+                    let mut missing = Vec::new();
+                    for (name, value) in values {
+                        if let Some(p) = params.get(&name) {
+                            if p.value != value {
+                                self.edits.insert(name, value);
+                            }
+                        } else {
+                            missing.push(name);
+                        }
+                    }
+                    self.modified_only = true;
+                    if !missing.is_empty() {
+                        self.missing_dialog = Some(missing);
+                    }
+                }
+                ParamFileAction::Compare => {
+                    self.compare = Some(values.into_iter()
+                        .filter_map(|(name, value)| params.get(&name).filter(|p| p.value != value).map(|p| (name, p.value, value, true))).collect());
+                }
+            }
+        }
+        if self.file_request.is_none() { self.file_target = None; }
+    }
+
     pub fn on_event(&mut self, e: &LinkEvent, toasts: &mut Toasts) {
         if let LinkEvent::ParamSet { name, ok } = e {
             if self.pending.remove(name) {
@@ -355,13 +449,16 @@ impl ParamEditor {
 
     pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, tree_page: bool) {
         let Some(link) = app.link else {
+            self.file_request = None; self.file_target = None;
             theme::label(ui, "Please Connect First");
             return;
         };
-        let (params, fw) = {
+        let (params, fw, target) = {
             let s = link.shared.read();
-            (s.params.clone(), s.cs.firmware)
+            (s.params.clone(), s.cs.firmware, (s.cs.sysid, s.cs.compid))
         };
+
+        self.file_ui(ui.ctx(), &params, target, app.toasts);
 
         {
             let values: BTreeMap<String, f32> = params.iter().map(|(k, p)| (k.clone(), p.value)).collect();
@@ -393,19 +490,8 @@ impl ParamEditor {
             let r = |y: f32, h: f32| Rect::from_min_size(o + Vec2::new(6.0, y), Vec2::new(110.0, h));
             let b = |ui: &mut egui::Ui, rr: Rect, t: &str| ui.put(rr, |ui: &mut egui::Ui| theme::button_sized(ui, t, rr.size())).clicked();
             if b(ui, r(6.0, 19.0), "Load from file") {
-                let loaded = if platform::HAS_NATIVE_DIALOGS {
-                    platform::open_text("Load Parameters", "Param List", &["param", "parm", "txt"]).map(|(_, t)| t)
-                } else {
-                    platform::list_files(&["param"]).last().and_then(|p| std::fs::read_to_string(p).ok())
-                };
-                if let Some(text) = loaded {
-                    for (k, v) in paramfile::load(&text) {
-                        if params.get(&k).map(|p| p.value != v).unwrap_or(false) {
-                            self.edits.insert(k, v);
-                        }
-                    }
-                    self.modified_only = true;
-                }
+                self.file_target = Some(target);
+                self.file_request = Some((ParamFileAction::Load, platform::FilePicker::new("Load Parameters", &["param", "parm", "txt"], None)));
             }
             if b(ui, r(31.0, 19.0), "Save to file") {
                 let text = paramfile::save(params.iter().map(|(k, p)| (k, p.value)));
@@ -427,13 +513,8 @@ impl ParamEditor {
                 link.send(LinkCommand::RequestParams);
             }
             if b(ui, r(116.0, 19.0), "Compare Params") {
-                if let Some((_, text)) = platform::open_text("Compare Parameters", "Param List", &["param", "parm", "txt"]) {
-                    let diffs: Vec<(String, f32, f32, bool)> = paramfile::load(&text)
-                        .into_iter()
-                        .filter_map(|(k, v)| params.get(&k).filter(|p| p.value != v).map(|p| (k, p.value, v, true)))
-                        .collect();
-                    self.compare = Some(diffs);
-                }
+                self.file_target = Some(target);
+                self.file_request = Some((ParamFileAction::Compare, platform::FilePicker::new("Compare Parameters", &["param", "parm", "txt"], None)));
             }
             if crate::display::flag(&app.settings.planner, "displayParamCommitButton") {
                 if b(ui, r(141.0, 22.0), "Commit Params") {
@@ -558,9 +639,9 @@ impl ParamEditor {
         });
         // presaved file arrived: show it in ParamCompare
         if let Some(r) = self.presaved.lock().unwrap().take() {
-            match r {
-                Ok(text) => {
-                    let diffs: Vec<(String, f32, f32, bool)> = paramfile::load(&text)
+            match r.and_then(|text| paramfile::load(&text).map_err(|e| e.to_string())) {
+                Ok(values) => {
+                    let diffs: Vec<(String, f32, f32, bool)> = values
                         .into_iter()
                         .filter_map(|(k, v)| params.get(&k).filter(|p| p.value != v).map(|p| (k, p.value, v, true)))
                         .collect();
@@ -599,6 +680,36 @@ impl ParamEditor {
             }
         }
         self.compare_window(ui.ctx());
+        self.missing_window(ui.ctx());
+    }
+
+    /// "No matching Params": dialog showing missing params that were not present on the vehicle
+    fn missing_window(&mut self, ctx: &egui::Context) {
+        let Some(missing) = self.missing_dialog.as_ref() else { return };
+        let mut open = true;
+        let mut dismiss = false;
+        egui::Window::new(crate::i18n::t("No matching Params"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(true)
+            .default_size(Vec2::new(420.0, 260.0))
+            .show(ctx, |ui| {
+                ui.label(RichText::new(format!("Missing {} params", missing.len())).strong().color(Color32::WHITE));
+                ui.add_space(4.0);
+                egui::ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
+                    let list = missing.join(" ");
+                    ui.label(RichText::new(list).color(Color32::LIGHT_GRAY));
+                });
+                ui.add_space(8.0);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                    if theme::button(ui, "OK").clicked() {
+                        dismiss = true;
+                    }
+                });
+            });
+        if !open || dismiss {
+            self.missing_dialog = None;
+        }
     }
 
     /// ParamCompare form: diff against a file, tick the rows to take, Continue.

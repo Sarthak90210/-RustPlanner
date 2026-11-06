@@ -1497,6 +1497,11 @@ mod sequence_tests {
         editor.image_buttons = true;
         editor.file_picker = Some((SequenceFile::Image, crate::platform::FilePicker::in_directory("Background image", std::env::temp_dir(), &["png"], None)));
         let mut toasts = Toasts::default();
+        // Establish the modal's layer before sending a key to the visible dialog.
+        for _ in 0..3 {
+            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| editor.ui(ui.ctx(), &[], &mut toasts));
+            out.textures_delta.clear();
+        }
         let mut out = ctx.run_ui(egui::RawInput {
             screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(1280.0,800.0))),
             events: vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }],

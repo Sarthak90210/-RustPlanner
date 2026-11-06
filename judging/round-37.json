@@ -1,0 +1,137 @@
+{
+  "round": 37,
+  "date": "2026-11-06",
+  "review_type": "Independent adversarial source and event-driven review of deferred log file workflows",
+  "reviewed_head": "b5a9c53a37f96b8353ffbf49f8b90bad20febcfe",
+  "reviewed_uncommitted_worktree": true,
+  "reviewed_files": [
+    "crates/mp-app/src/platform.rs",
+    "crates/mp-app/src/log_browse.rs",
+    "crates/mp-app/src/views/flight_data.rs",
+    "crates/mp-app/src/views/setup.rs",
+    "crates/mp-app/src/tool_windows.rs",
+    "crates/mp-app/src/views/mavlog.rs"
+  ],
+  "verdict": "REJECTED for exact-clone parity. The deferred file workflow is a real improvement: explicit log selection, cancellation, multi-selection and selected-file processing are demonstrated in shared desktop-executed UI tests. The reviewer found a wrong-file edge case caused by trimming open filenames; it was corrected and independently rechecked. Unique modal identities and top-modal Escape routing were also added and tested during review. This is still an in-app directory browser, not native Android/iOS document access or complete Mission Planner log-opening parity.",
+  "scores": {
+    "overall": 4,
+    "ui_ux": 3.5,
+    "features": 4.5,
+    "cross_platform_delivery": 2,
+    "scale": "Provisional qualitative exact-reference-parity judgment, not completion percentages. Narrow log workflow improvements do not justify a whole-product increase without a comprehensive acceptance inventory and native platform evidence."
+  },
+  "independent_validation": [
+    {
+      "command": "cargo test -p mp-app --lib file_workflow_tests",
+      "result": "PASS: 2 passed, 0 failed",
+      "scope": "Reviewer executed pointer-driven log browser and telemetry-export tests. Selecting a.bin/a.tlog processes that chosen file rather than z; cancellation preserves prior state/output. Log read failure is surfaced while the loaded log remains."
+    },
+    {
+      "command": "cargo test -p mp-app --lib file_picker_tests",
+      "result": "PASS: 5 passed, 0 failed after review corrections",
+      "scope": "Reviewer executed the current single/multiple picker suite, including directory/extension filtering, no automatic selection, save normalization, exact leading-space filename selection, and Escape cancelling only the top overlapping picker."
+    },
+    {
+      "command": "cargo test -p mp-app --lib swarm::sequence_tests",
+      "result": "PASS: 3 passed, 0 failed",
+      "scope": "Reviewer checked shared-picker adjacent sequence tests, including cancelled background selection. This is regression evidence, not complete sequence UI certification."
+    }
+  ],
+  "reference_checks": [
+    "Reference Log/MavlinkLog.cs uses explicit OpenFileDialog selection, multiple selection for conversions and single selection for graphing; the new telemetry selection mode follows that distinction.",
+    "Reference Log/LogBrowse.cs accepts *.log and *.bin and can open multiple log files. GCSViews/FlightData.cs Auto Analysis also accepts text .log files. Rust binary_log_picker still accepts only .bin.",
+    "Reviewed current owner polling in FlightData map UI, Setup terminal page, global Tools UI and both log windows. Temp LogBrowse action explicitly switches the main view to FlightData before requesting the picker."
+  ],
+  "confirmed_improvements": [
+    "All old pick_bin/pick_tlogs auto-selection helpers were removed from the inspected log paths; pending action and picker are stored together until completion.",
+    "poll_file_action consumes completed/cancelled requests once; telemetry multi-selection similarly clears its request before dispatch.",
+    "Binary review, analysis/conversion actions, FFT/spectrogram, magnetometer-log processing, split prompts, terminal log review and telemetry exports/graphing use the deferred picker.",
+    "File listing excludes directories with file-like suffixes and supports case-insensitive extension matching.",
+    "Desktop constructors continue to use rfd dialogs; common in-app code is exercised explicitly by the event tests."
+  ],
+  "corrected_during_review": [
+    {
+      "id": "R37-C1",
+      "priority": "P1",
+      "finding": "Open selection trimmed the selected filename, so choosing ' a.bin' could open 'a.bin' instead.",
+      "correction": "Open mode now uses the exact stored name; only save text input is trimmed. Reviewer independently ran the new pointer-driven two-file regression successfully."
+    },
+    {
+      "id": "R37-C2",
+      "priority": "P2",
+      "finding": "Every picker initially shared the same fixed modal identifier, and raw Escape handling could cancel more than one pending request.",
+      "correction": "Pickers now have per-instance identifiers and only the top modal consumes Escape. Reviewer independently ran the overlapping-picker regression successfully. Broader modal interaction combinations were not exhaustively exercised."
+    }
+  ],
+  "findings": [
+    {
+      "id": "R37-01",
+      "priority": "P1",
+      "subsystem": "Native mobile document access",
+      "status": "verified missing capability",
+      "evidence": [
+        "Mobile FilePicker constructor selects the app-directory browser; it does not call Android SAF or an iOS document picker.",
+        "binary_log_picker and telemetry picker are rooted at the application's logs directory; there is no provider or directory navigation in this browser."
+      ],
+      "impact": "A user cannot choose arbitrary phone/cloud/provider documents through the requested native mobile interaction. This does not establish Android/iOS feature parity.",
+      "required_fix": "Implement native document-provider selection/import and URI/security-scoped access with cancellation, permission and read-error handling. Validate on installed Android and iOS apps."
+    },
+    {
+      "id": "R37-02",
+      "priority": "P1",
+      "subsystem": "Complete log-opening parity",
+      "status": "verified inherited source gap",
+      "evidence": [
+        "Reference LogBrowse's filter contains both .log and .bin, with Multiselect=true and per-file loading.",
+        "Rust binary_log_picker limits the chooser to bin and single selection; LogBrowse::load passes bytes to the binary parser."
+      ],
+      "required_fix": "Implement text DataFlash log loading and the reference multi-log workflow, with source-derived content tests and interaction evidence. Do not present the repaired binary selection path as complete LogBrowse parity."
+    },
+    {
+      "id": "R37-03",
+      "priority": "P1",
+      "subsystem": "Text import workflows outside this run",
+      "status": "still open or separately in progress",
+      "evidence": [
+        "At inspection, platform::open_text on mobile returns None; several waypoint, polygon/KML, connection-list and setup callers still use that synchronous helper.",
+        "Parent is implementing parameter Load/Compare in a separate run; those changing config.rs paths were not reviewed here."
+      ],
+      "required_fix": "Complete deferred selection for every relevant text-import caller and preserve cancellation, validation, current editing state and target identity. Replace silent no-ops with actual workflows."
+    },
+    {
+      "id": "R37-04",
+      "priority": "P2",
+      "subsystem": "Owner lifecycle and test breadth",
+      "status": "coverage gap, not a reproduced defect",
+      "evidence": [
+        "Event-driven tests directly cover LogBrowse, one telemetry CSV export and the shared picker.",
+        "No equivalent completed-action tests were executed for FFT/MagCal/split, FlightData analysis/conversions, terminal-page navigation, or main-view switches while a request is pending.",
+        "Several owner pickers are polled only when their enclosing main view/page is rendered."
+      ],
+      "required_fix": "Add user-visible action/lifecycle tests for the remaining owners, including switching/closing views and overlapping requests. Establish intended suspension/cancellation behavior rather than inferring it from the generic picker test."
+    },
+    {
+      "id": "R37-05",
+      "priority": "P1",
+      "subsystem": "Whole-product and reliability gates",
+      "status": "prior open blockers not closed by this run",
+      "evidence": [
+        "No real BLE/WinUSB implementation, full reference WebSocket endpoint flow, complete analyzer/graph parity or five-platform install/run evidence is supplied by this change.",
+        "The earlier simulator startup timeout remains an unresolved reliability finding; this review did not investigate or close it."
+      ]
+    }
+  ],
+  "not_verified": [
+    "No Android/iOS build, installation, document-provider invocation or physical-device file selection was executed.",
+    "No real desktop rfd dialog was automated by the reviewer; the common in-app code was tested on Windows.",
+    "No whole-application visual comparison, full reference feature inventory or complete workspace suite was independently executed in this review.",
+    "No physical vehicle, transport hardware or firmware operation was exercised."
+  ],
+  "next_concrete_task": "Finish deferred text/parameter import wiring, then implement and validate native mobile document-provider access. Add text .log and multi-log opening parity rather than treating .bin selection as the whole feature.",
+  "ten_out_of_ten_requires": [
+    "Traceable comprehensive reference UI/workflow/feature inventory with authoritative acceptance evidence.",
+    "Matched rendering and interaction evidence across relevant sizes, DPI, locales and requested platforms.",
+    "Actual installable and launched native Windows/macOS/Linux/Android/iOS applications with required file and device access validated.",
+    "Resolution of known missing behavior and reliability failures; numerical ratings cannot hide untested gates."
+  ]
+}

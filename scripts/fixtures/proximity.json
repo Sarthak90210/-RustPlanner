@@ -1,0 +1,11 @@
+{
+  "radius_cm": 500,
+  "vehicle_cm": 80,
+  "sensors_cm": [50, 100, 150, 200, 250, 350, 500, 900],
+  "arrays": [
+    {"angle": 12, "width": 7.5, "distance_cm": 125},
+    {"angle": 95, "width": 20, "distance_cm": 275},
+    {"angle": 200, "width": 90, "distance_cm": 425},
+    {"angle": 275, "width": 150, "distance_cm": 700}
+  ]
+}

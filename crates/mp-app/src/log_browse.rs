@@ -47,6 +47,34 @@ pub struct LogBrowse {
     map_state: map::MapState,
     tiles: map::TileCache,
     error: Option<String>,
+    load_request: Option<((), crate::platform::FilePicker)>,
+    pub analysis: Option<Vec<(String, String, String)>>,
+}
+
+#[cfg(test)]
+mod file_workflow_tests {
+    use super::*;
+    use crate::platform::{FilePicker, picker_test_support as picker};
+    #[test]
+    fn selected_log_loads_once_cancel_preserves_it_and_read_errors_are_visible() {
+        let root = picker::root();
+        for name in ["a.bin", "z.bin"] { std::fs::write(root.join(name), dataflash::sample_log()).unwrap(); }
+        let ctx = egui::Context::default();
+        let mut browse = LogBrowse::default(); browse.show_map = false;
+        browse.load_request = Some(((), FilePicker::in_directory("Log", root.clone(), &["bin"], None)));
+        { let mut draw = |ctx: &egui::Context| browse.ui(ctx); picker::click(&ctx, &mut draw, "a.bin"); picker::click(&ctx, &mut draw, "Open"); }
+        assert_eq!(browse.name, "a.bin"); assert!(browse.load_request.is_none());
+        assert_eq!(browse.log.as_ref().unwrap().gps_track().len(), 200);
+        browse.load_request = Some(((), FilePicker::in_directory("Log", root.clone(), &["bin"], None)));
+        { let mut draw = |ctx: &egui::Context| browse.ui(ctx); picker::click(&ctx, &mut draw, "Cancel"); }
+        assert_eq!(browse.name, "a.bin"); assert!(browse.load_request.is_none());
+        browse.load(root.join("missing.bin"));
+        let mut shapes = Vec::new();
+        for _ in 0..3 { shapes = picker::frame(&ctx, &mut |ctx| browse.ui(ctx), Vec::new()); }
+        assert!(browse.error.is_some()); assert_eq!(browse.name, "a.bin");
+        assert!(shapes.iter().any(|s| matches!(&s.shape, egui::Shape::Text(t) if t.galley.job.text.contains("Log load error"))));
+        for name in ["a.bin", "z.bin"] { std::fs::remove_file(root.join(name)).unwrap(); } std::fs::remove_dir(root).unwrap();
+    }
 }
 
 impl Default for LogBrowse {
@@ -69,11 +97,17 @@ impl Default for LogBrowse {
             map_state: map::MapState::default(),
             tiles: map::TileCache::new(Some(crate::platform::tile_cache_dir())),
             error: None,
+            load_request: None,
+            analysis: None,
         }
     }
 }
 
 impl LogBrowse {
+    pub fn request_load(&mut self) {
+        self.load_request = Some(((), crate::platform::binary_log_picker()));
+    }
+
     pub fn load(&mut self, path: PathBuf) {
         match std::fs::read(&path) {
             Ok(b) => {
@@ -84,6 +118,8 @@ impl LogBrowse {
                 self.name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
                 self.log = Some(log);
                 self.graphs.clear();
+                self.selected = None;
+                self.analysis = None;
                 self.error = None;
                 self.open = true;
             }
@@ -101,6 +137,12 @@ impl LogBrowse {
     }
 
     pub fn ui(&mut self, ctx: &egui::Context) {
+        if let Some(((), path)) = crate::platform::poll_file_action(&mut self.load_request, ctx) { self.load(path); }
+        if let Some(error) = self.error.clone() {
+            let mut visible = true;
+            egui::Window::new("Log load error").open(&mut visible).show(ctx, |ui| { ui.label(error); });
+            if !visible { self.error = None; }
+        }
         if !self.open {
             return;
         }
@@ -129,6 +171,7 @@ impl LogBrowse {
                 ui.allocate_rect(full, Sense::hover());
             });
         });
+        self.analysis_window(ctx);
         if !open {
             self.open = false;
         }
@@ -185,26 +228,29 @@ impl LogBrowse {
             self.graphs.clear();
         }
         if b(ui, 239.0, 75.0, "Load A Log") {
-            if let Some(p) = pick_bin() {
-                self.load(p);
-            }
+            self.request_load();
         }
         if b(ui, 320.0, 75.0, "Remove Item") {
             if let Some((m, f)) = &self.selected {
                 self.graphs.retain(|g| !(g.0 == *m && g.1 == *f));
             }
         }
+        if b(ui, 401.0, 85.0, "Auto Analysis") {
+            if let Some(log) = &self.log {
+                self.analysis = Some(log.analysis());
+            }
+        }
         let c = |ui: &mut egui::Ui, x: f32, w: f32, v: &mut bool, t: &str| {
             ui.put(Rect::from_min_size(o + Vec2::new(x, 4.0), Vec2::new(w, 17.0)), egui::Checkbox::new(v, t));
         };
-        c(ui, 401.0, 50.0, &mut self.show_map, "Map");
-        c(ui, 454.0, 52.0, &mut self.show_time, "Time");
-        c(ui, 509.0, 82.0, &mut self.show_table, "Data Table");
-        c(ui, 594.0, 95.0, &mut self.show_params, "Show Params");
-        ui.put(Rect::from_min_size(o + Vec2::new(691.0, 2.0), Vec2::new(100.0, 21.0)), |ui: &mut egui::Ui| {
+        c(ui, 492.0, 48.0, &mut self.show_map, "Map");
+        c(ui, 544.0, 50.0, &mut self.show_time, "Time");
+        c(ui, 598.0, 78.0, &mut self.show_table, "Data Table");
+        c(ui, 680.0, 90.0, &mut self.show_params, "Show Params");
+        ui.put(Rect::from_min_size(o + Vec2::new(775.0, 2.0), Vec2::new(96.0, 21.0)), |ui: &mut egui::Ui| {
             let mut sel = self.preset;
             let r = egui::ComboBox::from_id_salt("CMB_preselect")
-                .width(92.0)
+                .width(88.0)
                 .wrap_mode(egui::TextWrapMode::Truncate)
                 .selected_text(PRESETS[self.preset].0)
                 .show_ui(ui, |ui| {
@@ -222,10 +268,43 @@ impl LogBrowse {
             }
             r
         });
-        c(ui, 797.0, 56.0, &mut self.show_mode, "Mode");
-        c(ui, 856.0, 56.0, &mut self.show_errors, "Errors");
-        c(ui, 915.0, 53.0, &mut self.show_msg, "MSG");
-        c(ui, 971.0, 62.0, &mut self.show_events, "Events");
+        c(ui, 876.0, 52.0, &mut self.show_mode, "Mode");
+        c(ui, 932.0, 52.0, &mut self.show_errors, "Errors");
+        c(ui, 988.0, 50.0, &mut self.show_msg, "MSG");
+        c(ui, 1042.0, 58.0, &mut self.show_events, "Events");
+    }
+
+    fn analysis_window(&mut self, ctx: &egui::Context) {
+        let Some(rows) = self.analysis.clone() else { return };
+        let mut open = true;
+        let title = if self.name.is_empty() { "Log Analysis".to_string() } else { format!("Log Analysis - {}", self.name) };
+        egui::Window::new(title).open(&mut open).collapsible(false).resizable(true).default_size(Vec2::new(720.0, 420.0)).show(ctx, |ui| {
+            ui.label("Partial native checks. NA means insufficient data or an unimplemented check.");
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                egui::Grid::new("lb_analysis_grid").num_columns(3).striped(true).spacing(Vec2::new(14.0, 6.0)).show(ui, |ui| {
+                    ui.label(egui::RichText::new("Diagnostic Test").strong().color(Color32::WHITE));
+                    ui.label(egui::RichText::new("Status").strong().color(Color32::WHITE));
+                    ui.label(egui::RichText::new("Details").strong().color(Color32::WHITE));
+                    ui.end_row();
+                    for (t, st, m) in rows {
+                        theme::label(ui, t);
+                        let col = match st.as_str() {
+                            "GOOD" => Color32::from_rgb(0, 200, 0),
+                            "WARN" => Color32::from_rgb(255, 165, 0),
+                            "FAIL" => Color32::RED,
+                            "INFO" => Color32::from_rgb(0, 180, 255),
+                            _ => Color32::GRAY,
+                        };
+                        ui.label(egui::RichText::new(st).color(col).strong());
+                        theme::label(ui, m);
+                        ui.end_row();
+                    }
+                });
+            });
+        });
+        if !open {
+            self.analysis = None;
+        }
     }
 
     fn graph(&mut self, ui: &mut egui::Ui, rect: Rect) {
@@ -365,14 +444,4 @@ impl LogBrowse {
             });
         });
     }
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn pick_bin() -> Option<PathBuf> {
-    rfd::FileDialog::new().add_filter("Binary Log", &["bin", "BIN"]).set_directory(crate::platform::data_dir().join("logs")).pick_file()
-}
-
-#[cfg(any(target_os = "android", target_os = "ios"))]
-pub fn pick_bin() -> Option<PathBuf> {
-    crate::platform::list_files_in(&crate::platform::data_dir().join("logs"), &["bin"]).last().cloned()
 }

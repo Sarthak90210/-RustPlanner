@@ -82,6 +82,7 @@ pub struct LinkShared {
     pub log_entries: Vec<(u16, u32, u32)>,
     /// MAVLink Inspector: last message per (sysid, compid, msgid) with rate.
     pub inspector: BTreeMap<(u8, u8, u32), MsgStat>,
+    pub proximity: crate::proximity::Proximity,
     /// ADSB_VEHICLE reports by ICAO address: (callsign, lat, lng, alt m, heading deg, last seen)
     pub adsb: BTreeMap<u32, (String, f64, f64, f32, f32, Instant)>,
     /// MainV2.comPort.MAVlist: every vehicle heard on this link, by (sysid, compid)
@@ -1019,6 +1020,8 @@ impl Worker {
             let now = Instant::now();
             let key = (hdr.system_id as u8, hdr.component_id, msg.message_id());
             let mut s = self.shared.write();
+            let yaw = if hdr.system_id == s.cs.sysid as u32 { s.cs.yaw } else { s.mavs.get(&(hdr.system_id as u8, hdr.component_id)).map(|m| m.heading).unwrap_or(0.0) };
+            s.proximity.update(hdr.system_id as u8, hdr.component_id, &msg, yaw, now);
             if hdr.system_id != 255 {
                 match &msg {
                     MavMessage::HEARTBEAT(hb) if hb.mavtype != MavType::MAV_TYPE_GCS && hb.autopilot != MavAutopilot::MAV_AUTOPILOT_INVALID => {

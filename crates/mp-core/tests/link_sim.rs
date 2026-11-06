@@ -14,13 +14,15 @@ fn wait_event(
     mut pred: impl FnMut(&LinkEvent) -> bool,
 ) -> LinkEvent {
     let end = Instant::now() + timeout;
+    let mut last_event = String::from("none");
     loop {
         let left = end.saturating_duration_since(Instant::now());
-        assert!(!left.is_zero(), "timed out waiting for event");
+        assert!(!left.is_zero(), "timed out waiting for event: status={:?}, bytes={}, last_event={last_event}", link.status(), link.shared.read().bytes_received);
         if let Ok(e) = link.events.recv_timeout(left) {
             if pred(&e) {
                 return e;
             }
+            last_event = format!("{e:?}");
         }
     }
 }

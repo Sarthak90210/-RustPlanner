@@ -1,0 +1,115 @@
+{
+  "round": 38,
+  "date": "2026-11-06",
+  "review_type": "Independent adversarial source and event-driven review of deferred parameter file selection",
+  "reviewed_head": "b5a9c53a37f96b8353ffbf49f8b90bad20febcfe",
+  "reviewed_uncommitted_worktree": true,
+  "reviewed_files": [
+    "crates/mp-app/src/views/config.rs",
+    "crates/mp-app/src/platform.rs",
+    "crates/mp-core/src/paramfile.rs",
+    "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigRawParams.cs",
+    "reference/MissionPlanner/Controls/ParamCompare.cs",
+    "reference/MissionPlanner/ExtLibs/Utilities/ParamFile.cs"
+  ],
+  "verdict": "REJECTED for exact-clone parity. Deferred Load and Compare now reach explicit file selection instead of the mobile last-file fallback or no-op. Two pointer-driven parameter tests independently pass. Selection completion stages edits or comparison rows without sending parameter commands. This does not implement the reference's complete parsing, excluded-parameter, offline editing, missing-name feedback, native file-provider or five-platform workflows. A workspace log inspected during review also contains a failing swarm cancellation regression and cannot support an all-green claim at that snapshot.",
+  "scores": {
+    "overall": 4.0,
+    "ui_ux": 3.5,
+    "features": 4.5,
+    "cross_platform_delivery": 2.0,
+    "scale": "Provisional qualitative exact-reference-parity judgment, not completion percentages. Narrow selected-file tests do not justify a whole-product score increase. No native mobile app, full reference GUI or physical vehicle was qualified by this review."
+  },
+  "independent_validation": [
+    {
+      "command": "cargo test -p mp-app --lib parameter_file_tests",
+      "result": "PASS: 2 passed, 0 failed, 108 filtered out",
+      "scope": "Reviewer executed current actual egui pointer-event tests for a.param selection versus z.param, known changed-value staging, Compare preserving staged edits, cancellation, invalid UTF-8 read errors and different-system cancellation. Tests invoke the production file_ui completion helper; they do not click the full connected parameter screen's Load/Compare launch buttons or validate an Android/iOS document provider."
+    },
+    {
+      "source": "target/run-38-workspace-tests.log",
+      "result": "Inspected log shows FAILED: swarm::sequence_tests::cancelling_background_selection_keeps_the_existing_image; 108 passed, 1 failed, 1 ignored",
+      "scope": "This was a parent-produced workspace log read by the reviewer, not an independently executed full-workspace command. The failed assertion is editor.file_picker.is_none() after first-frame Escape. Top-modal Escape semantics and this cold-frame test need reconciliation before claiming a passing workspace gate."
+    }
+  ],
+  "verified_improvements": [
+    "Load from file and Compare Params now create a deferred FilePicker request and capture the selected system/component identity.",
+    "ParamEditor::ui polls file_ui with current parameter values and identity; a changed identity clears the pending request and reports an error.",
+    "File cancellation clears the pending selection without replacing staged edits or comparison rows.",
+    "Read failure includes the selected path in a toast and preserves the previous editable state.",
+    "The completion helper has no Link argument and sends no vehicle commands. Actual Write Params remains a separate action.",
+    "Compare builds a separate diff list and does not immediately replace existing staged edits."
+  ],
+  "findings": [
+    {
+      "id": "R38-01",
+      "priority": "P1",
+      "subsystem": "Reference excluded-parameter semantics",
+      "status": "verified source mismatch at review snapshot; parent informed",
+      "evidence": [
+        "Utilities/ParamFile.cs loadParamFile filters SYSID_SW_MREV, WP_TOTAL, CMD_TOTAL, FENCE_TOTAL, SYS_NUM_RESETS, ARSPD_OFFSET, GND_ABS_PRESS, GND_TEMP, BARO1_GND_PRESS, BARO2_GND_PRESS, BARO3_GND_PRESS, BARO_GND_TEMP, CMD_INDEX, LOG_LASTFILE and FORMAT_VERSION.",
+        "ConfigRawParams.loadparamsfromfile repeats a subset of that protection before assigning grid values.",
+        "Rust paramfile::load accepts these names, and file_ui stages every known changed loaded value or includes it in comparison rows. Both paths call the same permissive parser."
+      ],
+      "impact": "An imported file can stage reset, count and calibration-related fields that the reference deliberately excludes. The current selected-file tests contain none of these source-derived exclusions.",
+      "required_fix": "Implement the full source-derived excluded-name set centrally for parameter-file import so Load and Compare agree, and add regression fixtures containing every excluded name beside a normal changed parameter."
+    },
+    {
+      "id": "R38-02",
+      "priority": "P1",
+      "subsystem": "Parameter parsing and import errors",
+      "status": "verified source mismatch",
+      "evidence": [
+        "Reference ParamFile.loadParamFile parses numbers with invariant culture and throws FormatException identifying a parameter and token on invalid numeric input.",
+        "Rust paramfile::load silently omits tokens that fail f32 parsing. file_ui cannot distinguish a malformed file from a successfully parsed partial or empty file.",
+        "Reference StreamReader detects text BOMs; std::fs::read_to_string accepts UTF-8 only. The current bad.txt test demonstrates an error path, not source encoding equivalence."
+      ],
+      "impact": "A malformed parameter file can be partially staged with no explanation, whereas the reference parser rejects the invalid numeric token. Supported text encodings also differ.",
+      "required_fix": "Add a fallible source-compatible import parser and decode supported reference encodings. Parse the complete file before mutating edits or comparison state; surface precise format errors."
+    },
+    {
+      "id": "R38-03",
+      "priority": "P1",
+      "subsystem": "Offline editing and missing-parameter feedback",
+      "status": "verified broader workflow gap",
+      "evidence": [
+        "ConfigRawParams.BUT_load_Click passes offline=true when the stream is closed; loadparamsfromfile then adds previously unknown names to the offline parameter collection and calls Activate.",
+        "For live loads, the reference counts missing names and shows a No matching Params dialog with the missing list.",
+        "Rust ParamEditor::ui returns before rendering file actions when app.link is None, and file_ui silently discards unknown names."
+      ],
+      "required_fix": "Implement offline parameter file editing as a real state workflow, plus source-compatible missing-name feedback for live files. Do not describe known-name staging tests as complete parameter-workflow parity."
+    },
+    {
+      "id": "R38-04",
+      "priority": "P1",
+      "subsystem": "Validation regression",
+      "status": "failing workspace log observed",
+      "evidence": [
+        "run-38-workspace-tests.log records the existing swarm background cancellation test failing because its picker remains pending.",
+        "The test sends Escape on the first modal frame; the new FilePicker gates Escape on top-modal status. The platform picker test was warmed before Escape, but the swarm workflow test was not."
+      ],
+      "required_fix": "Verify intended cold/open-frame and visible top-modal Escape behavior, reconcile the test with that behavior without weakening cancellation guarantees, then rerun the affected swarm path and workspace suite."
+    },
+    {
+      "id": "R38-05",
+      "priority": "P1",
+      "subsystem": "Native file access and complete platform/UI delivery",
+      "status": "still open",
+      "evidence": [
+        "Mobile selection still browses app-local directories; no Android Storage Access Framework or iOS document-provider path is implemented or exercised here.",
+        "Other platform::open_text mobile callers still return None, including mission/polygon/KML and connection-list workflows.",
+        "No native mobile build/install/run, parameter screen screenshot comparison, real parameter round-trip or actual vehicle validation was performed by this reviewer.",
+        "The prior intermittent simulator startup timeout remains unproven fixed; later passing tests alone do not establish its cause or repair."
+      ],
+      "required_fix": "Continue the broader deferred text-import migration, implement native document access and actual platform delivery, and retain the reliability issue until cause and repair are established."
+    }
+  ],
+  "next_concrete_task": "Fix the parameter-file exclusion and format-error mismatches and the observed swarm cancellation validation regression. Then migrate remaining text-import workflows and implement native mobile document access; offline parameter editing remains a separate exact-reference requirement.",
+  "not_verified": [
+    "No full reference or Rust parameter UI was visually compared.",
+    "No Android or iOS native chooser, app installation or runtime was exercised.",
+    "No physical controller received parameters through this workflow.",
+    "The same-system/component disconnect-and-reconnect identity case was not tested; the current guard records only those numeric IDs.",
+    "The reviewer did not execute the full workspace suite independently; the observed failure is from the parent log."
+  ]
+}

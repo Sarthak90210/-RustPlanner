@@ -1,0 +1,107 @@
+{
+  "round": 35,
+  "date": "2026-11-06",
+  "review_type": "Independent adversarial review of proximity temporal and angular retention against the complete reference dispatch path",
+  "reviewed_head": "b5a9c53a37f96b8353ffbf49f8b90bad20febcfe",
+  "reviewed_uncommitted_worktree": true,
+  "reviewed_files": [
+    "crates/mp-core/src/proximity.rs",
+    "crates/mp-core/tests/proximity_wire.rs",
+    "crates/mp-core/src/link.rs",
+    "crates/mp-app/src/tool_windows.rs",
+    "reference/MissionPlanner/ExtLibs/ArduPilot/Proximity.cs",
+    "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs",
+    "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVState.cs",
+    "reference/MissionPlanner/Controls/ProximityControl.cs"
+  ],
+  "verdict": "REJECTED for exact-clone parity. Angular trails, raw-angle identity, shared scalar/custom replacement rules and arrival order are now closer to directionState. Independent focused tests pass. However, the initial run35 implementation trusts an inner handler comment about accepting all components while the actual C# subscription dispatcher filters by both system and component. Merging components in the Rust production cache therefore does not reproduce the complete reference path. Custom DISTANCE_SENSOR orientations and broader feature/platform/UI gaps also remain open.",
+  "scores": {
+    "overall": 4.0,
+    "ui_ux": 3.5,
+    "features": 4.5,
+    "cross_platform_delivery": 2.0,
+    "scale": "Provisional qualitative whole-product exact-parity judgment, not completion percentages. A local retention repair does not establish complete proximity behavior, rendered equivalence, device qualification or application delivery on five platforms."
+  },
+  "independent_validation": [
+    {
+      "command": "cargo test -p mp-core --lib proximity",
+      "result": "PASS: 7 passed, 0 failed, 53 filtered out",
+      "scope": "Independently executed moving scan origins, changed increments, unknown-bin history, scalar/custom key collisions, raw angle identity, zero/negative increments, per-system isolation and expiry checks. The initial component-merging test encodes the inner-list interpretation; it does not prove complete reference dispatcher equivalence."
+    },
+    {
+      "command": "cargo test -p mp-core --test proximity_wire",
+      "result": "PASS: 1 passed, 0 failed",
+      "scope": "Independently executed TCP production-link fixture with simultaneous scalar sectors, ATTITUDE yaw and a GLOBAL obstacle array. The inspected fixture sends all packets from component 1 and therefore cannot detect cross-component replacement. This is synthetic traffic, not real sensor qualification."
+    }
+  ],
+  "confirmed_improvements": [
+    "Samples are kept in arrival order; replacing a matching sample appends the update as directionState.Add does.",
+    "Custom obstacle samples are keyed by sensor id and raw angle instead of array index. Changed scan origins can leave old angular samples visible until their individual 200 ms expiry.",
+    "Changed increments replace only matching angular samples, and unknown bins do not remove still-valid historical readings.",
+    "Raw 0 and 360 degree keys remain distinct, matching source equality rather than normalizing them before replacement.",
+    "The asymmetric scalar/custom replacement behavior is reproduced within one sample list: scalar records have default Angle zero, custom Add compares SensorId/Angle, and scalar Add compares SensorId/Orientation.",
+    "Finite zero and negative increments follow the reference list behavior instead of being discarded solely for their sign.",
+    "Explicit timestamp tests preserve samples at their exact expiry instant and remove them after it, consistent with the source's strict expireat < DateTime.Now test."
+  ],
+  "findings": [
+    {
+      "id": "R35-01",
+      "priority": "P1",
+      "subsystem": "Reference component filtering and production cache identity",
+      "status": "verified source mismatch in initial run35 implementation",
+      "evidence": [
+        "Proximity.cs constructor subscribes with explicit sysid and compid at lines 33-37; MAVState.cs constructs a separate Proximity object using that MAVState's sysid/compid.",
+        "MAVLinkInterface.cs PacketReceived at approximately lines 5575-5579 invokes a subscription only on exact message/system/component match, or on the explicitly documented current-primary 0/0 subscription case.",
+        "The inner Proximity.messageReceived comment says accept any compid, but that comment does not bypass the outer subscription filter.",
+        "Initial Rust Proximity::update names its component argument _comp and compares replacement identity only within sys; prox_ui queries readings for sys without component selection.",
+        "sensors_coexist_and_components_share_reference_sensor_identity intentionally asserts that a component-2 scalar replaces the same component-1 sensor. The actual selected C# Proximity instance would not receive that component-2 packet."
+      ],
+      "impact": "One component can overwrite or contribute readings to the selected component's radar in Rust when it would be excluded by the complete reference subscription path. A plausible inner-class port is not complete-path parity.",
+      "required_fix": "Scope retained sample lists by system and component, or filter dispatch so the selected reference-equivalent cache receives only the subscribed component. Preserve the corrected Add overload semantics within each list. Add a production wire regression with identical sensor ids from different components and verify the selected component's radar remains isolated.",
+      "acceptance": "A source-derived unit sequence and production-link fixture prove scalar/custom retention within a component and no cross-component replacement or selected-radar leakage."
+    },
+    {
+      "id": "R35-02",
+      "priority": "P1",
+      "subsystem": "Custom and nonhorizontal scalar proximity readings",
+      "status": "verified retained feature gap",
+      "evidence": [
+        "Reference Proximity.messageReceived accepts every in-range DISTANCE_SENSOR orientation and stores it through directionState.Add.",
+        "Rust rejects every orientation enum greater than 7 before storage.",
+        "Reference ProximityControl has a MAV_SENSOR_ROTATION_CUSTOM drawing branch. A scalar custom-orientation record has Angle default zero and Size 45, so this branch draws a yellow custom arc even though the message did not come from OBSTACLE_DISTANCE.",
+        "Reference directionState exposes GetClosest and GetWarnings over the full retained list; Rust exposes only the horizontal readings query and has no equivalents for those APIs."
+      ],
+      "impact": "Filtering vertical orientations is reasonable for horizontal drawing, but dropping them from the source-equivalent state prevents closest/warning behavior. Dropping scalar CUSTOM also removes a source-visible radar path. Source-family boolean obstacle_array is not a complete substitute for source Orientation when choosing the custom drawing branch.",
+      "required_fix": "Retain source orientation metadata separately from message family. Keep full raw records for source-equivalent closest/warning queries and filter unsupported planar orientations at rendering time. Add an in-range DISTANCE_SENSOR CUSTOM fixture proving the source's angle/width/color/expiry behavior.",
+      "acceptance": "Behavior fixtures cover vertical/nonhorizontal retention and query behavior, scalar CUSTOM rendering metadata and its 3 second expiry, plus ordinary eight-direction and obstacle-array regressions."
+    },
+    {
+      "id": "R35-03",
+      "priority": "P1",
+      "subsystem": "Inherited whole-product parity requirements",
+      "status": "not closed by a local retention change",
+      "evidence": [
+        "Round34 records visible text/stroke differences and content-harness outer/client geometry limitations; it is not native full-form equivalence.",
+        "Prior reports identify missing real BLE/WinUSB backends, reference Socket.IO negotiation/reconnect behavior, mobile file workflows and complete iOS application delivery.",
+        "platform.rs mobile open_text still returns None; log_browse.rs mobile pick_bin still automatically selects the final directory entry instead of presenting user selection.",
+        "No exhaustive main-view/dialog/UI workflow inventory or install-and-run evidence on Windows, macOS, Linux, Android and iOS was supplied by this retention run."
+      ],
+      "required_fix": "Continue concrete behavior and cross-platform delivery work with evidence for each requirement. Passing these local synthetic tests must not be presented as physical compatibility or complete UI parity."
+    }
+  ],
+  "next_concrete_task": "First correct component isolation using the real subscription dispatcher as authority, with an identical-id multi-component wire regression. Then move to a broader user-visible gap such as deliberate mobile log/file selection using the existing deferred FilePicker, rather than automatically choosing a file. Keep scalar CUSTOM and complete proximity query behavior explicitly open until implemented.",
+  "not_verified": [
+    "No new rendered image inspection or native window interaction was performed in this retention review.",
+    "No physical sensor or vehicle was connected.",
+    "No five-platform build, packaging, install or runtime validation was performed.",
+    "No full workspace suite was independently executed; only the eight focused tests above.",
+    "Scores are judgment from a sampled review and cannot be treated as measured implementation percentages."
+  ],
+  "ten_of_ten_requires": [
+    "A complete reference feature and UI workflow inventory with verified evidence for every required item.",
+    "Rendered and interactive comparisons across main views, dialogs, error paths, supported sizes and target platforms.",
+    "Installable and launched native application evidence on Windows, macOS, Linux, Android and iOS.",
+    "Real-device evidence for claimed hardware transports and workflows, plus fault/reconnect regression evidence.",
+    "No unresolved missing, simplified or unverified required behavior hidden behind a numerical rating."
+  ]
+}

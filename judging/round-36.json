@@ -1,0 +1,122 @@
+{
+  "round": 36,
+  "date": "2026-11-06",
+  "review_type": "Independent adversarial review of current proximity corrections and validation reliability",
+  "reviewed_head": "b5a9c53a37f96b8353ffbf49f8b90bad20febcfe",
+  "reviewed_uncommitted_worktree": true,
+  "verdict": "REJECTED for exact-clone parity. Current code corrects the component-isolation and scalar CUSTOM findings from the initial round-35 snapshot, and 13 focused tests independently pass. The populated radar content is closer to the isolated C# paint output but visibly different. A later full workspace log passes after an earlier simulator startup timeout; no runtime cause or fix has been established for that intermittent failure. Major mobile, hardware, protocol and UI delivery gaps still prevent exact parity.",
+  "scores": {
+    "overall": 4.0,
+    "ui_ux": 3.5,
+    "features": 4.5,
+    "cross_platform_delivery": 2.0,
+    "scale": "Provisional qualitative exact-reference-parity judgment, not completion percentages. Local corrections and passing tests do not establish whole-product or five-platform parity. No whole-product score increase is justified by this narrow run."
+  },
+  "independent_validation": [
+    {
+      "command": "cargo test -p mp-core --lib proximity",
+      "result": "PASS: 9 passed, 0 failed, 53 filtered out",
+      "scope": "Reviewer executed current cache tests covering raw angular retention, changed increments, unknown bins, scalar/custom key collisions, negative and zero increments, custom scalar orientation, repeated GLOBAL yaw, expiry, and system/component isolation."
+    },
+    {
+      "command": "cargo test -p mp-core --test proximity_wire",
+      "result": "PASS: 1 passed, 0 failed",
+      "scope": "Reviewer executed current TCP production-link test. It now sends the same sensor id from component 2 and verifies selected component 1 remains at 1 m while component 2 stores 9 m, alongside ATTITUDE yaw and GLOBAL obstacle handling. This is synthetic MAVLink traffic, not hardware qualification."
+    },
+    {
+      "command": "cargo test -p mp-app --lib proximity_view_tests",
+      "result": "PASS: 3 passed, 0 failed, 100 filtered out",
+      "scope": "Reviewer executed range/size controls, small/large headless drawing and egui pointer/text routing with focus transfer and close/reopen. These are synthetic UI events, not native window input automation."
+    },
+    {
+      "action": "Inspected target/judging/round35/reference-normal.png and rust-normal.png plus normal.manifest.json",
+      "result": "Populated 430x391 content captures exist and were visually inspected. Geometry and source colors are close; glyph weight/metrics and stroke rasterization remain visibly different.",
+      "scope": "These are existing parent-generated artifacts. Reviewer did not independently launch the capture executable. Manifest identifies actual eframe viewport pixels and frozen telemetry; both captures exclude full native form chrome."
+    }
+  ],
+  "confirmed_corrections": [
+    {
+      "prior_finding": "Initial round-35 implementation merged component identities",
+      "current_evidence": "Proximity.Sample stores sys and comp. Both scalar and custom replacement predicates include both ids, readings requires sys and comp, and prox_ui queries CurrentState.sysid/compid. The reference MAVLinkInterface.PacketReceived dispatcher filters matching subscription system and component before invoking Proximity.messageReceived, despite the inner handler comment saying accept any component. The current wire regression verifies isolation through actual dispatch."
+    },
+    {
+      "prior_finding": "Scalar DISTANCE_SENSOR CUSTOM orientation was rejected",
+      "current_evidence": "Current update admits orientation 100, preserves default Angle 0 and Size 45, and records it as a scalar source. Painter selects the yellow custom arc and omits the scalar distance label using orientation 100, matching the reference CUSTOM switch rather than assuming every custom arc came from an obstacle array."
+    },
+    {
+      "prior_finding": "Obstacle samples were replaced by array index",
+      "current_evidence": "Current samples use arrival-order storage and raw-angle equality per subscribed MAVState, preserving old angles until individual expiry and matching the asymmetric scalar/custom replacement rules. Sequence tests establish narrower behavioral evidence, not complete proximity equivalence."
+    }
+  ],
+  "validation_reliability": {
+    "failed_parent_run": {
+      "artifact": "target/run-35-final-tests.log",
+      "observed_result": "dronecan_over_mavlink_forwarding failed at its initial Connected wait; the link_sim binary ended with 8 passed and 1 failed. The failure was observed in the log by this reviewer."
+    },
+    "later_parent_run": {
+      "artifact": "target/run-36-workspace-tests.log",
+      "observed_result": "Completed log contains 189 passed, 0 failed and 1 ignored across workspace test targets. Parent reported exit code 0; reviewer inspected the completed test-result lines. This full suite was not independently executed by this reviewer."
+    },
+    "diagnostic_change": "tests/link_sim.rs wait_event now includes link status, received-byte count and the last unmatched event in a timeout assertion. It changes diagnostic output only, not runtime connection or simulator behavior.",
+    "conclusion": "The later pass, isolated pass and two parent-reported parallel passes do not prove that the intermittent startup failure is fixed. Retain it as an unresolved reliability issue. Do not infer a UDP port race or other root cause without failure evidence that discriminates the hypotheses."
+  },
+  "findings": [
+    {
+      "id": "R36-01",
+      "priority": "P1",
+      "subsystem": "Mobile file selection and text workflows",
+      "status": "verified current source gap",
+      "evidence": [
+        "crates/mp-app/src/log_browse.rs mobile pick_bin returns list_files_in(...).last().cloned(), selecting a filename without user choice.",
+        "crates/mp-app/src/platform.rs mobile open_text returns None unconditionally.",
+        "The existing deferred platform FilePicker can provide an in-app selection workflow, but the inspected log/text entry points do not consistently use it."
+      ],
+      "required_fix": "Replace mobile auto-selection/no-op paths with a deferred picker integrated into the actual owning view. Preserve desktop native dialogs. Cover multiple files, explicit selection, cancellation, empty directories, read failures and repeated opens, then implement and validate Android/iOS document-provider access for full platform parity.",
+      "acceptance": "Real view-event tests prove that the selected file is the file opened, cancel preserves prior content, and mobile workflows remain usable with more than one log. Installed mobile-device checks are still required beyond in-app sandbox selection."
+    },
+    {
+      "id": "R36-02",
+      "priority": "P1",
+      "subsystem": "Intermittent simulator connection reliability",
+      "status": "observed failure; cause and fix unproven",
+      "required_fix": "Use the improved diagnostics in a repeatable parallel connection loop, retain the first discriminating failure trace and fix the demonstrated cause. Preserve protocol and concurrency coverage; passing reruns or simply increasing timeouts cannot certify a runtime fix."
+    },
+    {
+      "id": "R36-03",
+      "priority": "P2",
+      "subsystem": "Remaining proximity and rendered UI parity",
+      "status": "still incomplete",
+      "evidence": [
+        "Nonhorizontal distance rotations are still discarded from the Rust cache, while the C# cache stores them even though the radar does not draw those rotations.",
+        "Reference GetClosest and GetWarnings queries are not implemented by the inspected Rust module.",
+        "Current captures visibly retain font/stroke differences and do not reproduce the full WinForms outer/client geometry, chrome, DPI or native event flow."
+      ],
+      "required_fix": "Preserve the remaining source data/query behavior where applicable and compare actual native reference/Rust windows at matched outer/client sizes and DPI. Do not promote content-harness similarity into full-window equivalence."
+    },
+    {
+      "id": "R36-04",
+      "priority": "P1",
+      "subsystem": "Inherited whole-product delivery blockers",
+      "status": "not closed by these local changes",
+      "evidence": [
+        "Prior independent reviews document missing real BLE/WinUSB backends and reference WebSocket endpoint negotiation/reconnect behavior.",
+        "Complete mobile serial/file workflows, an installable validated iOS application, complete graph interactions and full analyzer equivalence remain unqualified.",
+        "There is no exhaustive rendered UI/feature acceptance inventory or actual install/run evidence for every requested platform."
+      ]
+    }
+  ],
+  "next_concrete_task": "Integrate deferred user-selected mobile log/file opening into the real Log Browse and text-import workflows, with cancellation/error/state-preservation event tests. Continue the unresolved simulator reliability investigation with discriminating traces rather than claiming the latest green run fixed it.",
+  "not_verified": [
+    "No real sensor, vehicle, BLE/USB backend or firmware flashing operation was exercised.",
+    "No macOS, Linux, Android or iOS application was built, installed or launched by this reviewer.",
+    "No full Mission Planner form or whole application UI was compared through native input automation.",
+    "The complete workspace suite was inspected as parent-generated evidence, not independently rerun by this reviewer."
+  ],
+  "ten_out_of_ten_requires": [
+    "A traceable full reference UI/workflow/feature inventory with concrete behavioral acceptance evidence for every required item.",
+    "Matched native rendered and interaction evidence across requested platforms, window sizes, DPI and relevant locales.",
+    "Actual installable and launched native application evidence on Windows, macOS, Linux, Android and iOS.",
+    "Real device/transport validation for claimed hardware features and resolved reliability failures.",
+    "No hidden missing or unverified required behavior behind a numerical score."
+  ]
+}

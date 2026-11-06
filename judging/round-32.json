@@ -1,0 +1,106 @@
+{
+  "round": 32,
+  "date": "2026-11-06",
+  "review_type": "Independent adversarial source and targeted execution review of proximity retention and radar wiring",
+  "reviewed_head": "b5a9c53a37f96b8353ffbf49f8b90bad20febcfe",
+  "reviewed_worktree": [
+    "crates/mp-core/src/proximity.rs",
+    "crates/mp-core/src/link.rs",
+    "crates/mp-core/src/lib.rs",
+    "crates/mp-core/tests/proximity_wire.rs",
+    "crates/mp-app/src/tool_windows.rs"
+  ],
+  "verdict": "REJECTED for exact-clone parity. The proximity backend repairs verified lost-sector, orientation and missing obstacle-array defects. The reviewer found an integration yaw defect, which the parent corrected and extended a production-link regression to cover. Four targeted tests independently pass after that correction. The radar UI and wider product remain materially short of exact parity.",
+  "scores": {
+    "overall": 4.0,
+    "ui_ux": 3.5,
+    "features": 4.5,
+    "cross_platform_delivery": 2.0,
+    "scale": "Provisional qualitative exact-parity judgment, not a completion percentage or exhaustive certification. An incremental backend correction does not justify raising a whole-product rating without a comprehensive behavior inventory, rendered UI comparison and platform/device validation."
+  },
+  "independent_validation": [
+    {
+      "command": "cargo test -p mp-core --lib proximity",
+      "result": "PASS: 3 passed, 0 failed, 53 filtered out",
+      "scope": "Local Windows unit tests cover simultaneous sensors/components/systems, retention expiry, vertical and range rejection, obstacle sentinels, float increment, GLOBAL yaw and 200 ms obstacle expiry."
+    },
+    {
+      "command": "cargo test -p mp-core --test proximity_wire",
+      "result": "PASS: 1 passed, 0 failed",
+      "scope": "Loopback TCP production transport and link dispatch retain simultaneous DISTANCE_SENSOR sectors and an OBSTACLE_DISTANCE reading. Updated fixture sends ATTITUDE yaw 90 degrees without GLOBAL_POSITION_INT and asserts the GLOBAL obstacle bearing. This is synthetic MAVLink traffic, not physical lidar qualification."
+    }
+  ],
+  "confirmed_corrections": [
+    {
+      "prior_finding": "R30 proximity latest-message inspector drops simultaneous sectors",
+      "evidence": "Proximity now stores readings by system, component, message family, sensor id/type and orientation/bin. Link dispatch updates this cache and prox_ui reads it for the selected system. Tests retain multiple DISTANCE_SENSOR ids from one component simultaneously."
+    },
+    {
+      "prior_finding": "Every orientation enum was multiplied by 45 degrees",
+      "evidence": "Only enum values 0 through 7 become horizontal radar sectors. The reference drawing switch also draws these eight yaw orientations and custom array sectors; vertical sensors do not become fictitious horizontal directions."
+    },
+    {
+      "prior_finding": "Missing OBSTACLE_DISTANCE handling",
+      "evidence": "Native cache handles array range filtering, unknown-distance sentinel, angle offset, reference integer/float increment precedence, reference GLOBAL-plus-yaw convention, sector width and short expiry. Renderer consumes variable sector width and uses reference yellow for obstacle-array arcs and red for distance-sensor arcs."
+    },
+    {
+      "review_finding": "Initial dispatch used MavSummary.heading instead of selected CurrentState.yaw",
+      "status": "corrected and independently rechecked during this review",
+      "evidence": "HEARTBEAT initializes MavSummary.heading to zero; ATTITUDE updates CurrentState.yaw but not that summary field. The initial change therefore misrotated GLOBAL arrays without GLOBAL_POSITION_INT. link.rs now uses CurrentState.yaw for the selected system. Parent extended the TCP regression; reviewer independently ran it successfully."
+    }
+  ],
+  "findings": [
+    {
+      "id": "R32-01",
+      "priority": "P1",
+      "subsystem": "Proximity radar UI and interaction parity",
+      "status": "verified_source_parity_gap",
+      "evidence": [
+        "Reference Controls/ProximityControl.cs defaults screenradius to 500 cm and mavsize to 80 cm, changes radius with +/- and vehicle size with [ and ], and updates the title with both values.",
+        "Reference computes scale from current window dimensions, draws 50 cm rings, azimuth spokes/numbers and sensor distance labels, and uses a firmware-specific vehicle icon.",
+        "Rust prox_ui still allocates a fixed 380 px square, uses a fixed 10 m range and four rings, and draws a fixed white triangle. Matching scale/size controls, title values, spokes and distance labels are absent."
+      ],
+      "required_fix": "Port the reference radius and vehicle-size state, default values, key interactions, responsive geometry, annotations and vehicle marker; compare rendered reference and Rust views under identical sensor fixtures.",
+      "acceptance": "Behavior tests cover default 5 m radius, +/- and bracket controls and clamping. Render both views at multiple sizes with horizontal and array sectors, including empty and expired data; inspect geometry, labels, colors and marker scaling."
+    },
+    {
+      "id": "R32-02",
+      "priority": "P2",
+      "subsystem": "Proximity temporal/angular retention semantics",
+      "status": "verified_source_difference_requiring_explicit_acceptance",
+      "evidence": [
+        "Reference directionState.Add for obstacle arrays replaces records by sensor id and Angle; Rust replaces by system/component/type and array bin index.",
+        "When angle_offset or vehicle yaw changes within the 200 ms lifetime, the reference can retain old angular samples until expiry, whereas Rust overwrites the same bin at its new angle. Components are also separated by the Rust cache rather than collapsed by reference sensor id/angle."
+      ],
+      "impact": "For moving headings or scan origins, temporal radar trails and duplicate sensor behavior can differ. The current tests use a single obstacle-array update and do not establish equivalence for this sequence.",
+      "required_fix": "Add source-derived sequence fixtures for changed offsets, changed increment, repeated ids across components and stale/unknown bins. Either reproduce the reference result or explicitly retain this as a documented parity deviation; do not silently certify exact equivalence."
+    },
+    {
+      "id": "R32-03",
+      "priority": "P1",
+      "subsystem": "Wider exact-clone blockers remain open",
+      "status": "prior_verified_blockers_not_closed_by_this_run",
+      "evidence": [
+        "Round 31 records missing real BLE/WinUSB backends and reference Socket.IO negotiation/reconnect behavior despite the improved WS/TLS implementation.",
+        "Round 30 records incomplete mobile file/serial workflows, no installable iOS wrapper and incomplete graph interactions.",
+        "No exhaustive rendered UI comparison, real-device validation or full platform application delivery was provided by this run."
+      ],
+      "required_fix": "Continue the evidence-backed gap inventory and implement real behaviors. Passing narrow unit and loopback tests cannot certify whole-product parity."
+    }
+  ],
+  "not_verified": [
+    "No reference or Rust app was rendered in this review; UI findings are source comparisons, not visual certification.",
+    "No physical proximity sensor, vehicle, BLE or USB device was exercised.",
+    "No macOS, Linux, Android or iOS build/install/runtime check was independently performed.",
+    "The reviewer ran focused proximity tests, not the full workspace suite. Parent full-workspace validation remains separate.",
+    "No nonselected-vehicle attitude-history replay or system-switch regression was independently performed."
+  ],
+  "next_concrete_task": "Port ProximityControl radius/vehicle-size interactions and responsive annotated rendering, with source-derived behavior fixtures and rendered comparison. Also resolve the angular-retention sequence difference before claiming complete proximity parity.",
+  "ten_of_ten_requires": [
+    "An exhaustive feature and workflow inventory with evidence that every reference behavior is implemented or explicitly excluded by the user.",
+    "Side-by-side rendered comparison and interaction checks for all main views, dialogs, error paths, layouts and supported locales.",
+    "Installable native applications and runtime verification on every requested platform, with real device transports validated on applicable platforms.",
+    "Regression suites for protocol behavior, faults, retries, reconnects and file compatibility; no false-success placeholders.",
+    "Independent review with no unresolved missing behavior or unverified claims hidden behind a numerical score."
+  ]
+}

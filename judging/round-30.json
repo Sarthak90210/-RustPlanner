@@ -1,0 +1,190 @@
+{
+  "round": 30,
+  "date": "2026-11-06",
+  "review_type": "Independent adversarial source review against exact behavioral, visual and cross-platform parity",
+  "reviewed_head": "b5a9c53a37f96b8353ffbf49f8b90bad20febcfe",
+  "reviewed_worktree": [
+    "crates/mp-core/src/dataflash.rs",
+    "crates/mp-app/src/log_browse.rs"
+  ],
+  "verdict": "REJECTED. Exact-clone parity is not achieved. Source inspection finds production transport selections backed by memory queues, incomplete mobile workflows and incomplete graph interactions. The current log changes improve honesty and some edge cases, but cannot close these broader gaps.",
+  "scores": {
+    "overall": 4,
+    "ui_ux": 3.5,
+    "features": 4.5,
+    "cross_platform_delivery": 2,
+    "scale": "Provisional reviewer judgment on a 0-10 exact-parity scale, not a measured completion percentage. 10 requires the evidence below. UI score is not a rendered visual certification; this review did not render the apps."
+  },
+  "methodology": [
+    "Inspected actual Rust and corresponding C# implementations for communications, log browsing/analysis, proximity, graphs and platform delivery.",
+    "Treated round-29 as an untrusted hypothesis and checked its claims against source.",
+    "Did not infer parity from passing tests, code size, menu presence, comments, or prior scores.",
+    "Did not launch real vehicles or flash hardware. Did not independently execute workspace tests in this review; parent is validating the changing worktree."
+  ],
+  "prior_audit_corrections": [
+    {
+      "claim": "FFT and spectrogram are absent",
+      "evidence": "crates/mp-app/src/tool_windows.rs:141,186,412,1055 implement FFT/spectral blocks and display. These are partial implementations requiring comparison, not zero implementation."
+    },
+    {
+      "claim": "360-degree proximity radar is absent",
+      "evidence": "crates/mp-app/src/tool_windows.rs:964 implements a radar, but data retention and orientation handling are defective."
+    },
+    {
+      "claim": "Elevation graph is absent",
+      "evidence": "crates/mp-app/src/views/flight_plan/menu.rs:796 samples SRTM and draws planned/terrain elevation."
+    },
+    {
+      "claim": "Parameter comparison is absent",
+      "evidence": "crates/mp-app/src/views/config.rs:429,604 implement comparison and selection of changes."
+    },
+    {
+      "claim": "ConfigFFT and ESC calibration are absent",
+      "evidence": "crates/mp-app/src/views/setup.rs:1514,1649 have handlers. Their existence does not prove full behavior or visual parity."
+    },
+    {
+      "claim": "MATLAB export absent",
+      "evidence": "crates/mp-core/src/dataflash.rs implements to_mat_v4. Interoperability was not independently tested here."
+    }
+  ],
+  "findings": [
+    {
+      "id": "R30-01",
+      "priority": "P0",
+      "subsystem": "BLE / WinUSB",
+      "status": "verified_source_defect",
+      "evidence": [
+        "crates/mp-core/src/comms.rs:122-134 returns DriverTransport::new for nonempty BLE addresses and WinUSB paths.",
+        "DriverTransport at approximately line 373 stores input in VecDeque and writes in a Vec; no OS/device connection or driver attaches these buffers.",
+        "Tests at line 529 assert only that writes report their byte count.",
+        "Reference ExtLibs/Comms/CommsBLE.cs actually opens SimpleBLE peripherals; CommsWinUSB.cs is a device implementation."
+      ],
+      "impact": "Selecting these production transports appears to open successfully even though no device is contacted and no real bytes can arrive.",
+      "required_fix": "Implement real backends with device discovery, permission, connect/read/write/disconnect behavior; until then return Unsupported explicitly and test that unsupported selections fail honestly.",
+      "acceptance": "Read repeated real vehicle MAVLink heartbeats and round-trip a request over each backend, plus disconnect and permission failure tests."
+    },
+    {
+      "id": "R30-02",
+      "priority": "P0",
+      "subsystem": "WebSocket transport",
+      "status": "verified_source_defect",
+      "evidence": [
+        "crates/mp-core/src/comms.rs WebSocketTransport::connect accepts wss://, strips scheme, and opens plain TcpStream.",
+        "Handshake uses the RFC sample Sec-WebSocket-Key, accepts any response containing 101, and does not verify Sec-WebSocket-Accept.",
+        "Outgoing frames use a constant mask; read_exact consumes partial frame bytes without preserving a frame decoder state on timeout."
+      ],
+      "impact": "Secure WebSocket does not use TLS, malformed handshakes can be accepted, and fragmented/timed-out frames are not robustly decoded.",
+      "required_fix": "Use a maintained protocol implementation with TLS or reject wss before network I/O while implementing missing behavior. Cover frame fragmentation, control frames, close, timeouts and upgrade validation.",
+      "acceptance": "Integration tests against real WS/WSS endpoints, invalid upgrade rejection, fragmented frame delivery and delayed partial frames."
+    },
+    {
+      "id": "R30-03",
+      "priority": "P1",
+      "subsystem": "Proximity radar",
+      "status": "verified_source_defect",
+      "evidence": [
+        "crates/mp-core/src/link.rs:84 inspector map key is (sysid,compid,msgid); inserts at 1072 retain one latest message per key.",
+        "crates/mp-app/src/tool_windows.rs:964-984 obtains readings from inspector, so multiple DISTANCE_SENSOR sensor IDs/orientations on one component replace each other.",
+        "Every orientation is mapped as enum*45 degrees, including pitch/roll orientations; no OBSTACLE_DISTANCE handling in the inspected Rust path.",
+        "Reference Controls/ProximityControl.cs uses vehicle Proximity.DirectionState and explicitly switches supported yaw orientations. It supports radius and vehicle-size keys."
+      ],
+      "impact": "A multi-sector radar can silently show only the latest sector and draw nonhorizontal sensors in arbitrary headings.",
+      "required_fix": "Maintain per-vehicle proximity data keyed by sensor identity/orientation, handle valid yaw directions and obstacle arrays, reject invalid/sentinel readings, expire stale sectors, and reproduce reference controls.",
+      "acceptance": "Send at least eight sectors from the same component and verify simultaneous retention, vehicle isolation, stale expiry, invalid orientation rejection and a rendered comparison."
+    },
+    {
+      "id": "R30-04",
+      "priority": "P1",
+      "subsystem": "Mobile and iOS delivery",
+      "status": "verified_source_gap",
+      "evidence": [
+        ".github/workflows/build.yml iOS job runs cargo build --lib only; no Xcode wrapper, Info.plist or pbxproj was found in this checkout.",
+        "crates/mp-core/src/comms.rs:163 returns Unsupported for mobile serial.",
+        "crates/mp-app/src/platform.rs mobile open_text returns None.",
+        "crates/mp-app/src/log_browse.rs mobile pick_bin chooses the last log in a directory without presenting a file chooser."
+      ],
+      "impact": "A compiled iOS library is not an installable app; several important desktop workflows cannot be performed on mobile.",
+      "required_fix": "Provide installable iOS application packaging and lifecycle integration, mobile document picker/save/share flows, and supported mobile device connections with explicit permission handling.",
+      "acceptance": "Install and launch on Android and iOS; open/save/import/export files through actual OS workflows and complete a telemetry/parameter/mission session on each."
+    },
+    {
+      "id": "R30-05",
+      "priority": "P1",
+      "subsystem": "Graph UI and log browser",
+      "status": "verified_source_gap",
+      "evidence": [
+        "crates/mp-app/src/zedgraph.rs plot_range is an autoscaled painter with Sense::click, no zoom/pan/cursor/export interactions.",
+        "crates/mp-app/src/log_browse.rs has six presets and left/right scales but no graph expressions or interaction state.",
+        "Reference Log/LogBrowse.cs TestPython at 1304 evaluates expressions; GraphItem_AddCurve at 1597 supports per-unit axes; reference has zoom interactions.",
+        "Rust log browser minimum width 900 plus a 150px tree and fixed button positions up to x=1100 prevent usable narrow-phone layouts."
+      ],
+      "impact": "Graph workflows and small-screen interaction are substantially different from the reference.",
+      "required_fix": "Port a bounded expression evaluator, interaction/axis behavior, legends and export workflows; define and test responsive handling of the reference controls.",
+      "acceptance": "Behavior tests plus side-by-side rendered comparisons for graphs, mode/error markers, selection, zoom reset, pan, cursor and axis changes at desktop DPI and supported mobile sizes."
+    },
+    {
+      "id": "R30-06",
+      "priority": "P1",
+      "subsystem": "Native log analysis",
+      "status": "partial_improvement_with_open_parity_gap",
+      "evidence": [
+        "Current dataflash changes correctly stop claiming a direct port and label motor/altitude checks unavailable, battery voltage informational and absence of ERR data inconclusive.",
+        "Attitude samples are paired within records and angle wrapping is used; analysis clears on loading a new log.",
+        "Reference Utilities/LogAnalyzer.cs launches an external runner and reads its diagnostic results. No equivalence corpus for that runner is supplied.",
+        "Current compass vector checks derive independently filtered field series and merge MAG instances; multi-instance and missing-field pairing can distort magnitudes. GPS fix status is explicitly not evaluated."
+      ],
+      "impact": "The new report is a partial heuristic aid, not equivalent to Mission Planner's external analyzer. Multi-sensor data still needs stronger semantics.",
+      "required_fix": "Obtain reference analyzer outputs for known-good/fault logs, port exact applicable tests with vehicle/instance/flight-interval handling, pair vector components within records, and preserve inconclusive states.",
+      "acceptance": "A reference-vs-Rust fixture corpus covering each analyzer test, schema variants, multiple sensors, boot/disarmed periods, recovery events, missing and invalid samples."
+    },
+    {
+      "id": "R30-07",
+      "priority": "P1",
+      "subsystem": "Firmware and wider parity inventory",
+      "status": "verified_limited_implementation_unverified_full_scope",
+      "evidence": [
+        "crates/mp-core/src/fwupload.rs implements the serial PX4 protocol and APJ handling.",
+        "The DFU Mode action in tool_windows.rs only requests reboot mode via MAVLink; it is not USB DFU firmware programming.",
+        "No STK500 or USB DFU implementation was found in Rust source search; reference contains NetDFULib and Utilities/DFU.cs."
+      ],
+      "impact": "Legacy and recovery firmware workflows are not covered by the serial PX4 uploader.",
+      "required_fix": "Create a reference feature inventory and implement missing firmware backends with accurate UI, failure/retry behavior and board compatibility checks.",
+      "acceptance": "Protocol fixtures and actual supported-board verification for each backend. Do not treat a reboot-to-DFU command as a successful flash."
+    }
+  ],
+  "current_run_assessment": {
+    "improvements": [
+      "Stops several misleading health conclusions and resets stale analysis on a new log.",
+      "Adds native report UI and edge-case regressions."
+    ],
+    "does_not_establish": [
+      "Complete external analyzer parity",
+      "Rendered UI equivalence",
+      "Hardware correctness",
+      "Mobile feature equivalence"
+    ],
+    "test_results": "Parent reports 9 DataFlash tests passing, including 8 new regressions. Reviewer did not independently execute them. Full workspace validation was still running when parent supplied this update. These tests do not certify parity."
+  },
+  "ten_out_of_ten_gate": [
+    "Version-pin the reference and produce a complete user-visible feature/workflow inventory, each mapped to Rust code and evidence. Exclusions must be explicitly accepted by user, not silently omitted.",
+    "No production success path may be a simulation or placeholder presented as a real backend.",
+    "Reference-equivalent success, failure, cancellation, retry, persistence and safety behavior must be demonstrated for every inventoried workflow.",
+    "Side-by-side rendered and interactive validation of every screen/dialog/control, DPI/layout/theme/localization and keyboard/mouse/touch behavior.",
+    "Build, package, install and exercise actual Windows/macOS/Linux/Android/iOS applications. Compile-only artifacts are insufficient.",
+    "Real transport and relevant hardware protocol validation, including repeated telemetry and request readback; simulation proves only its exercised path.",
+    "Independent adversarial review finds no known material defects or unverified required workflows. Passing one script or receiving a score alone cannot satisfy this gate."
+  ],
+  "next_run_priority": [
+    "Eliminate false-success BLE/WinUSB transport paths, fix/reject insecure WSS, and add meaningful protocol coverage.",
+    "Repair proximity retention/orientation behavior with multi-sector tests.",
+    "Build a durable reference-to-Rust parity checklist before further numeric score claims.",
+    "Complete installable mobile packages and real file/connection workflows.",
+    "Port graph interaction and exact analyzer behavior from verified reference outputs."
+  ],
+  "limitations": [
+    "This is a sampled source review, not an exhaustive examination of all reference files.",
+    "No current screenshot comparison, device test, CI execution or full workspace test was performed by this reviewer.",
+    "Scores are provisional and should not be represented as objective completeness measurements.",
+    "The worktree was changing during review; report identifies the inspected behaviors and parent must validate final edits."
+  ]
+}

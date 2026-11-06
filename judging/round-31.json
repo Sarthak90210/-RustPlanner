@@ -1,0 +1,120 @@
+{
+  "round": 31,
+  "date": "2026-11-06",
+  "review_type": "Independent adversarial review of transport corrections and exact-clone parity blockers",
+  "reviewed_head": "b5a9c53a37f96b8353ffbf49f8b90bad20febcfe",
+  "reviewed_worktree": [
+    "crates/mp-core/src/comms.rs",
+    "crates/mp-core/Cargo.toml",
+    "Cargo.lock",
+    "crates/mp-core/src/dataflash.rs",
+    "crates/mp-app/src/log_browse.rs"
+  ],
+  "verdict": "REJECTED for exact parity. The transport changes are a real improvement and four focused tests independently pass. WSS now attempts TLS, upgrade verification and incremental framing are delegated to a protocol library, and unsupported BLE/WinUSB selections no longer pretend to contact devices. These corrections do not implement the missing device backends, reproduce every reference WebSocket behavior, or close the larger UI and platform gaps.",
+  "scores": {
+    "overall": 4.0,
+    "ui_ux": 3.5,
+    "features": 4.5,
+    "cross_platform_delivery": 2.0,
+    "scale": "Provisional qualitative judgment on a 0-10 exact-reference-parity scale. Scores are not completion percentages. They remain coarse because no exhaustive feature inventory or rendered UI certification exists. This incremental repair is too narrow to justify raising a whole-product rating."
+  },
+  "independent_validation": [
+    {
+      "command": "cargo test -p mp-core --lib comms::tests",
+      "result": "PASS: 4 passed, 0 failed, 49 filtered out",
+      "tests": [
+        "connection_spec_display_and_transports",
+        "websocket_rejects_an_unauthenticated_upgrade",
+        "secure_websocket_sends_tls_instead_of_plaintext_http",
+        "websocket_roundtrip_and_fragmented_reads_survive_timeouts"
+      ],
+      "scope": "Local Windows mp-core tests with loopback TCP peers. The TLS test observes a TLS record prefix then deliberately closes the server. It is not a completed authenticated WSS session or certificate-validation corpus. The fragmentation test splits one frame across TCP writes and read timeouts; it is not a WebSocket continuation-frame test."
+    }
+  ],
+  "confirmed_corrections": [
+    {
+      "prior_finding": "R30-01 false-success BLE/WinUSB opening",
+      "status": "false-success behavior fixed; feature remains missing",
+      "evidence": "comms::open now returns ErrorKind::Unsupported for nonempty BLE/WinUSB specs and InvalidInput for blank identifiers. DriverTransport memory queues were removed. Independent test checks unsupported results.",
+      "remaining": "Actual discovery, permissions, device IO, connection lifecycle and real MAVLink readback are unimplemented. An honest error is not a parity implementation."
+    },
+    {
+      "prior_finding": "R30-02 plaintext WSS, unauthenticated upgrade and partial-read corruption",
+      "status": "identified implementation defects corrected in inspected paths",
+      "evidence": "WebSocketTransport uses tungstenite::client_tls with rustls webpki roots; ring provider is initialized when no process provider exists. Client request and frame handling come from tungstenite. Independent tests reject an invalid Sec-WebSocket-Accept, observe TLS rather than HTTP on a wss endpoint and deliver a binary frame after a delayed partial TCP write.",
+      "remaining": "No completed trusted WSS endpoint test, wrong-host/untrusted/expired-certificate test, WebSocket continuation-frame, ping/pong, close, reconnect, write-backpressure or non-Windows execution was performed in this review."
+    }
+  ],
+  "findings": [
+    {
+      "id": "R31-01",
+      "priority": "P1",
+      "subsystem": "Reference WebSocket application protocol and lifecycle",
+      "status": "verified_source_parity_gap",
+      "evidence": [
+        "Reference ExtLibs/Comms/CommsWebSocket.cs Open sends text 2probe.",
+        "Reference RunReader handles text session IDs, responds to text starting with 3 by sending 40/MAVControl, and 5, and logs other text rather than treating it as binary MAVLink.",
+        "Reference Write handles its socketio state and RunReader attempts reconnect while autoReconnect is enabled.",
+        "Rust WebSocketTransport feeds Message::Text bytes into its MAVLink byte stream, sends only binary frames and returns connection-aborted on close. It contains no Socket.IO negotiation or reconnect state."
+      ],
+      "impact": "A raw binary WS endpoint can work while reference-compatible Socket.IO endpoints and reconnect workflows still differ. Text control traffic is passed to the MAVLink parser.",
+      "required_fix": "Specify and port the reference endpoint modes, text-control handling, binary envelope and reconnection/cancellation behavior. Do not equate a passing raw loopback with all Mission Planner WebSocket support.",
+      "acceptance": "Protocol fixture tests for raw WS, reference Socket.IO control exchange and binary envelope, server disconnect/reconnect and explicit user disconnect; actual WS/WSS session with decoded MAVLink telemetry."
+    },
+    {
+      "id": "R31-02",
+      "priority": "P1",
+      "subsystem": "TLS and control-frame evidence",
+      "status": "unverified_required_behavior",
+      "evidence": [
+        "The WSS test checks only the initial TLS record and expected connection failure after peer close.",
+        "The new framing tests do not send WebSocket continuation frames, ping/pong or a close handshake.",
+        "The code uses a trust-verifying library configuration, which is appropriate, but no actual successful certificate-validated session was exercised by this reviewer."
+      ],
+      "required_fix": "Add a trusted local TLS fixture or an appropriate controlled endpoint, reject wrong-name/untrusted certificates, and verify continuation/control/close behavior and bounded write failures.",
+      "acceptance": "Authenticated successful WSS telemetry exchange plus deterministic negative certificate tests and meaningful frame/control regression coverage."
+    },
+    {
+      "id": "R31-03",
+      "priority": "P1",
+      "subsystem": "Proximity radar",
+      "status": "R30-03 remains verified and unresolved",
+      "evidence": [
+        "link Shared.inspector is keyed by system/component/message ID and keeps only the last message for that key.",
+        "tool_windows::prox_ui reads DISTANCE_SENSOR from this cache, maps every orientation to enum*45 degrees and has no OBSTACLE_DISTANCE path."
+      ],
+      "required_fix": "Retain per-vehicle sensor/sector state separately from the message inspector, validate horizontal orientations and distance sentinels, handle obstacle arrays and expire stale readings.",
+      "acceptance": "At least eight sectors from one component remain visible together; tests cover vehicle isolation, orientations, sentinels and expiry; rendered reference comparison."
+    },
+    {
+      "id": "R31-04",
+      "priority": "P1",
+      "subsystem": "Whole-product parity and delivery",
+      "status": "prior material blockers remain",
+      "evidence": [
+        "iOS workflow still compiles a library without an installable Xcode app wrapper.",
+        "Mobile serial remains unsupported and important file workflows remain incomplete.",
+        "Graph zoom/pan/cursor/expression behavior remains short of the reference and the log UI is not usable at narrow phone widths.",
+        "Native diagnostic checks remain partial heuristics with no equivalence corpus against the reference external analyzer.",
+        "BLE/WinUSB and missing DFU/STK500 flashing workflows remain implementation gaps.",
+        "No complete source-pinned feature inventory or current rendered equivalence matrix exists."
+      ],
+      "required_fix": "Continue against the explicit blockers and create a durable feature/workflow-to-evidence inventory. Validate actual installed apps and device protocols on each required platform.",
+      "acceptance": "The ten-out-of-ten gates from round-30 remain unsatisfied; no product-wide exact-clone claim is supported."
+    }
+  ],
+  "next_run_priority": [
+    "Repair the deterministic proximity data-loss and orientation defects with a dedicated per-vehicle model and multi-sector regression tests.",
+    "Establish a reference-to-Rust workflow inventory so future ratings are tied to evidence rather than selected examples.",
+    "Finish WebSocket endpoint/lifecycle parity and authenticated TLS/control-frame tests.",
+    "Implement real BLE/WinUSB backends and installable iOS/mobile document workflows.",
+    "Close graph interaction and exact analyzer behavior gaps with reference fixtures and rendered comparisons."
+  ],
+  "ten_out_of_ten_status": "NOT MET. Missing required features, unverified real platform/device paths and lack of comprehensive UI equivalence evidence prevent 10/10 irrespective of passing focused tests.",
+  "limitations": [
+    "Reviewer independently ran only the four focused comms tests, not the full workspace suite.",
+    "No UI renders, live vehicles, firmware boards, mobile devices, external network endpoints or platform builds were tested.",
+    "This is an adversarial sampled review, not an exhaustive certification of the full reference codebase.",
+    "The worktree is mutable; the report describes the transport implementation inspected during this review."
+  ]
+}

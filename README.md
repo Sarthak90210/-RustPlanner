@@ -50,6 +50,51 @@ The iOS target selects wgpu for rendering.
 
 ## Status
 
+Independent adversarial reviews are recorded in `judging/round-30.json` through
+`judging/round-36.json`. These are source and targeted-test reviews, not full visual,
+hardware or platform certification. Their ratings are provisional judgments, not
+measured completion percentages. The exact-clone goal remains open.
+
+The native DataFlash checks now distinguish unavailable evidence from healthy data,
+avoid a fixed battery cell-count assumption, and distinguish ERR recovery records.
+They are a partial analyzer, not a port of the reference's external LogAnalyzer runner.
+WebSocket transport uses tungstenite with rustls for WSS handshakes and
+incremental framing. BLE and WinUSB return Unsupported until real backends exist.
+Reference Socket.IO negotiation and reconnect behavior remain open.
+
+Proximity telemetry retains separate sensors and obstacle-array sectors with expiry,
+vehicle filtering and selected-vehicle yaw. The radar uses reference range/size
+controls, range rings, spokes and the original quad icon. Headless drawing and TCP
+fixtures cover these paths; rendered parity and real sensor validation remain open.
+
+`scripts/capture_proximity.ps1 -Round 34` builds an isolated native radar capture
+example and renders three populated content fixtures through the production painter.
+The C# comparison compiles the unchanged `Temp_Paint` method extracted from the
+reference, with data/type adapters and matching content dimensions. Captures and
+receipts go under `target/judging/round34/`, including the executable and source hashes.
+This harness deliberately excludes form chrome: its reference Width/Height equal the
+fixture size, whereas the full WinForms form uses outer dimensions for scale and
+client dimensions for centering. It cannot establish full-form equivalence. Font
+weight and stroke rasterization remain visible GDI/egui differences. Keyboard tests
+now send actual egui pointer/text events, cover focus transfer to another text input,
+and verify controls work after closing/reopening without another content click.
+
+Proximity retention now follows the reference's id/orientation and id/raw-angle
+replacement rules, preserves arrival order and short-lived angular history, and
+separates each system/component subscription. Round 35 found that the outer C#
+subscription dispatcher filters components despite the cache's contrary comment;
+the implementation and multi-component TCP regression were corrected after that
+review. Scalar CUSTOM orientation now uses the reference's yellow 45-degree sector
+at zero degrees. Nine cache tests cover moving scan origins, changed increments,
+unknown bins, expiry, source-key collisions and repeated yaw. Nonhorizontal sensor
+retention and the reference closest/warning queries remain open.
+
+Validation found an intermittent simulator startup timeout in the round-35 workspace
+run, before the DroneCAN test received Connected. The isolated case, two subsequent
+parallel link suites, and the final round-36 workspace run passed. Failure diagnostics
+now include link status, received bytes and the last event. No runtime race fix or
+root cause is claimed; this remains an open reliability issue despite the rerun.
+
 Working end to end (tested against the simulator): connect, heartbeat, data streams, full parameter download
 with retries, parameter writes, mission upload/download (MISSION_ITEM_INT with MISSION_ITEM fallback),
 modes, arm/disarm, guided "Fly To Here", takeoff, servo/relay, calibration commands, `.waypoints` and

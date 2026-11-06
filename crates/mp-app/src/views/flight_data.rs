@@ -156,6 +156,7 @@ pub struct FlightDataView {
     /// GStreamerUI.DownloadGStreamer in progress: (percent, status), finished, the pipeline to start
     gst_download: Option<(std::sync::Arc<std::sync::Mutex<(i32, String)>>, std::sync::Arc<std::sync::atomic::AtomicBool>, String, std::sync::Arc<std::sync::atomic::AtomicBool>)>,
     log_browse: crate::log_browse::LogBrowse,
+    log_file_request: Option<(String, crate::platform::FilePicker)>,
     analysis: Option<(String, Vec<(String, String, String)>)>,
     raw_sensor: bool,
     extra: super::fd_tabs::ExtraTabs,
@@ -206,6 +207,7 @@ impl Default for FlightDataView {
             hud_prompt: None,
             gst_download: None,
             log_browse: Default::default(),
+            log_file_request: None,
             analysis: None,
             raw_sensor: false,
             extra: Default::default(),
@@ -225,9 +227,7 @@ impl Default for FlightDataView {
 impl FlightDataView {
     /// temp form "logindex": open the log browser on a picked .bin.
     pub fn open_log_browse(&mut self) {
-        if let Some(path) = crate::log_browse::pick_bin() {
-            self.log_browse.load(path);
-        }
+        self.log_browse.request_load();
     }
 
     pub fn on_event(&mut self, e: &LinkEvent) {
@@ -1478,6 +1478,9 @@ impl FlightDataView {
         }
         self.prompt_ui(ui.ctx(), app);
         self.log_downloader(ui.ctx(), app);
+        if let Some((action, path)) = crate::platform::poll_file_action(&mut self.log_file_request, ui.ctx()) {
+            self.dflog_path(&action, path, app);
+        }
         self.log_browse.ui(ui.ctx());
         self.analysis_window(ui.ctx());
         self.raw_sensor_window(ui.ctx(), cs);
@@ -1759,16 +1762,16 @@ impl FlightDataView {
     }
 
     /// DataFlash log tools on a picked .bin.
-    fn dflog_action(&mut self, what: &str, app: &mut AppCtx) {
+    fn dflog_action(&mut self, what: &str, _app: &mut AppCtx) {
         if what == "Geo Reference Images" {
             self.georef.open = true;
             return;
         }
-        let Some(path) = crate::log_browse::pick_bin() else { return };
-        if what == "Review a Log" {
-            self.log_browse.load(path);
-            return;
-        }
+        if what == "Review a Log" { self.log_browse.request_load(); return; }
+        self.log_file_request = Some((what.into(), crate::platform::binary_log_picker()));
+    }
+
+    fn dflog_path(&mut self, what: &str, path: std::path::PathBuf, app: &mut AppCtx) {
         let data = match std::fs::read(&path) {
             Ok(d) => d,
             Err(e) => {

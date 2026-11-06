@@ -13,18 +13,33 @@ use mp_core::tlog::Record;
 
 use crate::theme;
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn pick_tlogs() -> Vec<PathBuf> {
-    rfd::FileDialog::new().add_filter("Telemetry Log", &["tlog"]).set_directory(crate::platform::data_dir().join("logs")).pick_files().unwrap_or_default()
-}
-
-#[cfg(any(target_os = "android", target_os = "ios"))]
-fn pick_tlogs() -> Vec<PathBuf> {
-    crate::platform::list_files_in(&crate::platform::data_dir().join("logs"), &["tlog"]).into_iter().rev().take(1).collect()
-}
-
 fn msg_name(m: &MavMessage) -> &'static str {
     <MavMessage as mp_core::mavlink::Message>::message_name(m)
+}
+
+#[cfg(test)]
+mod file_workflow_tests {
+    use super::*;
+    use crate::platform::{FilePicker, picker_test_support as picker};
+    #[test]
+    fn telemetry_export_uses_the_selected_file_and_cancel_has_no_side_effects() {
+        let root = picker::root();
+        let mut bytes = 1_000_000u64.to_be_bytes().to_vec();
+        mp_core::mavlink::write_versioned_msg(&mut bytes, mp_core::mavlink::MavlinkVersion::V2, mp_core::mavlink::MavHeader { system_id: 42, component_id: 1, sequence: 0 },
+            &MavMessage::HEARTBEAT(Default::default())).unwrap();
+        for name in ["a.tlog", "z.tlog"] { std::fs::write(root.join(name), &bytes).unwrap(); }
+        let ctx = egui::Context::default();
+        let mut log = MavlinkLog::default();
+        log.file_request = Some(("Convert to CSV".into(), FilePicker::in_directory("Tlogs", root.clone(), &["tlog"], None)));
+        { let mut draw = |ctx: &egui::Context| log.ui(ctx); picker::click(&ctx, &mut draw, "a.tlog"); picker::click(&ctx, &mut draw, "Open"); }
+        assert!(std::fs::read_to_string(root.join("a.csv")).unwrap().contains("HEARTBEAT"));
+        assert!(!root.join("z.csv").exists()); assert!(log.file_request.is_none());
+        let status = log.status.clone();
+        log.file_request = Some(("Convert to CSV".into(), FilePicker::in_directory("Tlogs", root.clone(), &["tlog"], None)));
+        { let mut draw = |ctx: &egui::Context| log.ui(ctx); picker::click(&ctx, &mut draw, "Cancel"); }
+        assert_eq!(log.status, status); assert!(!root.join("z.csv").exists());
+        for name in ["a.tlog", "z.tlog", "a.csv"] { std::fs::remove_file(root.join(name)).unwrap(); } std::fs::remove_dir(root).unwrap();
+    }
 }
 
 fn num(v: &str) -> Option<f64> {
@@ -34,6 +49,7 @@ fn num(v: &str) -> Option<f64> {
 #[derive(Default)]
 pub struct MavlinkLog {
     pub open: bool,
+    file_request: Option<(String, crate::platform::FilePicker)>,
     progress: f32,
     status: String,
     /// Graph Log: per message, per numeric field, the series (seconds from start, value)
@@ -43,8 +59,7 @@ pub struct MavlinkLog {
 }
 
 impl MavlinkLog {
-    fn each(&mut self, f: impl Fn(&Path, &[Record]) -> Result<PathBuf, String>) {
-        let files = pick_tlogs();
+    fn each(&mut self, files: &[PathBuf], f: impl Fn(&Path, &[Record]) -> Result<PathBuf, String>) {
         let n = files.len().max(1);
         let mut done = Vec::new();
         for (i, p) in files.iter().enumerate() {
@@ -58,6 +73,10 @@ impl MavlinkLog {
     }
 
     pub fn ui(&mut self, ctx: &egui::Context) {
+        if let Some(result) = self.file_request.as_mut().and_then(|(_, picker)| picker.show_many(ctx)) {
+            let (action, _) = self.file_request.take().unwrap();
+            if let Some(paths) = result { self.action_on_files(&action, &paths); }
+        }
         if !self.open {
             return;
         }
@@ -134,9 +153,14 @@ impl MavlinkLog {
     }
 
     fn action(&mut self, what: &str) {
+        self.file_request = Some((what.into(), crate::platform::FilePicker::open_from(
+            "Telemetry Log", crate::platform::data_dir().join("logs"), &["tlog"], what != "Graph Log")));
+    }
+
+    fn action_on_files(&mut self, what: &str, files: &[PathBuf]) {
         self.progress = 0.0;
         match what {
-            "Create KML + GPX" => self.each(|p, recs| {
+            "Create KML + GPX" => self.each(files, |p, recs| {
                 let track: Vec<(f64, f64, f64)> = recs
                     .iter()
                     .filter_map(|r| match &r.msg {
@@ -152,7 +176,7 @@ impl MavlinkLog {
                 std::fs::write(p.with_extension("gpx"), gpx).map_err(|e| e.to_string())?;
                 Ok(p.with_extension("kml"))
             }),
-            "Convert to Text" => self.each(|p, recs| {
+            "Convert to Text" => self.each(files, |p, recs| {
                 let mut out = String::new();
                 for r in recs {
                     out.push_str(&format!("{} {:?}\n", r.time_us, r.msg));
@@ -161,7 +185,7 @@ impl MavlinkLog {
                 std::fs::write(&to, out).map_err(|e| e.to_string())?;
                 Ok(to)
             }),
-            "Convert to CSV" => self.each(|p, recs| {
+            "Convert to CSV" => self.each(files, |p, recs| {
                 let mut out = String::new();
                 for r in recs {
                     let f = crate::tools::fields(&r.msg);
@@ -172,7 +196,7 @@ impl MavlinkLog {
                 std::fs::write(&to, out).map_err(|e| e.to_string())?;
                 Ok(to)
             }),
-            "Extract Params" => self.each(|p, recs| {
+            "Extract Params" => self.each(files, |p, recs| {
                 let mut params: BTreeMap<String, f32> = BTreeMap::new();
                 for r in recs {
                     if let MavMessage::PARAM_VALUE(v) = &r.msg {
@@ -188,7 +212,7 @@ impl MavlinkLog {
                 std::fs::write(&to, mp_core::paramfile::save(params.iter().map(|(k, v)| (k, *v)))).map_err(|e| e.to_string())?;
                 Ok(to)
             }),
-            "Extract WPs" => self.each(|p, recs| {
+            "Extract WPs" => self.each(files, |p, recs| {
                 let mut items: BTreeMap<u16, Locationwp> = BTreeMap::new();
                 for r in recs {
                     match &r.msg {
@@ -209,7 +233,7 @@ impl MavlinkLog {
                 std::fs::write(&to, mp_core::mission::write_waypoint_file(&list[0], &list[1..])).map_err(|e| e.to_string())?;
                 Ok(to)
             }),
-            "Extract CS" => self.each(|p, recs| {
+            "Extract CS" => self.each(files, |p, recs| {
                 let mut cs = CurrentState::default();
                 let names: Vec<&str> = cs.fields().iter().map(|(n, _)| *n).collect();
                 let mut out = format!("time,{}\n", names.join(","));
@@ -225,7 +249,7 @@ impl MavlinkLog {
                 std::fs::write(&to, out).map_err(|e| e.to_string())?;
                 Ok(to)
             }),
-            "Create Matlab file" => self.each(|p, recs| {
+            "Create Matlab file" => self.each(files, |p, recs| {
                 let mut cols: BTreeMap<String, Vec<f64>> = BTreeMap::new();
                 for r in recs {
                     let name = msg_name(&r.msg);
@@ -253,7 +277,7 @@ impl MavlinkLog {
                 Ok(to)
             }),
             "Graph Log" => {
-                let Some(p) = pick_tlogs().into_iter().next() else { return };
+                let Some(p) = files.first() else { return };
                 match mp_core::tlog::read(&p) {
                     Ok(recs) => {
                         self.graph.clear();

@@ -63,32 +63,46 @@ pub const HAS_NATIVE_DIALOGS: bool = cfg!(not(any(target_os = "android", target_
 
 /// Desktop OS dialog, or a deferred browser of the mobile app's files.
 pub struct FilePicker {
+    id: egui::Id,
     title: String,
     root: PathBuf,
     exts: Vec<String>,
     name: String,
     save: bool,
     overwrite: bool,
-    ready: Option<Option<PathBuf>>,
+    ready: Option<Option<Vec<PathBuf>>>,
+    multiple: bool,
+    selected_names: std::collections::BTreeSet<String>,
 }
 
 impl FilePicker {
     pub fn new(title: &str, exts: &[&str], save_name: Option<&str>) -> Self {
-        let mut picker = Self::in_directory(title, files_dir(), exts, save_name);
+        Self::native_or_browser(title, files_dir(), exts, save_name, false)
+    }
+
+    pub fn open_from(title: &str, root: PathBuf, exts: &[&str], multiple: bool) -> Self {
+        Self::native_or_browser(title, root, exts, None, multiple)
+    }
+
+    fn native_or_browser(title: &str, root: PathBuf, exts: &[&str], save_name: Option<&str>, multiple: bool) -> Self {
+        let mut picker = Self::in_directory(title, root, exts, save_name);
+        picker.multiple = multiple;
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
-            let dialog = rfd::FileDialog::new().set_title(title).add_filter(title, exts);
-            picker.ready = Some(if let Some(name) = save_name { dialog.set_file_name(name).save_file() } else { dialog.pick_file() });
+            let dialog = rfd::FileDialog::new().set_title(title).set_directory(&picker.root).add_filter(title, exts);
+            picker.ready = Some(if let Some(name) = save_name { dialog.set_file_name(name).save_file().map(|p| vec![p]) }
+                else if multiple { dialog.pick_files() } else { dialog.pick_file().map(|p| vec![p]) });
         }
         picker
     }
 
     pub(crate) fn in_directory(title: &str, root: PathBuf, exts: &[&str], save_name: Option<&str>) -> Self {
-        Self { title: title.into(), root, exts: exts.iter().map(|s| s.to_string()).collect(), name: save_name.unwrap_or_default().into(), save: save_name.is_some(), overwrite: false, ready: None }
+        static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        Self { id: egui::Id::new(("file_picker", NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed))), title: title.into(), root, exts: exts.iter().map(|s| s.to_string()).collect(), name: save_name.unwrap_or_default().into(), save: save_name.is_some(), overwrite: false, ready: None, multiple: false, selected_names: Default::default() }
     }
 
     fn selected_path(&self) -> Option<PathBuf> {
-        let name = self.name.trim();
+        let name = if self.save { self.name.trim() } else { self.name.as_str() };
         if name.is_empty() || name == "." || name == ".." || name.chars().any(|c| matches!(c, '/' | '\\' | ':' | '\0')) { return None; }
         let mut path = self.root.join(name);
         if self.save && !self.exts.is_empty() {
@@ -98,14 +112,19 @@ impl FilePicker {
                 _ => {}
             }
         }
+        if !self.save && !self.exts.is_empty() && !self.exts.iter().any(|e| e == "*" || path.extension().is_some_and(|x| x.eq_ignore_ascii_case(e))) { return None; }
         Some(path)
     }
 
     /// Some(None) means Cancel; None means the browser is still open.
     pub fn show(&mut self, ctx: &egui::Context) -> Option<Option<PathBuf>> {
+        self.show_many(ctx).map(|paths| paths.and_then(|v| v.into_iter().next()))
+    }
+
+    pub fn show_many(&mut self, ctx: &egui::Context) -> Option<Option<Vec<PathBuf>>> {
         if let Some(done) = self.ready.take() { return Some(done); }
         let mut done = None;
-        egui::Modal::new(egui::Id::new("app_file_picker")).show(ctx, |ui| {
+        let modal = egui::Modal::new(self.id).show(ctx, |ui| {
             ui.set_min_width(280.0);
             crate::theme::label(ui, &self.title);
             let exts: Vec<_> = self.exts.iter().map(String::as_str).collect();
@@ -114,23 +133,32 @@ impl FilePicker {
                 if files.is_empty() { crate::theme::label(ui, "No files"); }
                 for path in files {
                     let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
-                    if ui.selectable_label(self.name == name, &name).clicked() { self.name = name; self.overwrite = false; }
+                    let selected = if self.multiple { self.selected_names.contains(&name) } else { self.name == name };
+                    if ui.selectable_label(selected, &name).clicked() {
+                        if self.multiple { if !self.selected_names.remove(&name) { self.selected_names.insert(name); } }
+                        else { self.name = name; }
+                        self.overwrite = false;
+                    }
                 }
             });
             if self.save && ui.text_edit_singleline(&mut self.name).changed() { self.overwrite = false; }
             let path = self.selected_path();
-            let valid = path.as_ref().is_some_and(|p| self.save || p.is_file());
+            let paths: Vec<PathBuf> = if self.multiple {
+                let exts: Vec<_> = self.exts.iter().map(String::as_str).collect();
+                list_files_in(&self.root, &exts).into_iter().filter(|p| p.file_name().is_some_and(|n| self.selected_names.contains(n.to_string_lossy().as_ref()))).collect()
+            } else { path.clone().filter(|p| self.save || p.is_file()).into_iter().collect() };
+            let valid = !paths.is_empty();
             ui.horizontal(|ui| {
                 let text = if self.overwrite { "Overwrite" } else if self.save { "Save" } else { "Open" };
                 if ui.add_enabled(valid, egui::Button::new(text)).clicked() {
                     if self.save { if let Some(p) = &path { self.name = p.file_name().unwrap_or_default().to_string_lossy().into_owned(); } }
                     if self.save && path.as_ref().is_some_and(|p| p.exists()) && !self.overwrite { self.overwrite = true; }
-                    else { done = Some(path); }
+                    else { done = Some(Some(paths)); }
                 }
                 if crate::theme::button(ui, "Cancel").clicked() { done = Some(None); }
             });
         });
-        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) { done = Some(None); }
+        if modal.is_top_modal && !modal.any_popup_open && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) { done = Some(None); }
         done
     }
 }
@@ -138,6 +166,45 @@ impl FilePicker {
 #[cfg(test)]
 mod file_picker_tests {
     use super::*;
+    #[test]
+    fn explicit_multi_selection_filters_directories_and_does_not_choose_the_last_file() {
+        let root = picker_test_support::root();
+        for name in ["a.tlog", "z.TLOG", "ignore.txt"] { std::fs::write(root.join(name), b"fixture").unwrap(); }
+        std::fs::create_dir(root.join("directory.tlog")).unwrap();
+        assert_eq!(list_files_in(&root, &["tlog"]), [root.join("a.tlog"), root.join("z.TLOG")]);
+        let ctx = egui::Context::default();
+        let mut picker = FilePicker::in_directory("Logs", root.clone(), &["tlog"], None);
+        picker.multiple = true;
+        let mut result = None;
+        {
+            let mut draw = |ctx: &egui::Context| { if let Some(done) = picker.show_many(ctx) { result = Some(done); } };
+            picker_test_support::frame(&ctx, &mut draw, Vec::new());
+        }
+        assert!(result.is_none(), "opening a picker must not select a file");
+        {
+            let mut draw = |ctx: &egui::Context| { if let Some(done) = picker.show_many(ctx) { result = Some(done); } };
+            picker_test_support::click(&ctx, &mut draw, "a.tlog");
+            picker_test_support::click(&ctx, &mut draw, "z.TLOG");
+            picker_test_support::click(&ctx, &mut draw, "Open");
+        }
+        assert_eq!(result, Some(Some(vec![root.join("a.tlog"), root.join("z.TLOG")])));
+        for name in ["a.tlog", "z.TLOG", "ignore.txt"] { std::fs::remove_file(root.join(name)).unwrap(); }
+        std::fs::remove_dir(root.join("directory.tlog")).unwrap(); std::fs::remove_dir(root).unwrap();
+    }
+    #[test]
+    fn opening_preserves_the_exact_selected_filename_including_leading_space() {
+        let root = picker_test_support::root();
+        std::fs::write(root.join("a.bin"), b"wrong file").unwrap();
+        std::fs::write(root.join(" a.bin"), b"selected file").unwrap();
+        let ctx = egui::Context::default();
+        let mut picker = FilePicker::in_directory("Logs", root.clone(), &["bin"], None);
+        let mut result = None;
+        { let mut draw = |ctx: &egui::Context| { if let Some(done) = picker.show(ctx) { result = Some(done); } };
+          picker_test_support::click(&ctx, &mut draw, " a.bin"); picker_test_support::click(&ctx, &mut draw, "Open"); }
+        let path = result.unwrap().unwrap();
+        assert_eq!(std::fs::read(path).unwrap(), b"selected file");
+        std::fs::remove_file(root.join("a.bin")).unwrap(); std::fs::remove_file(root.join(" a.bin")).unwrap(); std::fs::remove_dir(root).unwrap();
+    }
     #[test]
     fn extensionless_mobile_sequence_save_is_visible_to_load() {
         let id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
@@ -165,9 +232,26 @@ mod file_picker_tests {
         }
         let ctx = egui::Context::default();
         let mut done = None;
+        for _ in 0..3 {
+            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| { done = picker.show(ui.ctx()); });
+            out.textures_delta.clear();
+        }
         let mut out = ctx.run_ui(egui::RawInput { events: vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }], ..Default::default() }, |ui| { done = picker.show(ui.ctx()); });
         out.textures_delta.clear();
         assert_eq!(done, Some(None));
+    }
+    #[test]
+    fn escape_cancels_only_the_top_picker_when_requests_overlap() {
+        let root = picker_test_support::root();
+        let mut first = FilePicker::in_directory("First", root.clone(), &["bin"], None);
+        let mut second = FilePicker::in_directory("Second", root.clone(), &["bin"], None);
+        assert_ne!(first.id, second.id);
+        let ctx = egui::Context::default();
+        let (mut a, mut b) = (None, None);
+        for _ in 0..3 { picker_test_support::frame(&ctx, &mut |ctx| { a = first.show(ctx); b = second.show(ctx); }, Vec::new()); }
+        picker_test_support::frame(&ctx, &mut |ctx| { a = first.show(ctx); b = second.show(ctx); }, vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }]);
+        assert!(a.is_none()); assert_eq!(b, Some(None));
+        std::fs::remove_dir(root).unwrap();
     }
 }
 
@@ -225,32 +309,48 @@ pub fn save_text(
     )
 }
 
-/// Files in the app's files directory with one of the given extensions (for the in-app browser).
-pub fn list_files(exts: &[&str]) -> Vec<PathBuf> {
-    let mut v: Vec<PathBuf> = std::fs::read_dir(files_dir())
-        .map(|rd| {
-            rd.filter_map(|e| e.ok().map(|e| e.path()))
-                .filter(|p| {
-                    p.extension()
-                        .map(|e| exts.iter().any(|x| e.eq_ignore_ascii_case(x)))
-                        .unwrap_or(false)
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    v.sort();
-    v
+/// Files in the app's directory with an allowed extension.
+pub fn list_files(exts: &[&str]) -> Vec<PathBuf> { list_files_in(&files_dir(), exts) }
+
+/// Files in `dir`, sorted. Directories with file-like names are not selectable.
+pub fn list_files_in(dir: &std::path::Path, exts: &[&str]) -> Vec<PathBuf> {
+    let mut paths: Vec<_> = std::fs::read_dir(dir).into_iter().flatten().filter_map(Result::ok).map(|e| e.path())
+        .filter(|p| p.is_file() && (exts.is_empty() || exts.contains(&"*") || p.extension().is_some_and(|e| exts.iter().any(|x| e.eq_ignore_ascii_case(x)))))
+        .collect();
+    paths.sort(); paths
 }
 
-/// Files in `dir` with one of the given extensions, sorted.
-pub fn list_files_in(dir: &std::path::Path, exts: &[&str]) -> Vec<PathBuf> {
-    let mut v: Vec<PathBuf> = std::fs::read_dir(dir)
-        .map(|rd| {
-            rd.filter_map(|e| e.ok().map(|e| e.path()))
-                .filter(|p| p.extension().map(|e| exts.iter().any(|x| e.eq_ignore_ascii_case(x))).unwrap_or(false))
-                .collect()
-        })
-        .unwrap_or_default();
-    v.sort();
-    v
+/// Consume a completed deferred action once. Cancel clears it without dispatch.
+pub fn poll_file_action<A>(pending: &mut Option<(A, FilePicker)>, ctx: &egui::Context) -> Option<(A, PathBuf)> {
+    let result = pending.as_mut()?.1.show(ctx)?;
+    let (action, _) = pending.take()?;
+    result.map(|path| (action, path))
+}
+
+pub fn binary_log_picker() -> FilePicker {
+    FilePicker::open_from("Load a Log", data_dir().join("logs"), &["bin"], false)
+}
+
+#[cfg(test)]
+pub(crate) mod picker_test_support {
+    pub fn frame(ctx: &egui::Context, draw: &mut impl FnMut(&egui::Context), events: Vec<egui::Event>) -> Vec<egui::epaint::ClippedShape> {
+        let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::new(1400.0, 900.0))), events, ..Default::default() };
+        let mut out = ctx.run_ui(input, |ui| draw(ui.ctx()));
+        out.textures_delta.clear(); out.shapes
+    }
+    pub fn click(ctx: &egui::Context, draw: &mut impl FnMut(&egui::Context), label: &str) {
+        let mut shapes = Vec::new();
+        for _ in 0..3 { shapes = frame(ctx, draw, Vec::new()); }
+        let point = shapes.iter().find_map(|s| match &s.shape {
+            egui::Shape::Text(t) if t.galley.job.text == label => Some(t.pos + t.galley.size() / 2.0), _ => None,
+        }).unwrap_or_else(|| panic!("visible picker label missing: {label}"));
+        for pressed in [true, false] {
+            frame(ctx, draw, vec![egui::Event::PointerMoved(point), egui::Event::PointerButton { pos: point, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() }]);
+        }
+    }
+    pub fn root() -> std::path::PathBuf {
+        let id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let root = std::env::temp_dir().join(format!("mp-file-workflow-{}-{id}", std::process::id()));
+        std::fs::create_dir(&root).unwrap(); root
+    }
 }

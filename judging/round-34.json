@@ -1,0 +1,126 @@
+{
+  "round": 34,
+  "date": "2026-11-06",
+  "review_type": "Independent adversarial review of populated reference and production radar content renders",
+  "reviewed_head": "b5a9c53a37f96b8353ffbf49f8b90bad20febcfe",
+  "reviewed_uncommitted_worktree": true,
+  "reviewed_files": [
+    "crates/mp-app/src/tool_windows.rs",
+    "crates/mp-app/examples/proximity_capture.rs",
+    "scripts/fixtures/proximity.json",
+    "scripts/render_proximity_reference.ps1",
+    "scripts/proximity_reference_support.cs",
+    "scripts/capture_proximity.ps1",
+    "reference/MissionPlanner/Controls/ProximityControl.cs"
+  ],
+  "verdict": "REJECTED for exact-clone parity. Populated content renders now provide direct evidence of improved radar colors, label placement, icon layering and wide-arc shape. The Rust content is visibly closer to the isolated reference paint output, but typography and rasterization still differ. The reference harness intentionally does not reproduce the real WinForms outer/client geometry, and neither harness certifies full-window interaction or whole-product parity. Wider platform, device, protocol and feature gaps remain open.",
+  "scores": {
+    "overall": 4.0,
+    "ui_ux": 3.5,
+    "features": 4.5,
+    "cross_platform_delivery": 2.0,
+    "scale": "Provisional qualitative whole-product exact-parity judgment, not completion percentages or a measured image-similarity score. A narrow radar-content improvement cannot justify a whole-product grade increase without a comprehensive behavior, UI and platform inventory."
+  },
+  "independent_validation": [
+    {
+      "command": "cargo test -p mp-app --lib proximity_view_tests",
+      "result": "PASS: 3 passed, 0 failed, 100 filtered out",
+      "scope": "Independently executed reference control semantics, headless viewport drawing and real egui pointer/text-event routing tests. The current event regression also covers focus transfer to another TextEdit without radar shortcut leakage and close/reopen keyboard acquisition without a content click. These remain synthetic egui events, not native operating-system window input or complete pixel equivalence."
+    },
+    {
+      "command": "./scripts/render_proximity_reference.ps1 -Output target/judging/round34/reviewer-reference.png",
+      "result": "PASS: independent reference rerender has the same SHA256 as reference.png: AD194EAAEC4FD60364166F236DDDE87046C1F10D40197EED6EE9A5BDB7B31BD7",
+      "scope": "Confirms reproducibility of the isolated C# paint harness at its default content dimensions on this Windows host."
+    },
+    {
+      "operation": "Visual inspection of actual local PNG files using view_image",
+      "files": [
+        "target/judging/round34/reference.png",
+        "target/judging/round34/rust-before.png",
+        "target/judging/round34/rust-after.png",
+        "target/judging/round34/reference-small.png",
+        "target/judging/round34/rust-small.png",
+        "target/judging/round34/reference-plane.png",
+        "target/judging/round34/rust-plane.png"
+      ],
+      "result": "All seven files exist and were inspected. Normal and small Copter fixtures and the larger non-Copter fixture show populated sensor/obstacle data. Background and text colors, label placement and wide obstacle arcs are closer after the changes, while font weight, glyph metrics and stroke rasterization remain visibly different."
+    },
+    {
+      "operation": "Read parent-run target/run-34-tests.log",
+      "result": "Observed completed log with 183 passed, 1 ignored, 0 failed across workspace groups",
+      "scope": "This is inspection of a parent-run log, not an independently rerun workspace suite. It predates the small with_dimensions constructor/capture configuration followup."
+    }
+  ],
+  "confirmed_improvements": [
+    "The capture example calls the same ProximityView::paint method as the real radar window; the render fixture is not a separate Rust imitation of the production drawing code.",
+    "Reference render script extracts the unchanged Temp_Paint method text from the pinned local C# source. The support file supplies explicit fixture/type adapters rather than rewriting the painting statements.",
+    "Current Rust background uses the reference ThemeManager BGColor, green labels use System.Drawing Green RGB 0,128,0, azimuth labels use DimGray, and orientation-specific sensor-label offsets follow the source.",
+    "The Copter icon is drawn beneath rings and spokes as in the reference. Obstacle-array arcs now use enough segments to avoid the previous obvious polygonal shape.",
+    "The shared fixture includes all eight horizontal sensor orientations, narrow and wide obstacle sectors, and a distance exceeding displayed radius. Both Copter and non-Copter content cases are rendered.",
+    "Review found the initial Rust capture ignored fixture radius_cm and vehicle_cm. Parent corrected the capture to use a finite-positive with_dimensions constructor. Reviewer inspected that correction; recapture remains parent validation.",
+    "The added capture script records actual Rust viewport dimensions and executable hash, while reference receipts record source hash and the content-only limitation. Reviewer inspected the completed normal.manifest.json receipt showing a 430 by 391 Copter viewport and executable hash.",
+    "The event regression now exercises radar focus transfer to another text editor and reopening without an extra content click; all three focused tests independently passed with that extension."
+  ],
+  "findings": [
+    {
+      "id": "R34-01",
+      "priority": "P1",
+      "subsystem": "Radar content pixel equivalence",
+      "status": "verified rendered difference",
+      "evidence": [
+        "Rust draws each label twice at a horizontal 0.5-point offset to approximate GDI synthetic bold. This is explicitly an approximation, not the same font rasterizer or font style.",
+        "Inspected rust-after, rust-small and rust-plane images still show visibly different glyph weight/metrics and antialiased circular/arc strokes compared with the corresponding reference images.",
+        "The helper adds a fixed 1.0,1.5 point text offset to approximate GDI DrawString padding. No cross-DPI/font-metric corpus establishes that this is equivalent."
+      ],
+      "required_fix": "Keep exact pixel parity open. Derive font and positioning behavior from actual GDI metrics or an accepted native rendering strategy, and compare named text/stroke regions at matched content sizes and DPI rather than treating a closer-looking image as an exact match.",
+      "acceptance": "Rendered evidence across default, small and scaled sizes shows equivalent glyph geometry, label placement, colors and strokes, with remaining tolerances explicitly justified against the exact-clone requirement."
+    },
+    {
+      "id": "R34-02",
+      "priority": "P1",
+      "subsystem": "Native form geometry and UI evidence scope",
+      "status": "content harness limitation; native form equivalence unproven",
+      "evidence": [
+        "Original Temp_Paint centers using e.ClipRectangle client dimensions but computes scale using the real Form Height/Width, which include native outer geometry.",
+        "ProximityPaintHarness supplies plain Width/Height fields equal to the bitmap content dimensions. It is not a real ProximityControl Form and has no native nonclient geometry, timer, theme application lifecycle or window focus.",
+        "Rust capture is a borderless standalone eframe viewport calling the painter directly. It omits the actual egui radar Window, title bar, margins and event routing."
+      ],
+      "required_fix": "Retain the content harness for reproducible drawing checks, but add actual C# form and Rust window capture at matched outer/client sizes and DPI, with native open/focus/key/resize/close workflows. Do not promote this content evidence into full-form equivalence.",
+      "acceptance": "Full-window render and interaction evidence establishes geometry and focus behavior in the applications, including control focus transfer and reopened windows."
+    },
+    {
+      "id": "R34-03",
+      "priority": "P1",
+      "subsystem": "Angular retention and inherited product gaps",
+      "status": "still open; not closed by static render fixtures",
+      "evidence": [
+        "Proximity cache still replaces obstacle data by array bin/component rather than the reference sensor-id/angle semantics. Changed heading/offset and repeated sensor ids across components therefore remain source differences from round32.",
+        "Static fixture uses separate components to retain four scan origins in the current Rust cache, while the reference harness injects four records directly. It tests painter output, not equivalence of the temporal message-to-reading model.",
+        "Real BLE/WinUSB backends, complete reference WebSocket endpoint behavior, mobile file/serial workflows, an installable iOS wrapper, full graph interactions and complete analyzer equivalence remain prior blockers."
+      ],
+      "required_fix": "Next implement source-derived temporal sequence fixtures for changing yaw, offsets, increments, repeated ids across components and stale/unknown bins. Reproduce the reference retention/replacement result, then revisit the broader workflow inventory and platform delivery gates."
+    },
+    {
+      "id": "R34-04",
+      "priority": "P2",
+      "subsystem": "Capture reproducibility breadth",
+      "status": "partial evidence",
+      "evidence": [
+        "The reviewed visual set uses one frozen telemetry fixture at 96-DPI-style content scale, with default radius/vehicle dimensions.",
+        "The capture binary loads fixture JSON at compile time while the reference script reads it at runtime. Rebuilding before each paired run is necessary; the new capture script does this.",
+        "No expired/empty, changed-range, changed-vehicle-size, font fallback, locale or high-DPI populated render set was inspected in this review."
+      ],
+      "required_fix": "Extend capture cases beyond the current three sizes/vehicle variants and retain source, fixture, executable and image hashes for each paired run. A successful process exit should not substitute for a fresh validated capture artifact."
+    }
+  ],
+  "not_verified": [
+    "No full reference Mission Planner application or actual ProximityControl window was launched by this reviewer.",
+    "Reviewer inspected existing Rust native renderer artifacts rather than independently relaunching the Rust capture example.",
+    "No native GUI input was sent to the real radar window; egui event tests provide narrower synthetic routing evidence.",
+    "No real sensor, vehicle, BLE/USB hardware, firmware flashing operation or mobile device was exercised.",
+    "No macOS, Linux, Android or iOS build/install/runtime validation was performed.",
+    "No exhaustive whole-reference feature, UI workflow, locale or failure-path inventory was completed."
+  ],
+  "next_concrete_task": "Close the temporal/angular proximity retention difference with source-derived sequence tests, then add actual full-window geometry and focus evidence. Keep the synthetic content captures as a useful, explicitly bounded regression tool.",
+  "ten_out_of_ten_status": "NOT MET. Known rendered differences, missing required implementations and unverified whole-product/platform/device workflows prevent 10/10."
+}

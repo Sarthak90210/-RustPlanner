@@ -1,0 +1,98 @@
+{
+  "round": 33,
+  "date": "2026-11-06",
+  "review_type": "Independent adversarial source and focused execution review of radar controls and rendering",
+  "reviewed_head": "b5a9c53a37f96b8353ffbf49f8b90bad20febcfe",
+  "reviewed_worktree": [
+    "crates/mp-app/src/tool_windows.rs",
+    "crates/mp-app/assets/proximity_quad.png"
+  ],
+  "verdict": "REJECTED for exact-clone parity. Radar defaults, radius and vehicle-size key semantics, resizable geometry, rings, spokes, labels and the original Copter icon are concrete source improvements. Two focused tests independently pass and the icon bytes match the reference. This does not certify actual keyboard routing, populated radar rendering or whole-product visual and feature equivalence. Prior mobile, device, graph and diagnostic gaps remain open.",
+  "scores": {
+    "overall": 4.0,
+    "ui_ux": 3.5,
+    "features": 4.5,
+    "cross_platform_delivery": 2.0,
+    "scale": "Provisional qualitative exact-reference-parity judgment, not a completion percentage. Narrow UI work does not justify a whole-product score increase without comprehensive functional and visual evidence. No visual certification or physical-device qualification was performed."
+  },
+  "independent_validation": [
+    {
+      "command": "cargo test -p mp-app --lib proximity_view_tests",
+      "result": "PASS: 2 passed, 0 failed, 100 filtered out",
+      "scope": "Local Windows tests exercise direct control model defaults, key semantics and lower bounds, plus nonempty headless egui output at 320x480 and 1200x900 viewports. These tests do not send keyboard events through the radar's focus path, compare images or populate telemetry."
+    },
+    {
+      "command": "Get-FileHash crates/mp-app/assets/proximity_quad.png,reference/MissionPlanner/Resources/quad2.png",
+      "result": "MATCH: SHA256 73053D2A2FA7BF8AA5D054A057531F58858A3EB1FCDCB3C37ADAAFF009235202",
+      "scope": "Confirms byte-for-byte identity with the resource referenced as quadicon in Properties/Resources.resx. It does not prove rendered position, dimensions or visual layering."
+    }
+  ],
+  "verified_improvements": [
+    "ProximityView defaults to radius 500cm and vehicle size 80cm, matching reference ProximityControl fields.",
+    "Direct key handler matches reference +/- radius steps of 50cm, bracket vehicle-size steps of 1cm, radius lower-bound reset to 50cm and vehicle-size clamp at 1cm.",
+    "Renderer now computes pixel scale from available rectangle dimensions and radius, draws 0.5m rings and 45-degree spokes, and labels scalar sensor distances.",
+    "DISTANCE_SENSOR arcs remain red and OBSTACLE_DISTANCE arcs yellow, matching the reference source-family distinction.",
+    "Copter branch uses the original quadicon image rather than a generic triangle.",
+    "Stable egui window ID prevents changing range/size title text from creating a new window identity."
+  ],
+  "findings": [
+    {
+      "id": "R33-01",
+      "priority": "P1",
+      "subsystem": "Radar keyboard interaction and its validation",
+      "status": "verified interaction difference and coverage gap",
+      "evidence": [
+        "Rust prox_ui consumes Text events only while the allocated radar response has focus; that response requests focus only after a radar click.",
+        "Reference ProximityControl registers a form KeyPress handler, which works when that form has keyboard focus without an additional content click.",
+        "reference_range_and_vehicle_size_controls_preserve_lower_bounds calls the model key method directly; it does not send egui input events or assert focus behavior."
+      ],
+      "impact": "Model tests alone cannot establish the advertised keyboard workflow. Opening or focusing the radar may not immediately enable its documented controls, and routing must avoid acting while another input/window owns focus.",
+      "required_fix": "Implement and test deliberate radar-window keyboard focus acquisition and release. Add headless event tests for opening/focusing, plus/minus and bracket text, changing focus to another text input, and closing/reopening.",
+      "acceptance": "Real event-routing tests prove the expected window-focused behavior and no shortcut leakage; confirm the same interaction in the native app."
+    },
+    {
+      "id": "R33-02",
+      "priority": "P1",
+      "subsystem": "Radar visual parity",
+      "status": "verified source differences; rendered magnitude unverified",
+      "evidence": [
+        "Reference uses SystemFonts.DefaultFont plus 2 points in Bold; Rust draws proportional 12px regular text.",
+        "Reference uses orientation-specific sensor-label offsets and distinct azimuth label placement; Rust uses generic LEFT_TOP and CENTER_CENTER anchors.",
+        "Reference draws the Copter icon before range rings and spokes; Rust draws it after spokes.",
+        "Reference uses native GDI arcs; Rust approximates each arc with eight straight segments regardless of sector width.",
+        "The headless smoke test passes None for the link, so it does not exercise the Copter texture branch, sensor arcs or distance labels."
+      ],
+      "impact": "The radar is closer to the source design but remains visibly and structurally different in source. The current tests cannot assess clipping, overlap, font metrics or real DPI scaling.",
+      "required_fix": "Build a deterministic populated radar fixture with Copter and non-Copter variants, all eight sensor orientations, obstacle-array sectors and long/short distances. Compare rendered reference/Rust images at matched client sizes and DPI; correct typography, label anchors, layering and clipping from that evidence.",
+      "acceptance": "Rendered side-by-side or image-difference evidence shows matched reference geometry, labels, icon placement and resize behavior at normal and small sizes."
+    },
+    {
+      "id": "R33-03",
+      "priority": "P1",
+      "subsystem": "Inherited broader parity blockers",
+      "status": "still open; not requalified by this UI run",
+      "evidence": [
+        "Round31 documents real BLE/WinUSB implementations remain absent; explicit Unsupported is honest failure, not feature parity.",
+        "Round31 documents reference Socket.IO probe/control namespace and reconnect behavior remain unimplemented, and complete authenticated WSS behavior was not independently qualified.",
+        "Round32 documents obstacle retention differs from the reference when scan headings/offsets change.",
+        "Prior reports document incomplete mobile file/serial workflows, no complete installable iOS application delivery, incomplete log graph interactions and partial native diagnostic checks."
+      ],
+      "required_fix": "Continue from the evidence-backed inventories in rounds30-32 and add cross-platform install/run and rendered UI proof. Do not treat a passing radar test as closure of unrelated subsystems."
+    }
+  ],
+  "next_concrete_task": "Close radar window keyboard focus and event-routing coverage, then render deterministic populated radar fixtures against the C# form. The current empty headless smoke cannot certify the rendering changes.",
+  "not_verified": [
+    "No screenshot or native visible radar comparison was performed.",
+    "No actual sensor, vehicle, BLE or WinUSB device was connected.",
+    "No macOS, Linux, Android or iOS application was built, installed or launched by this reviewer.",
+    "No exhaustive Mission Planner feature inventory or full UI navigation comparison was performed.",
+    "The parent's latest workspace run is not claimed as this reviewer's independently executed validation."
+  ],
+  "ten_out_of_ten_criteria": [
+    "Traceable full reference feature and UI workflow inventory with concrete passing behavior evidence for every applicable item.",
+    "Matched rendered UI/interaction evidence across the supported window sizes, display scales and target platforms.",
+    "Actual installable, launched application evidence for Windows, macOS, Linux, Android and iOS.",
+    "Real transport/device validation where the clone claims hardware support; synthetic tests and Unsupported responses cannot substitute for it.",
+    "No known missing, simplified or unverified required behavior may be hidden by a global numerical rating."
+  ]
+}

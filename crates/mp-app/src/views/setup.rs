@@ -548,7 +548,7 @@ impl SetupView {
                 });
             }
             if theme::button_sized(ui, "Log Browse", Vec2::new(87.0, 23.0)).clicked() {
-                if let Some(path) = crate::log_browse::pick_bin() { self.term_log_browse.load(path); }
+                self.term_log_browse.request_load();
             }
         });
         self.term_log_browse.ui(ui.ctx());

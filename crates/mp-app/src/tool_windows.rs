@@ -230,9 +230,105 @@ struct Confirm {
     then: Box<dyn FnOnce(&Link)>,
 }
 
+pub struct ProximityView {
+    radius_cm: f32,
+    vehicle_cm: f32,
+    quad: Option<egui::TextureHandle>,
+    focus_on_open: bool,
+}
+
+impl Default for ProximityView {
+    fn default() -> Self { Self { radius_cm: 500.0, vehicle_cm: 80.0, quad: None, focus_on_open: true } }
+}
+
+impl ProximityView {
+    pub fn with_dimensions(radius_cm: f32, vehicle_cm: f32) -> Option<Self> {
+        if !radius_cm.is_finite() || !vehicle_cm.is_finite() || radius_cm < 1.0 || vehicle_cm < 1.0 { return None; }
+        Some(Self { radius_cm, vehicle_cm, ..Self::default() })
+    }
+
+    /// Production radar content painter, also used by the deterministic capture example.
+    pub fn paint(&mut self, ui: &egui::Ui, rect: Rect, readings: &[mp_core::proximity::Reading], is_copter: bool) {
+        let p = ui.painter().with_clip_rect(rect);
+        p.rect_filled(rect, 0.0, theme::bg());
+        let c = rect.center();
+        let max = self.radius_cm / 100.0;
+        let scale = rect.width().min(rect.height()) / (2.0 * (max + 0.5));
+        let dim_gray = Color32::from_gray(105);
+        let green = Color32::from_rgb(0, 128, 0); // System.Drawing.Brushes.Green
+        // SystemFonts.DefaultFont + 2 points at 96 DPI. GDI synthesizes the
+        // Microsoft Sans Serif bold face; the second pass approximates that weight.
+        // Font rasterization is still a known GDI/egui visual-parity limitation.
+        let text = |position: Pos2, label: String, color: Color32| {
+            let font = crate::fonts::ui_id(10.25 * 96.0 / 72.0);
+            let position = position + Vec2::new(1.0, 1.5);
+            p.text(position, egui::Align2::LEFT_TOP, &label, font.clone(), color);
+            p.text(position + Vec2::new(0.5, 0.0), egui::Align2::LEFT_TOP, label, font, color);
+        };
+        // Reference Temp_Paint draws the vehicle underneath rings/spokes.
+        if is_copter {
+            let quad = self.quad.get_or_insert_with(|| {
+                let image = image::load_from_memory(include_bytes!("../assets/proximity_quad.png")).expect("bundled quad icon").to_rgba8();
+                ui.ctx().load_texture("proximity_quad", egui::ColorImage::from_rgba_unmultiplied([image.width() as usize, image.height() as usize], image.as_raw()), egui::TextureOptions::LINEAR)
+            });
+            p.image(quad.id(), Rect::from_center_size(c, Vec2::splat(self.vehicle_cm / 100.0 * scale)), Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+        }
+        for k in 1..=(self.radius_cm / 50.0) as usize {
+            let meters = k as f32 * 0.5;
+            let r = meters * scale;
+            p.circle_stroke(c, r, Stroke::new(1.0, dim_gray));
+            text(c + Vec2::new(5.0, -r), format!("{meters:.1}m"), green);
+        }
+        for angle in (0..360).step_by(45) {
+            let rad = (angle as f32 - 90.0).to_radians();
+            let end = c + Vec2::new(rad.cos(), rad.sin()) * max * scale;
+            text(end + Vec2::new(-10.0, 5.0), angle.to_string(), dim_gray);
+            p.line_segment([c, end], Stroke::new(1.0, dim_gray));
+        }
+        for reading in readings {
+            let r = reading.distance_m.min(max) * scale;
+            let a0 = (reading.angle_deg - reading.width_deg / 2.0 - 90.0).to_radians();
+            let a1 = (reading.angle_deg + reading.width_deg / 2.0 - 90.0).to_radians();
+            // Keep chords below two physical pixels for wide obstacle-array arcs.
+            let segments = (((a1 - a0).abs() * r * ui.ctx().pixels_per_point() / 2.0).ceil() as usize).clamp(8, 4096);
+            let pts: Vec<Pos2> = (0..=segments).map(|i| {
+                let a = a0 + (a1 - a0) * i as f32 / segments as f32;
+                c + Vec2::new(a.cos(), a.sin()) * r
+            }).collect();
+            if reading.orientation != 100 {
+                let angle = (reading.angle_deg - 90.0).to_radians();
+                let offset = match (reading.angle_deg / 45.0).round() as u8 {
+                    0 => Vec2::new(-10.0, 5.0), 1 => Vec2::new(-40.0, 5.0),
+                    2 => Vec2::new(-40.0, 0.0), 3 => Vec2::new(-40.0, -5.0),
+                    4 => Vec2::new(-10.0, -15.0), 5 => Vec2::new(5.0, -5.0),
+                    6 => Vec2::new(5.0, 0.0), _ => Vec2::new(5.0, 5.0),
+                };
+                text(c + Vec2::new(angle.cos(), angle.sin()) * r + offset, format!("{:.1}m", reading.distance_m), green);
+            }
+            let col = if reading.orientation == 100 { Color32::YELLOW } else { Color32::RED };
+            p.add(Shape::line(pts, Stroke::new(3.0, col)));
+        }
+    }
+
+    fn key(&mut self, c: char) {
+        match c {
+            '+' => self.radius_cm -= 50.0,
+            '-' => self.radius_cm += 50.0,
+            ']' => self.vehicle_cm += 1.0,
+            '[' => self.vehicle_cm -= 1.0,
+            _ => {}
+        }
+        if self.radius_cm < 1.0 { self.radius_cm = 50.0; }
+        if self.vehicle_cm < 1.0 { self.vehicle_cm = 1.0; }
+    }
+}
+
+enum BinaryTool { Fft(bool), MagCal, Split }
+
 #[derive(Default)]
 pub struct Tools {
     prompt: Option<Prompt>,
+    binary_request: Option<(BinaryTool, crate::platform::FilePicker)>,
     confirm: Option<Confirm>,
     text: Option<(String, String)>,
     outputs: Vec<Output>,
@@ -250,6 +346,7 @@ pub struct Tools {
     follow_port: String,
     last_fix: Option<(f64, f64, f64)>,
     prox_open: bool,
+    prox_view: ProximityView,
     sign_open: bool,
     sign_pass: String,
     fft: Option<(String, f64, Vec<(String, Vec<f64>)>)>,
@@ -279,7 +376,7 @@ impl Tools {
             }
             "Follow Me" => self.open_follow(true),
             "Moving Base" => self.open_follow(false),
-            "Proximity" => self.prox_open = true,
+            "Proximity" => { self.prox_open = true; self.prox_view.focus_on_open = true; },
             "signing" | "Mavlink Signing" => self.sign_open = true,
             "FFT" => self.load_fft(false, toasts),
             "Spectrogram" => self.load_fft(true, toasts),
@@ -287,9 +384,7 @@ impl Tools {
             "hex Mavlink decode" | "parse packet bytes" => self.prompt = Some(Prompt::Hex("fd0500001a0c1".into())),
             "decode HWIDs" => self.prompt = Some(Prompt::HwId(String::new())),
             "Split DFLog" => {
-                if let Some(p) = pick("Split DFLog", "Binary Log", &["bin", "BIN"]) {
-                    self.prompt = Some(Prompt::Split(p, "2".into()));
-                }
+                self.binary_request = Some((BinaryTool::Split, crate::platform::binary_log_picker()));
             }
             "arm and takeoff" => {
                 if need_link(toasts) {
@@ -343,8 +438,7 @@ impl Tools {
             "Param Restore" => {
                 if need_link(toasts) {
                     if let Some(p) = pick("Param Restore", "Param List", &["param", "parm", "txt"]) {
-                        let text = std::fs::read_to_string(&p).unwrap_or_default();
-                        let list = mp_core::paramfile::load(&text);
+                        let list = match mp_core::paramfile::read(&p) { Ok(list) => list, Err(e) => { toasts.error(e.to_string()); return true; } };
                         let n = list.len();
                         for (k, v) in list {
                             link.unwrap().send(LinkCommand::SetParam { name: k, value: v });
@@ -409,8 +503,11 @@ impl Tools {
         }
     }
 
-    fn load_fft(&mut self, spect: bool, toasts: &mut Toasts) {
-        let Some(p) = crate::log_browse::pick_bin() else { return };
+    fn load_fft(&mut self, spect: bool, _toasts: &mut Toasts) {
+        self.binary_request = Some((BinaryTool::Fft(spect), crate::platform::binary_log_picker()));
+    }
+
+    fn load_fft_path(&mut self, spect: bool, p: PathBuf, toasts: &mut Toasts) {
         let Ok(data) = std::fs::read(&p) else {
             toasts.error("Failed to read log");
             return;
@@ -566,9 +663,12 @@ impl Tools {
     }
 
     /// MagCalib.ProcessLog: hard-iron offsets from the MAG min/max of a log.
-    fn mag_log(&mut self, toasts: &mut Toasts) {
-        let Some(p) = crate::log_browse::pick_bin() else { return };
-        let Ok(data) = std::fs::read(&p) else { return };
+    fn mag_log(&mut self, _toasts: &mut Toasts) {
+        self.binary_request = Some((BinaryTool::MagCal, crate::platform::binary_log_picker()));
+    }
+
+    fn mag_log_path(&mut self, p: PathBuf, toasts: &mut Toasts) {
+        let data = match std::fs::read(&p) { Ok(data) => data, Err(e) => { toasts.error(e.to_string()); return; } };
         let log = mp_core::dataflash::parse(&data);
         let mut out = String::new();
         for m in ["MAG", "MAG2", "MAG3"] {
@@ -591,6 +691,13 @@ impl Tools {
 
     /// Per-frame: run outputs, follow-me, warnings and draw the tool windows.
     pub fn ui(&mut self, ctx: &egui::Context, link: Option<&Link>, toasts: &mut Toasts) {
+        if let Some((action, path)) = crate::platform::poll_file_action(&mut self.binary_request, ctx) {
+            match action {
+                BinaryTool::Fft(spect) => self.load_fft_path(spect, path, toasts),
+                BinaryTool::MagCal => self.mag_log_path(path, toasts),
+                BinaryTool::Split => self.prompt = Some(Prompt::Split(path, "2".into())),
+            }
+        }
         let cs = link.map(|l| l.shared.read().cs.clone()).unwrap_or_default();
         self.tick(link, &cs, toasts);
         self.prompt_ui(ctx, link, toasts);
@@ -966,46 +1073,26 @@ impl Tools {
         if !self.prox_open {
             return;
         }
-        let readings: Vec<(f32, f32)> = link
-            .map(|l| {
-                l.shared
-                    .read()
-                    .inspector
-                    .values()
-                    .filter_map(|s| match &s.msg {
-                        MavMessage::DISTANCE_SENSOR(d) if s.last.elapsed() < Duration::from_secs(3) => Some((d.orientation as u8 as f32 * 45.0, d.current_distance as f32 / 100.0)),
-                        _ => None,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+        let readings = link.map(|l| {
+            let state = l.shared.read();
+            state.proximity.readings(state.cs.sysid, state.cs.compid, Instant::now())
+        }).unwrap_or_default();
         let mut open = true;
-        egui::Window::new(crate::i18n::t("Proximity")).open(&mut open).collapsible(false).default_size([400.0, 420.0]).show(ctx, |ui| {
-            let (rect, _) = ui.allocate_exact_size(Vec2::splat(380.0), egui::Sense::hover());
-            let p = ui.painter();
-            p.rect_filled(rect, 0.0, Color32::BLACK);
-            let c = rect.center();
-            let max = 10.0f32;
-            for k in 1..=4 {
-                let r = 180.0 * k as f32 / 4.0;
-                p.circle_stroke(c, r, Stroke::new(1.0, Color32::from_gray(80)));
-                p.text(c + Vec2::new(2.0, -r), egui::Align2::LEFT_BOTTOM, format!("{:.1}m", max * k as f32 / 4.0), egui::FontId::proportional(10.0), Color32::GRAY);
+        let title = format!("Radius(+/-): {}m MAV size([/]): {}m", self.prox_view.radius_cm / 100.0, self.prox_view.vehicle_cm / 100.0);
+        egui::Window::new(title).id(egui::Id::new("proximity_window")).open(&mut open).collapsible(false).default_size([430.0, 391.0]).show(ctx, |ui| {
+            let (rect, _) = ui.allocate_exact_size(ui.available_size().max(Vec2::splat(120.0)), egui::Sense::hover());
+            let response = ui.interact(rect, egui::Id::new("proximity_keyboard"), egui::Sense::click());
+            if response.clicked() || self.prox_view.focus_on_open {
+                response.request_focus();
+                self.prox_view.focus_on_open = false;
             }
-            p.add(Shape::convex_polygon(vec![c + Vec2::new(0.0, -12.0), c + Vec2::new(8.0, 8.0), c + Vec2::new(-8.0, 8.0)], Color32::WHITE, Stroke::NONE));
-            for (ang, d) in &readings {
-                let r = (d / max).min(1.0) * 180.0;
-                let a0 = (ang - 22.5 - 90.0).to_radians();
-                let a1 = (ang + 22.5 - 90.0).to_radians();
-                let pts: Vec<Pos2> = (0..=8).map(|i| {
-                    let a = a0 + (a1 - a0) * i as f32 / 8.0;
-                    c + Vec2::new(a.cos(), a.sin()) * r
-                }).collect();
-                let col = if *d < 2.0 { Color32::RED } else if *d < 5.0 { Color32::YELLOW } else { Color32::GREEN };
-                p.add(Shape::line(pts, Stroke::new(3.0, col)));
+            if response.has_focus() {
+                for event in ui.input(|i| i.events.clone()) {
+                    if let egui::Event::Text(text) = event { for c in text.chars() { self.prox_view.key(c); } }
+                }
             }
-            if readings.is_empty() {
-                p.text(Pos2::new(c.x, rect.bottom() - 16.0), egui::Align2::CENTER_CENTER, crate::i18n::t("No proximity data"), egui::FontId::proportional(12.0), Color32::WHITE);
-            }
+            let is_copter = link.is_some_and(|l| l.shared.read().cs.firmware == mp_core::firmware::Firmware::ArduCopter2);
+            self.prox_view.paint(ui, rect, &readings, is_copter);
         });
         if !open {
             self.prox_open = false;
@@ -1152,5 +1239,86 @@ fn split_bin(path: &Path, n: usize) -> Result<Vec<PathBuf>, String> {
         start = end;
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod proximity_view_tests {
+    use super::*;
+
+    #[test]
+    fn reference_range_and_vehicle_size_controls_preserve_lower_bounds() {
+        let mut view = ProximityView::default();
+        assert_eq!((view.radius_cm, view.vehicle_cm), (500.0, 80.0));
+        for c in "+]".chars() { view.key(c); }
+        assert_eq!((view.radius_cm, view.vehicle_cm), (450.0, 81.0));
+        for c in "-[".chars() { view.key(c); }
+        assert_eq!((view.radius_cm, view.vehicle_cm), (500.0, 80.0));
+        for _ in 0..1000 { view.key('+'); view.key('['); }
+        assert_eq!((view.radius_cm, view.vehicle_cm), (50.0, 1.0));
+    }
+
+    #[test]
+    fn radar_window_draws_at_small_and_large_viewports() {
+        for size in [Vec2::new(320.0, 480.0), Vec2::new(1200.0, 900.0)] {
+            let ctx = egui::Context::default();
+            let mut tools = Tools::default();
+            tools.prox_open = true;
+            let mut frame = ctx.run_ui(egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, size)), ..Default::default() }, |ui| tools.prox_ui(ui.ctx(), None));
+            assert!(!frame.shapes.is_empty());
+            frame.textures_delta.clear();
+        }
+    }
+
+    #[test]
+    fn radar_click_focus_routes_real_text_events_to_controls() {
+        let ctx = egui::Context::default();
+        let mut tools = Tools::default();
+        tools.prox_open = true;
+        let input = || egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1000.0, 800.0))), ..Default::default() };
+        let mut frame = ctx.run_ui(input(), |ui| tools.prox_ui(ui.ctx(), None));
+        frame.textures_delta.clear();
+        for _ in 0..3 {
+            let mut frame = ctx.run_ui(input(), |ui| tools.prox_ui(ui.ctx(), None));
+            frame.textures_delta.clear();
+        }
+        let center = ctx.read_response(egui::Id::new("proximity_keyboard")).unwrap().rect.center();
+        for pressed in [true, false] {
+            let mut event = input();
+            event.events = vec![egui::Event::PointerMoved(center), egui::Event::PointerButton { pos: center, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE }];
+            let mut frame = ctx.run_ui(event, |ui| tools.prox_ui(ui.ctx(), None));
+            frame.textures_delta.clear();
+        }
+        let mut event = input();
+        event.events = vec![egui::Event::Text("+]".into())];
+        let mut frame = ctx.run_ui(event, |ui| tools.prox_ui(ui.ctx(), None));
+        frame.textures_delta.clear();
+        assert_eq!((tools.prox_view.radius_cm, tools.prox_view.vehicle_cm), (450.0, 81.0));
+        let mut other_text = String::new();
+        let mut frame = ctx.run_ui(input(), |ui| {
+            tools.prox_ui(ui.ctx(), None);
+            ui.text_edit_singleline(&mut other_text).request_focus();
+        });
+        frame.textures_delta.clear();
+        let mut event = input();
+        event.events = vec![egui::Event::Text("+]".into())];
+        let mut frame = ctx.run_ui(event, |ui| {
+            tools.prox_ui(ui.ctx(), None);
+            ui.text_edit_singleline(&mut other_text);
+        });
+        frame.textures_delta.clear();
+        assert_eq!(other_text, "+]");
+        assert_eq!((tools.prox_view.radius_cm, tools.prox_view.vehicle_cm), (450.0, 81.0), "radar shortcuts must not consume other input focus");
+        tools.prox_open = false;
+        let mut frame = ctx.run_ui(input(), |ui| tools.prox_ui(ui.ctx(), None));
+        frame.textures_delta.clear();
+        tools.activate("Proximity", None, &mut Toasts::default());
+        let mut frame = ctx.run_ui(input(), |ui| tools.prox_ui(ui.ctx(), None));
+        frame.textures_delta.clear();
+        let mut event = input();
+        event.events = vec![egui::Event::Text("-[".into())];
+        let mut frame = ctx.run_ui(event, |ui| tools.prox_ui(ui.ctx(), None));
+        frame.textures_delta.clear();
+        assert_eq!((tools.prox_view.radius_cm, tools.prox_view.vehicle_cm), (500.0, 80.0), "opening radar restores keyboard controls without a content click");
+    }
 }
 
