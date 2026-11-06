@@ -1,0 +1,172 @@
+{
+  "round": 9,
+  "review_type": "fresh independent source and render review",
+  "reviewed_head": "cbd1eecd6c2bf4c7932b662776ac264526677d94",
+  "date": "2026-11-06",
+  "verdict": "Material software parity gaps remain. Not 10/10.",
+  "scores": {
+    "overall": 6.8,
+    "ui_ux": 7.6,
+    "features": 6.0,
+    "scale": "Qualitative judgment against exact C# software parity, not a measured percentage of completed features. Overall gives equal weight to UI/UX and features."
+  },
+  "rationale": "The main desktop shell, DATA layout, PLAN mission table, designer-derived SETUP pages and CONFIG parameter editor reproduce much of the original structure. Current source also has real Terminal, SiK-over-MAVLink and serial-pass implementations; old screenshots are not evidence that these are still missing. However, several original workflows are explicitly replaced by errors, generic screens or unsupported paths. Firmware-specific tuning and compass behavior also differ in ways that affect actual use. Passing protocol tests and representative screenshots cannot establish exact parity across the original application.",
+  "scope": {
+    "inspected": [
+      "DATA layout, HUD/video menus, tabs and payload controls",
+      "PLAN mission columns, coordinate display, context menus, survey entry point and View KML",
+      "SETUP page routing, terminal and SiK paths, compass device priority and initial parameter calculator",
+      "CONFIG page routing, basic tuning implementation, parameter editor layout, Planner language and layout settings",
+      "Ctrl+F tools, swarm routing, plugin manager, connection transports and mobile file helpers"
+    ],
+    "rust_render_images_viewed": [
+      "target/judging/round08/01_data_disconnected.png",
+      "target/judging/round08/07_plan_mission.png",
+      "target/judging/round08/14_config_fullparams.png",
+      "target/judging/round08/18_config_planner.png",
+      "target/judging/round08/32_ctrl_f_temp.png",
+      "target/judging/round08/35_setup_camera_gimbal.png",
+      "target/judging/round08/37_setup_joystick.png",
+      "target/judging/round08/38_data_swarm.png",
+      "target/judging/serial-tools-20261106/terminal.png"
+    ],
+    "render_limit": "Round08 images predate subsequent source changes. Current source was checked for each claimed gap. No side-by-side C# runtime capture or pixel comparison was performed, so visual similarity is assessed against designer/resource structure rather than certified exact rendering.",
+    "reported_evidence_not_rerun": [
+      "cargo test --workspace: 81 passing",
+      "Windows debug build",
+      "Independent TCP MAVLink serial wire tests and serial-pass worker tests"
+    ],
+    "unverified": [
+      "Full click-through and keyboard behavior of all original forms and tools",
+      "Complete failure/retry/reconnect behavior for every device protocol",
+      "All supported vehicle and legacy firmware combinations",
+      "Native macOS/Linux builds and runs, Android APK execution, iOS packaging and execution",
+      "Every map provider, survey option, log format, firmware upload target and scripting API"
+    ],
+    "verification_boundary": "No hardware or external network connection was launched, no app preferences were changed, and tests were not rerun. Physical flight qualification is not required to close these software parity findings."
+  },
+  "gaps": [
+    {
+      "priority": 1,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "CONFIG",
+      "title": "Route tuning to the original vehicle-specific pages",
+      "finding": "All Basic Tuning selections call the copter acsimplepids.xml implementation. Plane and Rover have dedicated original controls and bindings; Tracker should receive its dedicated Extended Tuning page but is excluded from the Rust ExtendedTuning route. A generic full parameter editor does not reproduce these workflows.",
+      "csharp_refs": ["reference/MissionPlanner/GCSViews/SoftwareConfig.cs:173-194", "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigArduplane.cs:87-93", "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigArdurover.cs:50-77"],
+      "rust_refs": ["crates/mp-app/src/views/config.rs:49-64", "crates/mp-app/src/views/config.rs:139-142", "crates/mp-app/src/views/tuning.rs:43-79"],
+      "next_fix": "Implement Plane, Rover and Tracker tuning layouts, parameter aliases and actions, then route by firmware as the original does. Verify each route with distinct parameter fixtures and rendered pages."
+    },
+    {
+      "priority": 2,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "SETUP compass",
+      "title": "Build compass priority rows from device IDs rather than row indices",
+      "finding": "Rust constructs at most three rows, pairs PRIO1 with DEV_ID and PRIO2 with DEV_ID2 by row number, and tests missing status against that same indexed device. A valid reordered priority list can therefore be marked missing and show orientation/external state for the wrong compass. C# resolves those properties by matching the actual device ID and appends detected devices that are not yet in the priority list. Rust also refuses swaps when one stored priority is zero.",
+      "csharp_refs": ["reference/MissionPlanner/GCSViews/ConfigurationView/ConfigHWCompass2.cs:38-58", "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigHWCompass2.cs:88-119", "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigHWCompass2.cs:184-255"],
+      "rust_refs": ["crates/mp-app/src/views/setup.rs:1866-1884", "crates/mp-app/src/views/setup.rs:1924-1938"],
+      "next_fix": "Resolve rows by DevID, include unprioritized detected compasses, preserve parameter aliases, and implement the original list-reorder/write semantics. Check swapped, zero-priority, missing-device and additional-device fixtures."
+    },
+    {
+      "priority": 3,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "DATA video and payload",
+      "title": "Implement the advertised GStreamer, HereLink and gimbal video paths",
+      "finding": "Set GStreamer Source and HereLink Video always report that GStreamer was not found without attempting discovery or starting a pipeline. Start Camera starts an HTTP MJPEG reader. Payload Video Control always reports that no stream is configured. The original has pipeline input/discovery/start and full-size, mini and pop-out gimbal video controls.",
+      "csharp_refs": ["reference/MissionPlanner/GCSViews/FlightData.cs:3186-3213", "reference/MissionPlanner/GCSViews/FlightData.cs:4946-4972", "reference/MissionPlanner/GCSViews/FlightData.cs:6667-6841"],
+      "rust_refs": ["crates/mp-app/src/views/flight_data.rs:464-482", "crates/mp-app/src/views/fd_tabs.rs:345-346"],
+      "next_fix": "Add actual backend discovery, pipeline input/start/stop and gimbal stream configuration plus the original display modes. Verify with local video fixtures and rendered interaction states."
+    },
+    {
+      "priority": 4,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "PLAN",
+      "title": "Restore coordinate-system switching and editable UTM/MGRS table columns",
+      "finding": "PLAN paints a fixed GEO label and exposes only Lat/Lon columns. The original switches between GEO, UTM and MGRS, changes visible columns and converts edits back to geographic coordinates. The Rust Enter UTM Coord context-menu action exists, but does not replace the missing table/display workflow.",
+      "csharp_refs": ["reference/MissionPlanner/GCSViews/FlightPlanner.cs:2741-2757", "reference/MissionPlanner/GCSViews/FlightPlanner.cs:2765-2808", "reference/MissionPlanner/GCSViews/FlightPlanner.cs:2832-2863"],
+      "rust_refs": ["crates/mp-app/src/views/flight_plan.rs:21-40", "crates/mp-app/src/views/flight_plan.rs:278-283", "crates/mp-app/src/views/flight_plan.rs:596-597", "crates/mp-app/src/views/flight_plan/menu.rs:535-539"],
+      "next_fix": "Add the coordinate selector, matching columns, reversible conversions and original validation. Verify conversions and edit persistence with known coordinate fixtures."
+    },
+    {
+      "priority": 5,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "Tools / swarm",
+      "title": "Restore distinct swarm workflows, especially Sequence Swarm",
+      "finding": "Swarm, Follow the leader, Sequence Swarm and Follow Swarm all open the same small vehicle grid. Sequence Swarm has no layout/step editor or sequence execution. The follow implementation sends followers to a line behind one leader once per second. This is a useful subset, but not the original tools' UI or behavior.",
+      "csharp_refs": ["reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:18-39", "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:89-150"],
+      "rust_refs": ["crates/mp-app/src/more_tools.rs:73-80", "crates/mp-app/src/more_tools.rs:454-553"],
+      "next_fix": "Give the tools their original distinct state and controls. Start with Sequence layout load/save, editing, steps and execution, verified against deterministic multiple-vehicle peers."
+    },
+    {
+      "priority": 6,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "SETUP / CONFIG navigation",
+      "title": "Honor per-page display flags and original vehicle/loading visibility",
+      "finding": "Rust models only a small subset of DisplayView flags. SETUP gates Advanced and Terminal but not the many individual hardware flags; Frame Type is visible for every parameter-complete connection. CONFIG always appends Full Parameter List and Planner, even while parameters are loading, and has no Loading page. C# applies per-page flags, firmware/version-dependent Frame Type selection, and the loading route.",
+      "csharp_refs": ["reference/MissionPlanner/GCSViews/InitialSetup.cs:183-216", "reference/MissionPlanner/GCSViews/SoftwareConfig.cs:226-260", "reference/MissionPlanner/ExtLibs/Utilities/DisplayView.cs:78-125"],
+      "rust_refs": ["crates/mp-app/src/display.rs:33-58", "crates/mp-app/src/views/setup.rs:39-51", "crates/mp-app/src/views/setup.rs:82-103", "crates/mp-app/src/views/config.rs:49-82"],
+      "next_fix": "Represent and apply the original display flags and page predicates. Verify navigation for Basic, Advanced and Custom layouts, disconnected/loading/ready states, Plane, Rover, Tracker and old/new Copter fixtures."
+    },
+    {
+      "priority": 7,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "Plugins",
+      "title": "Provide original plugin loading and lifecycle compatibility",
+      "finding": "The plugin window lists filenames with disabled Enabled checkboxes and explicitly states that .NET .dll/.cs plugins cannot load. The original compiles/loads plugins and invokes Init, Loaded, Loop and Exit; plugins can add application pages. Python/Lua script support is not equivalent to this extension contract.",
+      "csharp_refs": ["reference/MissionPlanner/Plugin/PluginLoader.cs:146-179", "reference/MissionPlanner/Plugin/PluginLoader.cs:256-329", "reference/MissionPlanner/MainV2.cs:2527-2581", "reference/MissionPlanner/GCSViews/InitialSetup.cs:53-58"],
+      "rust_refs": ["crates/mp-app/src/hotkey_tools.rs:80-117"],
+      "next_fix": "Implement a compatibility host and page/action bridge for the supported plugin contract, or explicitly retain this as an unresolved parity exclusion. Validate a sample plugin that adds a page and uses lifecycle hooks."
+    },
+    {
+      "priority": 8,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "Localization / Planner",
+      "title": "Restore the original language selector and translated resources",
+      "finding": "The language combo contains only English and UI text is hard-coded. C# discovers available language resources and changes the UI culture through MainV2.changelanguage. The single English menu entry is a missing user workflow, not just a translation verification gap.",
+      "csharp_refs": ["reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:106-128", "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:417-421", "reference/MissionPlanner/MainV2.cs:4227-4235"],
+      "rust_refs": ["crates/mp-app/src/views/config.rs:991-991"],
+      "next_fix": "Load supported resource translations, persist culture and update main pages and dialogs when the selection changes. Verify representative translated pages and text expansion."
+    },
+    {
+      "priority": 9,
+      "severity": "high",
+      "status": "confirmed unsupported paths; native platform execution otherwise unverified",
+      "area": "Platform and connections",
+      "title": "Complete missing transport and mobile import paths",
+      "finding": "ConnectionSpec has serial, TCP client and UDP only; original BLE and WinUSB custom ports are absent. On Android/iOS open_serial explicitly returns Unsupported and platform::open_text always returns None, so common mission/parameter/file import callers cannot complete through that helper. CI configuration and entry points exist, but are not execution evidence for native platform support.",
+      "csharp_refs": ["reference/MissionPlanner/MainV2.cs:3629-3641", "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4150-4150", "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4484-4488"],
+      "rust_refs": ["crates/mp-core/src/comms.rs:20-40", "crates/mp-core/src/comms.rs:121-128", "crates/mp-app/src/platform.rs:76-79", "crates/mp-app/src/views/flight_plan/menu.rs:450-453", ".github/workflows/build.yml:1-62"],
+      "next_fix": "Implement the missing desktop custom transports and mobile device/file access, connect imports to an actual picker/browser, then produce native build and basic launch/import receipts for each promised OS. Preserve the distinction between an explicit unsupported code path and an OS that has simply not been tested."
+    },
+    {
+      "priority": 10,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "SETUP initial parameters",
+      "title": "Match the original firmware-version branch in suggested filter parameters",
+      "finding": "C# selects RAT_*_FLTD/FLTE/FLTT for major version 4 and the older RAT_*_FILT names otherwise. Rust always creates the new filter names. The write loop skips suggestions whose names are not already present, so an old-firmware parameter set silently loses the intended filter changes.",
+      "csharp_refs": ["reference/MissionPlanner/GCSViews/ConfigurationView/ConfigInitialParams.cs:178-198"],
+      "rust_refs": ["crates/mp-app/src/views/setup.rs:1013-1015", "crates/mp-app/src/views/setup.rs:1087-1092", "crates/mp-app/src/views/setup.rs:1147-1150"],
+      "next_fix": "Carry firmware version into the calculator and reproduce the original filter-name selection. Verify generated suggestions for version 3 and version 4 parameter fixtures."
+    },
+    {
+      "priority": 11,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "PLAN",
+      "title": "Make View KML open the mission network KML",
+      "finding": "The Rust View KML hyperlink opens the generic ArduPilot planner documentation. The original opens the locally served network.kml mission endpoint. Exporting or viewing the mission in Google Earth cannot be completed by this control.",
+      "csharp_refs": ["reference/MissionPlanner/GCSViews/FlightPlanner.cs:4332-4340"],
+      "rust_refs": ["crates/mp-app/src/views/flight_plan.rs:289-289"],
+      "next_fix": "Provide mission KML/network-link generation and the appropriate local endpoint or exported document, then point this control at it. Verify that changing the mission changes the KML contents."
+    }
+  ],
+  "ten_out_of_ten_criterion": "No known material UI/UX or feature discrepancy in an adequately reviewed software scope, with verification of the original interactions and promised native platforms. This review is sampled, not exhaustive; closing these eleven findings alone would not certify all unreviewed original functionality."
+}

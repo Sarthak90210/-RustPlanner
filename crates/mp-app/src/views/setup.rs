@@ -135,6 +135,7 @@ pub struct SetupView {
     firmware: crate::firmware_ui::FirmwareInstaller,
     extra: crate::views::setup_pages::ExtraPages,
     dev: crate::views::device_pages::DevicePages,
+    mount: crate::views::mount::MountPage,
 }
 
 struct Terminal {
@@ -283,6 +284,7 @@ impl Default for SetupView {
             firmware: Default::default(),
             extra: Default::default(),
             dev: Default::default(),
+            mount: Default::default(),
         }
     }
 }
@@ -295,6 +297,7 @@ struct RadioCal {
 impl SetupView {
     pub fn close_terminal(&mut self) {
         self.term = None;
+        self.mount.leave();
     }
 
     /// Select a page by its BackstageView label.
@@ -324,7 +327,8 @@ impl SetupView {
             self.page = visible[sel];
         }
         let name = PAGES[if sel != before { self.page } else { shown }].0;
-        if name != "Terminal" { self.close_terminal(); }
+        if name != "Terminal" { self.term = None; }
+        if name != "Camera Gimbal" { self.mount.leave(); }
         egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::bg()).inner_margin(6)).show(ui, |ui| {
             match name {
                 "Install Firmware" if app.connected() => return self.extra.fw_disabled(ui, app),
@@ -335,6 +339,7 @@ impl SetupView {
                 "Antenna Tracker" => return self.extra.tracker(ui, app),
                 "RTK/GPS Inject" => return self.rtk.ui(ui, app),
                 "DroneCAN/UAVCAN" => return self.dronecan.ui(ui, app),
+                "Camera Gimbal" if app.connected() => return self.mount.ui(ui, app),
                 "Terminal" => return self.terminal(ui, app),
                 "Advanced" => return advanced(ui, app),
                 "Joystick" => {
@@ -978,7 +983,7 @@ impl SetupView {
 }
 
 /// ConfigInitialParams.calc_values: suggested parameters for a prop size and battery.
-fn initial_params(prop: f64, cells: f64, cmax: f64, cmin: f64, tmotor: bool, suggested: bool, params: &std::collections::BTreeMap<String, mp_core::link::Param>, plane: bool) -> Vec<(String, f64)> {
+fn initial_params(prop: f64, cells: f64, cmax: f64, cmin: f64, tmotor: bool, suggested: bool, params: &std::collections::BTreeMap<String, mp_core::link::Param>, plane: bool, firmware_major: Option<u8>) -> Vec<(String, f64)> {
     let round_to = |v: f64, p: i32| -> f64 {
         if p >= 0 {
             let m = 10f64.powi(p);
@@ -1010,9 +1015,14 @@ fn initial_params(prop: f64, cells: f64, cmax: f64, cmin: f64, tmotor: bool, sug
         out.push((format!("{atc}_ACC_R_MAX"), acc_p / 100.0));
         out.push((format!("{atc}_ACC_Y_MAX"), acc_y / 100.0));
     }
-    for (k, v) in [("RAT_PIT_FLTD", flt), ("RAT_PIT_FLTE", 0.0), ("RAT_PIT_FLTT", flt), ("RAT_RLL_FLTD", flt), ("RAT_RLL_FLTE", 0.0), ("RAT_RLL_FLTT", flt), ("RAT_YAW_FLTD", 0.0), ("RAT_YAW_FLTE", 2.0), ("RAT_YAW_FLTT", flt), ("THR_MIX_MAN", 0.1)] {
-        out.push((format!("{atc}_{k}"), v));
+    if firmware_major.map(|v| v == 4).unwrap_or_else(|| params.contains_key(&format!("{atc}_RAT_PIT_FLTD"))) {
+        for (k, v) in [("RAT_PIT_FLTD", flt), ("RAT_PIT_FLTE", 0.0), ("RAT_PIT_FLTT", flt), ("RAT_RLL_FLTD", flt), ("RAT_RLL_FLTE", 0.0), ("RAT_RLL_FLTT", flt), ("RAT_YAW_FLTD", 0.0), ("RAT_YAW_FLTE", 2.0), ("RAT_YAW_FLTT", flt)] {
+            out.push((format!("{atc}_{k}"), v));
+        }
+    } else {
+        for (k, v) in [("RAT_PIT_FILT", flt), ("RAT_RLL_FILT", flt), ("RAT_YAW_FILT", 2.0)] { out.push((format!("{atc}_{k}"), v)); }
     }
+    out.push((format!("{atc}_THR_MIX_MAN"), 0.1));
     out.push(("INS_ACCEL_FILTER".into(), 10.0));
     out.push(("INS_GYRO_FILTER".into(), gyro));
     out.push((format!("{mot}_THST_EXPO"), expo));
@@ -1084,8 +1094,11 @@ impl SetupView {
                     } else if cells < 1.0 {
                         app.toasts.error("Battery cell count must be at least 1.");
                     } else {
-                        let plane = app.link.map(|l| l.shared.read().cs.firmware == mp_core::firmware::Firmware::ArduPlane).unwrap_or(false);
-                        let list = initial_params(prop, cells, num("t_cellmax"), num("t_cellmin"), *st.checked.get("cb_tmotor").unwrap_or(&false), *st.checked.get("cb_suggested").unwrap_or(&false), &params, plane);
+                        let (plane, firmware_major) = app.link.map(|l| {
+                            let s = l.shared.read();
+                            (s.cs.firmware == mp_core::firmware::Firmware::ArduPlane, s.autopilot_version.map(|(v, _)| (v >> 24) as u8))
+                        }).unwrap_or((false, None));
+                        let list = initial_params(prop, cells, num("t_cellmax"), num("t_cellmin"), *st.checked.get("cb_tmotor").unwrap_or(&false), *st.checked.get("cb_suggested").unwrap_or(&false), &params, plane, firmware_major);
                         self.param_compare = Some(list.into_iter().map(|(k, v)| {
                             let cur = params.get(&k).map(|p| p.value as f64);
                             (k, cur, v, true)
@@ -1863,25 +1876,15 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
         p.text(c.left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, h, f.clone(), Color32::WHITE);
         x += w;
     }
-    let id_names = |i: usize| -> [String; 3] {
-        let n = if i == 0 { String::new() } else { (i + 1).to_string() };
-        [format!("COMPASS_PRIO{}_ID", i + 1), format!("COMPASS_DEV_ID{n}"), format!("COMPASS_EXTERN{}", if i == 0 { "AL".to_string() } else { n.clone() })]
-    };
     let orient_opts = mp_core::param_meta::options(fw, "COMPASS_ORIENT");
-    let prio_vals: Vec<f32> = (0..3).map(|i| params.get(&format!("COMPASS_PRIO{}_ID", i + 1)).map(|p| p.value).unwrap_or(0.0)).collect();
+    let mut compass_rows = super::compass::rows(&params);
     let mut swap: Option<(usize, usize)> = None;
-    for i in 0..3 {
-        let [prio, dev, ext] = id_names(i);
-        let Some(raw) = params.get(&prio).or(params.get(&dev)).map(|p| p.value as u32) else { continue };
-        if raw == 0 {
-            continue;
-        }
+    for (i, row) in compass_rows.iter().enumerate() {
+        let raw = row.id;
         let d = mp_core::devid::decode(raw);
         let y = grid.top() + 21.0 + i as f32 * 22.0;
-        let ext_v = params.get(&ext).map(|p| p.value).unwrap_or(0.0);
-        let orient_name = if i == 0 { "COMPASS_ORIENT".to_string() } else { format!("COMPASS_ORIENT{}", i + 1) };
-        let orient = params.get(&orient_name).map(|p| p.value as i64).unwrap_or(0);
-        let missing = !params.contains_key(&dev) || params.get(&dev).map(|p| p.value as u32) != Some(raw);
+        if y + 22.0 > grid.bottom() { break; }
+        let orient = row.orientation;
         let cells = [
             (i + 1).to_string(),
             raw.to_string(),
@@ -1889,9 +1892,9 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
             d.bus.to_string(),
             d.address.to_string(),
             mp_core::devid::compass_devtype(d.devtype),
-            if missing { "True".into() } else { "False".into() },
-            if ext_v != 0.0 { "True".into() } else { "False".into() },
-            orient_opts.iter().find(|(k, _)| *k == orient).map(|(_, s)| s.clone()).unwrap_or(orient.to_string()),
+            if row.missing { "True".into() } else { "False".into() },
+            if row.external { "True".into() } else { "False".into() },
+            orient.and_then(|v| orient_opts.iter().find(|(k, _)| *k == v).map(|(_, s)| s.clone()).or_else(|| Some(v.to_string()))).unwrap_or_default(),
             String::new(),
             String::new(),
         ];
@@ -1911,7 +1914,7 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
                 if ui.interact(c, ui.scope_id().with(("cmp_mv", i, k)), Sense::click()).clicked() {
                     if k == 9 && i > 0 {
                         swap = Some((i, i - 1));
-                    } else if k == 10 && i < 2 {
+                    } else if k == 10 && i + 1 < compass_rows.len() {
                         swap = Some((i, i + 1));
                     }
                 }
@@ -1921,28 +1924,24 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
             x += w;
         }
     }
-    // UpdateFirst3: rewrite COMPASS_PRIOn_ID in the new order
+    let mut rewrite = false;
     if let Some((a, b)) = swap {
-        if !app.readonly && prio_vals[a] != 0.0 && prio_vals[b] != 0.0 {
-            link.send(LinkCommand::SetParam { name: format!("COMPASS_PRIO{}_ID", a + 1), value: prio_vals[b] });
-            link.send(LinkCommand::SetParam { name: format!("COMPASS_PRIO{}_ID", b + 1), value: prio_vals[a] });
-        }
+        compass_rows.swap(a, b);
+        rewrite = true;
     }
     let rm = r(560.0, 261.0, 115.0, 23.0);
-    if ui.put(rm, |ui: &mut egui::Ui| theme::button_sized(ui, "Remove Missing", rm.size())).clicked() && !app.readonly {
-        for i in 0..3 {
-            let [prio, dev, _] = id_names(i);
-            let pv = params.get(&prio).map(|p| p.value as u32).unwrap_or(0);
-            let present = (0..3).any(|j| params.get(&id_names(j)[1]).map(|p| p.value as u32) == Some(pv));
-            if pv != 0 && !present {
-                link.send(LinkCommand::SetParam { name: prio, value: 0.0 });
-            }
-            let _ = dev;
+    if ui.put(rm, |ui: &mut egui::Ui| theme::button_sized(ui, "Remove Missing", rm.size())).clicked() {
+        compass_rows.retain(|r| !r.missing);
+        rewrite = true;
+    }
+    if rewrite && !app.readonly {
+        for (name, value) in super::compass::priority_writes(&compass_rows) {
+            if params.contains_key(&name) { link.send(LinkCommand::SetParam { name, value }); }
         }
     }
     p.text(o + Vec2::new(0.0, 261.0), egui::Align2::LEFT_TOP, "Do you want to disable any of the first 3 compasses?", f.clone(), Color32::WHITE);
-    for (k, (x, name)) in [(3.0, "COMPASS_USE"), (109.0, "COMPASS_USE2"), (215.0, "COMPASS_USE3")].iter().enumerate() {
-        if let Some(pv) = params.get(*name) {
+    for (k, (x, aliases)) in [(3.0, ["COMPASS_USE", "COMPASS1_USE"]), (109.0, ["COMPASS_USE2", "COMPASS2_USE"]), (215.0, ["COMPASS_USE3", "COMPASS3_USE"])].iter().enumerate() {
+        if let Some((name, pv)) = aliases.iter().find_map(|name| params.get(*name).map(|p| (*name, p))) {
             let mut b = pv.value != 0.0;
             if ui.put(r(*x, 277.0, 105.0, 17.0), egui::Checkbox::new(&mut b, format!("Use Compass {}", k + 1))).changed() && !app.readonly {
                 link.send(LinkCommand::SetParam { name: name.to_string(), value: if b { 1.0 } else { 0.0 } });
@@ -2109,3 +2108,26 @@ fn servo_output(ui: &mut egui::Ui, app: &mut AppCtx) {
     });
 }
 
+
+#[cfg(test)]
+mod initial_parameter_tests {
+    use super::*;
+
+    #[test]
+    fn firmware_version_selects_legacy_or_modern_filters_for_copter_and_quadplane() {
+        for (plane, atc) in [(false, "ATC"), (true, "Q_A")] {
+            let params = std::collections::BTreeMap::new();
+            let calc = |major| initial_params(10.0, 4.0, 4.2, 3.3, false, false, &params, plane, Some(major)).into_iter().collect::<std::collections::BTreeMap<_, _>>();
+            let old = calc(3);
+            let new = calc(4);
+            assert!(old.contains_key(&format!("{atc}_RAT_PIT_FILT")));
+            assert!(!old.contains_key(&format!("{atc}_RAT_PIT_FLTD")));
+            assert_eq!(old[&format!("{atc}_RAT_YAW_FILT")], 2.0);
+            assert!(new.contains_key(&format!("{atc}_RAT_PIT_FLTD")));
+            assert!(!new.contains_key(&format!("{atc}_RAT_PIT_FILT")));
+            assert_eq!(new[&format!("{atc}_RAT_PIT_FLTE")], 0.0);
+            assert_eq!(new[&format!("{atc}_RAT_YAW_FLTE")], 2.0);
+            assert_eq!(old[&format!("{atc}_RAT_RLL_FILT")], new[&format!("{atc}_RAT_RLL_FLTD")]);
+        }
+    }
+}

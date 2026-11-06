@@ -123,6 +123,10 @@ pub struct FormState {
     pub ranges: HashMap<String, (f64, f64)>,
     /// Runtime Visible overrides (true shows a designer-hidden control, false hides one).
     pub visible: HashMap<String, bool>,
+    /// Controls whose parameters depend on another selection, such as a servo output.
+    pub bindings: HashMap<String, String>,
+    pub check_values: HashMap<String, (f32, f32)>,
+    pub options: HashMap<String, Vec<(i32, String)>>,
 }
 
 impl FormState {
@@ -214,7 +218,7 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
         let r = Rect::from_min_size(at, Vec2::new(c.w.max(1.0), c.h.max(1.0)));
         maxy = maxy.max(r.bottom() - o.y);
         let text = c.text.clone().unwrap_or_default();
-        let bound = c.param.as_deref().and_then(|n| resolve(&params, n));
+        let bound = st.bindings.get(&c.name).map(String::as_str).or(c.param.as_deref()).and_then(|n| resolve(&params, n));
         let enabled = !st.disabled.contains(&c.name);
         match c.kind.as_str() {
             "label" => {
@@ -226,6 +230,7 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
             }
             "link" => {
                 p.text(at, egui::Align2::LEFT_TOP, text, font_for(c), Color32::from_rgb(0x00, 0x66, 0xcc));
+                if ui.interact(r, ui.id().with((&c.name, "link")), Sense::click()).clicked() { clicked.push(c.name.clone()); }
             }
             "group" => {
                 if c.h <= 6.0 {
@@ -243,11 +248,10 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
                 }
             }
             "mcheck" => {
-                let on_v = c.nums.first().copied().unwrap_or(1.0) as f32;
-                let off_v = c.nums.get(1).copied().unwrap_or(0.0) as f32;
+                let (on_v, off_v) = st.check_values.get(&c.name).copied().unwrap_or((c.nums.first().copied().unwrap_or(1.0) as f32, c.nums.get(1).copied().unwrap_or(0.0) as f32));
                 let cur = bound.as_ref().map(|n| params[n].value);
                 let mut on = cur.map(|v| v == on_v).unwrap_or(false);
-                let resp = ui.put(r, |ui: &mut egui::Ui| ui.add_enabled(cur.is_some(), egui::Checkbox::new(&mut on, &text)));
+                let resp = ui.put(r, |ui: &mut egui::Ui| ui.add_enabled(cur.is_some() && enabled && !app.readonly, egui::Checkbox::new(&mut on, &text)));
                 if resp.changed() && !app.readonly {
                     if let (Some(l), Some(n)) = (link, &bound) {
                         l.send(LinkCommand::SetParam { name: n.clone(), value: if on { on_v } else { off_v } });
@@ -257,7 +261,16 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
             "mcombo" => match (&bound, link) {
                 (Some(n), Some(l)) => {
                     let v = params[n].value;
-                    ui.scope_builder(egui::UiBuilder::new().max_rect(r), |ui| crate::views::config::param_control(ui, l, fw, n, v, r.width() - 8.0));
+                    ui.scope_builder(egui::UiBuilder::new().max_rect(r), |ui| ui.add_enabled_ui(enabled && !app.readonly, |ui| {
+                        if let Some(options) = st.options.get(&c.name) {
+                            let text = options.iter().find(|(k, _)| *k as f32 == v).map(|(_, s)| s.clone()).unwrap_or_else(|| v.to_string());
+                            egui::ComboBox::from_id_salt((name, &c.name)).width(r.width() - 8.0).selected_text(text).show_ui(ui, |ui| {
+                                for (key, label) in options {
+                                    if ui.selectable_label(*key as f32 == v, label).clicked() { l.send(LinkCommand::SetParam { name: n.clone(), value: *key as f32 }); }
+                                }
+                            });
+                        } else { crate::views::config::param_control(ui, l, fw, n, v, r.width() - 8.0); }
+                    }));
                 }
                 _ => {
                     ui.put(r, |ui: &mut egui::Ui| ui.add_enabled_ui(false, |ui| egui::ComboBox::from_id_salt((name, &c.name)).width(r.width() - 8.0).selected_text("").show_ui(ui, |_| {})).response);
@@ -273,7 +286,7 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
                         let inc = c.nums.get(3).copied().filter(|i| *i > 0.0).unwrap_or(1.0);
                         let (lo, hi) = (lo.min(v), hi.max(v));
                         let dec = theme::decimals_for(inc).max(theme::value_decimals(v as f32));
-                        let resp = theme::numeric_updown(ui, r, &mut v, lo, hi, inc, dec);
+                        let resp = ui.add_enabled_ui(enabled && !app.readonly, |ui| theme::numeric_updown(ui, r, &mut v, lo, hi, inc, dec)).inner;
                         if resp.changed() && (v * scale - cur).abs() > 1e-9 && !app.readonly {
                             if let Some(l) = link {
                                 l.send(LinkCommand::SetParam { name: n.clone(), value: (v * scale) as f32 });

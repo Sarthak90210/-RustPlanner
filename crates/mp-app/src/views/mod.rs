@@ -1,5 +1,6 @@
 pub mod checklist;
 pub mod config;
+pub mod compass;
 pub mod device_pages;
 pub mod dronecan_page;
 pub mod fd_tabs;
@@ -9,6 +10,7 @@ pub mod friendly;
 pub mod help;
 pub mod mavftp;
 pub mod mavlog;
+pub mod mount;
 pub mod osd_editor;
 pub mod rtk_page;
 pub mod setup;

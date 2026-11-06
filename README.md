@@ -118,6 +118,18 @@ Known gaps include:
   need platform adapters; several mobile file-open paths currently return no selection.
 - Real flight-controller, firmware-flashing, camera, radio and tracker qualification for the implemented tools.
 
+Independent parity reviews are recorded under `judging/`. Round 09 rates the sampled desktop clone
+6.8/10 overall and lists the next confirmed gaps. Reviews are qualitative scores, not measured feature
+completion percentages, and do not establish parity for unreviewed screens or platforms.
+
+The next implementation run adds ConfigMount's RC/SERVO output choices, RC input choices, dynamic
+PWM/reverse bindings and shutter routing on the original Camera Gimbal layout. Compass rows now map
+priority IDs to the matching detected device, include unprioritized devices, and rewrite the first three
+priorities after reordering or removing missing entries. The initial-parameter calculator selects 3.x
+or 4.x filter names using the reported firmware major version, with parameter-based fallback if absent.
+These changes have six new regression tests; the Windows workspace suite passes 87 tests. Fresh
+Compass and Camera Gimbal renderer receipts are under `target/judging/round10`.
+
 ## License
 
 GPL-3.0, like Mission Planner. Icons and marker images are Mission Planner / GMap.NET assets under the same license.
