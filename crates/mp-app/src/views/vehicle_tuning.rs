@@ -91,6 +91,7 @@ impl VehicleTuning {
     }
 
     pub fn on_event(&mut self, event: &LinkEvent, toasts: &mut Toasts) {
+        self.st.on_event(event, toasts);
         if let LinkEvent::ParamSet { name, ok } = event {
             if let Some((pending, value)) = &self.waiting {
                 if pending == name {
@@ -378,6 +379,13 @@ mod tests {
                 repeat: false,
                 modifiers: egui::Modifiers::CTRL,
             }]);
+        } else {
+            assert!(
+                rx.recv_timeout(Duration::from_millis(100)).is_err(),
+                "Direct numeric write skipped MavlinkNumericUpDown's 300 ms timer"
+            );
+            std::thread::sleep(forms::WRITE_DELAY);
+            frame(Vec::new());
         }
         drop(frame);
         let desired = page.pending().get(parameter).copied().unwrap_or(51.0);
@@ -398,6 +406,19 @@ mod tests {
         assert!(page.pending().is_empty());
         assert_eq!(link.shared.read().params[parameter].value, desired);
     }
+    #[test]
+    fn failed_direct_writes_show_the_original_messages() {
+        let mut st = FormState::default();
+        let mut toasts = Toasts::default();
+        st.awaiting.insert("CRUISE_SPEED".into(), "Set CRUISE_SPEED Failed".into());
+        st.awaiting.insert("MOT_PWM_TYPE".into(), "Set MOT_PWM_TYPE Failed!".into());
+        st.on_event(&LinkEvent::ParamSet { name: "CRUISE_SPEED".into(), ok: true }, &mut toasts);
+        st.on_event(&LinkEvent::ParamSet { name: "MOT_PWM_TYPE".into(), ok: false }, &mut toasts);
+        st.on_event(&LinkEvent::ParamSet { name: "OTHER".into(), ok: false }, &mut toasts);
+        assert_eq!(toasts.0, vec!["Set MOT_PWM_TYPE Failed!".to_string()]);
+        assert!(st.awaiting.is_empty());
+    }
+
     #[test]
     fn firmware_routes_use_distinct_original_forms_and_aliases() {
         assert_eq!(form_for(Firmware::ArduPlane, false), Some("plane_tuning"));

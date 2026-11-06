@@ -132,7 +132,14 @@ pub struct FormState {
     /// Vehicle PID pages stage edits until Write PIDS or Ctrl+S.
     pub staged: Option<std::collections::BTreeMap<String, f32>>,
     pub parameter_metadata: bool,
+    /// MavlinkNumericUpDown direct writes: (value, when its 300 ms timer fires)
+    pub delayed: std::collections::BTreeMap<String, (f32, std::time::Instant)>,
+    /// Direct writes awaiting their result and the message shown if they fail.
+    pub awaiting: HashMap<String, String>,
 }
+
+/// MavlinkNumericUpDown's timer.Interval.
+pub const WRITE_DELAY: std::time::Duration = std::time::Duration::from_millis(300);
 
 impl FormState {
     pub fn get(&self, ctl: &str) -> &str {
@@ -143,9 +150,47 @@ impl FormState {
         self.text.insert(ctl.to_string(), v.into());
     }
 
+    /// MavlinkComboBox / check box: an immediate write ("Set X Failed!" on failure).
     pub fn edit(&mut self, link: &Link, name: &str, value: f32) {
         if let Some(pending) = &mut self.staged { pending.insert(name.to_string(), value); }
-        else { link.send(LinkCommand::SetParam { name: name.to_string(), value }); }
+        else {
+            link.send(LinkCommand::SetParam { name: name.to_string(), value });
+            self.awaiting.insert(name.to_string(), format!("Set {name} Failed!"));
+        }
+    }
+
+    /// MavlinkNumericUpDown: each change restarts a 300 ms timer that writes the final value.
+    pub fn edit_numeric(&mut self, link: &Link, name: &str, value: f32) {
+        match &mut self.staged {
+            Some(pending) => { pending.insert(name.to_string(), value); }
+            None => { self.delayed.insert(name.to_string(), (value, std::time::Instant::now() + WRITE_DELAY)); }
+        }
+        self.flush(link, None);
+    }
+
+    /// Timer_Tick: send each numeric write whose timer has fired.
+    pub fn flush(&mut self, link: &Link, ctx: Option<&egui::Context>) {
+        let now = std::time::Instant::now();
+        let due: Vec<String> = self.delayed.iter().filter(|(_, (_, at))| *at <= now).map(|(n, _)| n.clone()).collect();
+        for name in due {
+            if let Some((value, _)) = self.delayed.remove(&name) {
+                link.send(LinkCommand::SetParam { name: name.clone(), value });
+                // Strings.ErrorSetValueFailed
+                self.awaiting.insert(name.clone(), format!("Set {name} Failed"));
+            }
+        }
+        if let (Some(ctx), Some(next)) = (ctx, self.delayed.values().map(|(_, at)| *at).min()) {
+            ctx.request_repaint_after(next.saturating_duration_since(now));
+        }
+    }
+
+    /// Reports a failed direct write as the original CustomMessageBox does.
+    pub fn on_event(&mut self, event: &mp_core::link::LinkEvent, toasts: &mut crate::app::Toasts) {
+        if let mp_core::link::LinkEvent::ParamSet { name, ok } = event {
+            if let Some(message) = self.awaiting.remove(name) {
+                if !ok { toasts.error(message); }
+            }
+        }
     }
 }
 
@@ -218,9 +263,12 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
         let s = l.shared.read();
         (s.params.clone(), s.cs.firmware)
     }).unwrap_or_default();
+    if let Some(l) = link { st.flush(l, Some(ui.ctx())); }
     if let Some(pending) = &st.staged {
         for (name, value) in pending { if let Some(p) = params.get_mut(name) { p.value = *value; } }
     }
+    // a NumericUpDown shows its own value while the write timer runs
+    for (name, (value, _)) in &st.delayed { if let Some(p) = params.get_mut(name) { p.value = *value; } }
     let mut clicked = Vec::new();
     let mut maxy: f32 = 0.0;
     for c in &f.controls {
@@ -310,7 +358,7 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
                         if let Some(m) = meta { resp.clone().on_hover_text(&m.description); }
                         if resp.changed() && (v * scale - cur).abs() > 1e-9 && !app.readonly {
                             if let Some(l) = link {
-                                st.edit(l, n, (v * scale) as f32);
+                                st.edit_numeric(l, n, (v * scale) as f32);
                             }
                         }
                     }

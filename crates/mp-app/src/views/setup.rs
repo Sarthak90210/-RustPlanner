@@ -305,7 +305,10 @@ impl SetupView {
 
     /// Select a page by its BackstageView label.
     pub fn dialogs(&mut self, ctx: &egui::Context, app: &mut AppCtx) { self.compass.dialogs(ctx, app); }
-    pub fn on_event(&mut self, event: &mp_core::link::LinkEvent, link: &Link, toasts: &mut crate::app::Toasts) { self.compass.on_event(event, link, toasts); }
+    pub fn on_event(&mut self, event: &mp_core::link::LinkEvent, link: &Link, toasts: &mut crate::app::Toasts) {
+        self.compass.on_event(event, link, toasts);
+        for st in self.forms.values_mut() { st.on_event(event, toasts); }
+    }
 
     pub fn goto(&mut self, name: &str) {
         if let Some(i) = PAGES.iter().position(|p| p.0 == name) {

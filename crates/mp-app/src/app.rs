@@ -142,7 +142,7 @@ impl Default for Settings {
 /// Mission Planner reports errors with a modal `CustomMessageBox`; informational messages
 /// only go to the log (MP shows them in the Messages tab / HUD, not as popups).
 #[derive(Default)]
-pub struct Toasts(Vec<String>);
+pub struct Toasts(pub(crate) Vec<String>);
 
 impl Toasts {
     pub fn info(&mut self, s: impl Into<String>) {

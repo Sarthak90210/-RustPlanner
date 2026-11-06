@@ -169,6 +169,11 @@ transforms, including its zone exceptions, rounded MGRS digits and trailing-zero
 values are checked against the independent PyPI `utm` package. An egui test switches systems and
 edits UTM and MGRS cells. `MP_COORDS=UTM|MGRS` with capture cases 51/52 renders each mode.
 
+Direct-write numeric form controls now follow MavlinkNumericUpDown. Each change restarts a 300 ms timer,
+the control shows its own value while the timer runs, and only the final value is sent. Failed direct
+writes show "Set X Failed" for numerics and "Set X Failed!" for combos and check boxes, as the
+original controls do. The Rover simulator test confirms that nothing is written before the timer fires.
+
 ## License
 
 GPL-3.0, like Mission Planner. Icons and marker images are Mission Planner / GMap.NET assets under the same license.
