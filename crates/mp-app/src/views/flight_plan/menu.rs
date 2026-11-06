@@ -200,8 +200,13 @@ impl FlightPlanView {
             ui.close();
         }
         if ui.button(crate::i18n::t("Area")).clicked() {
-            let a = mp_core::survey::area(&self.polygon);
-            app.toasts.info(format!("Area: {a:.0} m2 ({:.3} km2)", a / 1e6));
+            // areaToolStripMenuItem_Click (the tab stops drawn as spaces)
+            let a = mp_core::survey::area(&self.polygon).abs();
+            let tab = "        ";
+            app.toasts.message(format!("Area: {a:.0} m2
+{tab}{:.2} Acre
+{tab}{:.2} Hectare
+{tab}{:.0} sqf", a * 0.000247105, a * 1e-4, a * 10.7639), "Area");
             ui.close();
         }
         if self.mission_type == 1 {
@@ -234,6 +239,7 @@ impl FlightPlanView {
                     Some(cs) if cs.lat != 0.0 => {
                         let at = self.insert_at(hit);
                         let wp = self.new_wp(app, mavcmd::WAYPOINT, cs.lat, cs.lng);
+                        self.update_undo_buffer();
                         self.items.insert(at, wp);
                     }
                     _ => app.toasts.error("No vehicle position"),
@@ -244,12 +250,14 @@ impl FlightPlanView {
         if ins.response.clicked() {
             let at = self.insert_at(hit);
             let wp = self.new_wp(app, mavcmd::WAYPOINT, lat, lng);
+            self.update_undo_buffer();
             self.items.insert(at, wp);
             ui.close();
         }
         if ui.button(crate::i18n::t("Insert Spline WP")).clicked() {
             let at = self.insert_at(hit);
             let wp = self.new_wp(app, mavcmd::SPLINE_WAYPOINT, lat, lng);
+            self.update_undo_buffer();
             self.items.insert(at, wp);
             ui.close();
         }
@@ -258,6 +266,7 @@ impl FlightPlanView {
                 if ui.button(t).clicked() {
                     let mut wp = self.new_wp(app, id, lat, lng);
                     wp.p1 = p1;
+                    self.update_undo_buffer();
                     self.items.push(wp);
                     ui.close();
                 }
@@ -281,6 +290,7 @@ impl FlightPlanView {
         if ui.button(crate::i18n::t("Land")).clicked() {
             let mut wp = self.new_wp(app, mavcmd::LAND, lat, lng);
             wp.alt = 0.0;
+            self.update_undo_buffer();
             self.items.push(wp);
             ui.close();
         }
@@ -292,6 +302,7 @@ impl FlightPlanView {
         if ui.button(crate::i18n::t("DO_SET_ROI")).clicked() {
             let mut wp = self.new_wp(app, mavcmd::DO_SET_ROI, lat, lng);
             wp.alt = 0.0;
+            self.update_undo_buffer();
             self.items.push(wp);
             ui.close();
         }

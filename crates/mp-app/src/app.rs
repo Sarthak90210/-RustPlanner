@@ -147,8 +147,9 @@ impl Default for Settings {
 
 /// Mission Planner reports errors with a modal `CustomMessageBox`; informational messages
 /// only go to the log (MP shows them in the Messages tab / HUD, not as popups).
+/// The second list holds each message box's caption.
 #[derive(Default)]
-pub struct Toasts(pub(crate) Vec<String>);
+pub struct Toasts(pub(crate) Vec<String>, pub(crate) Vec<String>);
 
 impl Toasts {
     pub fn info(&mut self, s: impl Into<String>) {
@@ -157,10 +158,16 @@ impl Toasts {
     /// CustomMessageBox texts come from the views and Strings.resx: exact matches translate.
     #[track_caller]
     pub fn error(&mut self, s: impl Into<String>) {
+        self.message(s, "");
+    }
+    /// CustomMessageBox.Show(text, caption)
+    #[track_caller]
+    pub fn message(&mut self, s: impl Into<String>, caption: &str) {
         let s = crate::i18n::t(&s.into());
         log::warn!("{s}");
         if !self.0.contains(&s) {
             self.0.push(s);
+            self.1.push(crate::i18n::t(caption));
         }
     }
 }
@@ -545,6 +552,8 @@ impl MissionPlannerApp {
                     Err(e) => self.toasts.error(e),
                 },
                 LinkEvent::OperationError(e) => self.toasts.error(e),
+                // BUT_commitToFlash_Click reports its own result
+                LinkEvent::CommandAck { command: 245, .. } if self.config.params.commit_pending => {}
                 LinkEvent::CommandAck {
                     command,
                     result,
@@ -970,7 +979,8 @@ impl MissionPlannerApp {
             actions.push(AppAction::Tool("Spectrogram".into()));
         }
         // Ctrl+Z Camera().test: request camera / video / storage info and start streaming
-        if ctrl(Key::Z) {
+        // (FlightPlanner.ProcessCmdKey takes Ctrl+Z first while the Plan screen is shown)
+        if self.settings.view != View::FlightPlan && ctrl(Key::Z) {
             if let Some(l) = &self.link {
                 let cam = l.shared.read().mavs.keys().find(|(_, c)| *c == 100).copied();
                 if let Some((sys, comp)) = cam {
@@ -1091,7 +1101,15 @@ impl MissionPlannerApp {
         let Some(link) = &self.link else { return };
         let p = link.shared.read().progress.clone();
         if let Some(p) = p {
-            egui::Window::new(&p.label)
+            // the form's Text: FlightPlanner's "Receiving WP's" / "Sending WP's", else the step
+            let title = if p.label.starts_with("Getting WP") {
+                "Receiving WP's".to_string()
+            } else if p.label.starts_with("Setting WP") || p.label.starts_with("Set total wps") {
+                "Sending WP's".to_string()
+            } else {
+                p.label.clone()
+            };
+            egui::Window::new(title)
                 .id(egui::Id::unique("progress"))
                 .resizable(false)
                 .collapsible(false)
@@ -1116,10 +1134,12 @@ impl MissionPlannerApp {
     /// `CustomMessageBox`: themed modal with OK.
     fn toasts_ui(&mut self, ctx: &egui::Context) {
         let Some(msg) = self.toasts.0.first().cloned() else { return };
+        let caption = self.toasts.1.first().cloned().unwrap_or_default();
         let mut close = false;
         egui::Modal::new(egui::Id::unique("msgbox")).show(ctx, |ui| {
             ui.set_min_width(300.0);
-            ui.label(RichText::new("Mission Planner").strong().color(Color32::WHITE));
+            // the form's Text is the caption (empty by default)
+            ui.label(RichText::new(caption).strong().color(Color32::WHITE));
             ui.add_space(8.0);
             theme::label(ui, &msg);
             ui.add_space(10.0);
@@ -1131,6 +1151,9 @@ impl MissionPlannerApp {
         });
         if close {
             self.toasts.0.remove(0);
+            if !self.toasts.1.is_empty() {
+                self.toasts.1.remove(0);
+            }
         }
     }
 }

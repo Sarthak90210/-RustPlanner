@@ -104,6 +104,16 @@ pub struct FlightPlanView {
     mavftp: bool,
     /// a MAVFtp mission transfer in progress; reports like the MAVLink protocol does
     ftp_job: Option<crossbeam_channel::Receiver<LinkEvent>>,
+    /// BUT_write_Click / but_writewpfast_Click checks, resumed after each prompt
+    write_check: Option<WriteCheck>,
+    /// BUT_read_Click: "This will clear your existing points, Continue?"
+    read_confirm: bool,
+    /// saveWPsFast running on its own thread
+    fast_job: Option<crossbeam_channel::Receiver<Result<bool, String>>>,
+    /// FlightPlanner.history: home and list before each undoable change
+    history: Vec<(Locationwp, Vec<Locationwp>)>,
+    /// a marker drag records one undo step when it starts
+    drag_undo: bool,
     grid: bool,
     alt_warn: f32,
     mission_type: usize,
@@ -163,6 +173,11 @@ impl Default for FlightPlanView {
             spline: false,
             mavftp: false,
             ftp_job: None,
+            write_check: None,
+            read_confirm: false,
+            fast_job: None,
+            history: Vec::new(),
+            drag_undo: false,
             grid: false,
             alt_warn: 0.0,
             mission_type: 0,
@@ -247,6 +262,239 @@ impl FlightPlanView {
         }
     }
 
+    /// BUT_write_Click / but_writewpfast_Click up to the upload: each check either fails with
+    /// the original message, asks (and resumes here with the answer), or passes.
+    fn step_write(&mut self, app: &mut AppCtx) {
+        let Some(mut wc) = self.write_check.take() else { return };
+        if wc.prompt.is_some() {
+            self.write_check = Some(wc);
+            return;
+        }
+        if !wc.alt_asked {
+            wc.alt_asked = true;
+            if AltMode::from_frame(app.settings.alt_frame) == AltMode::Absolute {
+                wc.prompt = Some(WritePrompt::AbsoluteAlt);
+                self.write_check = Some(wc);
+                return;
+            }
+        }
+        if wc.fast && self.mission_type != 0 {
+            app.toasts.error("Only available for missions");
+            return;
+        }
+        if ![self.home.lat, self.home.lng, self.home.alt as f64].iter().all(|v| v.is_finite()) {
+            app.toasts.message("Your home location is invalid", "Error");
+            return;
+        }
+        let fw = self.fw(app);
+        while wc.row < self.items.len() {
+            let w = self.items[wc.row];
+            if !wc.zero_ok {
+                match write_row_check(&w, wc.row, self.alt_warn, fw) {
+                    RowCheck::Fail(msg) => {
+                        app.toasts.error(msg);
+                        return;
+                    }
+                    RowCheck::ZeroAlt { plane } if show_again(&app.settings.planner, zero_alt_tag(plane)) => {
+                        wc.prompt = Some(WritePrompt::ZeroAlt { plane });
+                        self.write_check = Some(wc);
+                        return;
+                    }
+                    _ => {}
+                }
+            }
+            wc.zero_ok = false;
+            wc.row += 1;
+        }
+        let Some(l) = app.link.filter(|_| app.connected()) else {
+            app.toasts.message("Please connect first!", "Error");
+            return;
+        };
+        if wc.fast {
+            // home is item 0 of the uploaded list
+            let mut all = vec![self.home];
+            all.extend(self.items.iter().copied());
+            let (tx, rx) = crossbeam_channel::bounded(1);
+            let (link_tx, shared, rows, altmode) = (l.sender(), l.shared.clone(), self.items.len(), app.settings.alt_frame);
+            std::thread::spawn(move || {
+                let cancel = std::sync::atomic::AtomicBool::new(false);
+                let r = mp_core::wpfast::write_fast(link_tx, shared.clone(), &all, rows, altmode, &cancel);
+                shared.write().progress = None;
+                let _ = tx.send(r);
+            });
+            self.fast_job = Some(rx);
+        } else {
+            // home is item 0 of the mission only; fence and rally lists are sent as-is
+            let mut all = if self.mission_type == 0 { vec![self.home] } else { Vec::new() };
+            all.extend(self.items.iter().copied());
+            self.mission_io(l, self.mission_type as u8, false, all);
+        }
+    }
+
+    /// The prompts of BUT_read_Click and the write checks.
+    fn write_prompts_ui(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
+        if self.read_confirm {
+            let mut answer = None;
+            egui::Modal::new(egui::Id::new("fp_read_confirm")).show(ctx, |ui| {
+                ui.set_width(300.0);
+                ui.label(egui::RichText::new(crate::i18n::t("Confirm")).strong());
+                theme::label(ui, "This will clear your existing points, Continue?");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                    if theme::button(ui, "Cancel").clicked() {
+                        answer = Some(false);
+                    }
+                    if theme::button(ui, "OK").clicked() {
+                        answer = Some(true);
+                    }
+                });
+            });
+            if let Some(ok) = answer {
+                self.read_confirm = false;
+                if ok {
+                    self.start_read(app);
+                }
+            }
+        }
+        let Some(prompt) = self.write_check.as_ref().and_then(|w| w.prompt) else { return };
+        let mut answer = None;
+        match prompt {
+            WritePrompt::AbsoluteAlt => {
+                egui::Modal::new(egui::Id::new("fp_absolute_alt")).show(ctx, |ui| {
+                    ui.set_width(300.0);
+                    ui.label(egui::RichText::new(crate::i18n::t("Alt Mode")).strong());
+                    theme::label(ui, "Absolute Alt is selected are you sure?");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                        if theme::button(ui, "No").clicked() {
+                            answer = Some(false);
+                        }
+                        if theme::button(ui, "Yes").clicked() {
+                            answer = Some(true);
+                        }
+                    });
+                });
+                if let Some(yes) = answer {
+                    // No switches CMB_altmode to Relative; the write goes on either way
+                    if !yes {
+                        app.settings.alt_frame = AltMode::Relative as u8;
+                    }
+                    if let Some(w) = self.write_check.as_mut() {
+                        w.prompt = None;
+                    }
+                }
+            }
+            WritePrompt::ZeroAlt { plane } => {
+                let row = self.write_check.as_ref().map(|w| w.row).unwrap_or(0);
+                let tag = zero_alt_tag(plane);
+                let key = show_again_key(tag);
+                let mut again = app.settings.planner.get(&key).map(|v| v != "False").unwrap_or(true);
+                let text = zero_alt_text(plane, row + 1);
+                let (body, link) = split_link(&text);
+                egui::Modal::new(egui::Id::new("fp_zero_alt")).show(ctx, |ui| {
+                    ui.set_min_width(300.0);
+                    ui.set_max_width(600.0);
+                    ui.label(egui::RichText::new(crate::i18n::t("Zero Altitude Warning")).strong());
+                    theme::label(ui, &body);
+                    if let Some((url, label)) = &link {
+                        ui.hyperlink_to(label, url);
+                    }
+                    ui.horizontal(|ui| {
+                        if ui.checkbox(&mut again, crate::i18n::t("Show me again?")).changed() {
+                            // chk_CheckStateChanged saves at once
+                            app.settings.planner.insert(key.clone(), if again { "True" } else { "False" }.into());
+                        }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if theme::button(ui, "Cancel").clicked() {
+                                answer = Some(false);
+                            }
+                            if theme::button(ui, "OK").clicked() {
+                                answer = Some(true);
+                            }
+                        });
+                    });
+                });
+                if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    answer = Some(false);
+                }
+                match answer {
+                    Some(true) => {
+                        if let Some(w) = self.write_check.as_mut() {
+                            w.prompt = None;
+                            w.zero_ok = true;
+                        }
+                    }
+                    Some(false) => self.write_check = None,
+                    None => {}
+                }
+            }
+        }
+    }
+
+    fn start_read(&mut self, app: &mut AppCtx) {
+        match app.link.filter(|_| app.connected()) {
+            None => app.toasts.message("Please connect first!", "Error"),
+            Some(l) => self.mission_io(l, self.mission_type as u8, true, Vec::new()),
+        }
+    }
+
+    /// Ctrl+Z: the last history entry back on screen (WPtoScreen)
+    fn undo(&mut self) {
+        if let Some((home, items)) = self.history.pop() {
+            self.home = home;
+            self.items = items;
+            self.selected = None;
+        }
+    }
+
+    /// updateUndoBuffer
+    pub(super) fn update_undo_buffer(&mut self) {
+        self.history.push((self.home, self.items.clone()));
+    }
+
+    /// FlightPlanner.ProcessCmdKey: Ctrl+Z undo, Ctrl+O / Ctrl+S waypoint files, and
+    /// Ctrl+Shift+F / W / R for Write Fast, Write and Read.
+    fn hotkeys(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
+        if ctx.egui_wants_keyboard_input() {
+            return;
+        }
+        let key = |m: egui::Modifiers, k: egui::Key| ctx.input_mut(|i| i.consume_key(m, k));
+        let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+        if key(cs, egui::Key::F) && self.write_check.is_none() {
+            self.write_check = Some(WriteCheck { fast: true, ..Default::default() });
+        }
+        if key(cs, egui::Key::W) && self.write_check.is_none() {
+            self.write_check = Some(WriteCheck { fast: false, ..Default::default() });
+        }
+        if key(cs, egui::Key::R) {
+            if self.items.is_empty() {
+                self.start_read(app);
+            } else {
+                self.read_confirm = true;
+            }
+        }
+        if key(egui::Modifiers::COMMAND, egui::Key::Z) {
+            self.undo();
+        }
+        if key(egui::Modifiers::COMMAND, egui::Key::O) {
+            if platform::HAS_NATIVE_DIALOGS {
+                if let Some((name, text)) = platform::open_text("Open Waypoint File", "Waypoints", &["waypoints", "txt"]) {
+                    self.load_text(&name, &text, app.toasts);
+                }
+            } else {
+                self.browser_open = true;
+            }
+        }
+        if key(egui::Modifiers::COMMAND, egui::Key::S) {
+            let text = mission::write_waypoint_file(&self.home, &self.items);
+            match platform::save_text("Save Waypoint File", "mission.waypoints", "Waypoints", &["waypoints"], &text) {
+                Some(Ok(path)) => {
+                    self.wpfile = std::path::Path::new(&path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or(path);
+                }
+                Some(Err(e)) => app.toasts.error(e),
+                None => {}
+            }
+        }
+    }
+
     fn fw(&self, app: &AppCtx) -> Firmware {
         app.link.filter(|_| app.connected()).map(|l| l.shared.read().cs.firmware).or(self.firmware).unwrap_or_default()
     }
@@ -292,6 +540,7 @@ impl FlightPlanView {
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
+        self.hotkeys(ui.ctx(), app);
         if let Some(ev) = self.ftp_job.as_ref().and_then(|rx| rx.try_recv().ok()) {
             self.ftp_job = None;
             self.on_event(&ev, app.toasts);
@@ -468,19 +717,32 @@ impl FlightPlanView {
         // panel5 (3,278 123x87): Read / Write / Write Fast
         let py = 278.0;
         let connected = app.connected();
-        let read = put_button(ui, r(px + 3.0, py + 4.0, 115.0, 23.0), "Read");
-        let write = put_button(ui, r(px + 3.0, py + 32.0, 115.0, 23.0), "Write") | put_button(ui, r(px + 3.0, py + 61.0, 115.0, 23.0), "Write Fast");
-        if read || write {
-            match app.link.filter(|_| connected) {
-                None => app.toasts.error("Please Connect First"),
-                Some(l) if read => self.mission_io(l, self.mission_type as u8, true, Vec::new()),
-                Some(l) => {
-                    // home is item 0 of the mission only; fence and rally lists are sent as-is
-                    let mut all = if self.mission_type == 0 { vec![self.home] } else { Vec::new() };
-                    all.extend(self.items.iter().copied());
-                    self.mission_io(l, self.mission_type as u8, false, all);
-                }
+        let _ = connected;
+        if put_button(ui, r(px + 3.0, py + 4.0, 115.0, 23.0), "Read") {
+            // BUT_read_Click asks before replacing a non-empty list
+            if self.items.is_empty() {
+                self.start_read(app);
+            } else {
+                self.read_confirm = true;
             }
+        }
+        if put_button(ui, r(px + 3.0, py + 32.0, 115.0, 23.0), "Write") && self.write_check.is_none() {
+            self.write_check = Some(WriteCheck { fast: false, ..Default::default() });
+        }
+        if put_button(ui, r(px + 3.0, py + 61.0, 115.0, 23.0), "Write Fast") && self.write_check.is_none() {
+            self.write_check = Some(WriteCheck { fast: true, ..Default::default() });
+        }
+        self.step_write(app);
+        self.write_prompts_ui(ui.ctx(), app);
+        if let Some(r) = self.fast_job.as_ref().and_then(|rx| rx.try_recv().ok()) {
+            self.fast_job = None;
+            // ProgressReporterDialogue's ShowDoneWithError
+            if let Err(e) = r {
+                app.toasts.message(e, "Error");
+            }
+        }
+        if self.fast_job.is_some() {
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
         }
 
         // panel1 (3,371 123x89): Home Location
@@ -558,11 +820,18 @@ impl FlightPlanView {
                 wp.lat = prev.lat;
                 wp.lng = prev.lng;
             }
+            self.update_undo_buffer();
             self.items.insert(at, wp);
             self.selected = Some(at);
         }
         p.text(o + Vec2::new(479.0, 4.0), egui::Align2::LEFT_TOP, crate::i18n::t("Alt Warn"), f.clone(), white);
-        ui.put(r(482.0, 20.0, 40.0, 20.0), egui::DragValue::new(&mut self.alt_warn));
+        // TXT_altwarn, kept in Settings "fpminaltwarning"
+        if let Some(v) = app.settings.planner.get("fpminaltwarning").and_then(|v| v.parse().ok()) {
+            self.alt_warn = v;
+        }
+        if ui.put(r(482.0, 20.0, 40.0, 20.0), egui::DragValue::new(&mut self.alt_warn)).changed() {
+            app.settings.planner.insert("fpminaltwarning".into(), self.alt_warn.to_string());
+        }
         ui.put(r(528.0, 12.0, 60.0, 17.0), egui::Checkbox::new(&mut self.spline, crate::i18n::t("Spline")));
         // chk_usemavftp: Settings "UseMissionMAVFTP"
         self.mavftp = app.settings.planner.get("UseMissionMAVFTP").map(|v| v == "True").unwrap_or(false);
@@ -659,20 +928,8 @@ impl FlightPlanView {
                 cells.push(Rect::from_min_size(Pos2::new(x, y), Vec2::new(*w, row_h)));
                 x += w;
             }
-            // Alt Warn: altitude cell turns red when the WP is lower than this above the terrain
-            let low = self.alt_warn > 0.0 && {
-                let w = &self.items[i];
-                w.has_location()
-                    && match (crate::srtm::altitude(w.lat, w.lng), crate::srtm::altitude(self.home.lat, self.home.lng)) {
-                        (Some(t), Some(h)) => {
-                            let amsl = if w.frame == 0 { w.alt as f64 } else { h + w.alt as f64 };
-                            amsl - t < self.alt_warn as f64
-                        }
-                        _ => false,
-                    }
-            };
             for (c, r) in cells.iter().enumerate().filter(|(_, r)| r.width() > 0.0) {
-                p.rect_filled(*r, 0.0, if c == 0 { theme::bg() } else if c == 8 && low { Color32::RED } else { row_bg });
+                p.rect_filled(*r, 0.0, if c == 0 { theme::bg() } else { row_bg });
                 p.rect_stroke(*r, 0.0, Stroke::new(1.0, grid_line), StrokeKind::Inside);
             }
             p.text(cells[0].center(), egui::Align2::CENTER_CENTER, (i + 1).to_string(), f.clone(), Color32::WHITE);
@@ -820,10 +1077,12 @@ impl FlightPlanView {
             self.selected = Some(i);
         }
         if let Some(i) = delete {
+            self.update_undo_buffer();
             self.items.remove(i);
             self.selected = None;
         }
         if let Some((a, b)) = swap {
+            self.update_undo_buffer();
             self.items.swap(a, b);
             self.selected = Some(b);
         }
@@ -999,7 +1258,14 @@ impl FlightPlanView {
             self.last_pointer = mouse;
         }
         self.dragging = new_drag;
+        if moved.is_none() {
+            self.drag_undo = false;
+        }
         if let Some((idx, lat, lng)) = moved {
+            if !self.drag_undo {
+                self.drag_undo = true;
+                self.update_undo_buffer();
+            }
             if idx == HOME_IDX {
                 self.home.lat = lat;
                 self.home.lng = lng;
@@ -1025,6 +1291,7 @@ impl FlightPlanView {
                 self.home.lat = lat;
                 self.home.lng = lng;
             } else {
+                self.update_undo_buffer();
                 let id = if self.spline { mavcmd::SPLINE_WAYPOINT } else { mavcmd::WAYPOINT };
                 let wp = self.new_wp(app, id, lat, lng);
                 self.items.push(wp);
@@ -1272,6 +1539,7 @@ impl FlightPlanView {
             });
         }
         if let Some(pts) = accept_circle {
+            self.update_undo_buffer();
             self.switch_type(0);
             for (lat, lng) in pts {
                 let wp = self.new_wp(app, mavcmd::WAYPOINT, lat, lng);
@@ -1364,6 +1632,134 @@ fn unit_mult(unit: &str) -> Option<(f32, &'static str)> {
         "speed" => Some((crate::units::speed(1.0), crate::units::speed_unit())),
         "dist" => Some((crate::units::dist(1.0), crate::units::dist_unit())),
         _ => None,
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum WritePrompt {
+    /// "Absolute Alt is selected are you sure?"
+    AbsoluteAlt,
+    /// checkZeroAlts' Common.MessageShowAgain
+    ZeroAlt { plane: bool },
+}
+
+#[derive(Default)]
+struct WriteCheck {
+    fast: bool,
+    alt_asked: bool,
+    row: usize,
+    /// the zero-altitude prompt for `row` was answered OK
+    zero_ok: bool,
+    prompt: Option<WritePrompt>,
+}
+
+#[derive(Debug, PartialEq)]
+enum RowCheck {
+    Pass,
+    Fail(String),
+    ZeroAlt { plane: bool },
+}
+
+/// One grid row of BUT_write_Click's loop: the Alt Warn test (column 0 comes first), the
+/// number check of Param1..Alt, then checkZeroAlts.
+fn write_row_check(w: &Locationwp, row: usize, alt_warn: f32, fw: Firmware) -> RowCheck {
+    let known = mavcmd::cmd_name(w.id) != "UNKNOWN";
+    let alt = crate::units::alt(w.alt) as f64;
+    if known && w.id < 95 && alt < alt_warn as f64 && ![22, 21, 20].contains(&w.id) {
+        return RowCheck::Fail(format!("Low alt on WP#{}\nPlease reduce the alt warning, or increase the altitude", row + 1));
+    }
+    if ![w.p1 as f64, w.p2 as f64, w.p3 as f64, w.p4 as f64, w.lat, w.lng, w.alt as f64].iter().all(|v| v.is_finite()) {
+        return RowCheck::Fail("There are errors in your mission".into());
+    }
+    let plane = fw == Firmware::ArduPlane;
+    if known && (plane || fw == Firmware::ArduCopter2) && alt == 0.0 && [16, 19, 17, 18, 31].contains(&w.id) {
+        return RowCheck::ZeroAlt { plane };
+    }
+    RowCheck::Pass
+}
+
+fn zero_alt_tag(plane: bool) -> &'static str {
+    if plane { "Zero Altitude Warning Plane" } else { "Zero Altitude Warning" }
+}
+
+/// MessageShowAgain's settings key
+fn show_again_key(tag: &str) -> String {
+    format!("SHOWAGAIN_{}", tag.replace([' ', '+', '-', '.'], "_"))
+}
+
+fn show_again(planner: &std::collections::BTreeMap<String, String>, tag: &str) -> bool {
+    planner.get(&show_again_key(tag)).map(|v| !v.eq_ignore_ascii_case("false")).unwrap_or(true)
+}
+
+/// Strings.ZeroAltWarningPlane / ZeroAltWarningCopter
+fn zero_alt_text(plane: bool, wp: usize) -> String {
+    if plane {
+        format!("WP# {wp} has zero altitude. If you actually want zero altitude, change it to 0.01 instead for predictable behavior.\n\nOn ArduPlane, zero altitudes may interpreted in two different ways: actual zero altitude, or keep current altitude. WAYPOINT commands will generally honor a zero altitude and LOITER commands will generally interpret it as \"use current altitude\", but only if the altitude frame is \"relative\". There may be more exceptions and this could change in future versions.\n\nONLY SET TO ZERO IF YOU REALLY UNDERSTAND EXACTLY WHAT IS GOING TO HAPPEN IN YOUR CASE (use a simulator to be sure).[link;https://ardupilot.org/plane/docs/common-mavlink-mission-command-messages-mav_cmd.html;Command Documentation]")
+    } else {
+        format!("WP# {wp} has zero altitude, this means no altitude change! If you want zero altitude, change it to 0.01. Do you want to continue or cancel wp upload?")
+    }
+}
+
+/// MessageShowAgain's [link;url;text] token: the text without it, and the link below.
+fn split_link(text: &str) -> (String, Option<(String, String)>) {
+    let Some(start) = text.find("[link;") else { return (text.to_string(), None) };
+    let Some(end) = text[start..].find(']').map(|e| start + e) else { return (text.to_string(), None) };
+    let inner = &text[start + 6..end];
+    match inner.rsplit_once(';') {
+        Some((url, label)) => (format!("{}{}", &text[..start], &text[end + 1..]), Some((url.to_string(), label.to_string()))),
+        None => (text.to_string(), None),
+    }
+}
+
+#[cfg(test)]
+mod write_check_tests {
+    use super::*;
+
+    #[test]
+    fn rows_fail_like_but_write_click() {
+        let wp = |id, alt| Locationwp { id, lat: -35.0, lng: 149.0, alt, frame: 3, ..Default::default() };
+        assert_eq!(write_row_check(&wp(16, 5.0), 2, 10.0, Firmware::ArduCopter2), RowCheck::Fail("Low alt on WP#3\nPlease reduce the alt warning, or increase the altitude".into()));
+        // takeoff, land and RTL may be low; DO commands are not checked
+        for id in [22, 21, 20, 183] {
+            assert_eq!(write_row_check(&wp(id, 5.0), 0, 10.0, Firmware::ArduCopter2), RowCheck::Pass);
+        }
+        let mut bad = wp(16, 50.0);
+        bad.p1 = f32::NAN;
+        assert_eq!(write_row_check(&bad, 0, 0.0, Firmware::ArduCopter2), RowCheck::Fail("There are errors in your mission".into()));
+        assert_eq!(write_row_check(&wp(16, 0.0), 0, 0.0, Firmware::ArduCopter2), RowCheck::ZeroAlt { plane: false });
+        assert_eq!(write_row_check(&wp(31, 0.0), 0, 0.0, Firmware::ArduPlane), RowCheck::ZeroAlt { plane: true });
+        assert_eq!(write_row_check(&wp(16, 0.0), 0, 0.0, Firmware::ArduRover), RowCheck::Pass, "only flying vehicles");
+        assert_eq!(write_row_check(&wp(22, 0.0), 0, 0.0, Firmware::ArduCopter2), RowCheck::Pass);
+    }
+
+    #[test]
+    fn undo_restores_each_recorded_step() {
+        let mut v = FlightPlanView::default();
+        let wp = |lat| Locationwp { id: 16, lat, lng: 149.0, alt: 10.0, ..Default::default() };
+        v.items = vec![wp(-35.0)];
+        v.update_undo_buffer();
+        v.items.push(wp(-35.1));
+        v.update_undo_buffer();
+        v.items.remove(0);
+        v.undo();
+        assert_eq!(v.items.len(), 2);
+        v.undo();
+        assert_eq!(v.items, vec![wp(-35.0)]);
+        v.undo();
+        assert_eq!(v.items, vec![wp(-35.0)], "an empty history leaves the list alone");
+    }
+
+    #[test]
+    fn show_again_keys_and_links() {
+        assert_eq!(show_again_key("Zero Altitude Warning Plane"), "SHOWAGAIN_Zero_Altitude_Warning_Plane");
+        let mut planner = std::collections::BTreeMap::new();
+        assert!(show_again(&planner, "Zero Altitude Warning"));
+        planner.insert("SHOWAGAIN_Zero_Altitude_Warning".to_string(), "False".to_string());
+        assert!(!show_again(&planner, "Zero Altitude Warning"));
+        let (body, link) = split_link(&zero_alt_text(true, 4));
+        assert!(body.starts_with("WP# 4 has zero altitude.") && body.ends_with("(use a simulator to be sure)."));
+        assert_eq!(link, Some(("https://ardupilot.org/plane/docs/common-mavlink-mission-command-messages-mav_cmd.html".to_string(), "Command Documentation".to_string())));
+        assert_eq!(split_link("plain").1, None);
     }
 }
 

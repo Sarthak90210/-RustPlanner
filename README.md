@@ -376,6 +376,26 @@ FlightData.cs:
 - Not ported yet: Custom Settings (camera definition settings).
 - Captures: cases 64-66 (`MP_GIMBAL=full|mini|popout`).
 
+PLAN Write and Write Fast follow BUT_write_Click and but_writewpfast_Click. Before uploading they:
+1. Ask to confirm Absolute alt mode ("No" switches it to Relative).
+2. Check the home location.
+3. Check each row: Alt Warn ("Low alt on WP#n"), invalid numbers ("There are errors in your mission"),
+   then checkZeroAlts' Show-me-again warning for Plane and Copter.
+
+After that:
+- Write Fast is mission-only and uses saveWPsFast's own protocol (`mp-core::wpfast`): MISSION_COUNT,
+  items streamed ten at a time, partial re-upload on MAV_MISSION_ERROR, and the original error texts.
+- Alt Warn is saved as "fpminaltwarning".
+- Read asks "This will clear your existing points, Continue?" when the list is not empty.
+- The progress dialog is titled "Sending WP's" or "Receiving WP's".
+- The Plan screen keeps FlightPlanner's undo history (Ctrl+Z) and its other shortcuts: Ctrl+O, Ctrl+S,
+  and Ctrl+Shift+F/W/R.
+
+Params grid edits all follow Params_CellValueChanged: mXparser arithmetic, RC/HS `_REV` 0 becomes -1,
+ReadOnly, and the "Out of range" Yes/No. This applies to the Options combo, the bitmask window and Set
+to default as well. Escape cancels an edit. The write messages use the original texts and captions,
+and Commit Params reports the autopilot's ACK.
+
 ## License
 
 GPL-3.0, like Mission Planner. Icons and marker images are Mission Planner / GMap.NET assets under the same license.

@@ -267,7 +267,7 @@ impl FriendlyParams {
                 for (k, v) in list {
                     link.send(LinkCommand::SetParam { name: k, value: v });
                 }
-                app.toasts.info("Parameters successfully saved.");
+                app.toasts.message("Parameters successfully saved.", "Saved");
             }
         }
         if ui.put(r(121.0, 11.0, 103.0, 19.0), |ui: &mut egui::Ui| theme::button_sized(ui, "Refresh Params", Vec2::new(103.0, 19.0))).clicked() {

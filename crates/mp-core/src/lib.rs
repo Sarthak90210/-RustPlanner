@@ -32,6 +32,7 @@ pub mod sim;
 pub mod state;
 pub mod survey;
 pub mod tlog;
+pub mod wpfast;
 
 pub use mavlink;
 

@@ -480,37 +480,63 @@ mod parameter_file_tests {
     }
 
     #[test]
-    fn write_confirm_detects_reboot_required_and_prompts_after_save() {
+    fn finished_writes_show_the_original_message_boxes() {
         let mut editor = ParamEditor::default();
         let mut toasts = Toasts::default();
-        let ctx = egui::Context::default();
-
-        // Stage a parameter that requires reboot (e.g. INS_ACC_ID or simulate via staged flag)
         editor.reboot_required_staged = true;
+        editor.write_count = 2;
         editor.pending.insert("INS_ACC_ID".into());
-
-        // Once all pending parameter writes complete, on_event activates show_reboot_prompt
+        editor.pending.insert("ANGLE_MAX".into());
         editor.on_event(&LinkEvent::ParamSet { name: "INS_ACC_ID".into(), ok: true }, &mut toasts);
+        assert!(toasts.0.is_empty(), "nothing until the last write");
+        editor.on_event(&LinkEvent::ParamSet { name: "ANGLE_MAX".into(), ok: true }, &mut toasts);
+        assert_eq!(toasts.0, ["2 parameters successfully saved.", "Reboot is required for some parameters to take effect."]);
+        assert_eq!(toasts.1, ["Saved", "Reboot Required"]);
         assert!(!editor.reboot_required_staged);
-        assert!(editor.show_reboot_prompt);
 
-        // Render reboot prompt window and dismiss with Escape
-        let mut out = ctx.run_ui(egui::RawInput {
-            events: vec![egui::Event::Key {
-                key: egui::Key::Escape,
-                physical_key: None,
-                pressed: true,
-                repeat: false,
-                modifiers: egui::Modifiers::NONE,
-            }],
-            ..Default::default()
-        }, |ui| {
-            editor.reboot_prompt_window(ui.ctx(), None, &mut toasts);
-        });
-        out.textures_delta.clear();
+        let mut toasts = Toasts::default();
+        editor.write_count = 1;
+        editor.pending.insert("X".into());
+        editor.on_event(&LinkEvent::ParamSet { name: "X".into(), ok: false }, &mut toasts);
+        assert_eq!(toasts.0, ["Set X Failed", "Not all parameters successfully saved."]);
+        assert_eq!(toasts.1, ["", "Saved"]);
+    }
 
-        // Reboot prompt should be dismissed cleanly
-        assert!(!editor.show_reboot_prompt);
+    #[test]
+    fn commit_params_reports_the_autopilots_answer() {
+        let mut editor = ParamEditor::default();
+        let mut toasts = Toasts::default();
+        // an ACK nobody asked for is ignored
+        editor.on_event(&LinkEvent::CommandAck { command: 245, result: "ACCEPTED".into(), ok: true }, &mut toasts);
+        assert!(toasts.0.is_empty());
+        editor.commit_pending = true;
+        editor.on_event(&LinkEvent::CommandAck { command: 245, result: "ACCEPTED".into(), ok: true }, &mut toasts);
+        assert_eq!(toasts.0, ["Parameters committed to non-volatile memory"]);
+        editor.commit_pending = true;
+        editor.on_event(&LinkEvent::CommandAck { command: 245, result: "Timeout".into(), ok: false }, &mut toasts);
+        assert_eq!(toasts.0.last().unwrap(), "Invalid command");
+        assert!(!editor.commit_pending);
+    }
+
+    #[test]
+    fn every_value_change_runs_readonly_then_range() {
+        let mut editor = ParamEditor::default();
+        let mut toasts = Toasts::default();
+        let ranged = mp_core::param_meta::ParamMeta { range: Some((0.0, 10.0)), ..Default::default() };
+        let readonly = mp_core::param_meta::ParamMeta { read_only: true, ..Default::default() };
+        editor.queue_value("RO", 3.0, 1.0, Some(&readonly), &mut toasts);
+        assert_eq!(toasts.0, ["RO is marked as ReadOnly, and will not be changed"]);
+        assert_eq!(toasts.1, ["ReadOnly"]);
+        assert!(editor.edits.is_empty());
+        editor.queue_value("R", 20.0, 1.0, Some(&ranged), &mut toasts);
+        assert_eq!(editor.range_confirm, Some(("R".to_string(), 20.0)));
+        assert!(editor.edits.is_empty(), "waits for Yes");
+        editor.range_confirm = None;
+        editor.queue_value("R", 5.0, 1.0, Some(&ranged), &mut toasts);
+        assert_eq!(editor.edits.get("R"), Some(&5.0));
+        // back to the vehicle's value clears the edit
+        editor.queue_value("R", 1.0, 1.0, Some(&ranged), &mut toasts);
+        assert!(editor.edits.is_empty());
     }
 
     #[test]
@@ -803,8 +829,10 @@ pub struct ParamEditor {
     pub confirmed: BTreeSet<String>,
     /// Staged flag indicating whether reboot is required after current save completes
     pub reboot_required_staged: bool,
-    /// Whether to display the post-save reboot confirmation prompt
-    pub show_reboot_prompt: bool,
+    /// parameters in the write batch, for "{n} parameters successfully saved."
+    pub write_count: usize,
+    /// Commit Params sent PREFLIGHT_STORAGE and waits for its ACK
+    pub commit_pending: bool,
     /// Whether to check if available parameter count diverged from vehicle reported count post-save
     pub check_param_count_divergence: bool,
     /// "Out of range" Yes/No for an edited value (name, value)
@@ -862,6 +890,16 @@ impl ParamEditor {
     }
 
     pub fn on_event(&mut self, e: &LinkEvent, toasts: &mut Toasts) {
+        if let LinkEvent::CommandAck { command: 245, ok, .. } = e {
+            if std::mem::take(&mut self.commit_pending) {
+                // BUT_commitToFlash_Click: doCommand throws on a refusal or timeout
+                if *ok {
+                    toasts.error("Parameters committed to non-volatile memory");
+                } else {
+                    toasts.error("Invalid command");
+                }
+            }
+        }
         if let LinkEvent::ParamSet { name, ok } = e {
             if self.pending.remove(name) {
                 if *ok {
@@ -873,15 +911,14 @@ impl ParamEditor {
                     toasts.error(format!("Set {name} Failed"));
                 }
                 if self.pending.is_empty() {
-                    if self.failed.is_empty() {
-                        toasts.info("Parameters successfully saved.");
+                    if !self.failed.is_empty() {
+                        toasts.message("Not all parameters successfully saved.", "Saved");
                     } else {
-                        toasts.error("Not all parameters successfully saved.");
+                        toasts.message(format!("{} parameters successfully saved.", self.write_count), "Saved");
                     }
                     if self.reboot_required_staged {
                         self.reboot_required_staged = false;
-                        self.show_reboot_prompt = true;
-                        toasts.info("Reboot is required for some parameters to take effect.");
+                        toasts.message("Reboot is required for some parameters to take effect.", "Reboot Required");
                     }
                     self.check_param_count_divergence = true;
                 }
@@ -911,9 +948,9 @@ impl ParamEditor {
                 let reported = s.param_count as usize;
                 if reported > 0 && received != reported {
                     if s.cs.armed {
-                        app.toasts.error("The number of available parameters changed, until full param refresh is done, some parameters will not be available.");
+                        app.toasts.message("The number of available parameters changed, until full param refresh is done, some parameters will not be available.", "Params");
                     } else {
-                        app.toasts.info("The number of available parameters changed. A full param refresh will be done to show all params.");
+                        app.toasts.message("The number of available parameters changed. A full param refresh will be done to show all params.", "Params");
                         link.send(LinkCommand::RequestParams);
                     }
                 }
@@ -924,7 +961,7 @@ impl ParamEditor {
 
         if is_connected {
             let values: BTreeMap<String, f32> = params.iter().map(|(k, p)| (k.clone(), p.value)).collect();
-            self.bitmask_window(ui.ctx(), fw, &values);
+            self.bitmask_window(ui.ctx(), fw, &values, app.toasts);
         }
         // MAVLinkInterface.getParamList: the packed list with defaults over MAVFtp
         if let Some(link) = app.link {
@@ -966,7 +1003,7 @@ impl ParamEditor {
             ui.add_enabled_ui(is_connected && !app.readonly, |ui| {
                 if b(ui, r(66.0, 19.0), "Write Params") {
                     if self.edits.is_empty() {
-                        app.toasts.info("No changes");
+                        app.toasts.message("No parameters were changed.", "No changes");
                     } else {
                         let mut keys: Vec<String> = self.edits.keys().cloned().collect();
                         sort_enable(&mut keys);
@@ -997,8 +1034,8 @@ impl ParamEditor {
                     if b(ui, r(141.0, 22.0), "Commit Params") {
                         if let Some(link) = app.link {
                             link.send(LinkCommand::CommandLong { command: 245, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
-                            // BUT_commitToFlash_Click's message box
-                            app.toasts.error("Parameters committed to non-volatile memory");
+                            // BUT_commitToFlash_Click's message box follows the ACK (on_event)
+                            self.commit_pending = true;
                         }
                     }
                 });
@@ -1214,7 +1251,25 @@ impl ParamEditor {
         self.missing_window(ui.ctx());
         self.write_confirm_window(ui.ctx(), app.link, fw);
         self.range_confirm_window(ui.ctx(), &params);
-        self.reboot_prompt_window(ui.ctx(), app.link, app.toasts);
+    }
+
+    /// Params_CellValueChanged after parsing: ReadOnly refuses, an out-of-range value asks
+    /// first, anything else is queued (and a value equal to the vehicle's drops the edit).
+    fn queue_value(&mut self, name: &str, nv: f64, current: f32, meta: Option<&param_meta::ParamMeta>, toasts: &mut Toasts) {
+        if meta.is_some_and(|m| m.read_only) {
+            toasts.message(format!("{name}{}", crate::i18n::t(" is marked as ReadOnly, and will not be changed")), "ReadOnly");
+            return;
+        }
+        if meta.and_then(|m| m.range).is_some_and(|(lo, hi)| nv < lo || nv > hi) {
+            self.range_confirm = Some((name.to_string(), nv as f32));
+            return;
+        }
+        self.failed.remove(name);
+        if nv as f32 == current {
+            self.edits.remove(name);
+        } else {
+            self.edits.insert(name.to_string(), nv as f32);
+        }
     }
 
     fn fail_pending(&mut self) {
@@ -1308,43 +1363,11 @@ impl ParamEditor {
                     self.reboot_required_staged = true;
                 }
                 if let Some(link) = link {
+                    self.write_count = changes.len();
                     for (name, _, new) in changes {
                         link.send(LinkCommand::SetParam { name: name.clone(), value: new });
                         self.pending.insert(name);
                     }
-                }
-            }
-        }
-    }
-
-    /// Prompt modal to reboot autopilot after saving reboot-required parameters (matching C# ConfigRawParams.cs L374-L377)
-    fn reboot_prompt_window(&mut self, ctx: &egui::Context, link: Option<&Link>, toasts: &mut Toasts) {
-        if !self.show_reboot_prompt { return; }
-        let mut dismiss = None;
-        egui::Modal::new(egui::Id::new("reboot_required_prompt")).show(ctx, |ui| {
-            ui.set_width(360.0);
-            ui.label(RichText::new(crate::i18n::t("Reboot Required")).strong());
-            ui.add_space(8.0);
-            ui.label("Reboot is required for some parameters to take effect.\nDo you want to reboot the autopilot now?");
-            ui.add_space(12.0);
-            ui.horizontal(|ui| {
-                if theme::button(ui, "Reboot Now").clicked() {
-                    dismiss = Some(true);
-                }
-                if theme::button(ui, "Later").clicked() {
-                    dismiss = Some(false);
-                }
-            });
-        });
-        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            dismiss = Some(false);
-        }
-        if let Some(reboot_now) = dismiss {
-            self.show_reboot_prompt = false;
-            if reboot_now {
-                if let Some(link) = link {
-                    link.send(LinkCommand::CommandLong { command: 246, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
-                    toasts.info("Reboot command sent to autopilot.");
                 }
             }
         }
@@ -1543,7 +1566,7 @@ impl ParamEditor {
                 });
 
                 // Value cell: editable
-                let mut v = edited.unwrap_or(*value);
+                let v = edited.unwrap_or(*value);
                 let mut child = ui.new_child(egui::UiBuilder::new().max_rect(cells[1].shrink(1.0)));
                 {
                     let vis = child.visuals_mut();
@@ -1556,6 +1579,7 @@ impl ParamEditor {
                 // DataGridView: plain text until the cell is clicked (EditingControlShowing)
                 let editing = self.editing.as_ref().map(|(n, _)| n == name).unwrap_or(false);
                 let mut changed = false;
+                let mut queued: Option<f64> = None;
                 if !editing {
                     let mut resp = child.put(cells[1].shrink(1.0), egui::Label::new(egui::RichText::new(paramfile::format_value(v)).color(Color32::WHITE)).sense(Sense::click().union(Sense::hover())));
                     resp = resp.on_hover_text(&tip);
@@ -1586,12 +1610,8 @@ impl ParamEditor {
                             .show_ui(ui, |ui| {
                                 for (k, s) in &m.values {
                                     if ui.selectable_label(*k as f32 == v, format!("{k}: {s}")).clicked() {
-                                        if m.read_only {
-                                            toasts.error(format!("{name}{}", crate::i18n::t(" is marked as ReadOnly, and will not be changed")));
-                                        } else {
-                                            v = *k as f32;
-                                            changed = true;
-                                        }
+                                        queued = Some(*k as f64);
+                                        changed = true;
                                     }
                                 }
                             })
@@ -1607,40 +1627,27 @@ impl ParamEditor {
                         r.request_focus();
                     }
                     if r.lost_focus() {
-                        // Params_CellValueChanged: parse, ReadOnly, then range (Yes/No)
-                        match cell_value(name, buf) {
-                            None => {
-                                self.failed.insert(name.clone());
-                            }
-                            Some(_) if meta.is_some_and(|m| m.read_only) => {
-                                toasts.error(format!("{name}{}", crate::i18n::t(" is marked as ReadOnly, and will not be changed")));
-                            }
-                            Some(nv) if meta.and_then(|m| m.range).is_some_and(|(lo, hi)| nv < lo || nv > hi) => {
-                                self.range_confirm = Some((name.clone(), nv as f32));
-                            }
-                            Some(nv) => {
-                                v = nv as f32;
-                                changed = true;
-                                self.failed.remove(name);
+                        // Escape cancels the edit (DataGridView CancelEdit); anything else ends it
+                        if !ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                            // Params_CellValueChanged: parse, then the checked path
+                            match cell_value(name, buf) {
+                                None => {
+                                    self.failed.insert(name.clone());
+                                }
+                                Some(nv) => queued = Some(nv),
                             }
                         }
                         self.editing = None;
                     }
                 }
                 if let Some(d) = ctx_default {
-                    v = d;
-                    changed = true;
+                    queued = Some(d as f64);
                 }
                 if ctx_revert {
                     self.edits.remove(name);
                     self.failed.remove(name);
-                } else if changed {
-                    self.failed.remove(name);
-                    if v == *value {
-                        self.edits.remove(name);
-                    } else {
-                        self.edits.insert(name.clone(), v);
-                    }
+                } else if let Some(nv) = queued {
+                    self.queue_value(name, nv, *value, meta, toasts);
                 }
                 if let Some(d) = defaults.and_then(|d| d.get(name)) {
                     txt(ui, cells[2], &paramfile::format_value(*d));
@@ -1675,11 +1682,8 @@ impl ParamEditor {
                             }).response
                         });
                         if let Some(nv) = pick {
-                            if nv == *value {
-                                self.edits.remove(name);
-                            } else {
-                                self.edits.insert(name.clone(), nv);
-                            }
+                            // the Options combo sets the Value cell, which runs CellValueChanged
+                            self.queue_value(name, nv as f64, *value, meta, toasts);
                         }
                     } else {
                         txt(ui, cells[4], &opts);
@@ -1702,7 +1706,7 @@ impl ParamEditor {
 
 impl ParamEditor {
     /// The MavlinkCheckBoxBitMask window opened from "Set Bitmask"; ticks update the cell value.
-    fn bitmask_window(&mut self, ctx: &egui::Context, fw: Firmware, params: &BTreeMap<String, f32>) {
+    fn bitmask_window(&mut self, ctx: &egui::Context, fw: Firmware, params: &BTreeMap<String, f32>, toasts: &mut Toasts) {
         let Some(name) = self.bitmask_edit.clone() else { return };
         let Some(m) = param_meta::get(fw, &name) else {
             self.bitmask_edit = None;
@@ -1725,11 +1729,8 @@ impl ParamEditor {
             });
         });
         if value as f32 != cur {
-            if params.get(&name).copied() == Some(value as f32) {
-                self.edits.remove(&name);
-            } else {
-                self.edits.insert(name.clone(), value as f32);
-            }
+            let current = params.get(&name).copied().unwrap_or(0.0);
+            self.queue_value(&name, value as f64, current, Some(m), toasts);
         }
         if !open {
             self.bitmask_edit = None;
