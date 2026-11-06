@@ -568,6 +568,20 @@ mod parameter_file_tests {
     }
 
     #[test]
+    fn numeric_updown_follows_params_rowenter() {
+        let m = |range, increment| mp_core::param_meta::ParamMeta { range: Some(range), increment, ..Default::default() };
+        // 0..4500: the range over 1000 is 4.5, so a step of 1 and no decimals
+        assert_eq!(numeric_updown(&m((0.0, 4500.0), None)), (0.0, 4500.0, 1.0, 0));
+        // 0..1: steps of 0.001
+        assert_eq!(numeric_updown(&m((0.0, 1.0), None)), (0.0, 1.0, 0.001, 3));
+        // a metadata increment wins; a tiny non-zero minimum adds places
+        // 0.5 at no decimals rounds to even: an increment of 0, as Math.Round gives
+        assert_eq!(numeric_updown(&m((0.0, 100.0), Some(0.5))), (0.0, 100.0, 0.0, 0));
+        assert_eq!(numeric_updown(&m((0.0, 100.0), Some(0.05))), (0.0, 100.0, 0.0, 1));
+        assert_eq!(numeric_updown(&m((0.0001, 1.0), Some(0.01))).3, 4);
+    }
+
+    #[test]
     fn tooltips_wrap_like_addnewlinesfortooltip() {
         assert_eq!(tooltip_lines("short"), "short");
         let long = "Maximum lean angle in all flight modes except the ones that do not use attitude control";
@@ -884,6 +898,20 @@ pub fn row_visible(cells: &RowCells, prefix: &str, re: Option<&regex::Regex>) ->
     let Some(re) = re else { return true };
     let fav = if cells.fav { "True" } else { "False" };
     [cells.name.as_str(), &cells.value, &cells.default, &cells.units, &cells.options, &cells.desc, fav].iter().any(|c| re.is_match(c))
+}
+
+/// Params_RowEnter's NumericUpDown: (minimum, maximum, increment, decimal places). The default
+/// increment is a power of ten near a thousandth of the range.
+fn numeric_updown(m: &param_meta::ParamMeta) -> (f64, f64, f64, usize) {
+    let (min, max) = m.range.unwrap_or((-32768.0, 32768.0));
+    let inc = m.increment.unwrap_or_else(|| 10f64.powf(((max - min) / 1000.0).log10().floor()));
+    let mut dp = (-inc.abs().log10()).max(0.0).round() as usize;
+    if min.abs() < inc && min.abs() >= 1e-9 {
+        dp = (-min.abs().log10()).max(0.0).round() as usize;
+    }
+    // decimal Math.Round: midpoints go to the even digit
+    let r = |v: f64| (v * 10f64.powi(dp as i32)).round_ties_even() / 10f64.powi(dp as i32);
+    (r(min), r(max), r(inc), dp)
 }
 
 /// The Options cell: the Range metadata, then the values one per line.
@@ -1703,7 +1731,6 @@ impl ParamEditor {
                 }
                 // DataGridView: plain text until the cell is clicked (EditingControlShowing)
                 let editing = self.editing.as_ref().map(|(n, _)| n == name).unwrap_or(false);
-                let mut changed = false;
                 let mut queued: Option<f64> = None;
                 if !editing {
                     let mut resp = child.put(cells[1].shrink(1.0), egui::Label::new(egui::RichText::new(paramfile::format_value(v)).color(Color32::WHITE)).sense(Sense::click().union(Sense::hover())));
@@ -1713,26 +1740,6 @@ impl ParamEditor {
                     if resp.clicked() {
                         self.editing = Some((name.clone(), paramfile::format_value(v)));
                         self.current = Some(name.clone());
-                    }
-                } else if let Some(m) = meta.filter(|m| !m.values.is_empty()) {
-                    let cur = paramfile::format_value(v);
-                    child.put(cells[1].shrink(1.0), |ui: &mut egui::Ui| {
-                        let r = egui::ComboBox::from_id_salt(("pv", name))
-                            .width(cells[1].width() - 6.0)
-                            .selected_text(cur)
-                            .show_ui(ui, |ui| {
-                                for (k, s) in &m.values {
-                                    if ui.selectable_label(*k as f32 == v, format!("{k}: {s}")).clicked() {
-                                        queued = Some(*k as f64);
-                                        changed = true;
-                                    }
-                                }
-                            })
-                            .response;
-                        r
-                    });
-                    if changed {
-                        self.editing = None;
                     }
                 } else if let Some((_, buf)) = self.editing.as_mut() {
                     let r = child.put(cells[1].shrink(1.0), egui::TextEdit::singleline(buf));
@@ -1786,6 +1793,17 @@ impl ParamEditor {
                         if let Some(nv) = pick {
                             // the Options combo sets the Value cell, which runs CellValueChanged
                             self.queue_value(name, nv as f64, *value, meta, toasts);
+                        }
+                    } else if current && m.range.is_some() {
+                        // a ranged number: NumericUpDown with the metadata increment
+                        let (min, max, inc, dp) = numeric_updown(m);
+                        let mut val = (v as f64).clamp(min, max);
+                        val = (val * 10f64.powi(dp as i32)).round_ties_even() / 10f64.powi(dp as i32);
+                        let before = val;
+                        ui.put(cells[4].shrink(1.0), egui::DragValue::new(&mut val).range(min..=max).speed(inc).fixed_decimals(dp));
+                        if val != before {
+                            // num.TextChanged writes the Value cell
+                            self.queue_value(name, val, *value, meta, toasts);
                         }
                     } else {
                         txt(ui, cells[4], &opts);
