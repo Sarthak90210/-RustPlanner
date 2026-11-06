@@ -148,8 +148,10 @@ impl Toasts {
     pub fn info(&mut self, s: impl Into<String>) {
         log::info!("{}", s.into());
     }
+    /// CustomMessageBox texts come from the views and Strings.resx: exact matches translate.
+    #[track_caller]
     pub fn error(&mut self, s: impl Into<String>) {
-        let s = s.into();
+        let s = crate::i18n::t(&s.into());
         log::warn!("{s}");
         if !self.0.contains(&s) {
             self.0.push(s);
@@ -261,7 +263,7 @@ impl MissionPlannerApp {
             .unwrap_or_default();
         // Settings "language": the CurrentUICulture for this run
         // MP_LANGUAGE=<culture> overrides it for captures
-        let language = std::env::var("MP_LANGUAGE").ok().or_else(|| settings.planner.get("language").cloned()).unwrap_or_else(|| "en-US".into());
+        let language = std::env::var("MP_LANGUAGE").ok().or_else(|| settings.planner.get("language").cloned()).unwrap_or_else(|| crate::i18n::resolve(&crate::i18n::os_ui_culture()).to_string());
         crate::i18n::init(&language);
         crate::fonts::install(&cc.egui_ctx);
         theme::apply(&cc.egui_ctx);

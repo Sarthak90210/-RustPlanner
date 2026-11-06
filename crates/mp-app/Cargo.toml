@@ -36,7 +36,7 @@ gilrs = "0.11"
 eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "persistence", "wayland", "x11"] }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell", "Win32_Globalization"] }
 raw-window-handle = "0.6"
 
 [target.'cfg(target_os = "android")'.dependencies]

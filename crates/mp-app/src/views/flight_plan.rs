@@ -129,6 +129,8 @@ pub struct FlightPlanView {
     coord_edit: Option<(usize, usize, String)>,
     /// MainMap_OnCurrentPositionChanged also moves coords1 to the map centre
     last_center: Option<(f64, f64)>,
+    /// currentMarker: the last pointer position over the map (SetMouseDisplay)
+    last_pointer: Option<(f64, f64)>,
 }
 
 #[derive(Clone, Copy)]
@@ -180,6 +182,7 @@ impl Default for FlightPlanView {
             measure: None,
             coord_edit: None,
             last_center: None,
+            last_pointer: None,
         }
     }
 }
@@ -396,7 +399,7 @@ impl FlightPlanView {
         let py = 64.0;
         ui.put(r(px + 3.0, py + 3.0, 50.0, 17.0), egui::Checkbox::new(&mut self.grid, crate::i18n::t("Grid")));
         // label1_Click: the network link served by MainV2's web service
-        if ui.put(r(px + 62.0, py + 3.0, 60.0, 13.0), egui::Link::new("View KML")).clicked() {
+        if ui.put(r(px + 62.0, py + 3.0, 60.0, 13.0), egui::Link::new(crate::i18n::t("View KML"))).clicked() {
             ui.ctx().open_url(egui::OpenUrl::new_tab("http://127.0.0.1:56781/network.kml"));
         }
         ui.put(r(px + 3.0, py + 22.0, 111.0, 21.0), |ui: &mut egui::Ui| {
@@ -982,6 +985,7 @@ impl FlightPlanView {
         }
         if mouse.is_some() {
             self.mouse = mouse;
+            self.last_pointer = mouse;
         }
         self.dragging = new_drag;
         if let Some((idx, lat, lng)) = moved {
@@ -1029,11 +1033,22 @@ impl FlightPlanView {
         let p = ui.painter().with_clip_rect(mrect);
         let f = fonts::ui_id(fonts::UI_SIZE);
         let total = self.total_distance();
-        let (prev, homed) = self.prev_and_home();
+        // SetMouseDisplay: from the last point of the route and from home to the pointer;
+        // the labels keep their resx text until the pointer has been over the map
+        let (prev_text, home_text) = match (self.last_pointer, self.route_last()) {
+            (Some((la, ln)), Some(last)) => {
+                let here = PointLatLngAlt::new(la, ln, 0.0);
+                let prev = format!("{}: {} AZ: {:.0}", crate::i18n::t("Prev"), format_distance(&app.settings.planner, last.distance(&here) / 1000.0, true), last.bearing(&here));
+                let home = PointLatLngAlt::new(self.home.lat, self.home.lng, 0.0);
+                let homed = format!("{}: {}", crate::i18n::t("Home"), format_distance(&app.settings.planner, home.distance(&here) / 1000.0, true));
+                (prev, homed)
+            }
+            _ => (crate::i18n::t("Prev"), crate::i18n::t("Home")),
+        };
         for (y, t) in [
-            (5.0, format!("Distance: {:.4} km", total / 1000.0)),
-            (18.0, format!("Prev: {prev:.2} m")),
-            (31.0, format!("Home: {homed:.2} m")),
+            (5.0, format!("{}: {}", crate::i18n::t("Distance"), format_distance(&app.settings.planner, total / 1000.0, false))),
+            (18.0, prev_text),
+            (31.0, home_text),
         ] {
             let g = p.layout_no_wrap(t, f.clone(), Color32::WHITE);
             let r = Rect::from_min_size(o + Vec2::new(3.0, y), g.size());
@@ -1063,20 +1078,15 @@ impl FlightPlanView {
         theme::vtrackbar(ui, Rect::from_min_size(o + Vec2::new(w - 50.0, 42.0), Vec2::new(45.0, (h - 48.0).max(40.0))), &mut app.settings.fp_map.zoom, 2.0, 22.0);
     }
 
-    fn prev_and_home(&self) -> (f64, f64) {
-        let is_loc = |w: &Locationwp| w.has_location() && (w.lat != 0.0 || w.lng != 0.0);
-        let idx = self.selected.filter(|i| self.items.get(*i).map(is_loc).unwrap_or(false)).or_else(|| self.items.iter().rposition(is_loc));
-        let Some(i) = idx else { return (0.0, 0.0) };
-        let w = &self.items[i];
-        let here = PointLatLngAlt::new(w.lat, w.lng, 0.0);
-        let prev = self.items[..i]
+    /// pointlist's last point: the last located waypoint, else home.
+    fn route_last(&self) -> Option<PointLatLngAlt> {
+        let is_loc = |w: &&Locationwp| w.has_location() && (w.lat != 0.0 || w.lng != 0.0);
+        self.items
             .iter()
             .rev()
-            .find(|w| is_loc(w))
+            .find(is_loc)
             .map(|w| PointLatLngAlt::new(w.lat, w.lng, 0.0))
-            .unwrap_or(PointLatLngAlt::new(self.home.lat, self.home.lng, 0.0));
-        let home = PointLatLngAlt::new(self.home.lat, self.home.lng, 0.0);
-        (prev.distance(&here), home.distance(&here))
+            .or_else(|| (self.home.lat != 0.0 || self.home.lng != 0.0).then(|| PointLatLngAlt::new(self.home.lat, self.home.lng, 0.0)))
     }
 
     fn total_distance(&self) -> f64 {
@@ -1479,5 +1489,30 @@ mod coord_tests {
 
         h.choose_system("MGRS", "GEO");
         assert!(h.label("MGRS").is_none() && h.label("Zone").is_none() && h.label("GEO").is_some());
+    }
+}
+
+
+/// FlightPlanner.FormatDistance: metres/kilometres, or feet/miles with Settings "distunits".
+fn format_distance(planner: &std::collections::BTreeMap<String, String>, km: f64, to_meter_or_feet: bool) -> String {
+    if planner.get("distunits").map(|u| u == "Feet").unwrap_or(false) {
+        if to_meter_or_feet { format!("{:.2} ft", km * 3280.8399) } else { format!("{:.4} miles", km * 0.621371) }
+    } else if to_meter_or_feet {
+        format!("{:.2} m", km * 1000.0)
+    } else {
+        format!("{km:.4} km")
+    }
+}
+
+#[cfg(test)]
+mod overlay_tests {
+    #[test]
+    fn format_distance_follows_the_unit_setting() {
+        let mut pl = std::collections::BTreeMap::new();
+        assert_eq!(super::format_distance(&pl, 0.95, false), "0.9500 km");
+        assert_eq!(super::format_distance(&pl, 0.2, true), "200.00 m");
+        pl.insert("distunits".to_string(), "Feet".to_string());
+        assert_eq!(super::format_distance(&pl, 1.0, true), "3280.84 ft");
+        assert_eq!(super::format_distance(&pl, 1.0, false), "0.6214 miles");
     }
 }

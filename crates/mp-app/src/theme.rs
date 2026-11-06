@@ -273,6 +273,7 @@ fn centered_text(painter: &egui::Painter, rect: Rect, text: &str, font: FontId, 
 // ------------------------------------------------------------------ MyButton
 
 /// `MissionPlanner.Controls.MyButton`: green vertical gradient, 1px outline, dark green text.
+#[track_caller]
 pub fn button_sized(ui: &mut Ui, text: &str, size: Vec2) -> Response {
     let text = &*crate::i18n::tr(text);
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
@@ -293,6 +294,7 @@ pub fn button_sized(ui: &mut Ui, text: &str, size: Vec2) -> Response {
 }
 
 /// MyButton sized to its text (WinForms default 75x23 minimum).
+#[track_caller]
 pub fn button(ui: &mut Ui, text: &str) -> Response {
     let text = &*crate::i18n::tr(text);
     let w = ui.painter().layout_no_wrap(text.to_string(), fonts::ui_id(fonts::UI_SIZE), self::text()).size().x + 16.0;
@@ -300,6 +302,7 @@ pub fn button(ui: &mut Ui, text: &str) -> Response {
 }
 
 /// Button filling the full width of the current cell, as `Dock = Fill` in a TableLayoutPanel.
+#[track_caller]
 pub fn button_fill(ui: &mut Ui, text: &str) -> Response {
     let size = ui.available_size();
     button_sized(ui, text, size)
@@ -309,6 +312,7 @@ pub fn button_fill(ui: &mut Ui, text: &str) -> Response {
 
 /// OS-drawn TabControl header strip (light tabs, black text) with the ◄ ► scroller when the
 /// tabs overflow.
+#[track_caller]
 pub fn tab_strip(ui: &mut Ui, id: &str, labels: &[&str], selected: &mut usize) {
     let owned: Vec<String> = labels.iter().map(|l| crate::i18n::t(l)).collect();
     let labels: Vec<&str> = owned.iter().map(String::as_str).collect();
@@ -383,6 +387,7 @@ pub fn tab_strip(ui: &mut Ui, id: &str, labels: &[&str], selected: &mut usize) {
 
 /// TabControl with Multiline = true: tabs wrap onto extra rows instead of scrolling.
 /// Returns the strip rect (for its context menu).
+#[track_caller]
 pub fn tab_strip_multiline(ui: &mut Ui, id: &str, labels: &[&str], selected: &mut usize) -> Rect {
     let owned: Vec<String> = labels.iter().map(|l| crate::i18n::t(l)).collect();
     let labels: Vec<&str> = owned.iter().map(String::as_str).collect();
@@ -437,6 +442,7 @@ pub const BSV_WIDTH: f32 = 172.0;
 /// `BackstageView` menu: black button area, 30px bold items, green gradient selection with the
 /// arrow pointing at the content page. Children are shown while their parent or a sibling is
 /// selected, prefixed like the original (">> " for parents, indented children).
+#[track_caller]
 pub fn backstage(ui: &mut Ui, items: &[BsvItem], selected: &mut usize) {
     let rect = ui.max_rect();
     let p = ui.painter();
@@ -570,8 +576,9 @@ pub fn vtrackbar_ticks(ui: &mut Ui, rect: Rect, value: &mut f64, min: f64, max: 
 }
 
 /// WinForms Label: plain white text at the UI font.
+#[track_caller]
 pub fn label(ui: &mut Ui, text: impl Into<String>) -> Response {
-    let text = crate::i18n::t(&text.into());
+    let text = crate::i18n::tr_view(&text.into()).into_owned();
     ui.add(egui::Label::new(egui::RichText::new(text).color(self::text())).selectable(false))
 }
 

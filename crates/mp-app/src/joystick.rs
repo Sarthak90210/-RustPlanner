@@ -474,11 +474,11 @@ impl Joystick {
         txt(411.0, 47.0, "Reverse");
         ui.put(
             r(464.0, 47.0, 117.0, 17.0),
-            egui::Checkbox::new(&mut self.manual_control, "Manual Control"),
+            egui::Checkbox::new(&mut self.manual_control, crate::i18n::t("Manual Control")),
         );
         ui.put(
             r(434.0, 81.0, 84.0, 17.0),
-            egui::Checkbox::new(&mut self.elevons, "Elevons"),
+            egui::Checkbox::new(&mut self.elevons, crate::i18n::t("Elevons")),
         );
         // detection: the axis that moves most within 3 s
         if let Some((ch, start, base)) = &self.detect {
@@ -677,7 +677,7 @@ impl Joystick {
                             });
                         }
                         if cfg.function.fields().is_empty() {
-                            ui.label("No settings to set");
+                            ui.label(crate::i18n::t("No settings to set"));
                         }
                     }
                 });
@@ -694,7 +694,7 @@ impl Joystick {
             return;
         }
         let mut open = true;
-        egui::Window::new("Joystick")
+        egui::Window::new(crate::i18n::t("Joystick"))
             .open(&mut open)
             .collapsible(false)
             .default_size([1100.0, 560.0])

@@ -70,7 +70,9 @@ $cases = @(
  @('58_data_zh_hans','data',1,1,0,0,12,'MP_LANGUAGE','zh-Hans'),
  @('59_setup_rangefinder_zh_hans','setup',1,0,0,28,7,'MP_LANGUAGE','zh-Hans'),
  @('60_plan_ko_kr','plan',1,1,0,0,12,'MP_LANGUAGE','ko-KR'),
- @('61_data_gstreamer_hud','data',1,1,0,0,14,'MP_GSTREAMER','1')
+ @('61_data_gstreamer_hud','data',1,1,0,0,14,'MP_GSTREAMER','1'),
+ @('62_plan_ar','plan',1,1,0,0,12,'MP_LANGUAGE','ar'),
+ @('63_plan_zh_hans','plan',1,1,0,0,12,'MP_LANGUAGE','zh-Hans')
 )
 $last = [Math]::Min($cases.Count, $From - 1 + $Count) - 1
 for ($ci = $From - 1; $ci -le $last; $ci++) {

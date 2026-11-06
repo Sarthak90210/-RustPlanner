@@ -275,6 +275,12 @@ saves the choice as Settings "language" and asks for a restart, as MainV2.change
 - an English-to-culture map for the hand-built views (menu bar, tabs, backstage, buttons, labels,
   checkboxes, menus, window titles and grid headers).
 
+Lookups are per view, as ComponentResourceManager is per type. The calling source file chooses the
+original view's .resx through `#[track_caller]`, and a shared map holds only strings every .resx
+translates the same way. Labels, which also carry data, use only their view's resources. Mnemonic "&"
+is stripped and numeric keys are dropped. Without a saved language the OS display language is used,
+with .NET resource fallback. Toasts translate exact Strings.resx messages. PLAN's distance overlay
+measures Prev/Home to the pointer as SetMouseDisplay does, with FormatDistance units.
 Strings the original never translated stay English. A system CJK or Arabic font is added as a fallback,
 standing in for GDI font linking. `MP_LANGUAGE=<culture>` overrides the setting for captures 58-60.
 Quick view captions follow CurrentState.GetNameandUnit: [DisplayText] (exported with the property table)

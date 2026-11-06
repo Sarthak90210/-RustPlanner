@@ -635,7 +635,7 @@ impl SetupView {
             let name = format!("RC{ch}_REVERSED");
             if let Some(pv) = params.get(&name) {
                 let mut b = pv.value != 0.0;
-                if ui.put(r(x, y, 70.0, 17.0), egui::Checkbox::new(&mut b, "Reverse")).changed() && !app.readonly {
+                if ui.put(r(x, y, 70.0, 17.0), egui::Checkbox::new(&mut b, crate::i18n::t("Reverse"))).changed() && !app.readonly {
                     link.send(LinkCommand::SetParam { name, value: if b { 1.0 } else { 0.0 } });
                 }
             }
@@ -757,9 +757,9 @@ fn accel(ui: &mut egui::Ui, view: &mut SetupView, link: &Link) {
     let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));
     let p = ui.painter().clone();
     let f = crate::fonts::ui_id(crate::fonts::UI_SIZE);
-    p.text(o + Vec2::new(3.0, 8.0), egui::Align2::LEFT_TOP, "Accelerometer Calibration", crate::fonts::bold_id(16.0), Color32::WHITE);
+    p.text(o + Vec2::new(3.0, 8.0), egui::Align2::LEFT_TOP, crate::i18n::t("Accelerometer Calibration"), crate::fonts::bold_id(16.0), Color32::WHITE);
     p.line_segment([o + Vec2::new(7.0, 30.0), o + Vec2::new(467.0, 30.0)], egui::Stroke::new(1.0, Color32::GRAY));
-    p.text(o + Vec2::new(83.0, 45.0), egui::Align2::LEFT_TOP, "Level your Autopilot to set default accelerometer Min/Max (3 axis).\nThis will ask you to place your autopilot on each edge.", f.clone(), Color32::WHITE);
+    p.text(o + Vec2::new(83.0, 45.0), egui::Align2::LEFT_TOP, crate::i18n::t("Level your Autopilot to set default accelerometer Min/Max (3 axis).\nThis will ask you to place your autopilot on each edge."), f.clone(), Color32::WHITE);
     // vehicle prompts: COMMAND_LONG ACCELCAL_VEHICLE_POS and STATUSTEXT
     let names = |p: u32| match p {
         1 => "LEVEL",
@@ -802,13 +802,13 @@ fn accel(ui: &mut egui::Ui, view: &mut SetupView, link: &Link) {
             link.send(LinkCommand::CommandLong { command: 42429, params: [p as f32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
         }
     }
-    p.text(o + Vec2::new(60.0, 133.0), egui::Align2::LEFT_TOP, "Level your Autopilot to set default accelerometer offsets (1 axis/AHRS trims).\nThis requires you to place your autopilot flat and level.", f.clone(), Color32::WHITE);
+    p.text(o + Vec2::new(60.0, 133.0), egui::Align2::LEFT_TOP, crate::i18n::t("Level your Autopilot to set default accelerometer offsets (1 axis/AHRS trims).\nThis requires you to place your autopilot flat and level."), f.clone(), Color32::WHITE);
     let lr = r(188.0, 168.0, 102.0, 21.0);
     if ui.put(lr, |ui: &mut egui::Ui| theme::button_sized(ui, &view.level_label, lr.size())).clicked() {
         link.send(LinkCommand::CommandLong { command: 241, params: [0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0] });
         view.level_label = "Completed".into();
     }
-    p.text(o + Vec2::new(60.0, 220.0), egui::Align2::LEFT_TOP, "Level your Autopilot to set default accelerometer scale factors for level flight (1 axis).\nThis requires you to place your autopilot flat and level.", f, Color32::WHITE);
+    p.text(o + Vec2::new(60.0, 220.0), egui::Align2::LEFT_TOP, crate::i18n::t("Level your Autopilot to set default accelerometer scale factors for level flight (1 axis).\nThis requires you to place your autopilot flat and level."), f, Color32::WHITE);
     let sr = r(188.0, 249.0, 102.0, 21.0);
     if ui.put(sr, |ui: &mut egui::Ui| theme::button_sized(ui, &view.simple_label, sr.size())).clicked() {
         link.send(LinkCommand::CommandLong { command: 241, params: [0.0, 0.0, 0.0, 0.0, 4.0, 0.0, 0.0] });
@@ -838,7 +838,7 @@ fn advanced(ui: &mut egui::Ui, app: &mut AppCtx) {
     let o = ui.max_rect().min;
     let p = ui.painter().clone();
     let f = crate::fonts::ui_id(crate::fonts::UI_SIZE);
-    p.text(o + Vec2::new(16.0, 11.0), egui::Align2::LEFT_TOP, "The following pages are for advanced configutation only. use with caution", f.clone(), Color32::WHITE);
+    p.text(o + Vec2::new(16.0, 11.0), egui::Align2::LEFT_TOP, crate::i18n::t("The following pages are for advanced configutation only. use with caution"), f.clone(), Color32::WHITE);
     let t = o + Vec2::new(73.0, 27.0);
     for (b, y, l) in ADVANCED {
         let r = Rect::from_min_size(t + Vec2::new(5.0, *y), Vec2::new(84.0, 30.0));
@@ -1214,7 +1214,7 @@ impl SetupView {
     fn param_compare_ui(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
         let Some(list) = self.param_compare.as_mut() else { return };
         let mut done = None;
-        egui::Window::new("Param Compare").collapsible(false).default_size([520.0, 420.0]).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Param Compare")).collapsible(false).default_size([520.0, 420.0]).show(ctx, |ui| {
             egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
                 egui::Grid::new("pcmp").num_columns(4).striped(true).show(ui, |ui| {
                     for h in ["Command", "Value", "New Value", "Use"] {
@@ -1337,7 +1337,7 @@ impl SetupView {
         if y == 0.0 {
             theme::label(ui, "No serial port parameters on this vehicle");
         }
-        p.text(o + Vec2::new(0.0, y + 8.0), egui::Align2::LEFT_TOP, "Note: changes to serial port settings require a reboot of the autopilot.", f.clone(), Color32::WHITE);
+        p.text(o + Vec2::new(0.0, y + 8.0), egui::Align2::LEFT_TOP, crate::i18n::t("Note: changes to serial port settings require a reboot of the autopilot."), f.clone(), Color32::WHITE);
         ui.allocate_rect(Rect::from_min_size(o, Vec2::new(cols.iter().sum(), y + 30.0)), Sense::hover());
 
         // MavlinkCheckBoxBitMask popup
@@ -1401,7 +1401,7 @@ impl SetupView {
         if st.get("_find_open") == "1" {
             let mut q = st.get("_find").to_string();
             let mut done = None;
-            egui::Window::new("Search For").collapsible(false).resizable(false).show(ui.ctx(), |ui| {
+            egui::Window::new(crate::i18n::t("Search For")).collapsible(false).resizable(false).show(ui.ctx(), |ui| {
                 theme::label(ui, "Enter a single word to search for");
                 ui.text_edit_singleline(&mut q);
                 ui.horizontal(|ui| {
@@ -1437,7 +1437,7 @@ impl SetupView {
         crate::forms::show(ui, app, "gpsorder", &mut st);
         self.forms.insert("gpsorder", st);
         if !params.contains_key("GPS1_CAN_OVRIDE") {
-            ui.painter().text(o + Vec2::new(8.0, 60.0), egui::Align2::LEFT_TOP, "This vehicle has no DroneCAN GPS override parameters (GPS1_CAN_OVRIDE)", crate::fonts::ui_id(crate::fonts::UI_SIZE), Color32::WHITE);
+            ui.painter().text(o + Vec2::new(8.0, 60.0), egui::Align2::LEFT_TOP, crate::i18n::t("This vehicle has no DroneCAN GPS override parameters (GPS1_CAN_OVRIDE)"), crate::fonts::ui_id(crate::fonts::UI_SIZE), Color32::WHITE);
             return;
         }
         let v = |n: &str| params.get(n).map(|p| p.value as i64).unwrap_or(0);
@@ -1568,7 +1568,7 @@ fn failsafe(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
     let cs = link.shared.read().cs.clone();
     txt(84.0, 5.0, "Radio IN");
     txt(342.0, 5.0, "Servo/Motor OUT");
-    p.text(o + Vec2::new(657.0, 5.0), egui::Align2::LEFT_TOP, "Wiki", f.clone(), Color32::from_rgb(0x00, 0x66, 0xcc));
+    p.text(o + Vec2::new(657.0, 5.0), egui::Align2::LEFT_TOP, crate::i18n::t("Wiki"), f.clone(), Color32::from_rgb(0x00, 0x66, 0xcc));
     let ys = [19.0, 70.0, 121.0, 172.0, 222.0, 273.0, 324.0, 375.0];
     for (i, y) in ys.iter().enumerate() {
         rc_bar(&p, at(15.0, *y, 170.0, 23.0), &format!("Radio {}", i + 1), cs.ch_in[i], None, false);
@@ -1620,7 +1620,7 @@ fn failsafe(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
     mav_combo(ui, link, "FS_THR_ENABLE", r(6.0, 13.0, 199.0, 20.0));
     let has_thr = { let s = link.shared.read(); s.params.contains_key("FS_THR_VALUE") || s.params.contains_key("THR_FS_VALUE") };
     if has_thr {
-        p.text(g + Vec2::new(6.0, 38.0), egui::Align2::LEFT_TOP, "FS Pwm", f.clone(), Color32::WHITE);
+        p.text(g + Vec2::new(6.0, 38.0), egui::Align2::LEFT_TOP, crate::i18n::t("FS Pwm"), f.clone(), Color32::WHITE);
         mav_num(ui, app, link, "FS_THR_VALUE", r(102.0, 35.0, 103.0, 19.0), (800.0, 1200.0), 1.0);
         mav_num(ui, app, link, "THR_FS_VALUE", r(102.0, 35.0, 103.0, 19.0), (800.0, 1200.0), 1.0);
     }
@@ -1655,7 +1655,7 @@ fn esc_cal(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
     let txt = |x: f32, y: f32, s: &str| {
         p.text(o + Vec2::new(x, y), egui::Align2::LEFT_TOP, s, f.clone(), Color32::WHITE);
     };
-    p.text(o + Vec2::new(7.0, 5.0), egui::Align2::LEFT_TOP, "ESC Calibration (AC3.3+)", egui::FontId::proportional(16.0), Color32::WHITE);
+    p.text(o + Vec2::new(7.0, 5.0), egui::Align2::LEFT_TOP, crate::i18n::t("ESC Calibration (AC3.3+)"), egui::FontId::proportional(16.0), Color32::WHITE);
     for y in [23.0, 147.0, 316.0] {
         p.line_segment([o + Vec2::new(3.0, y + 2.0), o + Vec2::new(592.0, y + 2.0)], egui::Stroke::new(1.0, Color32::from_rgb(0xd5, 0xdf, 0xe5)));
     }
@@ -1741,7 +1741,7 @@ fn battery_monitor(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link, prefix: &st
     txt(481.0, 47.0, "mAh");
     let speech_id = ui.scope_id().with("speechbatt");
     let mut speech: bool = ui.ctx().data(|d| d.get_temp(speech_id)).unwrap_or(false);
-    ui.put(at(333.0, 67.0, 151.0, 16.0), egui::Checkbox::new(&mut speech, "MP Alert on Low Battery"));
+    ui.put(at(333.0, 67.0, 151.0, 16.0), egui::Checkbox::new(&mut speech, crate::i18n::t("MP Alert on Low Battery")));
     ui.ctx().data_mut(|d| d.insert_temp(speech_id, speech));
 
     // sensor presets: (label, volt mult, amp per volt)
@@ -1934,8 +1934,8 @@ fn frame_type(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link) {
             set("FRAME_TYPE", val);
         }
     }
-    p.text(g2.min + Vec2::new(200.0, 272.0), egui::Align2::LEFT_TOP, "NOTE: X and H are NOT interchangable\nthe prop rotation changes", f.clone(), Color32::WHITE);
-    p.text(g2.min + Vec2::new(200.0, 356.0), egui::Align2::LEFT_TOP, "NOTE: This is the Y6B and prop rotation\nchanges from the old Y6A", f.clone(), Color32::WHITE);
+    p.text(g2.min + Vec2::new(200.0, 272.0), egui::Align2::LEFT_TOP, crate::i18n::t("NOTE: X and H are NOT interchangable\nthe prop rotation changes"), f.clone(), Color32::WHITE);
+    p.text(g2.min + Vec2::new(200.0, 356.0), egui::Align2::LEFT_TOP, crate::i18n::t("NOTE: This is the Y6B and prop rotation\nchanges from the old Y6A"), f.clone(), Color32::WHITE);
     ui.allocate_rect(Rect::from_min_size(o, Vec2::new(787.0, 532.0)), Sense::hover());
 }
 
@@ -1949,9 +1949,9 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link, state: &mut super::
     let p = ui.painter().clone();
     let f = crate::fonts::ui_id(crate::fonts::UI_SIZE);
     let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));
-    p.text(o + Vec2::new(3.0, 0.0), egui::Align2::LEFT_TOP, "Compass Priority", crate::fonts::bold_id(15.0), Color32::WHITE);
+    p.text(o + Vec2::new(3.0, 0.0), egui::Align2::LEFT_TOP, crate::i18n::t("Compass Priority"), crate::fonts::bold_id(15.0), Color32::WHITE);
     p.line_segment([o + Vec2::new(0.0, 22.0), o + Vec2::new(ui.max_rect().width(), 22.0)], egui::Stroke::new(1.0, Color32::GRAY));
-    p.text(o + Vec2::new(3.0, 33.0), egui::Align2::LEFT_TOP, "Set the Compass Priority by reordering the compasses in the table below (Highest at the top)", f.clone(), Color32::WHITE);
+    p.text(o + Vec2::new(3.0, 33.0), egui::Align2::LEFT_TOP, crate::i18n::t("Set the Compass Priority by reordering the compasses in the table below (Highest at the top)"), f.clone(), Color32::WHITE);
     // myDataGridView1
     let cols = [("Priority", 50.0), ("DevID", 50.0), ("BusType", 60.0), ("Bus", 50.0), ("Address", 50.0), ("DevType", 150.0), ("Missing", 50.0), ("External", 50.0), ("Orientation", 100.0), ("Up", 40.0), ("Down", 40.0)];
     let grid = r(3.0, 49.0, 672.0, 209.0);
@@ -2026,7 +2026,7 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link, state: &mut super::
             if params.contains_key(&name) { link.send(LinkCommand::SetParam { name, value }); }
         }
     }
-    p.text(o + Vec2::new(0.0, 261.0), egui::Align2::LEFT_TOP, "Do you want to disable any of the first 3 compasses?", f.clone(), Color32::WHITE);
+    p.text(o + Vec2::new(0.0, 261.0), egui::Align2::LEFT_TOP, crate::i18n::t("Do you want to disable any of the first 3 compasses?"), f.clone(), Color32::WHITE);
     for (k, (x, aliases)) in [(3.0, ["COMPASS_USE", "COMPASS1_USE"]), (109.0, ["COMPASS_USE2", "COMPASS2_USE"]), (215.0, ["COMPASS_USE3", "COMPASS3_USE"])].iter().enumerate() {
         if let Some((name, pv)) = aliases.iter().find_map(|name| params.get(*name).map(|p| (*name, p))) {
             let mut b = pv.value != 0.0;
@@ -2037,16 +2037,16 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link, state: &mut super::
     }
     if let Some(pv) = params.get("COMPASS_LEARN") {
         let mut b = pv.value != 0.0;
-        if ui.put(r(414.0, 277.0, 170.0, 17.0), egui::Checkbox::new(&mut b, "Automatically learn offsets")).changed() && !app.readonly {
+        if ui.put(r(414.0, 277.0, 170.0, 17.0), egui::Checkbox::new(&mut b, crate::i18n::t("Automatically learn offsets"))).changed() && !app.readonly {
             link.send(LinkCommand::SetParam { name: "COMPASS_LEARN".into(), value: if b { 1.0 } else { 0.0 } });
         }
     }
-    p.text(o + Vec2::new(0.0, 297.0), egui::Align2::LEFT_TOP, "A reboot is required to adjust the ordering.", f.clone(), Color32::WHITE);
+    p.text(o + Vec2::new(0.0, 297.0), egui::Align2::LEFT_TOP, crate::i18n::t("A reboot is required to adjust the ordering."), f.clone(), Color32::WHITE);
     let rb = r(3.0, 313.0, 75.0, 23.0);
     if ui.put(rb, |ui: &mut egui::Ui| theme::button_sized(ui, "Reboot", rb.size())).clicked() && !app.readonly {
         state.request_reboot();
     }
-    p.text(o + Vec2::new(0.0, 339.0), egui::Align2::LEFT_TOP, "A mag calibration is required to remap the above changes.", f.clone(), Color32::WHITE);
+    p.text(o + Vec2::new(0.0, 339.0), egui::Align2::LEFT_TOP, crate::i18n::t("A mag calibration is required to remap the above changes."), f.clone(), Color32::WHITE);
     // groupBoxonboardcalib
     let g = r(3.0, 355.0, 600.0, 162.0);
     crate::views::tuning::group_box(&p, g, "Onboard Mag Calibration");
@@ -2077,7 +2077,7 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link, state: &mut super::
         }
     }
     p.text(g.min + Vec2::new(350.0, 20.0), egui::Align2::LEFT_TOP, result, f.clone(), Color32::WHITE);
-    p.text(g.min + Vec2::new(7.0, 139.0), egui::Align2::LEFT_TOP, "Fitness", f.clone(), Color32::WHITE);
+    p.text(g.min + Vec2::new(7.0, 139.0), egui::Align2::LEFT_TOP, crate::i18n::t("Fitness"), f.clone(), Color32::WHITE);
     if let Some(pv) = params.get("COMPASS_CAL_FIT") {
         let opts = [(4.0, "Strict"), (8.0, "Default"), (16.0, "Relaxed"), (32.0, "Very Relaxed")];
         let cur = opts.iter().find(|(v, _)| (*v - pv.value).abs() < 0.01).map(|(_, n)| n.to_string()).unwrap_or(pv.value.to_string());
@@ -2095,7 +2095,7 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link, state: &mut super::
                 .response
         });
     }
-    p.text(g.min + Vec2::new(203.0, 139.0), egui::Align2::LEFT_TOP, "Relax fitness if calibration fails", f.clone(), Color32::WHITE);
+    p.text(g.min + Vec2::new(203.0, 139.0), egui::Align2::LEFT_TOP, crate::i18n::t("Relax fitness if calibration fails"), f.clone(), Color32::WHITE);
     let lb = r(3.0, 523.0, 120.0, 23.0);
     if ui.put(lb, |ui: &mut egui::Ui| theme::button_sized(ui, "Large Vehicle MagCal", lb.size())).clicked() {
         // MAV_CMD_FIXED_MAG_CAL_YAW with the current heading

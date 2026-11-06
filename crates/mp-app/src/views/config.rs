@@ -441,7 +441,7 @@ impl ParamEditor {
                 }
             }
             let f = fonts::ui_id(fonts::UI_SIZE);
-            ui.painter().text(o + Vec2::new(6.0, 169.0), egui::Align2::LEFT_TOP, "All Units are in raw\nformat with no scaling", f.clone(), Color32::WHITE);
+            ui.painter().text(o + Vec2::new(6.0, 169.0), egui::Align2::LEFT_TOP, crate::i18n::t("All Units are in raw\nformat with no scaling"), f.clone(), Color32::WHITE);
             // GitHubContent.GetDirContent("ardupilot", "ardupilot", "/Tools/Frame_params/")
             if !self.paramfiles_requested {
                 self.paramfiles_requested = true;
@@ -499,12 +499,12 @@ impl ParamEditor {
             if b(ui, r(255.0, 21.0), "Reset to Default") {
                 self.confirm_reset = true;
             }
-            ui.painter().text(o + Vec2::new(6.0, 286.0), egui::Align2::LEFT_TOP, "Search", f.clone(), Color32::WHITE);
+            ui.painter().text(o + Vec2::new(6.0, 286.0), egui::Align2::LEFT_TOP, crate::i18n::t("Search"), f.clone(), Color32::WHITE);
             ui.put(r(302.0, 20.0), egui::TextEdit::singleline(&mut self.search));
-            ui.put(Rect::from_min_size(o + Vec2::new(6.0, 328.0), Vec2::new(90.0, 17.0)), egui::Checkbox::new(&mut self.modified_only, "Modified"));
+            ui.put(Rect::from_min_size(o + Vec2::new(6.0, 328.0), Vec2::new(90.0, 17.0)), egui::Checkbox::new(&mut self.modified_only, crate::i18n::t("Modified")));
             // chk_none_default is only shown when the vehicle reported defaults
             if defaults.is_some() {
-                ui.put(Rect::from_min_size(o + Vec2::new(6.0, 351.0), Vec2::new(100.0, 17.0)), egui::Checkbox::new(&mut self.none_default, "None Default"));
+                ui.put(Rect::from_min_size(o + Vec2::new(6.0, 351.0), Vec2::new(100.0, 17.0)), egui::Checkbox::new(&mut self.none_default, crate::i18n::t("None Default")));
             }
             b(ui, r(384.0, 22.0), "Refresh Table");
         });
@@ -606,7 +606,7 @@ impl ParamEditor {
         let Some(diffs) = self.compare.as_mut() else { return };
         let mut open = true;
         let mut apply = false;
-        egui::Window::new("Param Compare").open(&mut open).collapsible(false).default_size(Vec2::new(480.0, 400.0)).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Param Compare")).open(&mut open).collapsible(false).default_size(Vec2::new(480.0, 400.0)).show(ctx, |ui| {
             if diffs.is_empty() {
                 theme::label(ui, "No differences");
                 return;
@@ -903,9 +903,9 @@ pub fn flight_modes(ui: &mut egui::Ui, app: &mut AppCtx) {
     let f = fonts::ui_id(fonts::UI_SIZE);
     let p = ui.painter().clone();
     let at = |x: f32, y: f32| o + Vec2::new(x, y);
-    p.text(at(94.0, 15.0), egui::Align2::LEFT_TOP, "Current Mode:", f.clone(), Color32::WHITE);
+    p.text(at(94.0, 15.0), egui::Align2::LEFT_TOP, crate::i18n::t("Current Mode:"), f.clone(), Color32::WHITE);
     p.text(at(174.0, 15.0), egui::Align2::LEFT_TOP, &cs.mode, f.clone(), Color32::WHITE);
-    p.text(at(94.0, 32.0), egui::Align2::LEFT_TOP, "Current PWM:", f.clone(), Color32::WHITE);
+    p.text(at(94.0, 32.0), egui::Align2::LEFT_TOP, crate::i18n::t("Current PWM:"), f.clone(), Color32::WHITE);
     p.text(at(174.0, 32.0), egui::Align2::LEFT_TOP, format!("{ch}: {pwm}"), f.clone(), Color32::WHITE);
     let ty = 48.0;
     for i in 0..6 {
@@ -931,13 +931,13 @@ pub fn flight_modes(ui: &mut egui::Ui, app: &mut AppCtx) {
         let standard_only = crate::display::flag(&app.settings.planner, "standardFlightModesOnly");
         if !standard_only && simple_p.is_some() {
             let mut b = st.1 & (1 << i) != 0;
-            if ui.put(Rect::from_min_size(at(222.0, y + 2.0), Vec2::new(105.0, 16.0)), egui::Checkbox::new(&mut b, "Simple Mode")).changed() {
+            if ui.put(Rect::from_min_size(at(222.0, y + 2.0), Vec2::new(105.0, 16.0)), egui::Checkbox::new(&mut b, crate::i18n::t("Simple Mode"))).changed() {
                 st.1 = if b { st.1 | (1 << i) } else { st.1 & !(1 << i) };
             }
         }
         if !standard_only && ss_p.is_some() {
             let mut b = st.2 & (1 << i) != 0;
-            if ui.put(Rect::from_min_size(at(332.0, y + 2.0), Vec2::new(135.0, 16.0)), egui::Checkbox::new(&mut b, "Super Simple Mode")).changed() {
+            if ui.put(Rect::from_min_size(at(332.0, y + 2.0), Vec2::new(135.0, 16.0)), egui::Checkbox::new(&mut b, crate::i18n::t("Super Simple Mode"))).changed() {
                 st.2 = if b { st.2 | (1 << i) } else { st.2 & !(1 << i) };
             }
         }
@@ -1157,7 +1157,7 @@ fn planner(ui: &mut egui::Ui, app: &mut AppCtx, _fw: Firmware) {
         let edit_id = egui::Id::new("theme_edit");
         if let Some(mut pal) = ui.ctx().data(|d| d.get_temp::<theme::Palette>(edit_id)) {
             let mut done = None;
-            egui::Window::new("Custom Theme").collapsible(false).resizable(false).show(ui.ctx(), |ui| {
+            egui::Window::new(crate::i18n::t("Custom Theme")).collapsible(false).resizable(false).show(ui.ctx(), |ui| {
                 egui::Grid::new("theme_colors").num_columns(2).show(ui, |ui| {
                     for (label, var) in theme::Palette::ITEMS {
                         theme::label(ui, label);
@@ -1237,7 +1237,7 @@ fn planner(ui: &mut egui::Ui, app: &mut AppCtx, _fw: Firmware) {
         let pending: Option<Vec<(String, String)>> = ui.ctx().data(|d| d.get_temp(prompt_id));
         if let Some(mut fields) = pending {
             let mut done = None;
-            egui::Window::new("Notification").collapsible(false).resizable(false).show(ui.ctx(), |ui| {
+            egui::Window::new(crate::i18n::t("Notification")).collapsible(false).resizable(false).show(ui.ctx(), |ui| {
                 for (k, v) in fields.iter_mut() {
                     let label = if k.ends_with("volt") || k.ends_with("percent") || k.ends_with("height") || k.ends_with("trigger") { "Level to warn at?" } else { "What do you want it to say?" };
                     theme::label(ui, format!("{label} ({k})"));

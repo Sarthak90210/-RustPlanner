@@ -1423,7 +1423,7 @@ impl FlightDataView {
         p.text(o + Vec2::new(45.0, ly), egui::Align2::LEFT_TOP, crate::i18n::t("Current Heading"), small.clone(), Color32::RED);
         p.text(o + Vec2::new(135.0, ly), egui::Align2::LEFT_TOP, crate::i18n::t("Direct to current WP"), small.clone(), Color32::from_rgb(255, 128, 0));
         p.text(o + Vec2::new(245.0, ly), egui::Align2::LEFT_TOP, crate::i18n::t("Target Heading"), small.clone(), Color32::from_rgb(0, 128, 0));
-        let gl = p.layout_no_wrap("GPS Track (Black)".into(), small, Color32::WHITE);
+        let gl = p.layout_no_wrap(crate::i18n::t("GPS Track (Black)"), small, Color32::WHITE);
         let gr = Rect::from_min_size(o + Vec2::new(332.0, ly), gl.size());
         p.rect_filled(gr, 0.0, Color32::BLACK);
         p.galley(gr.min, gl, Color32::WHITE);

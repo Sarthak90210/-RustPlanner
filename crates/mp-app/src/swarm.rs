@@ -1265,7 +1265,7 @@ impl LayoutEditor {
         }
         let _ = &toasts;
         let mut open = true;
-        egui::Window::new("Layout Editor").id(egui::Id::new("swarm_layout_editor")).open(&mut open).collapsible(false).resizable(false).fixed_size([899.0, 494.0]).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Layout Editor")).id(egui::Id::new("swarm_layout_editor")).open(&mut open).collapsible(false).resizable(false).fixed_size([899.0, 494.0]).show(ctx, |ui| {
             let (area, _) = ui.allocate_exact_size(Vec2::new(899.0, 494.0), Sense::hover());
             let o = area.min;
             let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));
@@ -1449,7 +1449,7 @@ impl LayoutEditor {
         }
         if self.image_buttons {
             let mut open = true;
-            egui::Window::new("Move Image").id(egui::Id::new("swarm_move_image")).open(&mut open).resizable(false).show(ctx, |ui| {
+            egui::Window::new(crate::i18n::t("Move Image")).id(egui::Id::new("swarm_move_image")).open(&mut open).resizable(false).show(ctx, |ui| {
                 let g = &mut self.grid;
                 let s = g.bg_step;
                 for (text, f) in [
@@ -1743,7 +1743,7 @@ impl FollowPathControl {
             ctx.request_repaint_after(Duration::from_millis(200));
         }
         let mut open = true;
-        egui::Window::new("Control").id(egui::Id::new("swarm_follow_path")).open(&mut open).collapsible(false).resizable(false).order(egui::Order::Foreground).fixed_size([551.0, 171.0]).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Control")).id(egui::Id::new("swarm_follow_path")).open(&mut open).collapsible(false).resizable(false).order(egui::Order::Foreground).fixed_size([551.0, 171.0]).show(ctx, |ui| {
             let (area, _) = ui.allocate_exact_size(Vec2::new(551.0, 171.0), Sense::hover());
             let o = area.min;
             let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));
@@ -2304,7 +2304,7 @@ impl WPControl {
         }
 
         let mut open = true;
-        egui::Window::new("WPControl")
+        egui::Window::new(crate::i18n::t("WPControl"))
             .id(egui::Id::new("swarm_wp_control"))
             .open(&mut open)
             .collapsible(false)
@@ -2371,7 +2371,7 @@ impl WPControl {
                 }
 
                 // label1: Line Seperation (10, 57) & numericUpDown1 (109, 55, 75, 20)
-                ui.painter().text(o + Vec2::new(10.0, 57.0), egui::Align2::LEFT_TOP, "Line Seperation", f.clone(), Color32::WHITE);
+                ui.painter().text(o + Vec2::new(10.0, 57.0), egui::Align2::LEFT_TOP, crate::i18n::t("Line Seperation"), f.clone(), Color32::WHITE);
                 ui.put(r(109.0, 55.0, 75.0, 20.0), |ui: &mut egui::Ui| {
                     ui.add_sized([75.0, 20.0], egui::DragValue::new(&mut self.separation).speed(0.1).range(0.1..=100.0).fixed_decimals(1))
                 });
@@ -2387,30 +2387,30 @@ impl WPControl {
                 }
 
                 // label2: Lead (10, 83) & numericUpDown2 (109, 81, 75, 20)
-                ui.painter().text(o + Vec2::new(10.0, 83.0), egui::Align2::LEFT_TOP, "Lead", f.clone(), Color32::WHITE);
+                ui.painter().text(o + Vec2::new(10.0, 83.0), egui::Align2::LEFT_TOP, crate::i18n::t("Lead"), f.clone(), Color32::WHITE);
                 ui.put(r(109.0, 81.0, 75.0, 20.0), |ui: &mut egui::Ui| {
                     ui.add_sized([75.0, 20.0], egui::DragValue::new(&mut self.lead).speed(0.1).range(-100.0..=100.0).fixed_decimals(1))
                 });
 
                 // chk_alt_interleave: (188, 84, 88, 17)
                 ui.put(r(188.0, 84.0, 95.0, 17.0), |ui: &mut egui::Ui| {
-                    ui.checkbox(&mut self.alt_interleave, "Alt Interleave")
+                    ui.checkbox(&mut self.alt_interleave, crate::i18n::t("Alt Interleave"))
                 });
 
                 // label3: User Offline trig (10, 109) & num_useroffline (109, 107, 75, 20)
-                ui.painter().text(o + Vec2::new(10.0, 109.0), egui::Align2::LEFT_TOP, "User Offline trig", f.clone(), Color32::WHITE);
+                ui.painter().text(o + Vec2::new(10.0, 109.0), egui::Align2::LEFT_TOP, crate::i18n::t("User Offline trig"), f.clone(), Color32::WHITE);
                 ui.put(r(109.0, 107.0, 75.0, 20.0), |ui: &mut egui::Ui| {
                     ui.add_sized([75.0, 20.0], egui::DragValue::new(&mut self.off_path_trigger).speed(0.1).range(1.0..=100.0).fixed_decimals(1))
                 });
 
                 // label4: alt seperation (10, 135) & num_rtl_alt (109, 133, 75, 20)
-                ui.painter().text(o + Vec2::new(10.0, 135.0), egui::Align2::LEFT_TOP, "alt seperation", f.clone(), Color32::WHITE);
+                ui.painter().text(o + Vec2::new(10.0, 135.0), egui::Align2::LEFT_TOP, crate::i18n::t("alt seperation"), f.clone(), Color32::WHITE);
                 ui.put(r(109.0, 133.0, 75.0, 20.0), |ui: &mut egui::Ui| {
                     ui.add_sized([75.0, 20.0], egui::DragValue::new(&mut self.takeoff_land_alt_sep).speed(0.1).range(1.0..=100.0).fixed_decimals(1))
                 });
 
                 // label5: WPNAV_ACCEL (190, 135) & num_wpnav_accel (282, 133, 75, 20)
-                ui.painter().text(o + Vec2::new(190.0, 135.0), egui::Align2::LEFT_TOP, "WPNAV_ACCEL", f.clone(), Color32::WHITE);
+                ui.painter().text(o + Vec2::new(190.0, 135.0), egui::Align2::LEFT_TOP, crate::i18n::t("WPNAV_ACCEL"), f.clone(), Color32::WHITE);
                 ui.put(r(282.0, 133.0, 75.0, 20.0), |ui: &mut egui::Ui| {
                     ui.add_sized([75.0, 20.0], egui::DragValue::new(&mut self.wpnav_accel).speed(0.1).range(1.0..=100.0).fixed_decimals(1))
                 });
@@ -2483,8 +2483,8 @@ impl WPControl {
                 ui.painter().rect_stroke(chart, 0.0, Stroke::new(1.0, Color32::GRAY), egui::StrokeKind::Inside);
 
                 // Axis titles
-                ui.painter().text(Pos2::new(chart.center().x, chart.bottom() + 4.0), egui::Align2::CENTER_TOP, "Distance", f.clone(), Color32::WHITE);
-                ui.painter().text(Pos2::new(graph_rect.left() + 4.0, chart.center().y), egui::Align2::LEFT_CENTER, "Altitude", f.clone(), Color32::WHITE);
+                ui.painter().text(Pos2::new(chart.center().x, chart.bottom() + 4.0), egui::Align2::CENTER_TOP, crate::i18n::t("Distance"), f.clone(), Color32::WHITE);
+                ui.painter().text(Pos2::new(graph_rect.left() + 4.0, chart.center().y), egui::Align2::LEFT_CENTER, crate::i18n::t("Altitude"), f.clone(), Color32::WHITE);
 
                 // Range
                 let max_dist = (self.path.len() as f64 * 0.1).max(50.0);

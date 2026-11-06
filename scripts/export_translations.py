@@ -45,6 +45,11 @@ FORM_CLASSES = {
 }
 
 
+def mnemonic(text):
+    """WinForms shows "&x" as an underlined access key and "&&" as "&" (MyButton strips it)."""
+    return text.replace("&&", "\0").replace("&", "").replace("\0", "&").strip()
+
+
 def read_resx(path):
     """name -> string value for <data> entries without a non-string type."""
     out = {}
@@ -98,24 +103,34 @@ def main():
         forms = {}
         for form, base in form_resx.items():
             tr = files.get(base, {})
-            texts = {k[: -len(".Text")]: v for k, v in tr.items() if k.endswith(".Text") and neutral[base].get(k) not in (None, v)}
+            texts = {k[: -len(".Text")]: mnemonic(v) for k, v in tr.items() if k.endswith(".Text") and neutral[base].get(k) not in (None, v)}
             if texts:
                 forms[form] = texts
+        # per view (ComponentResourceManager is per type): English -> translation in that .resx
+        views = collections.defaultdict(dict)
         votes = collections.defaultdict(collections.Counter)
         for base, tr in files.items():
             src = neutral.get(base, {})
-            strings = os.path.basename(base) == "Strings.resx"
+            view = os.path.splitext(os.path.basename(base))[0]
+            strings = view == "Strings"
             for k, v in tr.items():
                 english = src.get(k)
-                if english is None or english == v or not english.strip():
+                if english is None or english == v:
                     continue
-                if strings or k.endswith(".Text") or k.endswith(".HeaderText") or k.endswith(".ToolTipText"):
-                    votes[english.strip()][v.strip()] += 1
-        text = {e: c.most_common(1)[0][0] for e, c in sorted(votes.items())}
+                if not (strings or k.endswith(".Text") or k.endswith(".HeaderText") or k.endswith(".ToolTipText")):
+                    continue
+                key, value = mnemonic(english), mnemonic(v)
+                # data-like keys ("0", "-", "1.0") are never UI text
+                if len(key) <= 1 or not re.search(r"[^\W\d_]", key) or key == value:
+                    continue
+                views[view].setdefault(key, value)
+                votes[key][value] += 1
+        # the fallback for views without a table: only text every .resx translates the same way
+        text = {e: next(iter(c)) for e, c in sorted(votes.items()) if len(c) == 1}
         with open(os.path.join(OUT, f"{culture}.json"), "w", encoding="utf-8") as fh:
-            json.dump({"culture": culture, "forms": forms, "text": text}, fh, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+            json.dump({"culture": culture, "forms": forms, "views": views, "text": text}, fh, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         total += len(text)
-        print(f"{culture}: {len(text)} texts, {sum(len(v) for v in forms.values())} form controls in {len(forms)} forms")
+        print(f"{culture}: {len(text)} unambiguous texts, {len(views)} views, {sum(len(v) for v in forms.values())} form controls in {len(forms)} forms")
     print("forms matched:", json.dumps(form_resx and {k: os.path.relpath(v, REF) for k, v in sorted(form_resx.items())}, indent=0))
 
 
