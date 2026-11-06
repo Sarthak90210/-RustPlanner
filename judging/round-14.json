@@ -1,0 +1,329 @@
+{
+  "round": 14,
+  "review_type": "fresh independent targeted source, actual-render and interaction review",
+  "reviewed_head": "4f003f4574663d71075f1390115c4a6a7a24475c",
+  "date": "2026-11-06",
+  "verdict": "Material software parity gaps remain. Not 10/10.",
+  "scores": {
+    "overall": 7.5,
+    "ui_ux": 8.2,
+    "features": 6.8,
+    "scale": "Qualitative exact-C#-parity judgments, not completion percentages. Overall gives equal weight to UI/UX and features."
+  },
+  "rationale": "Run 14 closes the retained PLAN coordinate-system gap (round-13 priority 4, medium). The GEO/UTM/MGRS selector sits where coords1 sits in panel4: the combo at (3,5) 64 px wide, text at combo.Right+3, AltSource below the combo, and in MGRS mode the MGRS line below the combo with the source to its right, as Coords.OnPaint lays them out. The selection persists as Settings 'fpcoordmouse'. The Commands grid has Zone/Easting/Northing/MGRS between Frame and Delete, with the resx widths 57/67/72/64. Visibility toggles exactly as coords1_SystemChanged does. Cell edits go through convertFromUTM/convertFromMGRS semantics: signed PointLatLngAlt zone, 0,0 easting/northing rejected, MGRS results with a zero lat or lng rejected, parse failures ignored. The GeoUtility port follows WGSUTM (Norway/Svalbard zones, band, Math.Round to 3 places), UTM.ToString with .NET Framework double formatting, MGRS.TryParse and MGRS.Format. The round-14 renders show both modes. All residuals are low. The grid uses GeoUtility series where the original grid uses ProjNet (PointLatLngAlt.ToUTM, utmpos.ToLLA), so values can differ at millimetre level. The mouse readout does not follow the map centre on pan (MainMap_OnCurrentPositionChanged), and the UTM capture shows 0,0 ('31N 166021.445 0') where the original would show the centre. Escape commits a coordinate edit instead of cancelling it. Typed zone text is re-normalised. The Ocean altitude source is missing. Every other retained gap is unchanged in source. They include several high-severity feature areas: video, swarm, plugins and transports/mobile. They also include the full httpserver service, display flags, localization and Rover direct-write feedback. The closure earns credit on both axes but does not move the score far.",
+  "scope": {
+    "inspected": [
+      "git diff bb13fbc..4f003f4: flight_plan.rs, flight_plan/menu.rs, app.rs, mp-core coords.rs, lib.rs",
+      "FlightPlanner.cs Commands_CellEndEdit (2280-2320), convertFromGeographic/convertFromMGRS/convertFromUTM (2731-2808), coords1_SystemChanged (2832-2863), SetMouseDisplay (1253-1270), fpcoordmouse save/load (2579, 2603-2605), MainMap_OnCurrentPositionChanged (7933-7958), enterUTMCoord (3270-3295)",
+      "FlightPlanner.Designer.cs Commands column order (487-508) and coords1 wiring (398-408); FlightPlanner.resx coords1/panel4 geometry and coordZone/coordEasting/coordNorthing/MGRS widths (1003-1060)",
+      "ExtLibs/Controls/Coords.cs OnPaint and Coords.Designer.cs CMB_coordsystem geometry",
+      "ExtLibs/GeoUtility GeoSystem/MGRS.cs TryParse and Format, GeoSystem/UTM.cs Format and ToString, Base/Geocentric.cs Precision and Zoneband, Transformation/WGSUTM.cs zone, band and rounding",
+      "ExtLibs/Utilities/PointLatLngAlt.cs GetUTMZone/ToUTM/TryGetTransform (ProjNet), utmpos.cs ToLLA (ProjNet) and ToLLA2 (GeoUtility)",
+      "ExtLibs/Utilities/srtm.cs altsource values (SRTM, ASCII, Invalid, Ocean)",
+      "Retained-gap anchors rechecked at 4f003f4: flight_data.rs:476, fd_tabs.rs:346, hotkey_tools.rs:112, config.rs:995, comms.rs:20-40, more_tools.rs:73-80, kml_server.rs:45 and 125-141, vehicle_tuning.rs:94"
+    ],
+    "rust_render_images_viewed": [
+      "target/judging/round14/51_plan_utm.png",
+      "target/judging/round14/52_plan_mgrs.png"
+    ],
+    "render_evidence": "Both manifests record an actual 1280x800 eframe viewport, a connected ArduCopter autosim and 3115 complete parameters. The UTM capture shows the selector reading UTM, the mouse readout '31N / 166021.445 / 0 / 0.00m' (mouse never moved, so 0,0), Lat/Lon hidden and Zone/Easting/Northing visible with values such as '-55 696722.516 6084669.064'. The TAKEOFF row at 0,0 is blank, matching convertFromGeographic's early return. The MGRS capture shows the selector, 'SRTM' to the right of the combo, '55HFA9678284570' and '585.95m' below it, and a single MGRS column clipped at 64 px. That clipping is consistent with the original width. The MGRS cell text sits slightly high in its cell. The two captures have different binary SHA256 values (UTM 26571DD5..., MGRS 0B32B207...). The manifests do not tie either binary to 4f003f4.",
+    "reviewer_executed_verification": [
+      "None. As instructed, no cargo build or test ran in the worktree. The worktree was detached to 4f003f4 for read-only source inspection."
+    ],
+    "reported_evidence_not_rerun": [
+      "cargo test --workspace: 104 passed, 0 failed (main session), including utm_and_mgrs_columns_switch_and_edits_convert_back_to_lat_lng, canberra_round_trips_through_utm_and_mgrs, northern_zone_exceptions_and_invalid_input and matches_independent_reference_points"
+    ],
+    "verification_limits": [
+      "No original C# runtime was launched for side-by-side comparison, so ProjNet-versus-GeoUtility differences in the grid were reasoned about, not measured.",
+      "The egui test covers switching systems, an Easting edit, an invalid Northing and an MGRS edit. Zone edits, hemisphere sign changes, Escape and a settings reload across restarts are not exercised.",
+      "Native macOS, Linux, Android and iOS behavior and the complete original feature set were not exhaustively exercised.",
+      "No physical device was used. Physical flight qualification is separate from this software parity review."
+    ],
+    "reviewer_actions": "Read-only source and render inspection. Only judging/round-14.json was written."
+  },
+  "run14_dispositions": [
+    {
+      "change": "PLAN Coords selector (GEO/UTM/MGRS) with SRTM altitude/source and fpcoordmouse persistence",
+      "status": "closed (low residuals)",
+      "closed_parts": "The combo offers GEO/UTM/MGRS in enum order and saves Settings 'fpcoordmouse'. An unknown saved value falls back to GEO. Layout follows Coords with Vertical=true at panel4 (3,3). GEO shows lat/lng to 7 decimals plus alt '0.00'+unit, with AltSource below the combo. UTM splits UTM.ToString on spaces into zone+band, east and north lines plus alt. MGRS draws below the combo, with the source at combo.Right+4. UTM and MGRS skip drawing outside lat -80..84 / lng (-180,180), as Coords.OnPaint returns early there. Altitude is SRTM through units::alt, with source 'SRTM' or 'Invalid'.",
+      "remaining": "The original also sets coords1 Lat/Lng to the map centre whenever the map position changes (MainMap_OnCurrentPositionChanged), so it shows the centre before any mouse move and while panning. The port only tracks the mouse, which is why the UTM capture shows 0,0. There is no 'Ocean' or 'ASCII' altsource. The setting is written on change rather than on form close, which makes no practical difference.",
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_plan.rs:61-66",
+        "crates/mp-app/src/views/flight_plan.rs:343-385",
+        "crates/mp-app/src/views/flight_plan.rs:972-974",
+        "crates/mp-app/src/app.rs:277-280"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/ExtLibs/Controls/Coords.cs:88-160",
+        "reference/MissionPlanner/ExtLibs/Controls/Coords.Designer.cs:42-44",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:1253-1270",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:2579",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:2603-2605",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:7933-7958",
+        "reference/MissionPlanner/ExtLibs/Utilities/srtm.cs:32-33"
+      ]
+    },
+    {
+      "change": "Commands grid Zone/Easting/Northing/MGRS columns, visibility and editable conversion",
+      "status": "closed (low residuals)",
+      "closed_parts": "The column order matches Designer AddRange: Frame, coordZone, coordEasting, coordNorthing, MGRS, Delete. The widths match resx (57/67/72/64). column_visible reproduces coords1_SystemChanged for all three systems. Cells derive from lat/lng as convertFromGeographic does: signed GetUTMZone zone, easting/northing to '0.000', GeoUtility MGRS string, blank at 0,0. Ending an edit converts back through utmpos (signed zone) or MGRS, ignores 0,0 easting/northing and MGRS results with a zero lat or lng, and ignores parse failures. That matches the catch-and-return paths. Clicking a coordinate cell selects the row.",
+      "remaining": "The original grid uses ProjNet transforms (PointLatLngAlt.ToUTM via TryGetTransform, utmpos.ToLLA). The port uses GeoUtility series for both, so the third decimal can differ, more so far from the central meridian or in a forced zone. The original keeps typed cell text after an edit. The port re-derives it, so a typed zone such as 56 becomes the computed zone. An Escape key press commits the edit, whereas DataGridView cancels. The original's thousands-separator tolerance in double.Parse is absent. MGRS cell text renders slightly high in the cell.",
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_plan.rs:22-50",
+        "crates/mp-app/src/views/flight_plan.rs:52-90",
+        "crates/mp-app/src/views/flight_plan.rs:603-660",
+        "crates/mp-app/src/views/flight_plan.rs:713-763"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:2280-2320",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:2731-2808",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:2832-2863",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.Designer.cs:487-508",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.resx:1003-1060",
+        "reference/MissionPlanner/ExtLibs/Utilities/PointLatLngAlt.cs:191-198",
+        "reference/MissionPlanner/ExtLibs/Utilities/PointLatLngAlt.cs:255-292",
+        "reference/MissionPlanner/ExtLibs/Utilities/utmpos.cs:69-83"
+      ]
+    },
+    {
+      "change": "mp-core GeoUtility port (WGSUTM, UTMWGS, UTMMGR, MGRUTM, MGRS TryParse/Format)",
+      "status": "closed",
+      "closed_parts": "The zone formula, the Norway (32V) and Svalbard (31/33/35/37X) exceptions, the band lookup and the Math.Round(…,3) banker's rounding match WGSUTM. UTM.ToString uses .NET Framework 15-significant-digit double text. MGRS.TryParse strips spaces, uppercases, takes a 1- or 2-digit zone, rejects band I/O outside C..X and grid letters I/O/Z, requires an even digit count, and truncates or pads to 5 digits. MGRS.Format pads to 5 and strips shared trailing zeros, so '6W' has no leading zero. The tests cross-check against independent PyPI utm values within 1 cm. Enter UTM Coord now also uses the GeoUtility inverse, as the original UTM->Geographic does.",
+      "remaining": "Coverage is source review plus unit tests. No C# runtime was run side by side.",
+      "rust_refs": [
+        "crates/mp-core/src/coords.rs:48-147",
+        "crates/mp-core/src/coords.rs:149-246",
+        "crates/mp-core/src/coords.rs:289-313",
+        "crates/mp-app/src/views/flight_plan/menu.rs:35-38"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/ExtLibs/GeoUtility/Transformation/WGSUTM.cs:67-133",
+        "reference/MissionPlanner/ExtLibs/GeoUtility/GeoSystem/MGRS.cs:177-258",
+        "reference/MissionPlanner/ExtLibs/GeoUtility/GeoSystem/MGRS.cs:359-371",
+        "reference/MissionPlanner/ExtLibs/GeoUtility/GeoSystem/UTM.cs:228-256",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:3277-3292"
+      ]
+    },
+    {
+      "change": "egui interaction test for system switching and coordinate edits",
+      "status": "closed (verification improvement)",
+      "closed_parts": "The test drives the real action_panel and commands_grid through raw input. It switches GEO->UTM->MGRS->GEO and asserts the persisted setting and the visible headers each time. It edits Easting and checks the lat/lng round trip, types a non-numeric Northing and checks the position is unchanged, and edits MGRS and checks the result.",
+      "remaining": "Zone edits, southern/northern sign flips, Escape and a settings reload at startup are untested.",
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_plan.rs:1338-1466"
+      ]
+    }
+  ],
+  "new_or_remaining_affected_gaps": [
+    {
+      "priority": 1,
+      "severity": "medium",
+      "area": "Network services (httpserver)",
+      "title": "Provide the rest of the original embedded HTTP/websocket service",
+      "finding": "Unchanged at 4f003f4. kml_server binds 127.0.0.1 on first click and answers only network/location/wps/model, with 404 for everything else. The original serves the MJPEG HUD/map streams, MAVLink websockets, Mavelous, guided/command_long/rcoverride/get_mission APIs, hud.html, georef KML and an index from startup on all interfaces.",
+      "rust_refs": [
+        "crates/mp-app/src/kml_server.rs:45",
+        "crates/mp-app/src/kml_server.rs:124-141"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/Utilities/httpserver.cs:73",
+        "reference/MissionPlanner/Utilities/httpserver.cs:335-1320",
+        "reference/MissionPlanner/MainV2.cs:3237-3246"
+      ],
+      "next_fix": "Start the service at launch on the original binding. Add the streams, the websocket bridge, the HTTP APIs, hud.html, georef KML and the index. Verify each endpoint with HTTP and websocket client tests against the simulator."
+    },
+    {
+      "priority": 2,
+      "severity": "low",
+      "area": "CONFIG Rover Basic Tuning",
+      "title": "Report failed direct writes and match the numeric write timing",
+      "finding": "Unchanged. ParamSet{ok:false} from a direct write is ignored, so no 'Set X Failed!' message appears. There is no 300 ms coalescing and no optimistic display.",
+      "rust_refs": [
+        "crates/mp-app/src/forms.rs:146-149",
+        "crates/mp-app/src/views/vehicle_tuning.rs:93-110"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/Controls/MavlinkNumericUpDown.cs:153-177",
+        "reference/MissionPlanner/Controls/MavlinkComboBox.cs:180-198"
+      ],
+      "next_fix": "Track direct writes, raise the original error on failure, add 300 ms numeric coalescing, and test both rejection and a combo write."
+    },
+    {
+      "priority": 3,
+      "severity": "low",
+      "area": "PLAN Coords / grid residuals",
+      "title": "Follow the map centre in the Coords readout and match grid edit semantics",
+      "finding": "New residual from the run-14 closure. coords1 is also driven by MainMap_OnCurrentPositionChanged, which shows the centre at load and while panning. The port shows 0,0 until the mouse moves. Grid UTM uses GeoUtility instead of ProjNet. Escape commits instead of cancelling. Typed zone text is re-normalised. The Ocean/ASCII altitude sources are absent.",
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_plan.rs:343-385",
+        "crates/mp-app/src/views/flight_plan.rs:713-763",
+        "crates/mp-app/src/views/flight_plan.rs:972-974"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:7933-7958",
+        "reference/MissionPlanner/ExtLibs/Utilities/PointLatLngAlt.cs:255-292",
+        "reference/MissionPlanner/ExtLibs/Utilities/utmpos.cs:69-83",
+        "reference/MissionPlanner/ExtLibs/Utilities/srtm.cs:32-33"
+      ],
+      "next_fix": "Update the readout position on map-centre changes, use a full-accuracy TM (Krüger/ProjNet-equivalent) for the grid, cancel on Escape, and add the Ocean source."
+    },
+    {
+      "priority": 4,
+      "severity": "low",
+      "area": "PLAN View KML",
+      "title": "Match server lifetime and binding",
+      "finding": "Unchanged. The server starts on click and binds loopback only.",
+      "rust_refs": [
+        "crates/mp-app/src/kml_server.rs:45"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/Utilities/httpserver.cs:73-80",
+        "reference/MissionPlanner/MainV2.cs:3237-3246"
+      ],
+      "next_fix": "Fold this into the startup HTTP service."
+    }
+  ],
+  "retained_baseline_gaps": [
+    {
+      "priority": 3,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "DATA video and payload",
+      "title": "Implement the advertised GStreamer, HereLink and gimbal video paths",
+      "finding": "Set GStreamer Source and HereLink Video still only report that GStreamer was not found. Payload Video Control still reports that no gimbal stream is configured.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3186-3213",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4946-4972",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:6667-6841"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_data.rs:468-482",
+        "crates/mp-app/src/views/fd_tabs.rs:345-346"
+      ],
+      "next_fix": "Add backend discovery, pipeline input/start/stop and gimbal stream configuration plus the original display modes. Verify with local video fixtures.",
+      "disposition": "open; unchanged by run14 (rechecked at 4f003f4)."
+    },
+    {
+      "priority": 4,
+      "severity": "medium",
+      "status": "closed by run14",
+      "area": "PLAN",
+      "title": "Restore coordinate-system switching and editable UTM/MGRS table columns",
+      "finding": "Closed. See run14_dispositions. Low residuals are tracked as new_or_remaining_affected_gaps priority 3.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:2731-2863"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_plan.rs:22-90",
+        "crates/mp-app/src/views/flight_plan.rs:713-763"
+      ],
+      "next_fix": "None beyond the low residuals.",
+      "disposition": "closed by run14."
+    },
+    {
+      "priority": 5,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "Tools / swarm",
+      "title": "Restore distinct swarm workflows, especially Sequence Swarm",
+      "finding": "Swarm, Follow the leader, Sequence Swarm and Follow Swarm still open the same small vehicle grid. Sequence Swarm has no layout/step editor or execution.",
+      "csharp_refs": [
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:18-39",
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:89-150"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/more_tools.rs:73-80",
+        "crates/mp-app/src/more_tools.rs:454-553"
+      ],
+      "next_fix": "Give each tool its original state and controls, starting with Sequence layout load/save, editing, steps and execution against multiple deterministic peers.",
+      "disposition": "open; unchanged by run14."
+    },
+    {
+      "priority": 6,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "SETUP / CONFIG navigation",
+      "title": "Honor per-page display flags and original vehicle/loading visibility",
+      "finding": "Only a subset of DisplayView flags is modeled. Frame Type is always visible. CONFIG always appends Full Parameter List and Planner and has no Loading page.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/InitialSetup.cs:183-216",
+        "reference/MissionPlanner/GCSViews/SoftwareConfig.cs:226-260",
+        "reference/MissionPlanner/ExtLibs/Utilities/DisplayView.cs:78-125"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/display.rs:33-58",
+        "crates/mp-app/src/views/setup.rs:39-51",
+        "crates/mp-app/src/views/setup.rs:82-103",
+        "crates/mp-app/src/views/config.rs:49-82"
+      ],
+      "next_fix": "Represent and apply the original display flags and page predicates. Verify navigation across layouts, connection states and vehicles.",
+      "disposition": "open; unchanged by run14."
+    },
+    {
+      "priority": 7,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "Plugins",
+      "title": "Provide original plugin loading and lifecycle compatibility",
+      "finding": "The plugin window still says .NET .dll/.cs plugins cannot be loaded.",
+      "csharp_refs": [
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:146-179",
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:256-329",
+        "reference/MissionPlanner/MainV2.cs:2527-2581",
+        "reference/MissionPlanner/GCSViews/InitialSetup.cs:53-58"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/hotkey_tools.rs:80-117"
+      ],
+      "next_fix": "Implement a compatibility host and page/action bridge, or record an explicit parity exclusion. Validate with a sample plugin.",
+      "disposition": "open; unchanged by run14."
+    },
+    {
+      "priority": 8,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "Localization / Planner",
+      "title": "Restore the original language selector and translated resources",
+      "finding": "The language combo offers only 'English (en-US)'. The new Coords and grid headers are also hard-coded English.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:106-128",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:417-421",
+        "reference/MissionPlanner/MainV2.cs:4227-4235"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/config.rs:995"
+      ],
+      "next_fix": "Load translations, persist the culture and update pages and dialogs on change.",
+      "disposition": "open; unchanged by run14."
+    },
+    {
+      "priority": 9,
+      "severity": "high",
+      "status": "confirmed unsupported paths; native platform execution otherwise unverified",
+      "area": "Platform and connections",
+      "title": "Complete missing transport and mobile import paths",
+      "finding": "ConnectionSpec still has Auto, Serial, TCP and UDP listen/client only. There is no BLE, WinUSB or websocket. Mobile serial and file import return Unsupported/None.",
+      "csharp_refs": [
+        "reference/MissionPlanner/MainV2.cs:3629-3641",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4150-4150",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4484-4488"
+      ],
+      "rust_refs": [
+        "crates/mp-core/src/comms.rs:20-40",
+        "crates/mp-core/src/comms.rs:121-128",
+        "crates/mp-app/src/platform.rs:76-79",
+        "crates/mp-app/src/views/flight_plan/menu.rs:435-438"
+      ],
+      "next_fix": "Implement the missing custom transports and mobile file/device access, then produce native launch/import receipts per promised OS.",
+      "disposition": "open; unchanged by run14."
+    }
+  ],
+  "prioritized_next_fixes": [
+    "Implement actual GStreamer discovery/pipelines, HereLink and payload gimbal video display modes, verified with local video fixtures (FlightData.cs:3186-3213, 4946-4972, 6667-6841).",
+    "Implement distinct swarm tools, starting with the Sequence Swarm layout/step editor and execution (Swarm/Sequence/LayoutEditor.cs:18-150).",
+    "Provide the full embedded HTTP/websocket service at startup on the original binding: MJPEG HUD/map, MAVLink websockets, guided/command_long/rcoverride/get_mission, hud.html and georef KML (Utilities/httpserver.cs:73, 335-1320; MainV2.cs:3237-3246).",
+    "Honor DisplayView flags and the original SETUP/CONFIG page predicates, including Frame Type and the Loading page (InitialSetup.cs:183-216; SoftwareConfig.cs:226-260; DisplayView.cs:78-125).",
+    "Address plugin lifecycle compatibility, translated resources and missing BLE/WinUSB/mobile import paths (PluginLoader.cs:146-329; ConfigPlanner.cs:106-128; MainV2.cs:3629-3641). In the same pass, close the low residuals: Rover direct-write failure messaging and 300 ms coalescing (MavlinkNumericUpDown.cs:153-177), and Coords following the map centre plus ProjNet-accurate grid UTM (FlightPlanner.cs:7933-7958; PointLatLngAlt.cs:255-292)."
+  ],
+  "ten_out_of_ten_criterion": "No known material UI/UX or feature discrepancy in an adequately reviewed software scope, with the original interactions and promised native platforms verified. This remains a sampled review; closing only the listed gaps would not certify unreviewed original functionality."
+}

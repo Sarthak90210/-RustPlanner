@@ -127,6 +127,8 @@ pub struct FlightPlanView {
     measure: Option<(f64, f64)>,
     /// the UTM/MGRS cell being edited: (row, column, text)
     coord_edit: Option<(usize, usize, String)>,
+    /// MainMap_OnCurrentPositionChanged also moves coords1 to the map centre
+    last_center: Option<(f64, f64)>,
     kml_server: Option<crate::kml_server::KmlServer>,
 }
 
@@ -178,6 +180,7 @@ impl Default for FlightPlanView {
             circle_dialog: None,
             measure: None,
             coord_edit: None,
+            last_center: None,
             kml_server: None,
         }
     }
@@ -739,7 +742,9 @@ impl FlightPlanView {
                         self.coord_edit = Some((i, c, text));
                     } else if editing {
                         self.coord_edit = None;
-                        if text != shown[k] {
+                        // Escape cancels a DataGridView cell edit
+                        let cancelled = ui.input(|i| i.key_pressed(egui::Key::Escape));
+                        if !cancelled && text != shown[k] {
                             let mut edited = shown.clone();
                             edited[k] = text;
                             if let Some((lat, lng)) = coords_from_cells(c, &edited) {
@@ -969,6 +974,11 @@ impl FlightPlanView {
             }));
         }
 
+        let center = (app.settings.fp_map.lat.clamp(-90.0, 90.0), app.settings.fp_map.lng.clamp(-180.0, 180.0));
+        if self.last_center != Some(center) {
+            self.last_center = Some(center);
+            self.mouse = Some(center);
+        }
         if mouse.is_some() {
             self.mouse = mouse;
         }
@@ -1417,13 +1427,17 @@ mod coord_tests {
 
         /// Replace a grid cell's text below `header` and end the edit with Enter.
         fn edit_cell(&mut self, header: &str, text: &str) {
+            self.edit_cell_with(header, text, egui::Key::Enter);
+        }
+
+        fn edit_cell_with(&mut self, header: &str, text: &str, end: egui::Key) {
             // the grid starts at y = 220; the selector above may show the same text
             let h = self.labels.iter().find(|(t, p)| t == header && p.y > 220.0).map(|l| l.1).unwrap_or_else(|| panic!("{header} column hidden: {:?}", self.labels));
             self.click(h + Vec2::new(0.0, 22.0));
             let key = |key, modifiers| egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers };
             self.frame(vec![key(egui::Key::A, egui::Modifiers::COMMAND)]);
             self.frame(vec![egui::Event::Text(text.into())]);
-            self.frame(vec![key(egui::Key::Enter, egui::Modifiers::NONE)]);
+            self.frame(vec![key(end, egui::Modifiers::NONE)]);
             self.frame(Vec::new());
         }
     }
@@ -1459,6 +1473,8 @@ mod coord_tests {
         h.edit_cell("MGRS", &target);
         let (lat, lng) = mp_core::coords::mgrs_to_geo(&target).unwrap();
         assert_eq!((h.view.items[0].lat, h.view.items[0].lng), (lat, lng));
+        h.edit_cell_with("MGRS", &mp_core::coords::geo_to_mgrs(-35.37, 149.17).unwrap(), egui::Key::Escape);
+        assert_eq!((h.view.items[0].lat, h.view.items[0].lng), (lat, lng), "Escape cancels the cell edit");
 
         h.choose_system("MGRS", "GEO");
         assert!(h.label("MGRS").is_none() && h.label("Zone").is_none() && h.label("GEO").is_some());
