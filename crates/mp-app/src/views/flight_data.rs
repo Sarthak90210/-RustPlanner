@@ -129,9 +129,6 @@ pub struct FlightDataView {
     change_alt: f32,
     loiter_rad: f32,
     quick_edit: Option<usize>,
-    guided_alt: f32,
-    guided_alt_frame: u8,
-    guided_target: Option<(f64, f64)>,
     last_mode: String,
     mode_changed: Instant,
     last_armed: bool,
@@ -182,9 +179,6 @@ impl Default for FlightDataView {
             change_alt: 100.0,
             loiter_rad: 0.0,
             quick_edit: None,
-            guided_alt: 0.0,
-            guided_alt_frame: 3,
-            guided_target: None,
             last_mode: String::new(),
             mode_changed: Instant::now(),
             last_armed: false,
@@ -1086,7 +1080,10 @@ impl FlightDataView {
         let home = cs.home;
         let assets = app.assets;
         let zoom = app.settings.fd_map.zoom;
-        let guided = self.guided_target;
+        let target = active_guided(app.link);
+        let guided = if cs.mode.eq_ignore_ascii_case("Guided") && target.lat != 0.0 {
+            Some((target.lat, target.lng))
+        } else { None };
         let pois = app.settings.pois.clone();
         // the other vehicles on the link (MAVlist), drawn without heading lines
         let others: Vec<(u8, f64, f64, f32)> = app
@@ -1229,10 +1226,11 @@ impl FlightDataView {
                 }
                 link
             };
+            let guided_wp = active_guided(app.link);
             match a {
                 "Fly To Here" => {
                     if let Some(l) = need_link(app) {
-                        if self.guided_alt == 0.0 {
+                        if guided_wp.alt == 0.0 {
                             let (alt, frame) = guided_prompt_values(cs.firmware, &app.settings.planner);
                             self.prompt = Some(Prompt::AltInput {
                                 title: "Enter Alt".into(),
@@ -1242,8 +1240,7 @@ impl FlightDataView {
                                 then: AltInputted::FlyToHere(ll.0, ll.1),
                             });
                         } else {
-                            l.send(LinkCommand::Guided { lat: ll.0, lng: ll.1, alt: self.guided_alt, frame: self.guided_alt_frame });
-                            self.guided_target = Some(ll);
+                            l.send(LinkCommand::Guided { lat: ll.0, lng: ll.1, alt: guided_wp.alt, frame: guided_wp.frame });
                         }
                     }
                 }
@@ -1260,7 +1257,7 @@ impl FlightDataView {
                 "Fly To Coords" => {
                     self.prompt = Some(Prompt::Input {
                         title: "Fly To Coords".into(),
-                        fields: vec![("Lat".into(), format!("{:.7}", ll.0)), ("Lng".into(), format!("{:.7}", ll.1)), ("Alt".into(), format!("{}", self.guided_alt))],
+                        fields: vec![("Lat".into(), format!("{:.7}", ll.0)), ("Lng".into(), format!("{:.7}", ll.1)), ("Alt".into(), format!("{}", crate::units::alt(guided_wp.alt)))],
                         then: Inputted::FlyToCoords,
                     })
                 }
@@ -1302,7 +1299,7 @@ impl FlightDataView {
                 }
                 "TakeOff" => {
                     if let Some(l) = need_link(app) {
-                        l.send(LinkCommand::CommandLong { command: mavcmd::TAKEOFF, params: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, self.guided_alt] });
+                        l.send(LinkCommand::CommandLong { command: mavcmd::TAKEOFF, params: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, guided_wp.alt] });
                     }
                 }
                 "Jump To Tag" => {
@@ -1445,33 +1442,24 @@ impl FlightDataView {
                     app.toasts.error("Bad Alt");
                     return;
                 };
-                self.guided_alt = parsed as f32 / crate::units::alt(1.0);
-                self.guided_alt_frame = frame;
-                match then {
-                    AltInputted::FlyToHere(lat, lng) => {
-                        if let Some(l) = link.filter(|_| self.guided_alt != 0.0) {
-                            l.send(LinkCommand::Guided { lat, lng, alt: self.guided_alt, frame: self.guided_alt_frame });
-                            self.guided_target = Some((lat, lng));
+                let alt = parsed as f32 / crate::units::alt(1.0);
+                if let Some(l) = link {
+                    let target = l.shared.write().set_guided_altitude(alt, frame);
+                    match then {
+                        AltInputted::FlyToHere(lat, lng) if alt != 0.0 => {
+                            l.send(LinkCommand::Guided { lat, lng, alt, frame });
                         }
-                    }
-                    AltInputted::FlyToHereAlt => {
-                        let cs = link.map(|l| l.shared.read().cs.clone()).unwrap_or_default();
-                        if cs.mode.eq_ignore_ascii_case("Guided") {
-                            if let Some(l) = link {
-                                let target = { let s = l.shared.read(); s.guided_targets.get(&(s.cs.sysid, s.cs.compid)).cloned() };
-                                if let Some(wp) = target {
-                                    l.send(LinkCommand::Guided { lat: wp.lat, lng: wp.lng, alt: self.guided_alt, frame: self.guided_alt_frame });
-                                }
-                            }
+                        AltInputted::FlyToHereAlt if l.shared.read().cs.mode.eq_ignore_ascii_case("Guided") => {
+                            l.send(LinkCommand::Guided { lat: target.lat, lng: target.lng, alt, frame });
                         }
+                        _ => {}
                     }
                 }
             }
             Prompt::Input { fields, then, .. } => match then {
                 Inputted::FlyToCoords => {
                     if let (Some(l), Some(lat), Some(lng), Some(alt)) = (link, num(&fields, 0), num(&fields, 1), num(&fields, 2)) {
-                        l.send(LinkCommand::Guided { lat, lng, alt: alt as f32, frame: self.guided_alt_frame });
-                        self.guided_target = Some((lat, lng));
+                        l.send(LinkCommand::Guided { lat, lng, alt: alt as f32 / crate::units::alt(1.0), frame: active_guided(link).frame });
                     }
                 }
                 Inputted::PointCameraCoords => {
@@ -2019,13 +2007,17 @@ fn gauges_ui(ui: &mut egui::Ui, cs: &CurrentState, assets: &crate::assets::Asset
     ui.allocate_rect(Rect::from_min_size(o, avail), Sense::hover());
 }
 
+fn active_guided(link: Option<&mp_core::link::Link>) -> Locationwp {
+    link.map(|l| l.shared.read().guided_target()).unwrap_or_else(|| Locationwp::waypoint(0.0, 0.0, 0.0, 3))
+}
+
 fn guided_prompt_values(firmware: Firmware, settings: &std::collections::BTreeMap<String, String>) -> (String, u8) {
     let default_alt = if firmware == Firmware::ArduCopter2 { 10.0 } else { 100.0 };
     (settings.get("guided_alt").cloned().unwrap_or_else(|| format!("{:.0}", crate::units::alt(default_alt))),
      settings.get("guided_alt_frame").and_then(|s| s.parse().ok()).unwrap_or(3))
 }
 
-fn status_ui(ui: &mut egui::Ui, cs: &CurrentState) -> f32 {
+fn status_ui(ui: &mut egui::Ui, cs: &CurrentState) -> egui::scroll_area::ScrollAreaOutput<()> {
     // tabStatus_Paint: 120 px name, 50 px value, 15 px row height, 190 px column step, horizontal scroll
     let f = fonts::ui_id(fonts::UI_SIZE);
     ui.style_mut().spacing.scroll = egui::style::ScrollStyle::solid();
@@ -2036,8 +2028,11 @@ fn status_ui(ui: &mut egui::Ui, cs: &CurrentState) -> f32 {
     let num_cols = (fields.len() + rows_per_col - 1) / rows_per_col;
     let total_w = 10.0 + (num_cols as f32) * 190.0 + 30.0;
 
-    egui::ScrollArea::horizontal().auto_shrink([false, false]).show(ui, |ui| {
-        let (rect, _) = ui.allocate_exact_size(Vec2::new(total_w, col_h + 25.0), Sense::hover());
+    let mut scroll = egui::ScrollArea::horizontal().auto_shrink([false, false]);
+    // Native capture of the final column, paired with the actual scrollbar-drag test.
+    if std::env::var_os("MP_STATUS_END").is_some() { scroll = scroll.horizontal_scroll_offset(f32::MAX); }
+    scroll.show(ui, |ui| {
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(total_w, col_h + 10.0), Sense::hover());
         let p = ui.painter().clone();
         let o = rect.min;
         let mut x = 10.0;
@@ -2062,7 +2057,7 @@ fn status_ui(ui: &mut egui::Ui, cs: &CurrentState) -> f32 {
                 y = 10.0;
             }
         }
-    }).state.offset().x
+    })
 }
 
 fn servo_ui(ui: &mut egui::Ui, app: &mut AppCtx, cs: &CurrentState) {
@@ -2140,6 +2135,31 @@ pub fn pwm_bar(ui: &mut egui::Ui, label: &str, pwm: u16) {
 mod guided_tests {
     use super::*;
     #[test]
+    fn dragging_status_scrollbar_reaches_the_last_column_inside_small_panels() {
+        for size in [Vec2::new(300.0, 400.0), Vec2::new(260.0, 220.0)] {
+            let ctx = egui::Context::default();
+            let cs = CurrentState::default();
+            let mut state = None;
+            let mut time = 0.0;
+            let mut frame = |events| {
+                time += 0.2;
+                let mut out = ctx.run_ui(egui::RawInput { time: Some(time), screen_rect: Some(Rect::from_min_size(Pos2::ZERO, size)), events, ..Default::default() }, |ui| { state = Some(status_ui(ui, &cs)); });
+                out.textures_delta.clear();
+                let output = state.take().unwrap();
+                (output.state.offset().x, output.inner_rect, output.content_size.x)
+            };
+            frame(vec![]);
+            let (_, viewport, content) = frame(vec![]);
+            let start = Pos2::new(viewport.left() + 5.0, viewport.bottom() + 6.0);
+            assert!(start.y < size.y, "Scrollbar is outside the panel: {start:?}");
+            frame(vec![egui::Event::PointerMoved(start), egui::Event::PointerButton { pos: start, button: egui::PointerButton::Primary, pressed: true, modifiers: Default::default() }]);
+            let end = Pos2::new(viewport.right() - 2.0, start.y);
+            frame(vec![egui::Event::PointerMoved(end)]);
+            let (offset, _, _) = frame(vec![egui::Event::PointerButton { pos: end, button: egui::PointerButton::Primary, pressed: false, modifiers: Default::default() }]);
+            assert!(offset >= content - viewport.width() - 20.0, "Could not reach last column: offset={offset}, width={content}, viewport={viewport:?}");
+        }
+    }
+    #[test]
     fn status_columns_scroll_horizontally_with_the_mouse() {
         let ctx = egui::Context::default();
         let cs = CurrentState::default();
@@ -2147,7 +2167,7 @@ mod guided_tests {
         for i in 0..8 {
             let mut events = vec![egui::Event::PointerMoved(Pos2::new(100.0, 100.0))];
             if i == 1 { events.push(egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: Vec2::new(-500.0, 0.0), modifiers: egui::Modifiers::NONE, phase: egui::TouchPhase::Move, source: egui::MouseWheelSource::Unknown }); }
-            let mut out = ctx.run_ui(egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(300.0, 400.0))), events, ..Default::default() }, |ui| { offset = status_ui(ui, &cs); });
+            let mut out = ctx.run_ui(egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(300.0, 400.0))), events, ..Default::default() }, |ui| { offset = status_ui(ui, &cs).state.offset().x; });
             out.textures_delta.clear();
         }
         assert!(offset > 100.0, "Status did not scroll: {offset}");
@@ -2161,7 +2181,10 @@ mod guided_tests {
         let mut settings = crate::app::Settings::default();
         let mut joystick = crate::joystick::Joystick::default();
         let mut page = FlightDataView::default();
-        assert_eq!(page.guided_alt, 0.0);
+        let port = std::net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let link = mp_core::link::Link::connect_with_params(mp_core::comms::ConnectionSpec::UdpListen { port }, None, false);
+        { let mut st = link.shared.write(); st.cs.sysid = 1; st.cs.compid = 1; }
+        assert_eq!(active_guided(Some(&link)).alt, 0.0);
         for (alt, frame, key) in [("27", 10, egui::Key::Enter), ("bad", 0, egui::Key::Enter), ("99", 3, egui::Key::Escape)] {
             page.prompt = Some(Prompt::AltInput { title: "Enter Alt".into(), prompt_text: "Enter Guided Mode Alt".into(), alt: alt.into(), frame, then: AltInputted::FlyToHereAlt });
             let mut actions = Vec::new();
@@ -2170,19 +2193,26 @@ mod guided_tests {
                 events: vec![egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }],
                 ..Default::default()
             }, |ui| {
-                let mut app = AppCtx { link: None, extra_links: &[], tiles: &mut tiles, toasts: &mut toasts, settings: &mut settings, actions: &mut actions, sim_running: false, assets: &assets, readonly: false, joystick: &mut joystick };
+                let mut app = AppCtx { link: Some(&link), extra_links: &[], tiles: &mut tiles, toasts: &mut toasts, settings: &mut settings, actions: &mut actions, sim_running: false, assets: &assets, readonly: false, joystick: &mut joystick };
                 page.prompt_ui(ui.ctx(), &mut app);
             });
             out.textures_delta.clear();
             if alt == "27" {
-                assert_eq!(page.guided_alt, 27.0 / crate::units::alt(1.0));
-                assert_eq!(page.guided_alt_frame, 10);
+                assert_eq!(active_guided(Some(&link)).alt, 27.0 / crate::units::alt(1.0));
+                assert_eq!(active_guided(Some(&link)).frame, 10);
                 assert_eq!(settings.planner["guided_alt_frame"], "10");
             } else {
-                assert_eq!(page.guided_alt_frame, 10);
+                assert_eq!(active_guided(Some(&link)).frame, 10);
                 assert_eq!(settings.planner["guided_alt"], "bad"); // original saves before parsing
             }
         }
         assert_eq!(toasts.0, ["Bad Alt"]);
+        // A second MAV starts with no altitude and keeps its own selection.
+        link.shared.write().cs.sysid = 2;
+        assert_eq!(active_guided(Some(&link)).alt, 0.0);
+        link.shared.write().set_guided_altitude(50.0, 0);
+        link.shared.write().cs.sysid = 1;
+        assert_eq!(active_guided(Some(&link)).frame, 10);
+        assert_eq!(active_guided(Some(&link)).alt, 27.0 / crate::units::alt(1.0));
     }
 }

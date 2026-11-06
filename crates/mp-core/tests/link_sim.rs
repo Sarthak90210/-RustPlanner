@@ -7,6 +7,7 @@ use mp_core::link::{Link, LinkCommand, LinkEvent, LinkStatus};
 use mp_core::mission::Locationwp;
 use mp_core::{mavcmd, sim};
 
+#[track_caller]
 fn wait_event(
     link: &Link,
     timeout: Duration,

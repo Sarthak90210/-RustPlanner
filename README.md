@@ -235,6 +235,13 @@ The JSON stream preserves booleans and text. Additional telemetry includes secon
 batteries, terrain, power, optical flow and PID tuning. Unsupported properties are blank/null;
 the full CurrentState decoder and numeric selection lists still need further porting.
 
+Run 19 removes DATA's global guided altitude/frame/marker cache. DATA reads the selected vehicle's
+shared target, including targets sent by HTTP, scripts and raw position commands. Altitude edits
+update that vehicle while keeping its coordinates. Switching MAVs or connections uses each one's
+state. Production-link tests cover both selection and commands addressed to a nonselected vehicle.
+Status reserves room for its solid scrollbar; an egui test drags it to the last column at two panel
+sizes and confirms the bar remains inside the visible panel.
+
 ## License
 
 GPL-3.0, like Mission Planner. Icons and marker images are Mission Planner / GMap.NET assets under the same license.

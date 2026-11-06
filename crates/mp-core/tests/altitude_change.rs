@@ -104,6 +104,38 @@ fn send(peer: &Peer, component: u8, message: MavMessage) {
 }
 
 #[test]
+fn guided_cache_follows_vehicle_selection_and_raw_position_commands() {
+    let (link, peer) = Peer::connect();
+    link.send(LinkCommand::Guided { lat: -35.1, lng: 149.2, alt: 55.0, frame: 10 });
+    receive(&peer, Duration::from_secs(3), |m| matches!(m, MavMessage::MISSION_ITEM_INT(_)));
+    let first = link.shared.read().guided_target();
+    assert_eq!((first.alt, first.frame), (55.0, 10));
+    // Formation and other callers can send targets for a nonselected MAV.
+    link.send(LinkCommand::Send(Box::new(MavMessage::SET_POSITION_TARGET_GLOBAL_INT(SET_POSITION_TARGET_GLOBAL_INT_DATA {
+        target_system: 43, target_component: 2, lat_int: -340000000, lon_int: 1480000000,
+        alt: 80.0, coordinate_frame: MavFrame::MAV_FRAME_GLOBAL,
+        type_mask: PositionTargetTypemask::from_bits_truncate(0x0df8), ..Default::default()
+    }))));
+    receive(&peer, Duration::from_secs(3), |m| matches!(m, MavMessage::SET_POSITION_TARGET_GLOBAL_INT(p) if p.target_system == 43));
+    assert_eq!(link.shared.read().guided_target(), first);
+    for (sysid, compid) in [(43, 2), (44, 1), (42, 1)] {
+        link.send(LinkCommand::SetTarget { sysid, compid });
+        let until = Instant::now() + Duration::from_secs(2);
+        while { let s = link.shared.read(); (s.cs.sysid, s.cs.compid) } != (sysid, compid) && Instant::now() < until { std::thread::sleep(Duration::from_millis(5)); }
+        let selected = link.shared.read().guided_target();
+        match sysid {
+            43 => { assert_eq!((selected.lat, selected.lng, selected.alt, selected.frame), (-34.0, 148.0, 80.0, 0)); }
+            44 => { assert_eq!(selected.alt, 0.0); link.shared.write().set_guided_altitude(12.0, 3); }
+            42 => assert_eq!(selected, first),
+            _ => unreachable!(),
+        }
+    }
+    let (other, _peer) = Peer::connect();
+    assert_eq!(other.shared.read().guided_target().alt, 0.0);
+    assert_eq!(link.shared.read().guided_target(), first);
+}
+
+#[test]
 fn guided_frames_survive_the_production_link_for_plane_and_copter() {
     for mavtype in [MavType::MAV_TYPE_FIXED_WING, MavType::MAV_TYPE_QUADROTOR] {
         let (link, peer) = Peer::connect();

@@ -1,0 +1,180 @@
+{
+  "round": 18,
+  "review_type": "independent fixed-revision source comparison, native capture inspection and full workspace test rerun",
+  "reviewed_head": "c54ab791116434ada46ff9b24541750e0f9deac3",
+  "date": "2026-11-06",
+  "verdict": "Run 18 makes useful progress on Status presentation, typed state JSON, guided altitude frames and DisplayView consumers. The native captures and 135 passing tests support that progress. Exact software parity remains incomplete. In particular, registering property names does not implement their values, and DATA still owns guided altitude/frame/marker state outside the per-MAV shared state. No 10/10.",
+  "scores": {
+    "overall": 8.2,
+    "ui_ux": 8.6,
+    "features": 7.8,
+    "scale": "Qualitative exact-original software parity scores, not completion percentages. Overall equally weights UI/UX and features. The prior report is context, not proof of unreviewed claims."
+  },
+  "rationale": "Status now draws the original 120/50-pixel name/value pairs with 190-pixel column steps and natural ordering. The viewed native image confirms columns and typed boolean presentation, but it also shows many blank values and no visible horizontal scrollbar at the bottom. The new test proves horizontal wheel offset changes, not that a pointer user can see and drag the scrollbar in the real panel. Guided frame 0/3/10 transport and persisted integer altitude prompting are supported by source and passing production-link tests. The altitude-only action now reuses the selected MAV's shared target while already Guided. However, the DATA view's own altitude, frame and map marker remain global to the view, so changing vehicle or setting a target through HTTP/script does not fully match the original per-MAV GuidedMode state. DisplayView gates and Formation captions/scroll container are present in source. Larger video, plugin, localization, transport and mobile gaps remain concrete barriers to exact parity.",
+  "scope": {
+    "inspected": [
+      "Commit c54ab79 diff, especially crates/mp-app/src/views/flight_data.rs, app.rs, views/config.rs, views/checklist.rs, swarm.rs, httpserver.rs and crates/mp-core/src/link.rs",
+      "crates/mp-core/src/state.rs property registry, property lookup, fields filtering and added packet handlers; state_properties.rs and scripts/export_state_properties.py",
+      "reference/MissionPlanner/GCSViews/FlightData.cs guided callers, Status painting and per-MAV guided marker",
+      "reference/MissionPlanner/GCSViews/SoftwareConfig.cs start selection and remembered page behavior",
+      "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs GetItemList",
+      "Selected unchanged broad-gap source in hotkey_tools.rs, views/config.rs, comms.rs, platform.rs and original MainV2.cs"
+    ],
+    "rust_render_images_viewed": [
+      "target/judging/round18/05_data_status.png",
+      "target/judging/round18/53_swarm_formation.png"
+    ],
+    "capture_integrity": {
+      "binary": "target/debug/missionplanner.exe",
+      "verified_sha256": "1C50284C6B025F0508C80DCEEE0DA0E0FE7ADE9396946899B6FEC49CC2EDA60B",
+      "manifests": [
+        "target/judging/round18/05_data_status.manifest.json",
+        "target/judging/round18/53_swarm_formation.manifest.json"
+      ],
+      "captured_utc": [
+        "2026-11-06T09:35:19.7393263Z",
+        "2026-11-06T09:35:35.5160822Z"
+      ],
+      "receipt_scope": "Both manifests match the independently hashed binary and report native eframe viewport captures, 1280x800, simulator connection and completed parameter download. These receipts do not establish physical hardware behavior."
+    },
+    "reviewer_executed_verification": [
+      "cargo test --workspace completed successfully at the fixed HEAD: 135 passed, zero failed or ignored. Totals: 81 mp-app, 36 mp-core, 5 altitude_change, 9 link_sim, 4 mavserial.",
+      "The full rerun includes the final Status horizontal mouse scrolling test, guided altitude dialog test, HTTP typed websocket test and frame 0/3/10 production-link test for Plane and Copter.",
+      "Viewed both fresh native captures and compared the manifest SHA256 with target/debug/missionplanner.exe.",
+      "Compared affected Rust and original C# source selectively."
+    ],
+    "verification_limits": [
+      "No exhaustive re-audit of every page or of round 17 swarm algorithm claims. Prior claims are not independently re-proven by this targeted review.",
+      "No original C# application was launched for an equal-state pixel or interaction comparison.",
+      "No live pointer interaction was performed against the captured windows. The Formation beta alert obscures part of its status list. More than three vehicle cards and a dragged scrollbar were not visually verified.",
+      "Guided vehicle-switch and external-caller state synchronization were inspected in source, not reproduced in a native connected session.",
+      "Native mobile packaging/device runs and macOS/Linux execution were not verified.",
+      "No physical flight, camera, radio, tracker or multi-drone qualification was performed. Physical qualification is separate from the software parity score."
+    ],
+    "reviewer_actions": "Read-only inspection and test execution; authored judging/round-18.json only. No implementation edits or commits."
+  },
+  "run18_dispositions": [
+    {
+      "area": "Status names, layout and state JSON",
+      "status": "partial",
+      "closed_parts": "Generated top-level property-name/type registry, natural sorting, original column geometry, string/bool JSON and explicit null for unimplemented properties. Status wheel scrolling has an executing regression test.",
+      "remaining": "Many properties still have no decoder or derived value, remain blank/null, and are absent from numeric choosers using fields(). The real capture does not show a usable bottom scrollbar. It is not valid to call the CurrentState parity gap closed.",
+      "evidence": [
+        "crates/mp-core/src/state.rs:298-320",
+        "crates/mp-core/src/state.rs:439-444",
+        "crates/mp-core/src/state.rs:825-836",
+        "crates/mp-app/src/views/flight_data.rs:832-846",
+        "crates/mp-app/src/views/flight_data.rs:2028-2065",
+        "crates/mp-app/src/httpserver.rs:522-530",
+        "scripts/export_state_properties.py:13-35",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:4556-4579",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:6178-6219",
+        "README.md:232-236",
+        "target/judging/round18/05_data_status.png"
+      ]
+    },
+    {
+      "area": "Guided altitude prompt, frames and callers",
+      "status": "partial",
+      "closed_parts": "Absolute/Relative/Terrain choices, integer validation, unit conversion, saved prompt settings, first-alt prompt, frame preservation for Copter/Plane wire paths and HTTP frame 0. Altitude-only action no longer forces a new target when outside Guided and uses the shared target when already Guided.",
+      "remaining": "The view keeps guided_alt, guided_alt_frame and guided_target outside the per-MAV map. A target set by HTTP/script does not populate the DATA marker or its cached altitude/frame; switching MAV can reuse the previous vehicle's values and marker. Original Fly To Here and marker rendering use the active MAV's GuidedMode. The per-MAV target map closes only part of this state problem.",
+      "evidence": [
+        "crates/mp-app/src/views/flight_data.rs:132-134",
+        "crates/mp-app/src/views/flight_data.rs:1089",
+        "crates/mp-app/src/views/flight_data.rs:1233-1260",
+        "crates/mp-app/src/views/flight_data.rs:1441-1474",
+        "crates/mp-core/src/link.rs:92-96",
+        "crates/mp-core/src/link.rs:789-826",
+        "crates/mp-app/src/httpserver.rs:681",
+        "crates/mp-core/tests/altitude_change.rs:107",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:2930-2973",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3121-3145",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4346-4353"
+      ]
+    },
+    {
+      "area": "DisplayView consumer wiring and CONFIG default page",
+      "status": "closed",
+      "closed_parts": "Reviewed source now applies displayParamCommitButton, displayPreFlightTabEdit, lockQuickView, standardFlightModesOnly and autoHideMenuForce. CONFIG default/fallback selects Basic Tuning, Tracker Extended Tuning, Loading or Planner according to available pages. AutoHide keeps its revealed top bar open while the pointer remains inside its height.",
+      "remaining": "Closure is limited to the listed run 18 wiring. These flags and startup states were not each driven through native UI in this review.",
+      "evidence": [
+        "crates/mp-app/src/app.rs:300-302",
+        "crates/mp-app/src/app.rs:989-997",
+        "crates/mp-app/src/app.rs:1190-1200",
+        "crates/mp-app/src/views/config.rs:184",
+        "crates/mp-app/src/views/config.rs:200-212",
+        "crates/mp-app/src/views/config.rs:438-442",
+        "crates/mp-app/src/views/config.rs:931-944",
+        "crates/mp-app/src/views/config.rs:1249-1251",
+        "crates/mp-app/src/views/checklist.rs:145-152",
+        "crates/mp-app/src/views/flight_data.rs:781-785",
+        "reference/MissionPlanner/GCSViews/SoftwareConfig.cs:144-257",
+        "reference/MissionPlanner/GCSViews/SoftwareConfig.cs:293-315"
+      ]
+    },
+    {
+      "area": "Formation status captions, list scroll and grid hover",
+      "status": "partial",
+      "closed_parts": "Formation now renders Location and Speed captions and a vertical ScrollArea instead of stopping after a fixed number of cards. Source preserves hover selection when the pointer leaves the grid for its context menu. The capture visibly includes the new captions.",
+      "remaining": "Native list scrolling with extra vehicles, secondary-click altitude editing, and prior ZedGraph pan/zoom residuals were not exercised. The alert hides part of the captured status panel. This review does not endorse the previous report's blanket full-swarm-parity claim.",
+      "evidence": [
+        "crates/mp-app/src/swarm.rs:465-473",
+        "crates/mp-app/src/swarm.rs:809-849",
+        "reference/MissionPlanner/Swarm/FormationControl.Designer.cs:204-220",
+        "target/judging/round18/53_swarm_formation.png"
+      ]
+    }
+  ],
+  "remaining_software_gaps": [
+    {
+      "priority": 1,
+      "status": "open",
+      "area": "Complete CurrentState behavior and numeric choosers",
+      "next_fix": "Port missing decoder and derived properties in testable groups, including initialization/default values and update precedence. Reuse the original numeric type filter in choosers independently of packet arrival; compare fixture output with C# rather than counting generated names.",
+      "evidence": ["crates/mp-core/src/state.rs:307-319", "crates/mp-core/src/state.rs:439-444", "crates/mp-core/src/state.rs:835-836", "crates/mp-app/src/views/flight_data.rs:839", "README.md:235-236"]
+    },
+    {
+      "priority": 2,
+      "status": "open",
+      "area": "Guided state synchronization",
+      "next_fix": "Make altitude/frame/target a single per-MAV shared state for DATA, HTTP and scripts. Test two-MAV switching, HTTP then Fly To Here, altitude-only edits outside Guided, and selected-MAV map marker changes.",
+      "evidence": ["crates/mp-app/src/views/flight_data.rs:132-134", "crates/mp-app/src/views/flight_data.rs:1089", "crates/mp-app/src/views/flight_data.rs:1235-1246", "reference/MissionPlanner/GCSViews/FlightData.cs:3121-3141"]
+    },
+    {
+      "priority": 3,
+      "status": "open",
+      "area": "DATA video",
+      "next_fix": "Implement real GStreamer discovery and source pipelines, HereLink and gimbal/payload video controls. Verify local deterministic video fixtures through the user-visible flow.",
+      "evidence": ["crates/mp-app/src/views/flight_data.rs:485-489", "reference/MissionPlanner/GCSViews/FlightData.cs:3186-3213", "reference/MissionPlanner/GCSViews/FlightData.cs:6667-6841"]
+    },
+    {
+      "priority": 4,
+      "status": "open",
+      "area": "Status scrollbar visibility",
+      "next_fix": "Reserve solid scrollbar height inside the actual DATA panel and capture it after scrolling. Verify dragging the bar reaches the last property column at 1280x800 and smaller panel sizes. The current wheel-offset test does not establish that interaction.",
+      "evidence": ["crates/mp-app/src/views/flight_data.rs:2031-2040", "crates/mp-app/src/views/flight_data.rs:2142-2156", "target/judging/round18/05_data_status.png"]
+    },
+    {
+      "priority": 5,
+      "status": "open",
+      "area": "Plugin execution",
+      "next_fix": "Provide the original plugin loading and lifecycle capability through a compatibility host, including page registration and callbacks. Listing files and disabled checkboxes does not implement it.",
+      "evidence": ["crates/mp-app/src/hotkey_tools.rs:103-112", "reference/MissionPlanner/Plugin/PluginLoader.cs:146-179", "reference/MissionPlanner/Plugin/PluginLoader.cs:256-329"]
+    },
+    {
+      "priority": 6,
+      "status": "open",
+      "area": "Localization",
+      "next_fix": "Load and apply translated resources, persist culture, and verify the original language-selector behavior beyond English.",
+      "evidence": ["crates/mp-app/src/views/config.rs:1087", "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:106-128"]
+    },
+    {
+      "priority": 7,
+      "status": "open",
+      "area": "Transports and mobile native software",
+      "next_fix": "Implement BLE/WinUSB custom connections, mobile file selection and USB serial adapters, then build native Android/iOS packages and record device software runs. Keep desktop build/test receipts distinct from native support.",
+      "evidence": ["crates/mp-core/src/comms.rs:26-46", "crates/mp-app/src/platform.rs:76-79", "reference/MissionPlanner/MainV2.cs:3629-3641", "README.md:115-118"]
+    }
+  ],
+  "ten_out_of_ten_criterion": "An honest 10 requires no known material software discrepancy in the promised scope and adequate source, interaction, decoder and native platform verification. Generated names, screenshots, local tests or physical-flight absence alone cannot settle that question. Current known missing behavior makes 10 unjustified."
+}

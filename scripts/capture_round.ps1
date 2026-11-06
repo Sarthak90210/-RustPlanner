@@ -65,12 +65,13 @@ $cases = @(
  @('53_swarm_formation','data',0,0,0,0,14,'MP_SWARM','1','MP_TOOL','Swarm'),
  @('54_swarm_sequence','data',0,0,0,0,14,'MP_SWARM','1','MP_TOOL','Sequence Swarm'),
  @('55_swarm_follow_leader','data',0,0,0,0,14,'MP_SWARM','1','MP_TOOL','Follow the leader'),
- @('56_swarm_follow_swarm','data',0,0,0,0,14,'MP_SWARM','1','MP_TOOL','Follow Swarm')
+ @('56_swarm_follow_swarm','data',0,0,0,0,14,'MP_SWARM','1','MP_TOOL','Follow Swarm'),
+ @('57_data_status_last_column','data',1,0,6,0,7,'MP_STATUS_END','1')
 )
 $last = [Math]::Min($cases.Count, $From - 1 + $Count) - 1
 for ($ci = $From - 1; $ci -le $last; $ci++) {
     $case = $cases[$ci]
-    foreach ($name in @('MP_AUTOSIM','MP_DEMO','MP_SURVEY','MP_INSPECTOR','MP_TEMP','MP_SWARM','MP_COORDS','MP_TOOL')) {
+    foreach ($name in @('MP_AUTOSIM','MP_DEMO','MP_SURVEY','MP_INSPECTOR','MP_TEMP','MP_SWARM','MP_COORDS','MP_TOOL','MP_STATUS_END')) {
         Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
     }
     $env:MP_COORDS = 'GEO'
