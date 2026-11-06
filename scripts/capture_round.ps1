@@ -61,7 +61,9 @@ $cases = @(
  @('49_dronecan','setup',0,0,0,25,4),
  @('50_antenna_tracker','setup',0,0,0,39,4)
 )
-foreach ($case in ($cases | Select-Object -Skip ($From - 1) -First $Count)) {
+$last = [Math]::Min($cases.Count, $From - 1 + $Count) - 1
+for ($ci = $From - 1; $ci -le $last; $ci++) {
+    $case = $cases[$ci]
     foreach ($name in @('MP_AUTOSIM','MP_DEMO','MP_SURVEY','MP_INSPECTOR','MP_TEMP','MP_SWARM')) {
         Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
     }

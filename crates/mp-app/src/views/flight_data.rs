@@ -758,10 +758,18 @@ impl FlightDataView {
             let bot = if cellr.width() >= 109.0 {
                 Rect::from_min_size(Pos2::new(cellr.left() + 41.0, cellr.top()), Vec2::new(68.0, 23.0))
             } else {
-                Rect::from_min_max(Pos2::new(cellr.left(), cellr.top() + 20.0), Pos2::new(cellr.right(), cellr.bottom()))
+                Rect::from_min_size(Pos2::new(cellr.left(), cellr.top() + 20.0), Vec2::new(68.0, 23.0))
             };
             ui.put(num, egui::DragValue::new(val).speed(0.5).max_decimals(1));
-            if ui.put(bot, |ui: &mut egui::Ui| theme::button_sized(ui, text, bot.size())).clicked() {
+            // the panel clips its children: a wrapped button shows only its top part
+            let clip = cellr.intersect(ui.clip_rect());
+            let resp = ui
+                .scope_builder(egui::UiBuilder::new().max_rect(bot), |ui| {
+                    ui.set_clip_rect(clip);
+                    theme::button_sized(ui, text, bot.size())
+                })
+                .inner;
+            if resp.clicked() && resp.interact_pointer_pos().map(|p| clip.contains(p)).unwrap_or(true) {
                 clicked = Some(text);
             }
         }
