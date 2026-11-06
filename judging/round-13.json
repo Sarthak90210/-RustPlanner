@@ -1,0 +1,325 @@
+{
+  "round": 13,
+  "review_type": "fresh independent targeted source, actual-render and interaction review",
+  "reviewed_head": "bb13fbce2229fa0ae898fc88d06bac34d76017e4",
+  "date": "2026-11-06",
+  "verdict": "Material software parity gaps remain. Not 10/10.",
+  "scores": {
+    "overall": 7.3,
+    "ui_ux": 8.0,
+    "features": 6.6,
+    "scale": "Qualitative exact-C#-parity judgments, not completion percentages. Overall gives equal weight to UI/UX and features."
+  },
+  "rationale": "Run 13 closes the three Rover tuning findings from round 12. Rover controls no longer stage. The Avoidance group follows the original SONAR_TRIGGER_CM/RNGFND_TRIGGR_CM predicate, and the round-13 Rover capture shows it hidden. Combo controls get metadata descriptions. View KML now serves a working network.kml with location.kml, wps.kml and the aircraft model, and the KML content matches httpserver.cs closely. Real but small residuals remain. Rover direct writes fail silently where the original shows 'Set X Failed!'. Rover numeric edits have no 300 ms debounce and no optimistic display. The Rust server is loopback-only and starts on click, whereas the original listens on all interfaces from startup. Reading httpserver.cs also turns up a gap no earlier round recorded. The same original service provides MJPEG HUD/map streams, MAVLink websockets, the Mavelous UI, guided/command_long/rcoverride/get_mission HTTP APIs, hud.html and georef KML. The port provides none of these. The large retained gaps (video, PLAN coordinate systems, swarm tools, plugins, localization, transports/mobile, display flags) are unchanged. Credit for the closures is partly offset by the newly recorded HTTP-service gap, so features rises only slightly.",
+  "scope": {
+    "inspected": [
+      "git diff 0c5c8bf..bb13fbc: vehicle_tuning.rs, forms.rs, kml_server.rs, flight_plan.rs, app.rs, README.md",
+      "ConfigArdurover.cs Activate (setup, groupBox1 predicate, tooltip loop) and its Designer bindings",
+      "ConfigArduplane.cs/ConfigAntennaTracker.cs tooltip code (Plane and Rover set tooltips; Tracker does not)",
+      "MavlinkNumericUpDown direct-write timer and error path; MavlinkComboBox direct-write and error path",
+      "Utilities/httpserver.cs location.kml, network.kml, wps.kml and block_plane_0.dae handlers, its full endpoint list and listener binding; MainV2 http thread startup; FlightPlanner lnk_kml_LinkClicked",
+      "mp-core link.rs SetParam queue, ack and failure events, to judge Rover direct-write feedback",
+      "Retained-gap anchors rechecked at bb13fbc: flight_data.rs GStreamer/HereLink, fd_tabs.rs Video Control, flight_plan.rs fixed GEO/Lat/Lon, more_tools.rs swarm routing, hotkey_tools.rs plugins, config.rs language combo, comms.rs ConnectionSpec, platform.rs mobile open_text"
+    ],
+    "rust_render_images_viewed": [
+      "target/judging/round13/config_rover.png",
+      "target/judging/round13/07_plan_mission.png"
+    ],
+    "render_evidence": "Round-13 manifests identify the actual 1280x800 eframe viewport, connected autosim, complete parameters and binary SHA256 CEBCD60265C2A27AF728B4BBB69CE58579D1290372310FCF8AF60195802567C6. The Rover capture (ArduRover, 3275-parameter fixture) no longer shows the empty Avoidance box. Steering Rate, Speed/Throttle, Throttle and Motors, Navigation, RC7-RC10 option combos and the Write Params/Refresh Screen buttons render. Navigation fields without bound parameters are disabled. The PLAN capture shows the View KML link in its original panel position, alongside the fixed GEO label and Lat/Lon columns. A static render cannot show the KML click or a browser/Google Earth result.",
+    "reviewer_executed_verification": [
+      "None. As instructed, no cargo build or test ran in the worktree. The worktree was detached to bb13fbc for read-only source inspection."
+    ],
+    "reported_evidence_not_rerun": [
+      "cargo test --workspace: 100 passed, 0 failed (main session), including rover_numeric_edit_writes_directly_without_ctrl_s, the Plane staged roundtrip and network_kml_serves_live_mission_aircraft_model_and_updates"
+    ],
+    "verification_limits": [
+      "No original C# runtime was launched for side-by-side comparison.",
+      "The Rover test covers one numeric up-arrow click that writes without Ctrl+S and reads back from the simulator. Rover combo direct writes, rejected or timed-out direct writes and rapid repeated clicks were checked in source only.",
+      "The KML test is an HTTP-level test. Google Earth was not run, and the click-to-browser path (open_url) was not executed.",
+      "Native macOS, Linux, Android and iOS launch/import behavior and the complete original feature set were not exhaustively exercised.",
+      "No physical device was used. Physical flight qualification is separate from this software parity review."
+    ],
+    "reviewer_actions": "Read-only source and render inspection. Only judging/round-13.json was written."
+  },
+  "run13_dispositions": [
+    {
+      "change": "Rover Basic Tuning direct writes (no staging)",
+      "status": "closed (low residual recorded separately)",
+      "closed_parts": "prepare enables staging only for plane_tuning. With staged == None, FormState::edit sends SetParam immediately for numeric, combo and check controls, matching the original Rover controls, which have no ValueUpdated subscribers and call setParam themselves. The egui test clicks a Rover numeric up arrow, sends no Ctrl+S, and observes the simulator ACK and readback. Plane staging and its no-early-write test are retained. Write Params with an empty change set is a no-op, consistent with the original's empty changes table.",
+      "remaining": "Direct writes bypass VehicleTuning.waiting, so a rejected or timed-out write raises ParamSet{ok:false} with no handler and the user gets no message. The original shows ErrorSetValueFailed or 'Set X Failed!'. Numeric clicks each send a write immediately instead of the original 300 ms debounce. The control shows the old value until readback, while the original keeps the typed value. Combo direct writes are untested.",
+      "rust_refs": [
+        "crates/mp-app/src/views/vehicle_tuning.rs:44-56",
+        "crates/mp-app/src/forms.rs:146-149",
+        "crates/mp-app/src/views/vehicle_tuning.rs:93-110",
+        "crates/mp-app/src/views/vehicle_tuning.rs:263-272",
+        "crates/mp-app/src/views/vehicle_tuning.rs:369-381"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigArdurover.cs:45-89",
+        "reference/MissionPlanner/Controls/MavlinkNumericUpDown.cs:147-177",
+        "reference/MissionPlanner/Controls/MavlinkComboBox.cs:173-198"
+      ]
+    },
+    {
+      "change": "Rover Avoidance (groupBox1) parameter-dependent visibility",
+      "status": "closed",
+      "closed_parts": "The page sets st.visible[groupBox1] from the presence of SONAR_TRIGGER_CM or RNGFND_TRIGGR_CM. forms::hidden walks parent chains, so descendants hide with the group. The round-13 Rover capture shows the group absent with a fixture that lacks both parameters. The predicate is re-evaluated every frame, which also covers parameters that arrive later.",
+      "remaining": "No present-parameter render (legacy SONAR or current RNGFND) was supplied. The parent-walk logic makes a binding failure unlikely.",
+      "rust_refs": [
+        "crates/mp-app/src/views/vehicle_tuning.rs:155-160",
+        "crates/mp-app/src/forms.rs:168-184"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigArdurover.cs:79-82"
+      ]
+    },
+    {
+      "change": "Metadata tooltips and ranges on tuning combo/numeric controls",
+      "status": "closed",
+      "closed_parts": "parameter_metadata is now independent of staging. Combo responses get the metadata description on hover, and numeric controls keep metadata range and increment. This matches the Plane and Rover Activate tooltip loops and MavlinkNumericUpDown.setup, which always consults metadata for ranges.",
+      "remaining": "Tracker also receives tooltips, which the original ConfigAntennaTracker does not set. This is a harmless addition. Truncated combo text has no full-text hover, which the original's wider combos did not need.",
+      "rust_refs": [
+        "crates/mp-app/src/views/vehicle_tuning.rs:47",
+        "crates/mp-app/src/forms.rs:279-287",
+        "crates/mp-app/src/forms.rs:302-304"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigArdurover.cs:91-110",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigArduplane.cs:105-122",
+        "reference/MissionPlanner/Controls/MavlinkNumericUpDown.cs:66-90"
+      ]
+    },
+    {
+      "change": "PLAN View KML loopback network.kml server",
+      "status": "closed for the View KML workflow; broader httpserver gap recorded as new",
+      "closed_parts": "Clicking View KML binds port 56781, pushes the current mission and link snapshot, and opens http://127.0.0.1:56781/network.kml. The failure text matches the original. network.kml has the original two NetworkLinks: location.kml with onInterval/1 s refresh and flyToView=1, and wps.kml with flyToView=0. location.kml emits one Model placemark per vehicle ('P/Q alt', clamped to 0.01, heading=yaw, tilt=-pitch, roll=-roll, scale 2, block_plane_0.dae) and a LookAt (tilt 80, range 50) when the active position is non-zero. wps.kml emits WP placemarks with home first as 'H', plus 'WPs' absolute (ff00ffff) and 'onground' clampToGround (7f00ffff) line strings. The model is bundled and served. The mission snapshot refreshes every frame, so the next request reflects edits. The HTTP test covers all of this.",
+      "remaining": "The original starts the server at MainV2 startup on IPAddress.Any. The port starts it on first click and binds 127.0.0.1, so LAN Google Earth clients cannot connect and links do not resolve before the click. If the port is already taken, the port shows an error rather than opening the URL as the original does. location.kml skips links that are not Connected, while the original iterates all Comports. Google Earth was not exercised.",
+      "rust_refs": [
+        "crates/mp-app/src/kml_server.rs:43-81",
+        "crates/mp-app/src/kml_server.rs:124-142",
+        "crates/mp-app/src/kml_server.rs:159-269",
+        "crates/mp-app/src/views/flight_plan.rs:138-146",
+        "crates/mp-app/src/views/flight_plan.rs:301-310",
+        "crates/mp-app/src/app.rs:1204"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4331-4341",
+        "reference/MissionPlanner/Utilities/httpserver.cs:73",
+        "reference/MissionPlanner/Utilities/httpserver.cs:559-680",
+        "reference/MissionPlanner/Utilities/httpserver.cs:682-806",
+        "reference/MissionPlanner/MainV2.cs:3237-3246"
+      ]
+    },
+    {
+      "change": "Plane staging and Rover direct-write egui tests through simulator readback",
+      "status": "closed (verification improvement)",
+      "closed_parts": "numeric_roundtrip is parameterized by vehicle kind, form, parameter and staging mode. Plane asserts no early write before Ctrl+S, and Rover asserts the write arrives without it. Both assert the simulator ACK and the final value.",
+      "remaining": "Combo, rejection and timeout paths are not exercised.",
+      "rust_refs": [
+        "crates/mp-app/src/views/vehicle_tuning.rs:252-400"
+      ]
+    }
+  ],
+  "new_or_remaining_affected_gaps": [
+    {
+      "priority": 1,
+      "severity": "medium",
+      "area": "Network services (httpserver)",
+      "title": "Provide the rest of the original embedded HTTP/websocket service",
+      "finding": "Newly recorded, though not new in the code. The original httpserver, started at application launch on port 56781 on all interfaces, also serves: MAVLink websockets (/websocket/server and raw at /), MJPEG /hud.jpg, /map.jpg and /both.jpg streams, /hud.html, georefnetwork.kml, the Mavelous UI (/mav/, /mavlink/), guided GET/POST, command_long, rcoverride and get_mission HTTP APIs, and an index page. The Rust kml_server answers only network/location/wps/model and returns 404 for everything else. No other module in crates/ implements these endpoints. External tools that use these endpoints (web HUD, Mavelous, HTTP guided control) do not work.",
+      "rust_refs": [
+        "crates/mp-app/src/kml_server.rs:124-142",
+        "crates/mp-app/src/kml_server.rs:45"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/Utilities/httpserver.cs:73",
+        "reference/MissionPlanner/Utilities/httpserver.cs:335-540",
+        "reference/MissionPlanner/Utilities/httpserver.cs:540-558",
+        "reference/MissionPlanner/Utilities/httpserver.cs:808-1011",
+        "reference/MissionPlanner/Utilities/httpserver.cs:1011-1320",
+        "reference/MissionPlanner/MainV2.cs:3237-3246"
+      ],
+      "next_fix": "Start the service at launch on the original binding and add the HUD/map MJPEG streams, websocket MAVLink bridge, guided/command_long/rcoverride/get_mission APIs, hud.html, georef KML and index. Verify each endpoint with HTTP and websocket client tests against the simulator."
+    },
+    {
+      "priority": 2,
+      "severity": "low",
+      "area": "CONFIG Rover Basic Tuning",
+      "title": "Report failed direct writes and match the numeric write timing",
+      "finding": "Rover and Tracker direct writes call link.send(SetParam) without registering a waiter. A rejected or timed-out write raises ParamSet{ok:false}, which VehicleTuning.on_event ignores because waiting is None, so the user sees nothing. The original MavlinkNumericUpDown timer and MavlinkComboBox show error message boxes. Numeric edits also skip the original 300 ms coalescing. The control displays the old value until the vehicle echoes the new one.",
+      "rust_refs": [
+        "crates/mp-app/src/forms.rs:146-149",
+        "crates/mp-app/src/views/vehicle_tuning.rs:93-110"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/Controls/MavlinkNumericUpDown.cs:153-177",
+        "reference/MissionPlanner/Controls/MavlinkComboBox.cs:180-198"
+      ],
+      "next_fix": "Track direct writes per page and raise the original error on ok:false. Coalesce numeric writes over 300 ms and show the edited value while the write is pending. Test a rejected Rover numeric write and a Rover combo selection against the simulator."
+    },
+    {
+      "priority": 3,
+      "severity": "low",
+      "area": "PLAN View KML",
+      "title": "Match server lifetime and binding",
+      "finding": "The KML server starts on the first View KML click and binds only to 127.0.0.1. The original listens on IPAddress.Any from startup. LAN Google Earth clients and network links opened before the click cannot reach it. A port conflict produces an error instead of opening the URL.",
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_plan.rs:301-309",
+        "crates/mp-app/src/kml_server.rs:45"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/Utilities/httpserver.cs:73-80",
+        "reference/MissionPlanner/MainV2.cs:3237-3246",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4331-4341"
+      ],
+      "next_fix": "Fold this into the startup HTTP service above. Keep View KML as the URL opener."
+    }
+  ],
+  "retained_baseline_gaps": [
+    {
+      "priority": 3,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "DATA video and payload",
+      "title": "Implement the advertised GStreamer, HereLink and gimbal video paths",
+      "finding": "Set GStreamer Source and HereLink Video still only show 'GStreamer was not found on this system' without discovery or a pipeline. Start Camera starts the HTTP MJPEG reader. Payload Video Control still reports that no gimbal stream is configured. The original has pipeline input/discovery/start and full-size, mini and pop-out gimbal video.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3186-3213",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4946-4972",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:6667-6841"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_data.rs:468-482",
+        "crates/mp-app/src/views/fd_tabs.rs:345-346"
+      ],
+      "next_fix": "Add backend discovery, pipeline input/start/stop and gimbal stream configuration plus the original display modes. Verify with local video fixtures and rendered states.",
+      "disposition": "open; unchanged by run13 (rechecked at bb13fbc)."
+    },
+    {
+      "priority": 4,
+      "severity": "medium",
+      "status": "confirmed in source and round-13 PLAN render",
+      "area": "PLAN",
+      "title": "Restore coordinate-system switching and editable UTM/MGRS table columns",
+      "finding": "PLAN still paints a fixed GEO label and only Lat/Lon columns, as the round-13 capture shows. The original switches between GEO, UTM and MGRS, changes the visible columns and converts edits back to geographic coordinates. The Enter UTM Coord context action does not replace this workflow.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:2741-2757",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:2765-2808",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:2832-2863"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_plan.rs:21-40",
+        "crates/mp-app/src/views/flight_plan.rs:295",
+        "crates/mp-app/src/views/flight_plan/menu.rs:535-539"
+      ],
+      "next_fix": "Add the coordinate selector, matching columns, reversible conversions and validation. Verify with known coordinate fixtures.",
+      "disposition": "open; unchanged by run13."
+    },
+    {
+      "priority": 5,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "Tools / swarm",
+      "title": "Restore distinct swarm workflows, especially Sequence Swarm",
+      "finding": "Swarm, Follow the leader, Sequence Swarm and Follow Swarm still open the same small vehicle grid. Sequence Swarm has no layout/step editor or execution.",
+      "csharp_refs": [
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:18-39",
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:89-150"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/more_tools.rs:73-80",
+        "crates/mp-app/src/more_tools.rs:454-553"
+      ],
+      "next_fix": "Give each tool its original state and controls, starting with Sequence layout load/save, editing, steps and execution against multiple deterministic peers.",
+      "disposition": "open; unchanged by run13."
+    },
+    {
+      "priority": 6,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "SETUP / CONFIG navigation",
+      "title": "Honor per-page display flags and original vehicle/loading visibility",
+      "finding": "Only a small subset of DisplayView flags is modeled. Frame Type is visible for every parameter-complete connection. CONFIG always appends Full Parameter List and Planner and has no Loading page. config.rs and setup.rs are untouched by run 13.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/InitialSetup.cs:183-216",
+        "reference/MissionPlanner/GCSViews/SoftwareConfig.cs:226-260",
+        "reference/MissionPlanner/ExtLibs/Utilities/DisplayView.cs:78-125"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/display.rs:33-58",
+        "crates/mp-app/src/views/setup.rs:39-51",
+        "crates/mp-app/src/views/setup.rs:82-103",
+        "crates/mp-app/src/views/config.rs:49-82"
+      ],
+      "next_fix": "Represent and apply the original display flags and page predicates. Verify navigation across layouts, connection states and vehicle fixtures.",
+      "disposition": "open; unchanged by run13."
+    },
+    {
+      "priority": 7,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "Plugins",
+      "title": "Provide original plugin loading and lifecycle compatibility",
+      "finding": "The plugin window still says .NET .dll/.cs plugins cannot be loaded. The original compiles and loads plugins, calls Init/Loaded/Loop/Exit, and lets plugins add pages.",
+      "csharp_refs": [
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:146-179",
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:256-329",
+        "reference/MissionPlanner/MainV2.cs:2527-2581",
+        "reference/MissionPlanner/GCSViews/InitialSetup.cs:53-58"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/hotkey_tools.rs:80-117"
+      ],
+      "next_fix": "Implement a compatibility host and page/action bridge, or explicitly retain this as a parity exclusion. Validate with a sample plugin.",
+      "disposition": "open; unchanged by run13."
+    },
+    {
+      "priority": 8,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "Localization / Planner",
+      "title": "Restore the original language selector and translated resources",
+      "finding": "The language combo still offers only 'English (en-US)', and UI text is hard-coded. The original discovers resource cultures and switches through MainV2.changelanguage.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:106-128",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:417-421",
+        "reference/MissionPlanner/MainV2.cs:4227-4235"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/config.rs:995"
+      ],
+      "next_fix": "Load translations, persist the culture and update pages and dialogs on change. Verify representative translated pages.",
+      "disposition": "open; unchanged by run13."
+    },
+    {
+      "priority": 9,
+      "severity": "high",
+      "status": "confirmed unsupported paths; native platform execution otherwise unverified",
+      "area": "Platform and connections",
+      "title": "Complete missing transport and mobile import paths",
+      "finding": "ConnectionSpec still has Auto, Serial, TCP and UDP listen/client only, with no BLE, WinUSB or websocket custom ports. On Android/iOS, open_serial returns Unsupported and platform::open_text returns None.",
+      "csharp_refs": [
+        "reference/MissionPlanner/MainV2.cs:3629-3641",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4150-4150",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4484-4488"
+      ],
+      "rust_refs": [
+        "crates/mp-core/src/comms.rs:20-40",
+        "crates/mp-core/src/comms.rs:121-128",
+        "crates/mp-app/src/platform.rs:76-79",
+        "crates/mp-app/src/views/flight_plan/menu.rs:450-453",
+        ".github/workflows/build.yml:1-62"
+      ],
+      "next_fix": "Implement the missing custom transports and mobile file/device access, then produce native launch/import receipts per promised OS.",
+      "disposition": "open; unchanged by run13."
+    }
+  ],
+  "prioritized_next_fixes": [
+    "Implement actual GStreamer discovery/pipelines, HereLink and payload gimbal video display modes, verified with local video fixtures (FlightData.cs:3186-3213, 4946-4972, 6667-6841).",
+    "Restore PLAN GEO/UTM/MGRS switching with matching editable columns and reversible conversion (FlightPlanner.cs:2741-2863).",
+    "Implement distinct swarm tools, starting with the Sequence Swarm layout/step editor and execution (Swarm/Sequence/LayoutEditor.cs:18-150).",
+    "Provide the full embedded HTTP/websocket service at startup on the original binding: MJPEG HUD/map, MAVLink websockets, guided/command_long/rcoverride/get_mission, hud.html and georef KML (Utilities/httpserver.cs:73, 335-1320; MainV2.cs:3237-3246).",
+    "Address plugin lifecycle compatibility, translated resources, display-flag/loading predicates and missing BLE/WinUSB/mobile import paths (PluginLoader.cs:146-329; ConfigPlanner.cs:106-128; InitialSetup.cs:183-216; MainV2.cs:3629-3641). In the same pass, add failure messaging and 300 ms coalescing for Rover/Tracker direct writes (MavlinkNumericUpDown.cs:153-177; MavlinkComboBox.cs:180-198)."
+  ],
+  "ten_out_of_ten_criterion": "No known material UI/UX or feature discrepancy in an adequately reviewed software scope, with the original interactions and promised native platforms verified. This remains a sampled review; closing only the listed gaps would not certify unreviewed original functionality."
+}

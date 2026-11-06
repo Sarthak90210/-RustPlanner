@@ -32,28 +32,9 @@ fn offset_m(lat: f64, lng: f64, north: f64, east: f64) -> (f64, f64) {
     (lat + (north / R).to_degrees(), lng + (east / (R * lat.to_radians().cos())).to_degrees())
 }
 
-/// UTM (WGS84) to latitude / longitude.
+/// UTM (WGS84) to latitude / longitude, as `utmpos.ToLLA` with a signed zone.
 pub(super) fn utm_to_latlng(zone: i32, south: bool, easting: f64, northing: f64) -> (f64, f64) {
-    let a: f64 = 6_378_137.0;
-    let f: f64 = 1.0 / 298.257_223_563;
-    let e2 = f * (2.0 - f);
-    let ep2 = e2 / (1.0 - e2);
-    let k0 = 0.9996;
-    let x = easting - 500_000.0;
-    let y = if south { northing - 10_000_000.0 } else { northing };
-    let m = y / k0;
-    let mu = m / (a * (1.0 - e2 / 4.0 - 3.0 * e2 * e2 / 64.0 - 5.0 * e2.powi(3) / 256.0));
-    let e1 = (1.0 - (1.0 - e2).sqrt()) / (1.0 + (1.0 - e2).sqrt());
-    let phi1 = mu + (3.0 * e1 / 2.0 - 27.0 * e1.powi(3) / 32.0) * (2.0 * mu).sin() + (21.0 * e1 * e1 / 16.0 - 55.0 * e1.powi(4) / 32.0) * (4.0 * mu).sin() + (151.0 * e1.powi(3) / 96.0) * (6.0 * mu).sin();
-    let n1 = a / (1.0 - e2 * phi1.sin().powi(2)).sqrt();
-    let t1 = phi1.tan().powi(2);
-    let c1 = ep2 * phi1.cos().powi(2);
-    let r1 = a * (1.0 - e2) / (1.0 - e2 * phi1.sin().powi(2)).powf(1.5);
-    let d = x / (n1 * k0);
-    let lat = phi1 - (n1 * phi1.tan() / r1) * (d * d / 2.0 - (5.0 + 3.0 * t1 + 10.0 * c1 - 4.0 * c1 * c1 - 9.0 * ep2) * d.powi(4) / 24.0 + (61.0 + 90.0 * t1 + 298.0 * c1 + 45.0 * t1 * t1 - 252.0 * ep2 - 3.0 * c1 * c1) * d.powi(6) / 720.0);
-    let lng0 = ((zone - 1) * 6 - 180 + 3) as f64;
-    let lng = lng0.to_radians() + (d - (1.0 + 2.0 * t1 + c1) * d.powi(3) / 6.0 + (5.0 - 2.0 * c1 + 28.0 * t1 - 3.0 * c1 * c1 + 8.0 * ep2 + 24.0 * t1 * t1) * d.powi(5) / 120.0) / phi1.cos();
-    (lat.to_degrees(), lng.to_degrees())
+    mp_core::coords::utm_signed_to_geo(if south { -zone.abs() } else { zone.abs() }, easting, northing)
 }
 
 /// 5x7 glyphs for the "Text" auto-WP generator (rows top to bottom, 5 bits each).

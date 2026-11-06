@@ -19,7 +19,7 @@ mod map_controls;
 const HOME_IDX: usize = usize::MAX;
 
 /// Commands DataGridView columns: (header, width) from FlightPlanner.resx.
-const COLS: [(&str, f32); 17] = [
+const COLS: [(&str, f32); 21] = [
     ("", 41.0),
     ("Command", 174.0),
     ("P1", 40.0),
@@ -30,6 +30,10 @@ const COLS: [(&str, f32); 17] = [
     ("Lon", 70.0),
     ("Alt", 30.0),
     ("Frame", 70.0),
+    ("Zone", 57.0),
+    ("Easting", 67.0),
+    ("Northing", 72.0),
+    ("MGRS", 64.0),
     ("Delete", 40.0),
     ("Up", 30.0),
     ("Down", 30.0),
@@ -38,6 +42,52 @@ const COLS: [(&str, f32); 17] = [
     ("Dist", 35.0),
     ("AZ", 30.0),
 ];
+const COL_ZONE: usize = 10;
+const COL_MGRS: usize = 13;
+const COL_DELETE: usize = 14;
+const COL_GRAD: usize = 17;
+const COORD_SYSTEMS: [&str; 3] = ["GEO", "UTM", "MGRS"];
+
+/// coords1_SystemChanged: Lat/Lon for GEO, Zone/Easting/Northing for UTM, MGRS for MGRS.
+fn column_visible(col: usize, system: &str) -> bool {
+    match col {
+        6 | 7 => system == "GEO",
+        10..=12 => system == "UTM",
+        COL_MGRS => system == "MGRS",
+        _ => true,
+    }
+}
+
+/// The selected Coords system, saved as Settings "fpcoordmouse".
+fn coord_system(app: &AppCtx) -> &'static str {
+    let s = app.settings.planner.get("fpcoordmouse").map(String::as_str).unwrap_or("GEO");
+    COORD_SYSTEMS.iter().copied().find(|c| *c == s).unwrap_or("GEO")
+}
+
+/// convertFromGeographic: Zone, Easting, Northing and MGRS cell text; blank at 0,0.
+fn coord_cells(lat: f64, lng: f64) -> [String; 4] {
+    if lat == 0.0 && lng == 0.0 {
+        return Default::default();
+    }
+    let (zone, east, north) = mp_core::coords::to_utm_signed(lat, lng);
+    let mgrs = mp_core::coords::geo_to_mgrs(lat, lng).unwrap_or_default();
+    [zone.to_string(), format!("{east:.3}"), format!("{north:.3}"), mgrs]
+}
+
+/// Commands_CellEndEdit: convertFromUTM / convertFromMGRS. Unparsable input is ignored.
+fn coords_from_cells(col: usize, cells: &[String; 4]) -> Option<(f64, f64)> {
+    if col == COL_MGRS {
+        let (lat, lng) = mp_core::coords::mgrs_to_geo(&cells[3])?;
+        return (lat != 0.0 && lng != 0.0).then_some((lat, lng));
+    }
+    let zone: i32 = cells[0].trim().parse().ok()?;
+    let east: f64 = cells[1].trim().parse().ok()?;
+    let north: f64 = cells[2].trim().parse().ok()?;
+    if east == 0.0 && north == 0.0 {
+        return None;
+    }
+    Some(mp_core::coords::utm_signed_to_geo(zone, east, north))
+}
 
 pub struct FlightPlanView {
     home: Locationwp,
@@ -75,6 +125,8 @@ pub struct FlightPlanView {
     /// visible map area (min lat, min lng, max lat, max lng)
     view_bounds: Option<(f64, f64, f64, f64)>,
     measure: Option<(f64, f64)>,
+    /// the UTM/MGRS cell being edited: (row, column, text)
+    coord_edit: Option<(usize, usize, String)>,
     kml_server: Option<crate::kml_server::KmlServer>,
 }
 
@@ -125,6 +177,7 @@ impl Default for FlightPlanView {
             view_bounds: None,
             circle_dialog: None,
             measure: None,
+            coord_edit: None,
             kml_server: None,
         }
     }
@@ -287,12 +340,49 @@ impl FlightPlanView {
         let p = ui.painter().clone();
         let white = Color32::WHITE;
 
-        // panel4 (3,3 127x55): coords1, the mouse location
+        // panel4 (3,3 127x55): coords1 (Vertical), the mouse location in the chosen system
         let (mlat, mlng) = self.mouse.unwrap_or((0.0, 0.0));
-        p.text(at(6.0, 4.0), egui::Align2::LEFT_TOP, format!("Lat  {mlat:.7}"), f.clone(), white);
-        p.text(at(6.0, 19.0), egui::Align2::LEFT_TOP, format!("Lng  {mlng:.7}"), f.clone(), white);
-        p.text(at(6.0, 34.0), egui::Align2::LEFT_TOP, "Alt  0", f.clone(), white);
-        p.text(at(100.0, 4.0), egui::Align2::LEFT_TOP, "GEO", f.clone(), white);
+        let mut system = coord_system(app);
+        ui.put(r(3.0, 5.0, 64.0, 20.0), |ui: &mut egui::Ui| {
+            egui::ComboBox::from_id_salt("CMB_coordsystem")
+                .width(56.0)
+                .selected_text(system)
+                .show_ui(ui, |ui| {
+                    for c in COORD_SYSTEMS {
+                        ui.selectable_value(&mut system, c, c);
+                    }
+                })
+                .response
+        });
+        if system != coord_system(app) {
+            app.settings.planner.insert("fpcoordmouse".into(), system.into());
+        }
+        let (alt, alt_source) = match self.mouse.and_then(|(la, ln)| crate::srtm::altitude(la, ln)) {
+            Some(a) => (crate::units::alt(a as f32), "SRTM"),
+            None => (0.0, if self.mouse.is_some() { "Invalid" } else { "" }),
+        };
+        let alt = format!("{alt:.2}{}", crate::units::alt_unit());
+        let in_grid = (-80.0..=84.0).contains(&mlat) && mlng < 180.0 && mlng > -180.0;
+        let (text, text_at, source_at) = match system {
+            "UTM" => (
+                in_grid.then(|| mp_core::coords::geo_to_utm(mlat, mlng)).flatten().map(|u| {
+                    let s = mp_core::coords::utm_string(&u);
+                    format!("{}\n{alt}", s.split(' ').collect::<Vec<_>>().join("\n"))
+                }),
+                at(70.0, 6.0),
+                at(3.0, 33.0),
+            ),
+            "MGRS" => (
+                in_grid.then(|| mp_core::coords::geo_to_mgrs(mlat, mlng)).flatten().map(|m| format!("{m}\n{alt}")),
+                at(8.0, 30.0),
+                at(71.0, 5.0),
+            ),
+            _ => (Some(format!("{mlat:.7}\n{mlng:.7}\n{alt}")), at(70.0, 6.0), at(3.0, 33.0)),
+        };
+        if let Some(text) = text {
+            p.text(text_at, egui::Align2::LEFT_TOP, text, f.clone(), white);
+            p.text(source_at, egui::Align2::LEFT_TOP, alt_source, f.clone(), white);
+        }
 
         // panel3 (3,64 123x127)
         let px = 3.0;
@@ -509,7 +599,9 @@ impl FlightPlanView {
             }
         }
 
-        let total_w: f32 = COLS.iter().map(|c| c.1).sum();
+        let system = coord_system(app);
+        let widths: Vec<f32> = COLS.iter().enumerate().map(|(i, c)| if column_visible(i, system) { c.1 } else { 0.0 }).collect();
+        let total_w: f32 = widths.iter().sum();
         let (hdr_h, row_h) = (21.0, 22.0);
         let n = self.items.len();
         let (area, _) = ui.allocate_exact_size(Vec2::new(total_w.max(ui.available_width()), hdr_h + row_h * n as f32), Sense::hover());
@@ -519,7 +611,10 @@ impl FlightPlanView {
         p.rect_filled(area, 0.0, theme::bg());
 
         let mut x = area.left();
-        for (i, (_, w)) in COLS.iter().enumerate() {
+        for (i, w) in widths.iter().enumerate() {
+            if *w == 0.0 {
+                continue;
+            }
             let r = Rect::from_min_size(Pos2::new(x, area.top()), Vec2::new(*w, hdr_h));
             p.rect_stroke(r, 0.0, Stroke::new(1.0, grid_line), StrokeKind::Inside);
             p.with_clip_rect(r).text(r.left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, &headers[i], f.clone(), Color32::WHITE);
@@ -542,7 +637,7 @@ impl FlightPlanView {
             };
             let mut cells = Vec::with_capacity(COLS.len());
             let mut x = area.left();
-            for (_, w) in COLS.iter() {
+            for w in &widths {
                 cells.push(Rect::from_min_size(Pos2::new(x, y), Vec2::new(*w, row_h)));
                 x += w;
             }
@@ -558,7 +653,7 @@ impl FlightPlanView {
                         _ => false,
                     }
             };
-            for (c, r) in cells.iter().enumerate() {
+            for (c, r) in cells.iter().enumerate().filter(|(_, r)| r.width() > 0.0) {
                 p.rect_filled(*r, 0.0, if c == 0 { theme::bg() } else if c == 8 && low { Color32::RED } else { row_bg });
                 p.rect_stroke(*r, 0.0, Stroke::new(1.0, grid_line), StrokeKind::Inside);
             }
@@ -587,6 +682,7 @@ impl FlightPlanView {
                 }
                 resp
             });
+            let mut coord_clicked = false;
             let mut cell_edit = |ui: &mut egui::Ui, r: Rect, dv: egui::DragValue| {
                 let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink(1.0)));
                 {
@@ -614,8 +710,46 @@ impl FlightPlanView {
                     *v = shown / m;
                 }
             }
-            cell_edit(ui, cells[6], egui::DragValue::new(&mut w.lat).speed(0.00001).fixed_decimals(7));
-            cell_edit(ui, cells[7], egui::DragValue::new(&mut w.lng).speed(0.00001).fixed_decimals(7));
+            if system == "GEO" {
+                cell_edit(ui, cells[6], egui::DragValue::new(&mut w.lat).speed(0.00001).fixed_decimals(7));
+                cell_edit(ui, cells[7], egui::DragValue::new(&mut w.lng).speed(0.00001).fixed_decimals(7));
+            } else {
+                let shown = coord_cells(w.lat, w.lng);
+                for c in (COL_ZONE..=COL_MGRS).filter(|c| column_visible(*c, system)) {
+                    let k = c - COL_ZONE;
+                    let editing = matches!(&self.coord_edit, Some((row, col, _)) if (*row, *col) == (i, c));
+                    let mut text = match &self.coord_edit {
+                        Some((_, _, t)) if editing => t.clone(),
+                        _ => shown[k].clone(),
+                    };
+                    let resp = ui.put(
+                        cells[c].shrink2(Vec2::new(2.0, 1.0)),
+                        egui::TextEdit::singleline(&mut text)
+                            .frame(egui::Frame::NONE)
+                            .margin(Vec2::new(1.0, 0.0))
+                            .vertical_align(egui::Align::Center)
+                            .min_size(Vec2::new(0.0, cells[c].height() - 2.0))
+                            .id(egui::Id::new(("coordcell", i, c)))
+                            .desired_width(cells[c].width() - 4.0),
+                    );
+                    if resp.gained_focus() || resp.clicked() {
+                        coord_clicked = true;
+                    }
+                    if resp.has_focus() {
+                        self.coord_edit = Some((i, c, text));
+                    } else if editing {
+                        self.coord_edit = None;
+                        if text != shown[k] {
+                            let mut edited = shown.clone();
+                            edited[k] = text;
+                            if let Some((lat, lng)) = coords_from_cells(c, &edited) {
+                                w.lat = lat;
+                                w.lng = lng;
+                            }
+                        }
+                    }
+                }
+            }
             {
                 let m = mults[6];
                 let mut shown = w.alt * m;
@@ -623,6 +757,9 @@ impl FlightPlanView {
                 if shown != w.alt * m {
                     w.alt = shown / m;
                 }
+            }
+            if coord_clicked {
+                select = Some(i);
             }
             ui.put(cells[9].shrink(1.0), |ui: &mut egui::Ui| {
                 let cur = AltMode::from_frame(w.frame);
@@ -638,11 +775,11 @@ impl FlightPlanView {
                     })
                     .response
             });
-            let dr = cells[10].shrink(2.0);
+            let dr = cells[COL_DELETE].shrink(2.0);
             if ui.put(dr, |ui: &mut egui::Ui| system_button(ui, "X", dr.size())).clicked() {
                 delete = Some(i);
             }
-            for (c, tex, dir) in [(11usize, up, -1i32), (12, down, 1)] {
+            for (c, tex, dir) in [(COL_DELETE + 1, up, -1i32), (COL_DELETE + 2, down, 1)] {
                 let ir = Rect::from_center_size(cells[c].center(), Vec2::splat(20.0));
                 p.image(tex, ir, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
                 if ui.interact(cells[c], ui.scope_id().with(("updown", i, c)), Sense::click()).clicked() {
@@ -655,7 +792,7 @@ impl FlightPlanView {
             if let Some((g, a, d, az)) = derived[i] {
                 for (k, v) in [g, a, crate::units::dist(d as f32) as f64, az].iter().enumerate() {
                     let txt = if k >= 2 { format!("{v:.0}") } else { format!("{v:.1}") };
-                    p.text(cells[13 + k].left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, txt, f.clone(), Color32::WHITE);
+                    p.text(cells[COL_GRAD + k].left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, txt, f.clone(), Color32::WHITE);
                 }
             }
         }
@@ -1195,5 +1332,135 @@ fn unit_mult(unit: &str) -> Option<(f32, &'static str)> {
         "speed" => Some((crate::units::speed(1.0), crate::units::speed_unit())),
         "dist" => Some((crate::units::dist(1.0), crate::units::dist_unit())),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod coord_tests {
+    use super::*;
+    use crate::{app::Settings, assets::Assets, joystick::Joystick, map::TileCache};
+
+    struct Harness {
+        ctx: egui::Context,
+        view: FlightPlanView,
+        settings: Settings,
+        tiles: TileCache,
+        assets: Assets,
+        joystick: Joystick,
+        toasts: crate::app::Toasts,
+        labels: Vec<(String, Pos2)>,
+    }
+
+    impl Harness {
+        fn new() -> Self {
+            let ctx = egui::Context::default();
+            let assets = Assets::load(&ctx);
+            let mut view = FlightPlanView::default();
+            view.items = vec![Locationwp { id: mavcmd::WAYPOINT, lat: -35.363261, lng: 149.165230, alt: 100.0, frame: 3, ..Default::default() }];
+            let mut h = Self { ctx, assets, view, settings: Settings::default(), tiles: TileCache::offline(), joystick: Joystick::default(), toasts: Default::default(), labels: Vec::new() };
+            h.frame(Vec::new());
+            h.frame(Vec::new());
+            h
+        }
+
+        fn frame(&mut self, events: Vec<egui::Event>) {
+            let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1400.0, 400.0))), events, ..Default::default() };
+            let mut actions = Vec::new();
+            let mut out = self.ctx.run_ui(input, |ui| {
+                let mut app = AppCtx {
+                    link: None,
+                    extra_links: &[],
+                    tiles: &mut self.tiles,
+                    toasts: &mut self.toasts,
+                    settings: &mut self.settings,
+                    actions: &mut actions,
+                    sim_running: false,
+                    assets: &self.assets,
+                    readonly: false,
+                    joystick: &mut self.joystick,
+                };
+                ui.scope_builder(egui::UiBuilder::new().max_rect(Rect::from_min_size(Pos2::ZERO, Vec2::new(130.0, 200.0))), |ui| self.view.action_panel(ui, &mut app));
+                ui.scope_builder(egui::UiBuilder::new().max_rect(Rect::from_min_size(Pos2::new(0.0, 220.0), Vec2::new(1400.0, 180.0))), |ui| self.view.commands_grid(ui, &mut app));
+            });
+            out.textures_delta.clear();
+            fn walk(shape: &egui::Shape, out: &mut Vec<(String, Pos2)>) {
+                match shape {
+                    egui::Shape::Text(t) => out.push((t.galley.text().to_string(), t.pos + t.galley.size() / 2.0)),
+                    egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+                    _ => {}
+                }
+            }
+            self.labels.clear();
+            for s in &out.shapes {
+                walk(&s.shape, &mut self.labels);
+            }
+        }
+
+        fn label(&self, text: &str) -> Option<Pos2> {
+            self.labels.iter().find(|(t, _)| t == text).map(|l| l.1)
+        }
+
+        fn click(&mut self, pos: Pos2) {
+            for pressed in [true, false] {
+                self.frame(vec![egui::Event::PointerMoved(pos), egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE }]);
+            }
+            self.frame(Vec::new());
+        }
+
+        fn choose_system(&mut self, current: &str, system: &str) {
+            let combo = self.label(current).expect("coordinate selector");
+            self.click(combo);
+            let item = self.labels.iter().rev().find(|(t, _)| t == system).expect("system option").1;
+            self.click(item);
+            assert_eq!(self.settings.planner.get("fpcoordmouse").map(String::as_str), Some(system));
+        }
+
+        /// Replace a grid cell's text below `header` and end the edit with Enter.
+        fn edit_cell(&mut self, header: &str, text: &str) {
+            // the grid starts at y = 220; the selector above may show the same text
+            let h = self.labels.iter().find(|(t, p)| t == header && p.y > 220.0).map(|l| l.1).unwrap_or_else(|| panic!("{header} column hidden: {:?}", self.labels));
+            self.click(h + Vec2::new(0.0, 22.0));
+            let key = |key, modifiers| egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers };
+            self.frame(vec![key(egui::Key::A, egui::Modifiers::COMMAND)]);
+            self.frame(vec![egui::Event::Text(text.into())]);
+            self.frame(vec![key(egui::Key::Enter, egui::Modifiers::NONE)]);
+            self.frame(Vec::new());
+        }
+    }
+
+    #[test]
+    fn utm_and_mgrs_columns_switch_and_edits_convert_back_to_lat_lng() {
+        let mut h = Harness::new();
+        assert!(h.label("Zone").is_none() && h.label("MGRS").is_none());
+        assert!(h.label("-35.3632610\n149.1652300\n0.00m").is_none(), "mouse location starts at 0,0");
+        assert!(h.label("0.0000000\n0.0000000\n0.00m").is_some(), "{:?}", h.labels);
+
+        h.choose_system("GEO", "UTM");
+        for header in ["Zone", "Easting", "Northing"] {
+            assert!(h.label(header).is_some(), "{header}");
+        }
+        assert!(h.label("MGRS").is_none());
+        let origin = mp_core::coords::utm_string(&mp_core::coords::geo_to_utm(0.0, 0.0).unwrap()).replace(' ', "\n");
+        assert!(origin.starts_with("31N\n166021.4"));
+        assert!(h.label(&format!("{origin}\n0.00m")).is_some(), "UTM mouse display: {:?}", h.labels);
+        let (zone, east, north) = mp_core::coords::to_utm_signed(-35.363261, 149.165230);
+        assert_eq!(zone, -55);
+        h.edit_cell("Easting", &format!("{:.3}", east + 1000.0));
+        let (lat, lng) = mp_core::coords::utm_signed_to_geo(zone, east + 1000.0, north);
+        let w = h.view.items[0];
+        assert!((w.lat - lat).abs() < 1e-9 && (w.lng - lng).abs() < 1e-9, "{} {}", w.lat, w.lng);
+        assert!(w.lng > 149.17);
+        h.edit_cell("Northing", "not a number");
+        assert_eq!((h.view.items[0].lat, h.view.items[0].lng), (w.lat, w.lng), "invalid UTM is ignored");
+
+        h.choose_system("UTM", "MGRS");
+        assert!(h.label("Zone").is_none() && h.labels.iter().any(|(t, p)| t == "MGRS" && p.y > 220.0));
+        let target = mp_core::coords::geo_to_mgrs(-35.36, 149.16).unwrap();
+        h.edit_cell("MGRS", &target);
+        let (lat, lng) = mp_core::coords::mgrs_to_geo(&target).unwrap();
+        assert_eq!((h.view.items[0].lat, h.view.items[0].lng), (lat, lng));
+
+        h.choose_system("MGRS", "GEO");
+        assert!(h.label("MGRS").is_none() && h.label("Zone").is_none() && h.label("GEO").is_some());
     }
 }

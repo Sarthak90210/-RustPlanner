@@ -4,6 +4,7 @@
 //! Platform independent: no UI and no OS-specific code outside of `comms` serial support.
 
 pub mod comms;
+pub mod coords;
 pub mod dataflash;
 pub mod devid;
 pub mod firmware;

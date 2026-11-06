@@ -274,6 +274,10 @@ impl MissionPlannerApp {
         if std::env::var_os("MP_DEMO").is_some() {
             startup.push(AppAction::DemoFlight);
         }
+        // MP_COORDS=GEO|UTM|MGRS selects PLAN's coordinate system (Settings "fpcoordmouse")
+        if let Ok(v) = std::env::var("MP_COORDS") {
+            settings.planner.insert("fpcoordmouse".into(), v.to_ascii_uppercase());
+        }
         if let Ok(v) = std::env::var("MP_VIEW") {
             settings.view = match v.to_ascii_lowercase().as_str() {
                 "plan" => View::FlightPlan,

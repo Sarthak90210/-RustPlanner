@@ -161,6 +161,14 @@ model. Active/extra links supply vehicle poses; mission changes update the next 
 test validates network links, waypoint absolute/relative heights, mission/aircraft updates, the model,
 HEAD responses, missing resources and server shutdown. Google Earth itself has not been exercised.
 
+Run 14 adds PLAN's coordinate systems. The Coords selector switches the mouse readout between GEO,
+UTM and MGRS (with SRTM altitude and source) and persists as `fpcoordmouse`. The waypoint grid swaps
+Lat/Lon for editable Zone/Easting/Northing or MGRS columns. Edits convert back to latitude/longitude,
+and unparsable entries are ignored, as in the original. `mp_core::coords` ports GeoUtility's
+transforms, including its zone exceptions, rounded MGRS digits and trailing-zero trimming. Its UTM
+values are checked against the independent PyPI `utm` package. An egui test switches systems and
+edits UTM and MGRS cells. `MP_COORDS=UTM|MGRS` with capture cases 51/52 renders each mode.
+
 ## License
 
 GPL-3.0, like Mission Planner. Icons and marker images are Mission Planner / GMap.NET assets under the same license.

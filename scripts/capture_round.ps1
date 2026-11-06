@@ -59,14 +59,17 @@ $cases = @(
  @('47_adsb','setup',1,0,0,17,7),
  @('48_cubeid','setup',1,0,0,20,7),
  @('49_dronecan','setup',0,0,0,25,4),
- @('50_antenna_tracker','setup',0,0,0,39,4)
+ @('50_antenna_tracker','setup',0,0,0,39,4),
+ @('51_plan_utm','plan',1,1,0,0,12,'MP_COORDS','UTM'),
+ @('52_plan_mgrs','plan',1,1,0,0,12,'MP_COORDS','MGRS')
 )
 $last = [Math]::Min($cases.Count, $From - 1 + $Count) - 1
 for ($ci = $From - 1; $ci -le $last; $ci++) {
     $case = $cases[$ci]
-    foreach ($name in @('MP_AUTOSIM','MP_DEMO','MP_SURVEY','MP_INSPECTOR','MP_TEMP','MP_SWARM')) {
+    foreach ($name in @('MP_AUTOSIM','MP_DEMO','MP_SURVEY','MP_INSPECTOR','MP_TEMP','MP_SWARM','MP_COORDS')) {
         Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
     }
+    $env:MP_COORDS = 'GEO'
     $env:MP_DESKTOP = $desktopOne
     $env:MP_DATA_DIR = Join-Path $captureRoot 'session-data'
     $env:MP_VIEW = $case[1]
