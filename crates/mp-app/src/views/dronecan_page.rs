@@ -160,11 +160,11 @@ impl DroneCanPage {
                     if self.menu_for == Some(n.id) {
                         let mut close = false;
                         egui::Popup::menu(&resp).show(|ui| {
-                            if ui.button("Restart").clicked() {
+                            if ui.button(crate::i18n::t("Restart")).clicked() {
                                 self.session.restart(n.id);
                                 close = true;
                             }
-                            if ui.button("Select").clicked() {
+                            if ui.button(crate::i18n::t("Select")).clicked() {
                                 self.selected = Some(n.id);
                                 close = true;
                             }

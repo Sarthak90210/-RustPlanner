@@ -144,7 +144,7 @@ impl OsdEditor {
         if btn(ui, 23.0, 32.0, "Write customization") {
             self.write(link, app);
         }
-        ui.put(Rect::from_min_size(Pos2::new(px + 24.0, o.y + 8.0 + 63.0), Vec2::new(145.0, 17.0)), egui::Checkbox::new(&mut self.auto_write, "Auto write on leaving"));
+        ui.put(Rect::from_min_size(Pos2::new(px + 24.0, o.y + 8.0 + 63.0), Vec2::new(145.0, 17.0)), egui::Checkbox::new(&mut self.auto_write, crate::i18n::t("Auto write on leaving")));
         if btn(ui, 112.0, 42.0, "OSD / Telmetry Slots Config") {
             self.screen = 5.min(*screens.last().unwrap_or(&1));
         }
@@ -183,8 +183,8 @@ impl OsdEditor {
         p.rect_filled(canvas, 0.0, Color32::from_rgb(0x55, 0x6b, 0x7a));
         let ny = canvas.top() + ch * NTSC_ROWS as f32;
         p.line_segment([Pos2::new(canvas.left(), ny), Pos2::new(canvas.right(), ny)], Stroke::new(1.0, Color32::DARK_GRAY));
-        p.text(Pos2::new(canvas.left() + 6.0, ny - 12.0), egui::Align2::LEFT_TOP, "NTSC", egui::FontId::proportional(8.0), Color32::BLACK);
-        p.text(Pos2::new(canvas.left() + 6.0, ny + 3.0), egui::Align2::LEFT_TOP, "PAL", egui::FontId::proportional(8.0), Color32::BLACK);
+        p.text(Pos2::new(canvas.left() + 6.0, ny - 12.0), egui::Align2::LEFT_TOP, crate::i18n::t("NTSC"), egui::FontId::proportional(8.0), Color32::BLACK);
+        p.text(Pos2::new(canvas.left() + 6.0, ny + 3.0), egui::Align2::LEFT_TOP, crate::i18n::t("PAL"), egui::FontId::proportional(8.0), Color32::BLACK);
         let font = self.font(ui.ctx());
         let mut hits: Vec<(String, Rect)> = Vec::new();
         for it in &items {
@@ -232,7 +232,7 @@ impl OsdEditor {
         let rw = (body.right() - rx - 4.0).max(200.0);
         let rp = ui.painter().clone();
         crate::views::tuning::group_box(&rp, Rect::from_min_size(Pos2::new(rx, body.top()), Vec2::new(rw, 70.0)), "Editor Options");
-        ui.put(Rect::from_min_size(Pos2::new(rx + 23.0, body.top() + 30.0), Vec2::new(rw - 30.0, 17.0)), egui::Checkbox::new(&mut self.name_captions, "Use item names as captions"));
+        ui.put(Rect::from_min_size(Pos2::new(rx + 23.0, body.top() + 30.0), Vec2::new(rw - 30.0, 17.0)), egui::Checkbox::new(&mut self.name_captions, crate::i18n::t("Use item names as captions")));
         crate::views::tuning::group_box(&rp, Rect::from_min_size(Pos2::new(rx, body.top() + 76.0), Vec2::new(rw, 90.0)), "Screen Options");
         for (k, opt) in ["ENABLE", "CHAN_MIN", "CHAN_MAX"].iter().enumerate() {
             let n = format!("{sp}{opt}");

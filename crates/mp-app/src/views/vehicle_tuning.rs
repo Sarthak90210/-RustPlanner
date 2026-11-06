@@ -117,15 +117,15 @@ impl VehicleTuning {
         };
         let mut answer = None;
         egui::Modal::new(egui::Id::new("vehicle_tuning_large_value")).show(ctx, |ui| {
-            ui.heading("Large Value");
+            ui.heading(crate::i18n::t("Large Value"));
             ui.label(format!(
                 "{name} has more than doubled the last input. Are you sure?"
             ));
             ui.horizontal(|ui| {
-                if ui.button("Yes").clicked() {
+                if ui.button(crate::i18n::t("Yes")).clicked() {
                     answer = Some(true);
                 }
-                if ui.button("No").clicked() {
+                if ui.button(crate::i18n::t("No")).clicked() {
                     answer = Some(false);
                 }
             });

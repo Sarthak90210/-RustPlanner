@@ -299,7 +299,7 @@ impl ExtendedTuning {
                     }
                 }
             }
-            ui.put(Rect::from_min_size(o + Vec2::new(7.0, 79.0), Vec2::new(170.0, 17.0)), egui::Checkbox::new(&mut self.lock_rp, "Lock Pitch and Roll Values"));
+            ui.put(Rect::from_min_size(o + Vec2::new(7.0, 79.0), Vec2::new(170.0, 17.0)), egui::Checkbox::new(&mut self.lock_rp, crate::i18n::t("Lock Pitch and Roll Values")));
             for (name, v) in edits {
                 if self.lock_rp {
                     // CHK_lockrollpitch mirrors roll <-> pitch rate/stab values
@@ -312,7 +312,7 @@ impl ExtendedTuning {
             }
 
             // Tune / RC options
-            let lab = |x: f32, y: f32, t: &str| p.text(o + Vec2::new(x, y), egui::Align2::LEFT_TOP, t, f.clone(), Color32::WHITE);
+            let lab = |x: f32, y: f32, t: &str| p.text(o + Vec2::new(x, y), egui::Align2::LEFT_TOP, crate::i18n::t(t), f.clone(), Color32::WHITE);
             lab(183.0, 332.0, "Tune");
             lab(183.0, 357.0, "Min");
             for (y, t, names) in [
@@ -398,7 +398,7 @@ pub fn geofence(ui: &mut egui::Ui, app: &mut AppCtx) {
     };
     let o = ui.max_rect().min;
     let p = ui.painter().clone();
-    p.text(o + Vec2::new(19.0, 4.0), egui::Align2::LEFT_TOP, "Geo Fence", fonts::bold_id(15.0), Color32::WHITE);
+    p.text(o + Vec2::new(19.0, 4.0), egui::Align2::LEFT_TOP, crate::i18n::t("Geo Fence"), fonts::bold_id(15.0), Color32::WHITE);
     p.line_segment([o + Vec2::new(23.0, 27.0), o + Vec2::new(483.0, 27.0)], Stroke::new(1.0, Color32::GRAY));
     let t = o + Vec2::new(23.0, 35.0);
     let f = fonts::ui_id(fonts::UI_SIZE);
@@ -418,7 +418,7 @@ pub fn geofence(ui: &mut egui::Ui, app: &mut AppCtx) {
             let val = params[n].value;
             if n == "FENCE_ENABLE" {
                 let mut b = val != 0.0;
-                if ui.put(r, egui::Checkbox::new(&mut b, "Enable")).changed() && !app.readonly {
+                if ui.put(r, egui::Checkbox::new(&mut b, crate::i18n::t("Enable"))).changed() && !app.readonly {
                     link.send(LinkCommand::SetParam { name: n.into(), value: if b { 1.0 } else { 0.0 } });
                 }
             } else {

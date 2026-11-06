@@ -158,7 +158,7 @@ impl CheckList {
         let Some(list) = self.editing.as_mut() else { return };
         let fields: Vec<&'static str> = std::iter::once("mode").chain(cs.fields().into_iter().map(|(n, _)| n)).collect();
         let mut done = None;
-        egui::Window::new("CheckList Editor").collapsible(false).default_size([640.0, 420.0]).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("CheckList Editor")).collapsible(false).default_size([640.0, 420.0]).show(ctx, |ui| {
             let mut remove = None;
             egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
                 egui::Grid::new("cl_edit").num_columns(8).striped(true).show(ui, |ui| {

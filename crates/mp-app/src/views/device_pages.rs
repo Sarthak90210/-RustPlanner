@@ -49,7 +49,7 @@ impl DevicePages {
             app.toasts.error(msg);
         }
         if let Some((text, p)) = self.busy.lock().clone() {
-            egui::Window::new("Progress").collapsible(false).resizable(false).show(ctx, |ui| {
+            egui::Window::new(crate::i18n::t("Progress")).collapsible(false).resizable(false).show(ctx, |ui| {
                 crate::theme::label(ui, &text);
                 crate::theme::progress(ui, p, egui::vec2(300.0, 20.0), "");
             });

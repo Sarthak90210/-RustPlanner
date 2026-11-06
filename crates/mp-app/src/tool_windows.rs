@@ -854,7 +854,7 @@ impl Tools {
         let mut open = true;
         let fields: Vec<&'static str> = cs.fields().into_iter().map(|(n, _)| n).collect();
         let mut remove = None;
-        egui::Window::new("Warning Manager").open(&mut open).collapsible(false).default_size([520.0, 300.0]).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Warning Manager")).open(&mut open).collapsible(false).default_size([520.0, 300.0]).show(ctx, |ui| {
             egui::Grid::new("warnings").num_columns(6).striped(true).show(ui, |ui| {
                 for h in ["Field", "Op", "Value", "Repeat (s)", "Say", ""] {
                     theme::label(ui, h);
@@ -908,10 +908,10 @@ impl Tools {
             return;
         }
         let mut open = true;
-        egui::Window::new("Mavlink Mirror").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Mavlink Mirror")).open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
             theme::label(ui, "UDP destination (host:port)");
             ui.add_enabled(!self.mirror_on, egui::TextEdit::singleline(&mut self.mirror_target));
-            ui.add_enabled(!self.mirror_on, egui::Checkbox::new(&mut self.mirror_write, "Write access"));
+            ui.add_enabled(!self.mirror_on, egui::Checkbox::new(&mut self.mirror_write, crate::i18n::t("Write access")));
             if theme::button(ui, if self.mirror_on { "Stop" } else { "Start" }).clicked() {
                 match link {
                     Some(l) => {
@@ -980,7 +980,7 @@ impl Tools {
             })
             .unwrap_or_default();
         let mut open = true;
-        egui::Window::new("Proximity").open(&mut open).collapsible(false).default_size([400.0, 420.0]).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Proximity")).open(&mut open).collapsible(false).default_size([400.0, 420.0]).show(ctx, |ui| {
             let (rect, _) = ui.allocate_exact_size(Vec2::splat(380.0), egui::Sense::hover());
             let p = ui.painter();
             p.rect_filled(rect, 0.0, Color32::BLACK);
@@ -1004,7 +1004,7 @@ impl Tools {
                 p.add(Shape::line(pts, Stroke::new(3.0, col)));
             }
             if readings.is_empty() {
-                p.text(Pos2::new(c.x, rect.bottom() - 16.0), egui::Align2::CENTER_CENTER, "No proximity data", egui::FontId::proportional(12.0), Color32::WHITE);
+                p.text(Pos2::new(c.x, rect.bottom() - 16.0), egui::Align2::CENTER_CENTER, crate::i18n::t("No proximity data"), egui::FontId::proportional(12.0), Color32::WHITE);
             }
         });
         if !open {
@@ -1018,7 +1018,7 @@ impl Tools {
             return;
         }
         let mut open = true;
-        egui::Window::new("Mavlink Signing").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Mavlink Signing")).open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
             theme::label(ui, "Passphrase");
             ui.add(egui::TextEdit::singleline(&mut self.sign_pass).password(true));
             ui.horizontal(|ui| {
@@ -1068,7 +1068,7 @@ impl Tools {
                     let x = chart.left() + chart.width() * k as f32 / 5.0;
                     p.text(Pos2::new(x, chart.bottom() + 3.0), egui::Align2::CENTER_TOP, format!("{:.0}", nyq * k as f64 / 5.0), egui::FontId::proportional(10.0), Color32::WHITE);
                 }
-                p.text(Pos2::new(chart.center().x, rect.bottom() - 2.0), egui::Align2::CENTER_BOTTOM, "Hz", egui::FontId::proportional(10.0), Color32::WHITE);
+                p.text(Pos2::new(chart.center().x, rect.bottom() - 2.0), egui::Align2::CENTER_BOTTOM, crate::i18n::t("Hz"), egui::FontId::proportional(10.0), Color32::WHITE);
                 for (i, (n, s)) in series.iter().enumerate() {
                     let pts: Vec<Pos2> = s.iter().enumerate().skip(1).map(|(k, v)| Pos2::new(chart.left() + chart.width() * k as f32 / s.len() as f32, chart.bottom() - (v / hi) as f32 * chart.height())).collect();
                     p.add(Shape::line(pts, Stroke::new(1.0, colors[i % colors.len()])));
@@ -1098,7 +1098,7 @@ impl Tools {
                 }
                 p.text(chart.left_top() - Vec2::new(4.0, 0.0), egui::Align2::RIGHT_TOP, format!("{:.0}Hz", rate / 2.0), egui::FontId::proportional(10.0), Color32::WHITE);
                 p.text(chart.left_bottom() - Vec2::new(4.0, 0.0), egui::Align2::RIGHT_BOTTOM, "0", egui::FontId::proportional(10.0), Color32::WHITE);
-                p.text(Pos2::new(chart.center().x, rect.bottom() - 2.0), egui::Align2::CENTER_BOTTOM, "time (IMU AccX)", egui::FontId::proportional(10.0), Color32::WHITE);
+                p.text(Pos2::new(chart.center().x, rect.bottom() - 2.0), egui::Align2::CENTER_BOTTOM, crate::i18n::t("time (IMU AccX)"), egui::FontId::proportional(10.0), Color32::WHITE);
             });
             if !open {
                 self.spect = None;

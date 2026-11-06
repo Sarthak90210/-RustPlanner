@@ -471,13 +471,13 @@ impl Grid {
         }
         let mut alt = None;
         resp.context_menu(|ui| {
-            if ui.button("Change Alt").clicked() {
+            if ui.button(crate::i18n::t("Change Alt")).clicked() {
                 alt = self.hover;
                 ui.close();
             }
         });
         let r = Rect::from_min_size(rect.max - Vec2::new(64.0, 20.0), Vec2::new(61.0, 17.0));
-        ui.put(r, egui::Checkbox::new(&mut self.vertical, "Vertical"));
+        ui.put(r, egui::Checkbox::new(&mut self.vertical, crate::i18n::t("Vertical")));
         (moved, alt)
     }
 }
@@ -702,7 +702,7 @@ impl FormationControl {
         }
         let mut open = true;
         let by_key = |k: Key| mavs.iter().find(|m| m.key == k);
-        egui::Window::new("Control").id(egui::Id::new("swarm_formation")).open(&mut open).collapsible(false).resizable(false).order(egui::Order::Foreground).fixed_size([931.0, 471.0]).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Control")).id(egui::Id::new("swarm_formation")).open(&mut open).collapsible(false).resizable(false).order(egui::Order::Foreground).fixed_size([931.0, 471.0]).show(ctx, |ui| {
             let (area, _) = ui.allocate_exact_size(Vec2::new(931.0, 471.0), Sense::hover());
             let o = area.min;
             let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));
@@ -785,7 +785,7 @@ impl FormationControl {
             // tabControl1 / "Stage 1" / grid1
             let tab = r(12.0, 39.0, 769.0, 420.0);
             ui.painter().rect_stroke(tab.with_min_y(tab.min.y + 22.0), 0.0, Stroke::new(1.0, Color32::from_gray(0x82)), egui::StrokeKind::Inside);
-            ui.painter().text(tab.min + Vec2::new(8.0, 4.0), egui::Align2::LEFT_TOP, "Stage 1", crate::fonts::ui_id(crate::fonts::UI_SIZE), Color32::WHITE);
+            ui.painter().text(tab.min + Vec2::new(8.0, 4.0), egui::Align2::LEFT_TOP, crate::i18n::t("Stage 1"), crate::fonts::ui_id(crate::fonts::UI_SIZE), Color32::WHITE);
             let grid_rect = r(19.0, 64.0, 755.0, 388.0);
             if ui.rect_contains_pointer(grid_rect) {
                 let wheel: f32 = ui.input(|i| i.events.iter().filter_map(|e| if let egui::Event::MouseWheel { delta, .. } = e { Some(delta.y) } else { None }).sum());
@@ -853,7 +853,7 @@ impl FormationControl {
         if let Some((k, mut text)) = self.alt_prompt.take() {
             let mut done = None;
             egui::Modal::new(egui::Id::new("swarm_alt")).show(ctx, |ui| {
-                ui.heading("Alt");
+                ui.heading(crate::i18n::t("Alt"));
                 theme::label(ui, "Enter New Alt");
                 ui.text_edit_singleline(&mut text);
                 ui.horizontal(|ui| {

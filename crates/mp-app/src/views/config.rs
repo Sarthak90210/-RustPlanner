@@ -981,7 +981,7 @@ fn planner(ui: &mut egui::Ui, app: &mut AppCtx, _fw: Firmware) {
         let p = ui.painter().clone();
         let f = fonts::ui_id(fonts::UI_SIZE);
         let lab = |x: f32, y: f32, t: &str| {
-            p.text(o + Vec2::new(x, y), egui::Align2::LEFT_TOP, t, f.clone(), Color32::WHITE);
+            p.text(o + Vec2::new(x, y), egui::Align2::LEFT_TOP, crate::i18n::t(t), f.clone(), Color32::WHITE);
         };
         let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));
         let pl = &mut app.settings.planner;
@@ -1084,7 +1084,36 @@ fn planner(ui: &mut egui::Ui, app: &mut AppCtx, _fw: Firmware) {
         check(ui, pl, "speecharmenabled", r(760.0, 89.0, 85.0, 17.0), "Arm/Disarm", false);
         check(ui, pl, "speechlowspeedenabled", r(853.0, 89.0, 85.0, 17.0), "Low Speed", false);
         combo(ui, pl, "speech_severity", r(107.0, 111.0, 138.0, 21.0), &["EMERGENCY", "ALERT", "CRITICAL", "ERROR", "WARNING", "NOTICE", "INFO", "DEBUG"], "CRITICAL");
-        combo(ui, pl, "language", r(107.0, 139.0, 138.0, 21.0), &["English (en-US)"], "English (en-US)");
+        // CMB_language: CultureInfo display names; a change is saved and needs a restart
+        {
+            let lr = r(107.0, 139.0, 138.0, 21.0);
+            let cur = pl.get("language").cloned().unwrap_or_else(|| crate::i18n::culture().to_string());
+            let shown = crate::i18n::CULTURES.iter().find(|(c, _)| c.eq_ignore_ascii_case(&cur)).map(|(_, n)| *n).unwrap_or("English (United States)");
+            let mut pick = None;
+            ui.put(lr, |ui: &mut egui::Ui| {
+                egui::ComboBox::from_id_salt(("pl", "language")).width(lr.width() - 8.0).wrap_mode(egui::TextWrapMode::Truncate).selected_text(shown).show_ui(ui, |ui| {
+                    for (code, name) in crate::i18n::CULTURES {
+                        if ui.selectable_label(cur.eq_ignore_ascii_case(code), *name).clicked() {
+                            pick = Some(*code);
+                        }
+                    }
+                }).response
+            });
+            if let Some(code) = pick.filter(|c| !c.eq_ignore_ascii_case(&cur)) {
+                pl.insert("language".into(), code.to_string());
+                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("language_restart"), true));
+            }
+            if ui.ctx().data(|d| d.get_temp::<bool>(egui::Id::new("language_restart"))).unwrap_or(false) {
+                egui::Modal::new(egui::Id::new("language_restart_modal")).show(ui.ctx(), |ui| {
+                    theme::label(ui, "Please Restart the Planner");
+                    if theme::button(ui, "OK").clicked() {
+                        // MainV2.instance.Close()
+                        ui.ctx().data_mut(|d| d.remove::<bool>(egui::Id::new("language_restart")));
+                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                });
+            }
+        }
         let jr = r(107.0, 166.0, 99.0, 23.0);
         if ui.put(jr, |ui: &mut egui::Ui| theme::button_sized(ui, "Joystick Setup", jr.size())).clicked() {
             app.joystick.window_open = true;

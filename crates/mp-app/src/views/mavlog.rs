@@ -62,7 +62,7 @@ impl MavlinkLog {
             return;
         }
         let mut open = true;
-        egui::Window::new("Log").open(&mut open).collapsible(false).resizable(false).fixed_size([884.0, 380.0]).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Log")).open(&mut open).collapsible(false).resizable(false).fixed_size([884.0, 380.0]).show(ctx, |ui| {
             let (full, _) = ui.allocate_exact_size(Vec2::new(884.0, 380.0), egui::Sense::hover());
             let o = full.min;
             let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));

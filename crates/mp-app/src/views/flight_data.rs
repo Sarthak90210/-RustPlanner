@@ -447,7 +447,7 @@ impl FlightDataView {
 
     /// contextMenuStripHud
     fn hud_menu(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
-        ui.menu_button("Video", |ui| {
+        ui.menu_button(crate::i18n::t("Video"), |ui| {
             let rec = self.video.as_ref().map(|v| v.recording()).unwrap_or(false);
             if ui.add_enabled(self.video.is_some() && !rec, egui::Button::new("Record Hud to AVI")).clicked() {
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -466,11 +466,11 @@ impl FlightDataView {
                 }
                 ui.close();
             }
-            if ui.button("Set MJPEG source").clicked() {
+            if ui.button(crate::i18n::t("Set MJPEG source")).clicked() {
                 self.hud_prompt = Some(HudPrompt::Mjpeg(app.settings.mjpeg_url.clone()));
                 ui.close();
             }
-            if ui.button("Start Camera").clicked() {
+            if ui.button(crate::i18n::t("Start Camera")).clicked() {
                 if self.video.is_none() {
                     self.video = Some(crate::mjpeg::Mjpeg::start(&app.settings.mjpeg_url, ui.ctx()));
                 }
@@ -482,7 +482,7 @@ impl FlightDataView {
                     ui.close();
                 }
             }
-            if ui.button("GStreamer Stop").clicked() {
+            if ui.button(crate::i18n::t("GStreamer Stop")).clicked() {
                 self.video = None;
                 ui.close();
             }
@@ -491,27 +491,27 @@ impl FlightDataView {
             app.settings.hud_wide = !app.settings.hud_wide;
             ui.close();
         }
-        if ui.button("User Items").clicked() {
+        if ui.button(crate::i18n::t("User Items")).clicked() {
             self.hud_prompt = Some(HudPrompt::UserItems);
             ui.close();
         }
-        if ui.checkbox(&mut app.settings.hud.russian, "Russian Hud").clicked() {
+        if ui.checkbox(&mut app.settings.hud.russian, crate::i18n::t("Russian Hud")).clicked() {
             ui.close();
         }
-        if ui.button("Swap With Map").clicked() {
+        if ui.button(crate::i18n::t("Swap With Map")).clicked() {
             app.settings.hud_swap = !app.settings.hud_swap;
             ui.close();
         }
-        if ui.button("Ground Color").clicked() {
+        if ui.button(crate::i18n::t("Ground Color")).clicked() {
             let c = app.settings.hud.ground.unwrap_or([0x9b, 0xb8, 0x24, 0x41, 0x4f, 0x07]);
             self.hud_prompt = Some(HudPrompt::Ground([c[0], c[1], c[2]], [c[3], c[4], c[5]]));
             ui.close();
         }
-        if ui.button("Battery Cell Voltage").clicked() {
+        if ui.button(crate::i18n::t("Battery Cell Voltage")).clicked() {
             self.hud_prompt = Some(HudPrompt::Cells(app.settings.hud.cells.to_string()));
             ui.close();
         }
-        if ui.checkbox(&mut app.settings.hud.icons, "Show icons").clicked() {
+        if ui.checkbox(&mut app.settings.hud.icons, crate::i18n::t("Show icons")).clicked() {
             ui.close();
         }
     }
@@ -665,17 +665,17 @@ impl FlightDataView {
         self.tab = visible[sel.min(visible.len() - 1)];
         // contextMenuStripactionstab: Customize / MultiLine
         ui.interact(strip, ui.scope_id().with("tabs_ctx"), Sense::click()).context_menu(|ui| {
-            if ui.button("Customize").clicked() {
+            if ui.button(crate::i18n::t("Customize")).clicked() {
                 self.tabs_customize = true;
                 ui.close();
             }
-            if ui.checkbox(&mut app.settings.fd_tabs_multiline, "MultiLine").clicked() {
+            if ui.checkbox(&mut app.settings.fd_tabs_multiline, crate::i18n::t("MultiLine")).clicked() {
                 ui.close();
             }
         });
         if self.tabs_customize {
             let mut open = true;
-            egui::Window::new("Customize").open(&mut open).collapsible(false).resizable(false).show(ui.ctx(), |ui| {
+            egui::Window::new(crate::i18n::t("Customize")).open(&mut open).collapsible(false).resizable(false).show(ui.ctx(), |ui| {
                 for t in TABS {
                     let mut on = !app.settings.fd_hidden_tabs.iter().any(|h| h == t);
                     if ui.checkbox(&mut on, t).changed() {
@@ -742,7 +742,7 @@ impl FlightDataView {
         if app.settings.quick_undocked {
             theme::label(ui, "Quick view is undocked (right-click it to dock)");
             let mut open = true;
-            egui::Window::new("Quick").open(&mut open).default_size([300.0, 240.0]).show(ui.ctx(), |ui| self.quick_grid(ui, app, cs));
+            egui::Window::new(crate::i18n::t("Quick")).open(&mut open).default_size([300.0, 240.0]).show(ui.ctx(), |ui| self.quick_grid(ui, app, cs));
             if !open {
                 app.settings.quick_undocked = false;
             }
@@ -778,7 +778,7 @@ impl FlightDataView {
             }
             // contextMenuStripQuickView
             resp.context_menu(|ui| {
-                if ui.button("Set View Count").clicked() {
+                if ui.button(crate::i18n::t("Set View Count")).clicked() {
                     self.quick_count = Some((app.settings.quick_cols.to_string(), app.settings.quick_rows.to_string()));
                     ui.close();
                 }
@@ -794,7 +794,7 @@ impl FlightDataView {
     fn quick_dialogs(&mut self, ctx: &egui::Context, app: &mut AppCtx, cs: &CurrentState) {
         if let Some((c, r)) = self.quick_count.as_mut() {
             let mut done = None;
-            egui::Window::new("Set View Count").collapsible(false).resizable(false).show(ctx, |ui| {
+            egui::Window::new(crate::i18n::t("Set View Count")).collapsible(false).resizable(false).show(ctx, |ui| {
                 theme::label(ui, "Enter number of columns to have.");
                 ui.text_edit_singleline(c);
                 theme::label(ui, "Enter number of rows to have.");
@@ -827,7 +827,7 @@ impl FlightDataView {
 
         if let Some(i) = self.quick_edit {
             let mut open = true;
-            egui::Window::new("Display This").open(&mut open).collapsible(false).show(ui.ctx(), |ui| {
+            egui::Window::new(crate::i18n::t("Display This")).open(&mut open).collapsible(false).show(ui.ctx(), |ui| {
                 egui::ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
                     egui::Grid::new("qsel").num_columns(4).show(ui, |ui| {
                         for (k, (n, _)) in cs.fields().into_iter().enumerate() {
@@ -1056,8 +1056,8 @@ impl FlightDataView {
                 fonts::ui_id(fonts::UI_SIZE),
                 Color32::WHITE,
             );
-            ui.put(Rect::from_min_size(o + Vec2::new(260.0, 3.0), Vec2::new(59.0, 17.0)), egui::Checkbox::new(&mut self.tuning, "Tuning"));
-            ui.put(Rect::from_min_size(o + Vec2::new(325.0, 3.0), Vec2::new(75.0, 17.0)), egui::Checkbox::new(&mut self.auto_pan, "Auto Pan"));
+            ui.put(Rect::from_min_size(o + Vec2::new(260.0, 3.0), Vec2::new(59.0, 17.0)), egui::Checkbox::new(&mut self.tuning, crate::i18n::t("Tuning")));
+            ui.put(Rect::from_min_size(o + Vec2::new(325.0, 3.0), Vec2::new(75.0, 17.0)), egui::Checkbox::new(&mut self.auto_pan, crate::i18n::t("Auto Pan")));
         });
 
         egui::CentralPanel::default().frame(egui::Frame::new()).show(ui, |ui| {
@@ -1194,21 +1194,21 @@ impl FlightDataView {
                     ui.close();
                 }
             }
-            ui.menu_button("Set Home Here", |ui| {
-                if ui.button("Set Home Here").clicked() {
+            ui.menu_button(crate::i18n::t("Set Home Here"), |ui| {
+                if ui.button(crate::i18n::t("Set Home Here")).clicked() {
                     ctx_action = Some("Set Home Here");
                     ui.close();
                 }
-                if ui.button("Set EKF Origin Here").clicked() {
+                if ui.button(crate::i18n::t("Set EKF Origin Here")).clicked() {
                     ctx_action = Some("Set EKF Origin Here");
                     ui.close();
                 }
             });
-            if ui.button("TakeOff").clicked() {
+            if ui.button(crate::i18n::t("TakeOff")).clicked() {
                 ctx_action = Some("TakeOff");
                 ui.close();
             }
-            if ui.checkbox(&mut self.camera_overlap, "Camera Overlap").clicked() {
+            if ui.checkbox(&mut self.camera_overlap, crate::i18n::t("Camera Overlap")).clicked() {
                 ui.close();
             }
             for item in ["Jump To Tag", "Gimbal Video"] {
@@ -1325,7 +1325,7 @@ impl FlightDataView {
         let (w, h) = (mrect.width(), mrect.height());
         wind_dir(&p, Rect::from_min_size(o, Vec2::splat(60.0)), cs.wind_dir, cs.wind_vel);
         distance_bar(&p, Rect::from_min_size(o + Vec2::new(66.0, 0.0), Vec2::new((w - 131.0).max(10.0), 22.0)), cs, &mission);
-        p.text(o + Vec2::new(w - 40.0, 3.0), egui::Align2::LEFT_TOP, "Zoom", fonts::ui_id(fonts::UI_SIZE), Color32::BLACK);
+        p.text(o + Vec2::new(w - 40.0, 3.0), egui::Align2::LEFT_TOP, crate::i18n::t("Zoom"), fonts::ui_id(fonts::UI_SIZE), Color32::BLACK);
         let zl = Rect::from_min_size(o + Vec2::new(w - 44.0, 22.0), Vec2::new(42.0, 20.0));
         ui.put(zl, egui::DragValue::new(&mut app.settings.fd_map.zoom).speed(0.1).range(2.0..=22.0).max_decimals(1));
         let trk = Rect::from_min_size(o + Vec2::new(w - 45.0, 40.0), Vec2::new(45.0, (h - 54.0).max(40.0)));
@@ -1334,9 +1334,9 @@ impl FlightDataView {
         p.text(o + Vec2::new(-1.0, h - 48.0), egui::Align2::LEFT_TOP, format!("hdop: {:.1}", cs.gpshdop), small.clone(), Color32::WHITE);
         p.text(o + Vec2::new(-1.0, h - 29.0), egui::Align2::LEFT_TOP, format!("Sats: {}", cs.satcount), small.clone(), Color32::WHITE);
         let ly = h - 30.0;
-        p.text(o + Vec2::new(45.0, ly), egui::Align2::LEFT_TOP, "Current Heading", small.clone(), Color32::RED);
-        p.text(o + Vec2::new(135.0, ly), egui::Align2::LEFT_TOP, "Direct to current WP", small.clone(), Color32::from_rgb(255, 128, 0));
-        p.text(o + Vec2::new(245.0, ly), egui::Align2::LEFT_TOP, "Target Heading", small.clone(), Color32::from_rgb(0, 128, 0));
+        p.text(o + Vec2::new(45.0, ly), egui::Align2::LEFT_TOP, crate::i18n::t("Current Heading"), small.clone(), Color32::RED);
+        p.text(o + Vec2::new(135.0, ly), egui::Align2::LEFT_TOP, crate::i18n::t("Direct to current WP"), small.clone(), Color32::from_rgb(255, 128, 0));
+        p.text(o + Vec2::new(245.0, ly), egui::Align2::LEFT_TOP, crate::i18n::t("Target Heading"), small.clone(), Color32::from_rgb(0, 128, 0));
         let gl = p.layout_no_wrap("GPS Track (Black)".into(), small, Color32::WHITE);
         let gr = Rect::from_min_size(o + Vec2::new(332.0, ly), gl.size());
         p.rect_filled(gr, 0.0, Color32::BLACK);
@@ -1630,7 +1630,7 @@ impl FlightDataView {
             return;
         }
         let mut open = true;
-        egui::Window::new("Raw Sensor View").open(&mut open).collapsible(false).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Raw Sensor View")).open(&mut open).collapsible(false).show(ctx, |ui| {
             egui::Grid::new("raw").num_columns(4).spacing(Vec2::new(18.0, 4.0)).show(ui, |ui| {
                 for (a, b, c, n) in [("ax", "ay", "az", "Accel"), ("gx", "gy", "gz", "Gyro"), ("mx", "my", "mz", "Mag")] {
                     theme::label(ui, n);
@@ -1707,7 +1707,7 @@ impl FlightDataView {
             }
         }
         let mut open = true;
-        egui::Window::new("Log Downloader").open(&mut open).collapsible(false).default_size(Vec2::new(784.0, 412.0)).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Log Downloader")).open(&mut open).collapsible(false).default_size(Vec2::new(784.0, 412.0)).show(ctx, |ui| {
             ui.horizontal_top(|ui| {
                 ui.vertical(|ui| {
                     ui.set_width(321.0);

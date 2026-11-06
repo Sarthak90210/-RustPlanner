@@ -89,7 +89,7 @@ impl HotkeyTools {
             .unwrap_or_default();
         files.sort();
         let mut open = true;
-        egui::Window::new("Plugins").open(&mut open).default_size([520.0, 300.0]).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Plugins")).open(&mut open).default_size([520.0, 300.0]).show(ctx, |ui| {
             egui::Grid::new("plugins").num_columns(4).striped(true).show(ui, |ui| {
                 for h in ["Name", "Author", "Version", "Enabled"] {
                     ui.label(RichText::new(h).strong().color(Color32::WHITE));
@@ -144,7 +144,7 @@ impl HotkeyTools {
         let rows = self.cache_rows.clone().unwrap_or_default();
         let mut open = true;
         let mut action = None;
-        egui::Window::new("Map Cache")
+        egui::Window::new(crate::i18n::t("Map Cache"))
             .open(&mut open)
             .default_size([520.0, 300.0])
             .show(ctx, |ui| {
@@ -245,7 +245,7 @@ impl HotkeyTools {
         }
         let mut open = true;
         let mut clicked = Vec::new();
-        egui::Window::new("Devops")
+        egui::Window::new(crate::i18n::t("Devops"))
             .open(&mut open)
             .collapsible(false)
             .resizable(false)

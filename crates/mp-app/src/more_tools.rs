@@ -391,7 +391,7 @@ impl MoreTools {
                     if t == "MAVSerial pass" {
                         if let Some(stop) = &self.serial_pass {
                             if stop.load(std::sync::atomic::Ordering::Relaxed) {
-                                ui.label("Stopped");
+                                ui.label(crate::i18n::t("Stopped"));
                             } else if theme::button(ui, "Stop").clicked() {
                                 stop.store(true, std::sync::atomic::Ordering::Relaxed);
                             }
@@ -422,7 +422,7 @@ impl MoreTools {
         // LogDownloadscp
         if let Some(src) = self.scp_prompt.as_mut() {
             let mut done = None;
-            egui::Window::new("logdownload scp").collapsible(false).resizable(false).show(ctx, |ui| {
+            egui::Window::new(crate::i18n::t("logdownload scp")).collapsible(false).resizable(false).show(ctx, |ui| {
                 theme::label(ui, "user@host:/path/to/logs");
                 ui.add(egui::TextEdit::singleline(src).desired_width(360.0));
                 ui.horizontal(|ui| {
@@ -524,7 +524,7 @@ impl MoreTools {
                         }
                     });
                 }
-                ui.checkbox(&mut self.follow, "Follow the leader");
+                ui.checkbox(&mut self.follow, crate::i18n::t("Follow the leader"));
             });
             if self.follow && self.leader.is_none() {
                 theme::label(ui, "Pick a leader with the radio button");
@@ -563,7 +563,7 @@ impl MoreTools {
             })
         });
         let mut open = true;
-        egui::Window::new("QNH").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("QNH")).open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
             theme::label(ui, "QNH (hPa)");
             ui.text_edit_singleline(&mut self.qnh);
             match (press, self.qnh.trim().parse::<f32>()) {
@@ -586,7 +586,7 @@ impl MoreTools {
     fn baro_ui(&mut self, ctx: &egui::Context, link: Option<&Link>, toasts: &mut Toasts) {
         let Some(v) = self.baro_prompt.as_mut() else { return };
         let mut done = None;
-        egui::Window::new("adjust aircraft baro height").collapsible(false).resizable(false).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("adjust aircraft baro height")).collapsible(false).resizable(false).show(ctx, |ui| {
             theme::label(ui, "Current height above home (m)");
             ui.text_edit_singleline(v);
             ui.horizontal(|ui| {
@@ -620,7 +620,7 @@ impl MoreTools {
             return;
         }
         let mut open = true;
-        egui::Window::new("Manage Command List").open(&mut open).default_size([560.0, 420.0]).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Manage Command List")).open(&mut open).default_size([560.0, 420.0]).show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 egui::Grid::new("cmdlist").num_columns(8).striped(true).show(ui, |ui| {
                     for h in ["Command", "P1", "P2", "P3", "P4", "X", "Y", "Z"] {
@@ -653,7 +653,7 @@ impl MoreTools {
             })
         });
         let mut open = true;
-        egui::Window::new("opticalflow calib").open(&mut open).collapsible(false).show(ctx, |ui| match &flow {
+        egui::Window::new(crate::i18n::t("opticalflow calib")).open(&mut open).collapsible(false).show(ctx, |ui| match &flow {
             Some(f) => {
                 let (r, _) = ui.allocate_exact_size(Vec2::splat(200.0), egui::Sense::hover());
                 let p = ui.painter();
@@ -680,7 +680,7 @@ impl MoreTools {
         let Some(l) = link else { return };
         let cs = l.shared.read().cs.clone();
         let mut open = true;
-        egui::Window::new("gimbal test").open(&mut open).collapsible(false).show(ctx, |ui| match cs.home {
+        egui::Window::new(crate::i18n::t("gimbal test")).open(&mut open).collapsible(false).show(ctx, |ui| match cs.home {
             Some(h) => {
                 let dn = (h.lat - cs.lat).to_radians() * 6_378_137.0;
                 let de = (h.lng - cs.lng).to_radians() * 6_378_137.0 * cs.lat.to_radians().cos();

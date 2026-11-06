@@ -394,7 +394,7 @@ impl FlightPlanView {
         // panel3 (3,64 123x127)
         let px = 3.0;
         let py = 64.0;
-        ui.put(r(px + 3.0, py + 3.0, 50.0, 17.0), egui::Checkbox::new(&mut self.grid, "Grid"));
+        ui.put(r(px + 3.0, py + 3.0, 50.0, 17.0), egui::Checkbox::new(&mut self.grid, crate::i18n::t("Grid")));
         // label1_Click: the network link served by MainV2's web service
         if ui.put(r(px + 62.0, py + 3.0, 60.0, 13.0), egui::Link::new("View KML")).clicked() {
             ui.ctx().open_url(egui::OpenUrl::new_tab("http://127.0.0.1:56781/network.kml"));
@@ -405,7 +405,7 @@ impl FlightPlanView {
             app.settings.fp_map.provider = prov;
             ui.allocate_response(Vec2::ZERO, Sense::hover())
         });
-        p.text(at(px + 4.0, py + 46.0), egui::Align2::LEFT_TOP, "Status", f.clone(), white);
+        p.text(at(px + 4.0, py + 46.0), egui::Align2::LEFT_TOP, crate::i18n::t("Status"), f.clone(), white);
         if put_button(ui, r(px + 3.0, py + 68.0, 115.0, 23.0), "Inject Custom Map") {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if let Some(dir) = rfd::FileDialog::new().set_title("Inject Custom Map").pick_folder() {
@@ -471,17 +471,17 @@ impl FlightPlanView {
 
         // panel1 (3,371 123x89): Home Location
         let py = 371.0;
-        p.text(at(px + 18.0, py + 3.0), egui::Align2::LEFT_TOP, "Home Location", f.clone(), white);
-        p.text(at(px + 4.0, py + 22.0), egui::Align2::LEFT_TOP, "Lat", f.clone(), white);
-        p.text(at(px + 3.0, py + 45.0), egui::Align2::LEFT_TOP, "Long", f.clone(), white);
-        p.text(at(px + 3.0, py + 68.0), egui::Align2::LEFT_TOP, "ASL", f.clone(), white);
+        p.text(at(px + 18.0, py + 3.0), egui::Align2::LEFT_TOP, crate::i18n::t("Home Location"), f.clone(), white);
+        p.text(at(px + 4.0, py + 22.0), egui::Align2::LEFT_TOP, crate::i18n::t("Lat"), f.clone(), white);
+        p.text(at(px + 3.0, py + 45.0), egui::Align2::LEFT_TOP, crate::i18n::t("Long"), f.clone(), white);
+        p.text(at(px + 3.0, py + 68.0), egui::Align2::LEFT_TOP, crate::i18n::t("ASL"), f.clone(), white);
         ui.put(r(px + 47.0, py + 18.0, 65.0, 20.0), egui::DragValue::new(&mut self.home.lat).speed(0.00001).max_decimals(7));
         ui.put(r(px + 47.0, py + 42.0, 65.0, 20.0), egui::DragValue::new(&mut self.home.lng).speed(0.00001).max_decimals(7));
         ui.put(r(px + 47.0, py + 65.0, 65.0, 20.0), egui::DragValue::new(&mut self.home.alt).speed(0.5).max_decimals(2));
 
         if !connected {
             let py = 466.0;
-            p.text(at(px + 3.0, py), egui::Align2::LEFT_TOP, "Vehicle type (offline)", f.clone(), white);
+            p.text(at(px + 3.0, py), egui::Align2::LEFT_TOP, crate::i18n::t("Vehicle type (offline)"), f.clone(), white);
             ui.put(r(px + 3.0, py + 16.0, 115.0, 21.0), |ui: &mut egui::Ui| {
                 let mut fw = self.firmware.unwrap_or_default();
                 egui::ComboBox::from_id_salt("fwsel").width(107.0).selected_text(format!("{fw:?}")).show_ui(ui, |ui| {
@@ -505,7 +505,7 @@ impl FlightPlanView {
         let p = ui.painter().clone();
         let white = Color32::WHITE;
 
-        p.text(o + Vec2::new(9.0, 4.0), egui::Align2::LEFT_TOP, "WP Radius", f.clone(), white);
+        p.text(o + Vec2::new(9.0, 4.0), egui::Align2::LEFT_TOP, crate::i18n::t("WP Radius"), f.clone(), white);
         // TXT_WPRad / TXT_loiterrad (multiplierdist) and TXT_DefaultAlt (multiplieralt) are in
         // display units; the settings keep metres
         let unit_box = |ui: &mut egui::Ui, rect: Rect, metres: &mut f32, m: f32, max: f32| {
@@ -515,9 +515,9 @@ impl FlightPlanView {
             }
         };
         unit_box(ui, r(23.0, 20.0, 36.0, 20.0), &mut app.settings.wp_radius, crate::units::dist(1.0), 1000.0);
-        p.text(o + Vec2::new(76.0, 4.0), egui::Align2::LEFT_TOP, "Loiter Radius", f.clone(), white);
+        p.text(o + Vec2::new(76.0, 4.0), egui::Align2::LEFT_TOP, crate::i18n::t("Loiter Radius"), f.clone(), white);
         unit_box(ui, r(89.0, 20.0, 36.0, 20.0), &mut app.settings.loiter_radius, crate::units::dist(1.0), 10000.0);
-        p.text(o + Vec2::new(151.0, 4.0), egui::Align2::LEFT_TOP, "Default Alt", f.clone(), white);
+        p.text(o + Vec2::new(151.0, 4.0), egui::Align2::LEFT_TOP, crate::i18n::t("Default Alt"), f.clone(), white);
         unit_box(ui, r(154.0, 20.0, 40.0, 20.0), &mut app.settings.default_alt, crate::units::alt(1.0), 10000.0);
         ui.put(r(213.0, 7.0, 79.0, 21.0), |ui: &mut egui::Ui| {
             let cur = AltMode::from_frame(app.settings.alt_frame);
@@ -535,7 +535,7 @@ impl FlightPlanView {
         });
         // CHK_verifyheight.Visible = displayCheckHeightBox
         if crate::display::flag(&app.settings.planner, "displayCheckHeightBox") {
-            ui.put(r(298.0, 13.0, 95.0, 17.0), egui::Checkbox::new(&mut self.verify_height, "Verify Height"));
+            ui.put(r(298.0, 13.0, 95.0, 17.0), egui::Checkbox::new(&mut self.verify_height, crate::i18n::t("Verify Height")));
         }
         if put_button(ui, r(398.0, 8.0, 75.0, 23.0), "Add Below") {
             let at = self.selected.map(|i| i + 1).unwrap_or(self.items.len()).min(self.items.len());
@@ -547,12 +547,12 @@ impl FlightPlanView {
             self.items.insert(at, wp);
             self.selected = Some(at);
         }
-        p.text(o + Vec2::new(479.0, 4.0), egui::Align2::LEFT_TOP, "Alt Warn", f.clone(), white);
+        p.text(o + Vec2::new(479.0, 4.0), egui::Align2::LEFT_TOP, crate::i18n::t("Alt Warn"), f.clone(), white);
         ui.put(r(482.0, 20.0, 40.0, 20.0), egui::DragValue::new(&mut self.alt_warn));
-        ui.put(r(528.0, 12.0, 60.0, 17.0), egui::Checkbox::new(&mut self.spline, "Spline"));
+        ui.put(r(528.0, 12.0, 60.0, 17.0), egui::Checkbox::new(&mut self.spline, crate::i18n::t("Spline")));
         // chk_usemavftp: Settings "UseMissionMAVFTP"
         self.mavftp = app.settings.planner.get("UseMissionMAVFTP").map(|v| v == "True").unwrap_or(false);
-        if ui.put(r(589.0, 12.0, 70.0, 17.0), egui::Checkbox::new(&mut self.mavftp, "MAVFTP")).changed() {
+        if ui.put(r(589.0, 12.0, 70.0, 17.0), egui::Checkbox::new(&mut self.mavftp, crate::i18n::t("MAVFTP"))).changed() {
             app.settings.planner.insert("UseMissionMAVFTP".into(), if self.mavftp { "True" } else { "False" }.into());
         }
         let min_r = Rect::from_min_size(Pos2::new(full.right() - 37.0, o.y), Vec2::new(37.0, 21.0));
@@ -621,7 +621,7 @@ impl FlightPlanView {
             }
             let r = Rect::from_min_size(Pos2::new(x, area.top()), Vec2::new(*w, hdr_h));
             p.rect_stroke(r, 0.0, Stroke::new(1.0, grid_line), StrokeKind::Inside);
-            p.with_clip_rect(r).text(r.left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, &headers[i], f.clone(), Color32::WHITE);
+            p.with_clip_rect(r).text(r.left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, crate::i18n::t(&headers[i]), f.clone(), Color32::WHITE);
             x += w;
         }
 
@@ -854,7 +854,7 @@ impl FlightPlanView {
             if let Some((a, b)) = tracker {
                 let p = view.to_screen(a, b);
                 painter.circle_stroke(p, 8.0, Stroke::new(2.0, Color32::from_rgb(0x00, 0xbf, 0xff)));
-                painter.text(p + Vec2::new(10.0, -6.0), egui::Align2::LEFT_TOP, "Tracker Home", fonts::ui_id(fonts::UI_SIZE), Color32::WHITE);
+                painter.text(p + Vec2::new(10.0, -6.0), egui::Align2::LEFT_TOP, crate::i18n::t("Tracker Home"), fonts::ui_id(fonts::UI_SIZE), Color32::WHITE);
             }
             let mut screen: Vec<(usize, Pos2)> = Vec::new();
             if home.lat != 0.0 || home.lng != 0.0 {
@@ -1055,7 +1055,7 @@ impl FlightPlanView {
             self.switch_type(to);
             r
         });
-        p.text(o + Vec2::new(w - 45.0, 5.0), egui::Align2::LEFT_TOP, "Zoom", f.clone(), Color32::BLACK);
+        p.text(o + Vec2::new(w - 45.0, 5.0), egui::Align2::LEFT_TOP, crate::i18n::t("Zoom"), f.clone(), Color32::BLACK);
         ui.put(
             Rect::from_min_size(o + Vec2::new(w - 49.0, 25.0), Vec2::new(45.0, 20.0)),
             egui::DragValue::new(&mut app.settings.fp_map.zoom).speed(0.1).range(2.0..=22.0).max_decimals(1),
@@ -1162,7 +1162,7 @@ impl FlightPlanView {
         let mut close_survey = false;
         let mut accept_survey = None;
         if let Some(sp) = self.survey_dialog.as_mut() {
-            egui::Window::new("SimpleGrid").collapsible(false).resizable(false).show(ctx, |ui| {
+            egui::Window::new(crate::i18n::t("SimpleGrid")).collapsible(false).resizable(false).show(ctx, |ui| {
                 egui::Grid::new("survey").num_columns(2).show(ui, |ui| {
                     theme::label(ui, "Altitude (m)");
                     ui.add(egui::DragValue::new(&mut sp.alt).range(1.0..=10000.0));
@@ -1206,7 +1206,7 @@ impl FlightPlanView {
         // FENCE_CIRCLE_INCLUSION centred on home with the entered radius
         let mut fc_done = None;
         if let Some(radius) = self.fence_circle.as_mut() {
-            egui::Window::new("Radius").collapsible(false).resizable(false).show(ctx, |ui| {
+            egui::Window::new(crate::i18n::t("Radius")).collapsible(false).resizable(false).show(ctx, |ui| {
                 theme::label(ui, "Radius (m)");
                 ui.text_edit_singleline(radius);
                 ui.horizontal(|ui| {
@@ -1233,7 +1233,7 @@ impl FlightPlanView {
         let mut close_circle = false;
         let mut accept_circle = None;
         if let Some((lat, lng, radius, points)) = self.circle_dialog.as_mut() {
-            egui::Window::new("Create WP Circle").collapsible(false).resizable(false).show(ctx, |ui| {
+            egui::Window::new(crate::i18n::t("Create WP Circle")).collapsible(false).resizable(false).show(ctx, |ui| {
                 theme::label(ui, "Radius (m)");
                 ui.text_edit_singleline(radius);
                 theme::label(ui, "Points");
@@ -1266,10 +1266,10 @@ impl FlightPlanView {
     fn file_browser(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
         let mut open = true;
         let mut load = None;
-        egui::Window::new("Open Waypoint File").open(&mut open).collapsible(false).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Open Waypoint File")).open(&mut open).collapsible(false).show(ctx, |ui| {
             let files = platform::list_files(&["waypoints", "txt"]);
             if files.is_empty() {
-                ui.label("No .waypoints files saved yet.");
+                ui.label(crate::i18n::t("No .waypoints files saved yet."));
             }
             for f in files {
                 let name = f.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
@@ -1328,7 +1328,7 @@ fn draw_fence(painter: &egui::Painter, view: &map::MapView, fence: &[Locationwp]
             5000 => {
                 let p = view.to_screen(f.lat, f.lng);
                 painter.circle_filled(p, 6.0, Color32::from_rgb(255, 165, 0));
-                painter.text(p + Vec2::new(8.0, 0.0), egui::Align2::LEFT_CENTER, "Return", fonts::ui_id(fonts::UI_SIZE), Color32::WHITE);
+                painter.text(p + Vec2::new(8.0, 0.0), egui::Align2::LEFT_CENTER, crate::i18n::t("Return"), fonts::ui_id(fonts::UI_SIZE), Color32::WHITE);
                 i += 1;
             }
             _ => i += 1,

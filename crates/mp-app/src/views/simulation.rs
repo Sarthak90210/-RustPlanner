@@ -107,7 +107,7 @@ impl SimulationView {
         let base_y = g1.bottom() + 6.0;
         let g3 = Rect::from_min_size(Pos2::new(o.x + 13.0, base_y), Vec2::new(140.0, 72.0));
         group_box(&p, g3, "Options");
-        p.text(g3.min + Vec2::new(7.0, 20.0), egui::Align2::LEFT_TOP, "Heading", f.clone(), Color32::WHITE);
+        p.text(g3.min + Vec2::new(7.0, 20.0), egui::Align2::LEFT_TOP, crate::i18n::t("Heading"), f.clone(), Color32::WHITE);
         ui.put(Rect::from_min_size(g3.min + Vec2::new(60.0, 18.0), Vec2::new(51.0, 20.0)), egui::DragValue::new(&mut app.settings.sitl_heading).range(0.0..=359.0));
         ui.put(Rect::from_min_size(g3.min + Vec2::new(10.0, 44.0), Vec2::new(123.0, 21.0)), |ui: &mut egui::Ui| {
             let names = [sitl::VERSIONS[0], sitl::VERSIONS[1], sitl::VERSIONS[2], "Built-in (offline)"];
@@ -125,9 +125,9 @@ impl SimulationView {
         // groupBox4: Advanced users only
         let g4 = Rect::from_min_size(Pos2::new(o.x + 152.0, base_y), Vec2::new(w - 152.0, 72.0));
         group_box(&p, g4, "Advanced users only");
-        p.text(g4.min + Vec2::new(6.0, 20.0), egui::Align2::LEFT_TOP, "Sim Speed", f.clone(), Color32::WHITE);
+        p.text(g4.min + Vec2::new(6.0, 20.0), egui::Align2::LEFT_TOP, crate::i18n::t("Sim Speed"), f.clone(), Color32::WHITE);
         ui.put(Rect::from_min_size(g4.min + Vec2::new(70.0, 18.0), Vec2::new(51.0, 20.0)), egui::DragValue::new(&mut app.settings.sitl_speed).range(1..=50));
-        p.text(g4.min + Vec2::new(127.0, 20.0), egui::Align2::LEFT_TOP, "Model", f.clone(), Color32::WHITE);
+        p.text(g4.min + Vec2::new(127.0, 20.0), egui::Align2::LEFT_TOP, crate::i18n::t("Model"), f.clone(), Color32::WHITE);
         ui.put(Rect::from_min_size(g4.min + Vec2::new(169.0, 17.0), Vec2::new(121.0, 21.0)), |ui: &mut egui::Ui| {
             egui::ComboBox::from_id_salt("cmb_model")
                 .width(113.0)
@@ -139,9 +139,9 @@ impl SimulationView {
                 })
                 .response
         });
-        p.text(g4.min + Vec2::new(296.0, 20.0), egui::Align2::LEFT_TOP, "Extra command line", f.clone(), Color32::WHITE);
+        p.text(g4.min + Vec2::new(296.0, 20.0), egui::Align2::LEFT_TOP, crate::i18n::t("Extra command line"), f.clone(), Color32::WHITE);
         ui.put(Rect::from_min_size(g4.min + Vec2::new(401.0, 17.0), Vec2::new(230.0, 20.0)), egui::TextEdit::singleline(&mut app.settings.sitl_extra));
-        ui.put(Rect::from_min_size(g4.min + Vec2::new(638.0, 17.0), Vec2::new(60.0, 17.0)), egui::Checkbox::new(&mut app.settings.sitl_wipe, "Wipe"));
+        ui.put(Rect::from_min_size(g4.min + Vec2::new(638.0, 17.0), Vec2::new(60.0, 17.0)), egui::Checkbox::new(&mut app.settings.sitl_wipe, crate::i18n::t("Wipe")));
         for (x, t) in [(9.0, "Copter Swarm - Single link"), (104.0, "Copter Swarm - Multilink"), (199.0, "Plane Swarm - Multilink"), (294.0, "Rover Swarm - Multilink")] {
             let r = Rect::from_min_size(g4.min + Vec2::new(x, 44.0), Vec2::new(89.0, 23.0));
             if ui.put(r, |ui: &mut egui::Ui| theme::button_sized(ui, t, r.size())).clicked() {
@@ -200,7 +200,7 @@ impl SimulationView {
         // Common.LoadingBox("Downloading", "Downloading sitl software")
         let st = self.runner.status.lock().clone();
         if st.busy {
-            egui::Window::new("Downloading").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO).show(ui.ctx(), |ui| {
+            egui::Window::new(crate::i18n::t("Downloading")).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO).show(ui.ctx(), |ui| {
                 ui.horizontal(|ui| {
                     ui.spinner();
                     theme::label(ui, st.message.as_str());

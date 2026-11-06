@@ -273,7 +273,7 @@ impl FirmwareInstaller {
         let f = fonts::ui_id(fonts::UI_SIZE);
         let p = ui.painter().clone();
         let at = |x: f32, y: f32| o + Vec2::new(x, y);
-        p.text(at(397.0, 330.0), egui::Align2::LEFT_TOP, "Please click the images above for \"Flight versions\"", f.clone(), Color32::WHITE);
+        p.text(at(397.0, 330.0), egui::Align2::LEFT_TOP, crate::i18n::t("Please click the images above for \"Flight versions\""), f.clone(), Color32::WHITE);
         if ui.put(Rect::from_min_size(at(348.0, 349.0), Vec2::new(383.0, 13.0)), egui::Link::new("Ardupilot is free software. Click here to read the licence")).clicked() {
             ui.ctx().open_url(egui::OpenUrl::new_tab("https://ardupilot.org/copter/docs/common-license-gpl.html"));
         }
@@ -308,7 +308,7 @@ impl FirmwareInstaller {
             ui.allocate_response(Vec2::ZERO, Sense::hover())
         });
         p.text(at(3.0, 443.0), egui::Align2::LEFT_TOP, &st.text, f.clone(), if st.error.is_some() { Color32::RED } else { Color32::WHITE });
-        p.text(at(862.0, 443.0), egui::Align2::LEFT_TOP, "Images by Max Levine", f, Color32::WHITE);
+        p.text(at(862.0, 443.0), egui::Align2::LEFT_TOP, crate::i18n::t("Images by Max Levine"), f, Color32::WHITE);
         ui.allocate_rect(Rect::from_min_size(o, Vec2::new(986.0, 462.0)), Sense::hover());
     }
 
@@ -427,7 +427,7 @@ impl FirmwareInstaller {
         if let Some(list) = self.choices.clone() {
             let mut open = true;
             let mut chosen = None;
-            egui::Window::new("Firmware Selection").open(&mut open).default_size(Vec2::new(620.0, 420.0)).show(ui.ctx(), |ui| {
+            egui::Window::new(crate::i18n::t("Firmware Selection")).open(&mut open).default_size(Vec2::new(620.0, 420.0)).show(ui.ctx(), |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     for f in list.iter().take(500) {
                         let t = format!("{} {} {} {} ({})", f.platform, f.vehicletype, f.version_str.clone().unwrap_or_default(), f.version_type, f.board_id.unwrap_or(0));

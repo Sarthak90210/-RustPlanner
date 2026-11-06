@@ -114,13 +114,13 @@ impl ExtraTabs {
                 self.send_xpdr(l, true);
             }
         }
-        p.text(o + Vec2::new(64.0, 11.0), egui::Align2::LEFT_TOP, "FlightID", f.clone(), Color32::WHITE);
+        p.text(o + Vec2::new(64.0, 11.0), egui::Align2::LEFT_TOP, crate::i18n::t("FlightID"), f.clone(), Color32::WHITE);
         ui.put(r(113.0, 6.0, 77.0, 20.0), egui::TextEdit::singleline(&mut self.flight_id).char_limit(8));
-        p.text(o + Vec2::new(64.0, 37.0), egui::Align2::LEFT_TOP, "Squawk", f.clone(), Color32::WHITE);
+        p.text(o + Vec2::new(64.0, 37.0), egui::Align2::LEFT_TOP, crate::i18n::t("Squawk"), f.clone(), Color32::WHITE);
         ui.put(r(113.0, 31.0, 77.0, 26.0), egui::DragValue::new(&mut self.squawk).range(0.0..=7777.0).speed(1.0));
-        p.text(o + Vec2::new(64.0, 63.0), egui::Align2::LEFT_TOP, "NIC", f.clone(), Color32::WHITE);
+        p.text(o + Vec2::new(64.0, 63.0), egui::Align2::LEFT_TOP, crate::i18n::t("NIC"), f.clone(), Color32::WHITE);
         ui.put(r(113.0, 63.0, 77.0, 20.0), egui::TextEdit::singleline(&mut self.nic).interactive(false));
-        p.text(o + Vec2::new(64.0, 89.0), egui::Align2::LEFT_TOP, "NACp", f.clone(), Color32::WHITE);
+        p.text(o + Vec2::new(64.0, 89.0), egui::Align2::LEFT_TOP, crate::i18n::t("NACp"), f.clone(), Color32::WHITE);
         ui.put(r(113.0, 89.0, 77.0, 20.0), egui::TextEdit::singleline(&mut self.nacp).interactive(false));
         // fault_clb: status from UAVIONIX_ADSB_OUT_STATUS
         let faults: u8 = link
@@ -214,7 +214,7 @@ impl ExtraTabs {
         p.text(o + Vec2::new(19.0, 10.0), egui::Align2::LEFT_TOP, if running { "Script Status: Running" } else { "Script Status: No Script Running" }, f.clone(), Color32::WHITE);
         let sel = self.script.as_ref().and_then(|s| s.file_name()).map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "None".into());
         p.text(o + Vec2::new(19.0, 29.0), egui::Align2::LEFT_TOP, format!("Selected Script: {sel}"), f, Color32::WHITE);
-        ui.put(r(19.0, 50.0, 140.0, 17.0), egui::Checkbox::new(&mut self.redirect, "Redirect Output"));
+        ui.put(r(19.0, 50.0, 140.0, 17.0), egui::Checkbox::new(&mut self.redirect, crate::i18n::t("Redirect Output")));
         if put_btn(ui, r(16.0, 80.0, 71.0, 23.0), "Select Script") {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {

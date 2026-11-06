@@ -39,7 +39,7 @@ impl GeorefWindow {
         }
         let mut open = true;
         let mut clicked = Vec::new();
-        egui::Window::new("Geo Ref Images").open(&mut open).collapsible(false).resizable(false).fixed_size([1085.0, 595.0]).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Geo Ref Images")).open(&mut open).collapsible(false).resizable(false).fixed_size([1085.0, 595.0]).show(ctx, |ui| {
             clicked = crate::forms::show(ui, app, "georef", &mut self.st);
         });
         if !open {

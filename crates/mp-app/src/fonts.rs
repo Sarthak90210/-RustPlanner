@@ -58,7 +58,13 @@ fn arial_bold() -> Option<Vec<u8>> {
 
 pub fn install(ctx: &egui::Context) {
     let mut defs = FontDefinitions::default();
-    let defaults: Vec<String> = defs.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
+    let mut defaults: Vec<String> = defs.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
+    // GDI font linking gives WinForms CJK/Arabic glyphs; here the UI language's system font
+    // follows every family
+    if let Some(d) = first_existing(crate::i18n::script_font_paths(crate::i18n::culture())) {
+        defs.font_data.insert("mp-script".into(), Arc::new(FontData::from_owned(d)));
+        defaults.push("mp-script".into());
+    }
 
     let mut add = |key: &str, data: Option<Vec<u8>>, family: FontFamily| {
         let mut chain = Vec::new();

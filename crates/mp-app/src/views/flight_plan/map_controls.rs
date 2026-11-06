@@ -87,7 +87,7 @@ impl FlightPlanView {
     }
 
     fn zoom_menu(&mut self, ui: &mut egui::Ui, size: Vec2, app: &mut AppCtx) {
-        if ui.button("Zoom to Vehicle").clicked() {
+        if ui.button(crate::i18n::t("Zoom to Vehicle")).clicked() {
             let pos = app.link.map(|l| {
                 let s = l.shared.read();
                 (s.cs.lat, s.cs.lng)
@@ -100,7 +100,7 @@ impl FlightPlanView {
             }
             ui.close();
         }
-        if ui.button("Zoom to Mission").clicked() {
+        if ui.button(crate::i18n::t("Zoom to Mission")).clicked() {
             let items = if self.mission_type == 0 {
                 &self.items
             } else {
@@ -116,7 +116,7 @@ impl FlightPlanView {
                 .fit_points(&pts, size - Vec2::new(60.0, 0.0));
             ui.close();
         }
-        if ui.button("Zoom to Home").clicked() {
+        if ui.button(crate::i18n::t("Zoom to Home")).clicked() {
             let home = app
                 .link
                 .and_then(|l| l.shared.read().cs.home)

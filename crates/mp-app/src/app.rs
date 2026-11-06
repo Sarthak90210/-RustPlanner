@@ -254,13 +254,17 @@ const SETTINGS_KEY: &str = "mp_settings";
 
 impl MissionPlannerApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        crate::fonts::install(&cc.egui_ctx);
-        theme::apply(&cc.egui_ctx);
         mp_core::param_meta::warm_up();
         let mut settings: Settings = cc
             .storage
             .and_then(|s| eframe::get_value(s, SETTINGS_KEY))
             .unwrap_or_default();
+        // Settings "language": the CurrentUICulture for this run
+        // MP_LANGUAGE=<culture> overrides it for captures
+        let language = std::env::var("MP_LANGUAGE").ok().or_else(|| settings.planner.get("language").cloned()).unwrap_or_else(|| "en-US".into());
+        crate::i18n::init(&language);
+        crate::fonts::install(&cc.egui_ctx);
+        theme::apply(&cc.egui_ctx);
         cc.egui_ctx.set_zoom_factor(settings.ui_scale);
         if let Ok(guid) = std::env::var("MP_DESKTOP") {
             if let Err(e) = platform::move_to_virtual_desktop(cc, &guid) {
@@ -585,6 +589,7 @@ impl MissionPlannerApp {
         let top = bar.top() + 2.0;
         let item = |ui: &mut egui::Ui, x: f32, w: f32, tex: egui::TextureId, label: &str, selected: bool, id: &str| -> (bool, f32) {
             // ToolStripButton AutoSize with ImageAboveText: 39px image + 13px text + padding
+            let label = &*crate::i18n::tr(label);
             let tw = ui.painter().layout_no_wrap(label.to_string(), font.clone(), theme::MENU_TEXT).size().x;
             let w = w.max(tw + 6.0);
             let r = egui::Rect::from_min_size(egui::pos2(x, top), Vec2::new(w, 56.0));
@@ -761,23 +766,23 @@ impl MissionPlannerApp {
                 .show(ui.ctx(), |ui| {
                     egui::Grid::new("connopts").num_columns(2).show(ui, |ui| match self.settings.port.as_str() {
                         "TCP" => {
-                            ui.label("Enter host name/ip (ensure remote end is already started)");
+                            ui.label(crate::i18n::t("Enter host name/ip (ensure remote end is already started)"));
                             ui.text_edit_singleline(&mut self.settings.tcp_host);
                             ui.end_row();
-                            ui.label("Enter remote port");
+                            ui.label(crate::i18n::t("Enter remote port"));
                             ui.add(egui::DragValue::new(&mut self.settings.tcp_port));
                             ui.end_row();
                         }
                         "UDP" => {
-                            ui.label("Enter Local port (ensure remote end is already sending)");
+                            ui.label(crate::i18n::t("Enter Local port (ensure remote end is already sending)"));
                             ui.add(egui::DragValue::new(&mut self.settings.udp_port));
                             ui.end_row();
                         }
                         _ => {
-                            ui.label("Enter remote host");
+                            ui.label(crate::i18n::t("Enter remote host"));
                             ui.text_edit_singleline(&mut self.settings.udpcl_host);
                             ui.end_row();
-                            ui.label("Enter remote port");
+                            ui.label(crate::i18n::t("Enter remote port"));
                             ui.add(egui::DragValue::new(&mut self.settings.udpcl_port));
                             ui.end_row();
                         }
@@ -806,26 +811,26 @@ impl MissionPlannerApp {
 
         if self.show_stats {
             let mut open = true;
-            egui::Window::new("Connection Stats").open(&mut open).resizable(false).collapsible(false).show(ui.ctx(), |ui| match &self.link {
+            egui::Window::new(crate::i18n::t("Connection Stats")).open(&mut open).resizable(false).collapsible(false).show(ui.ctx(), |ui| match &self.link {
                 Some(l) => {
                     let s = l.shared.read();
                     egui::Grid::new("stats").num_columns(2).show(ui, |ui| {
-                        ui.label("Packets Received");
+                        ui.label(crate::i18n::t("Packets Received"));
                         ui.label(s.cs.packets_received.to_string());
                         ui.end_row();
-                        ui.label("Packets Lost");
+                        ui.label(crate::i18n::t("Packets Lost"));
                         ui.label(s.cs.packets_lost.to_string());
                         ui.end_row();
-                        ui.label("Link Quality");
+                        ui.label(crate::i18n::t("Link Quality"));
                         ui.label(format!("{:.0}%", s.cs.linkqualitygcs));
                         ui.end_row();
-                        ui.label("Connection");
+                        ui.label(crate::i18n::t("Connection"));
                         ui.label(s.spec.as_ref().map(|c| c.to_string()).unwrap_or_default());
                         ui.end_row();
                     });
                 }
                 None => {
-                    ui.label("Not connected");
+                    ui.label(crate::i18n::t("Not connected"));
                 }
             });
             if !open {
@@ -990,25 +995,25 @@ impl MissionPlannerApp {
     fn main_menu_ctx(&mut self, resp: &egui::Response, _actions: &mut Vec<AppAction>) {
         resp.context_menu(|ui| {
             if !crate::display::flag(&self.settings.planner, "autoHideMenuForce") {
-                if ui.checkbox(&mut self.menu_hidden, "AutoHide").clicked() {
+                if ui.checkbox(&mut self.menu_hidden, crate::i18n::t("AutoHide")).clicked() {
                     self.settings.planner.insert("menu_autohide".into(), self.menu_hidden.to_string());
                     ui.close();
                 }
             }
             let fs = ui.ctx().input(|i| i.viewport().fullscreen.unwrap_or(false));
             let mut full = fs;
-            if ui.checkbox(&mut full, "Full Screen").clicked() {
+            if ui.checkbox(&mut full, crate::i18n::t("Full Screen")).clicked() {
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Fullscreen(full));
                 ui.close();
             }
-            if ui.checkbox(&mut self.readonly, "Readonly").clicked() {
+            if ui.checkbox(&mut self.readonly, crate::i18n::t("Readonly")).clicked() {
                 ui.close();
             }
-            if ui.button("Connection Options").clicked() {
+            if ui.button(crate::i18n::t("Connection Options")).clicked() {
                 self.conn_form = Some((self.settings.port.clone(), self.settings.baud));
                 ui.close();
             }
-            if ui.button("Connection List").clicked() {
+            if ui.button(crate::i18n::t("Connection List")).clicked() {
                 // connectionListToolStripMenuItem: one connection per line of a text file
                 if let Some((_, text)) = platform::open_text("Connection List", "Connection list", &["txt", "*"]) {
                     for spec in parse_connection_list(&text) {
@@ -1026,7 +1031,7 @@ impl MissionPlannerApp {
         let Some((port, baud)) = self.conn_form.as_mut() else { return };
         let mut open = true;
         let mut go = false;
-        egui::Window::new("Connection Options").open(&mut open).resizable(false).collapsible(false).show(ctx, |ui| {
+        egui::Window::new(crate::i18n::t("Connection Options")).open(&mut open).resizable(false).collapsible(false).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 egui::ComboBox::from_id_salt("co_port").width(113.0).selected_text(port.clone()).show_ui(ui, |ui| {
                     let mut opts = comms::serial_ports();

@@ -69,7 +69,7 @@ impl TuningGraph {
         }
         if self.picking {
             let mut open = true;
-            egui::Window::new("Graph This").open(&mut open).collapsible(false).show(ui.ctx(), |ui| {
+            egui::Window::new(crate::i18n::t("Graph This")).open(&mut open).collapsible(false).show(ui.ctx(), |ui| {
                 egui::ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
                     egui::Grid::new("zg_pick").num_columns(4).show(ui, |ui| {
                         for (k, (n, _)) in cs.fields().into_iter().enumerate() {

@@ -149,9 +149,9 @@ impl PageState {
         }
         let mut answer = None;
         egui::Modal::new(egui::Id::new("compass_reboot")).show(ctx, |ui| {
-            ui.heading("Reboot");
+            ui.heading(crate::i18n::t("Reboot"));
             if self.awaiting_reboot {
-                ui.label("Rebooting...");
+                ui.label(crate::i18n::t("Rebooting..."));
                 return;
             }
             ui.label(if self.standalone_reboot {

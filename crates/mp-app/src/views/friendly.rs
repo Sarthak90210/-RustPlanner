@@ -278,7 +278,7 @@ impl FriendlyParams {
         }
         let pl = &mut app.settings.planner;
         let mut adv = pl.get("advancedview").map(|v| v == "True").unwrap_or(false);
-        if ui.put(r(507.0, 13.0, 131.0, 17.0), egui::Checkbox::new(&mut adv, "Advanced Menu View")).changed() {
+        if ui.put(r(507.0, 13.0, 131.0, 17.0), egui::Checkbox::new(&mut adv, crate::i18n::t("Advanced Menu View"))).changed() {
             pl.insert("advancedview".into(), if adv { "True" } else { "False" }.into());
         }
         let (fw, all): (Firmware, Vec<String>) = {

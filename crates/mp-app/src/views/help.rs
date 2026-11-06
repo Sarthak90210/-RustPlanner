@@ -29,7 +29,7 @@ pub fn ui(ui: &mut egui::Ui) {
         ui.ctx().open_url(egui::OpenUrl::new_tab("https://github.com/Sarthak90210/MissionPlanner/actions"));
     }
     let mut console = false;
-    ui.put(Rect::from_min_size(egui::pos2(cx - 87.0, by + 35.0), Vec2::new(190.0, 17.0)), egui::Checkbox::new(&mut console, "Show Console Window (restart)"));
+    ui.put(Rect::from_min_size(egui::pos2(cx - 87.0, by + 35.0), Vec2::new(190.0, 17.0)), egui::Checkbox::new(&mut console, crate::i18n::t("Show Console Window (restart)")));
     ui.put(
         Rect::from_min_size(egui::pos2(cx - 32.0, by + 55.0), Vec2::new(70.0, 13.0)),
         egui::Hyperlink::from_label_and_url("Change Log", "https://github.com/ArduPilot/MissionPlanner/blob/master/ChangeLog.txt"),

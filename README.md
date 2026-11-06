@@ -265,6 +265,20 @@ the existing image. Tests cover saving and loading the real sequence file and th
 Android CI produces a debug-signed APK for installation tests; distribution release signing is not
 configured. The preceding iOS CI job built the aarch64 release library, which is not an iOS app bundle.
 
+UI languages follow ConfigPlanner's CMB_language. It offers the original 17 cultures by display name,
+saves the choice as Settings "language" and asks for a restart, as MainV2.changelanguage does.
+`scripts/export_translations.py` exports each culture from Mission Planner's .resx files into
+`crates/mp-app/assets/i18n/`:
+
+- per-form control texts, applied to the Designer-exported forms the way
+  ComponentResourceManager.ApplyResources does;
+- an English-to-culture map for the hand-built views (menu bar, tabs, backstage, buttons, labels,
+  checkboxes, menus, window titles and grid headers).
+
+Strings the original never translated stay English. A system CJK or Arabic font is added as a fallback,
+standing in for GDI font linking. `MP_LANGUAGE=<culture>` overrides the setting for captures 58-60.
+Captions taken from CurrentState DisplayText (Quick view) are not yet translated.
+
 ## License
 
 GPL-3.0, like Mission Planner. Icons and marker images are Mission Planner / GMap.NET assets under the same license.
