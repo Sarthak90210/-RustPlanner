@@ -1081,7 +1081,8 @@ mod tests {
         assert_eq!(cs["roll"], 12.5);
         assert!(cs["armed"].is_boolean());
         assert!(cs["mode"].is_string());
-        assert!(cs["gen_speed"].is_null());
+        assert_eq!(cs["gen_speed"], 0.0);
+        assert!(cs["TrackerLocation"].is_null());
         assert!(cs.get("accelerometer").is_none());
         let (_, wps) = ws_recv(&mut s);
         let wps: serde_json::Value = serde_json::from_slice(&wps).unwrap();

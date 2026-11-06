@@ -236,7 +236,7 @@ impl Default for CurrentState {
             packets_received: 0,
             packets_lost: 0,
             track: Vec::new(),
-            extra: std::collections::BTreeMap::new(),
+            extra: default_extra(),
             last_pos_update: None,
             last_seq: None,
             rangefinder_alt_index: i32::MAX,
@@ -246,7 +246,14 @@ impl Default for CurrentState {
 
 #[path = "state_properties.rs"]
 mod properties;
-use properties::{PropertyKind, PROPERTIES};
+use properties::{PropertyKind, PROPERTIES, AUTO_DEFAULTS};
+
+fn default_extra() -> std::collections::BTreeMap<String, f64> {
+    let mut values: std::collections::BTreeMap<_, _> = AUTO_DEFAULTS.iter().map(|(name, value)| ((*name).into(), *value)).collect();
+    // ResetInternals overrides the language default for voltageflag.
+    values.insert("voltageflag".into(), 1.0);
+    values
+}
 
 impl CurrentState {
     pub fn location(&self) -> PointLatLngAlt {
@@ -304,7 +311,7 @@ impl CurrentState {
         names
     }
 
-    /// Values keep their original types. Unported properties are null rather than fabricated zeroes.
+    /// Values keep their original types. Unported computed getters remain null.
     pub fn property(&self, name: &str) -> serde_json::Value {
         use serde_json::json;
         match name {
@@ -342,7 +349,8 @@ impl CurrentState {
             "gpsalt" => self.gpsalt as f64,
             "airspeed" => self.airspeed as f64,
             "groundspeed" => self.groundspeed as f64,
-            "verticalspeed" | "climbrate" => self.verticalspeed as f64,
+            "verticalspeed" => self.verticalspeed as f64,
+            "climbrate" => self.extra.get(name).copied().unwrap_or(self.verticalspeed as f64),
             "throttle" => self.throttle as f64,
             "nav_roll" => self.nav_roll as f64,
             "nav_pitch" => self.nav_pitch as f64,
@@ -388,6 +396,19 @@ impl CurrentState {
             "mx" => self.mx as f64,
             "my" => self.my as f64,
             "mz" => self.mz as f64,
+            "accelsq" => self.magnitude("ax", "ay", "az") / 1000.0,
+            "accelsq2" => self.magnitude("ax2", "ay2", "az2") / 1000.0,
+            "accelsq3" => self.magnitude("ax3", "ay3", "az3") / 1000.0,
+            "gyrosq" => self.magnitude("gx", "gy", "gz"),
+            "gyrosq2" => self.magnitude("gx2", "gy2", "gz2"),
+            "gyrosq3" => self.magnitude("gx3", "gy3", "gz3"),
+            "magfield" => self.magnitude("mx", "my", "mz"),
+            "magfield2" => self.magnitude("mx2", "my2", "mz2"),
+            "magfield3" => self.magnitude("mx3", "my3", "mz3"),
+            "watts" => self.battery_voltage as f64 * self.current as f64,
+            "vlen" => self.magnitude("vx", "vy", "vz"),
+            "verticalspeed_fpm" => self.vz as f64 * -3.28084 * 60.0,
+            "timeInAirMinSec" => (self.time_in_air / 60.0).trunc() as f64 + (self.time_in_air % 60.0) as f64 / 100.0,
             "wind_dir" => self.wind_dir as f64,
             "wind_vel" => self.wind_vel as f64,
             "press_temp" => self.press_temp as f64,
@@ -414,7 +435,7 @@ impl CurrentState {
             "barometer" => if self.sensors_health & 8 != 0 { 1.0 } else { 0.0 },
             "gps" => if self.gpsstatus >= 3 { 1.0 } else { 0.0 },
             "battery" => if self.sensors_health & (1 << 10) != 0 { 1.0 } else { 0.0 },
-            "failsafe" => if self.system_status == 5 { 1.0 } else { 0.0 },
+            "failsafe" => self.extra.get(name).copied().unwrap_or(if self.system_status == 5 { 1.0 } else { 0.0 }),
             s if s.starts_with("ch") && s.ends_with("in") => {
                 if let Ok(idx) = s[2..s.len() - 2].parse::<usize>() {
                     if idx >= 1 && idx <= 18 {
@@ -444,6 +465,17 @@ impl CurrentState {
             .filter_map(|name| self.field(name).map(|value| (name, value))).collect()
     }
 
+    fn magnitude(&self, x: &str, y: &str, z: &str) -> f64 {
+        [x, y, z].into_iter().map(|name| self.field(name).unwrap_or(0.0).powi(2)).sum::<f64>().sqrt()
+    }
+
+    fn high_latency_mode(&mut self, mode: u32) {
+        if self.firmware.modes().iter().any(|(number, _)| *number == mode) {
+            self.custom_mode = mode;
+            self.mode = self.firmware.mode_name(mode);
+        }
+    }
+
     /// Port of `CurrentState.UpdateCurrentSettings` message handling.
     fn esc(&mut self, first: usize, voltage: &[u16; 4], current: &[u16; 4], rpm: &[u16; 4], temperature: &[u8; 4]) {
         for i in 0..4 {
@@ -465,7 +497,63 @@ impl CurrentState {
                     .contains(MavModeFlag::MAV_MODE_FLAG_SAFETY_ARMED);
                 self.custom_mode = hb.custom_mode;
                 self.system_status = hb.system_status as u8;
+                self.extra.insert("failsafe".into(), f64::from(self.system_status == 5));
                 self.mode = self.firmware.mode_name(hb.custom_mode);
+            }
+            MavMessage::HIGH_LATENCY(h) => {
+                self.extra.insert("landed".into(), f64::from(h.landed_state as u8 == 1));
+                if h.base_mode.contains(MavModeFlag::MAV_MODE_FLAG_CUSTOM_MODE_ENABLED) { self.high_latency_mode(h.custom_mode); }
+                self.roll = h.roll as f32 / 100.0;
+                self.pitch = h.pitch as f32 / 100.0;
+                self.yaw = h.heading as f32 / 100.0;
+                self.extra.insert("ch3percent".into(), h.throttle as f64);
+                self.lat = h.latitude as f64 / 1e7;
+                self.lng = h.longitude as f64 / 1e7;
+                self.altasl = h.altitude_amsl as f32;
+                self.alt = self.altasl - self.home.map(|p| p.alt as f32).unwrap_or(0.0);
+                self.alt_error = h.altitude_sp as f32 - self.alt;
+                let old = self.extra.get("targetalt").copied().unwrap_or(0.0);
+                self.extra.insert("targetalt".into(), old * 0.5 + ((self.alt + self.alt_error).round_ties_even() as f64) * 0.5);
+                self.airspeed = h.airspeed as f32;
+                self.extra.insert("targetairspeed".into(), h.airspeed_sp as f64);
+                self.groundspeed = h.groundspeed as f32;
+                self.extra.insert("climbrate".into(), h.climb_rate as f64);
+                self.satcount = h.gps_nsat;
+                self.gpsstatus = h.gps_fix_type as u8;
+                self.battery_remaining = h.battery_remaining as i32;
+                self.press_temp = h.temperature as f32;
+                self.extra.insert("airspeed1_temp".into(), h.temperature_air as f64);
+                self.extra.insert("failsafe".into(), f64::from(h.failsafe > 0));
+                self.wpno = h.wp_num as u16;
+                self.wp_dist = h.wp_distance as f32;
+            }
+            MavMessage::HIGH_LATENCY2(h) => {
+                self.firmware = Firmware::from_heartbeat(h.autopilot, h.mavtype);
+                self.mavtype = h.mavtype as u32;
+                self.high_latency_mode(h.custom_mode as u32);
+                self.lat = h.latitude as f64 / 1e7;
+                self.lng = h.longitude as f64 / 1e7;
+                self.altasl = h.altitude as f32;
+                self.alt = self.altasl - self.home.map(|p| p.alt as f32).unwrap_or(0.0);
+                self.alt_error = h.target_altitude as f32 - self.alt;
+                self.extra.insert("targetalt".into(), h.target_altitude as f64);
+                self.wp_dist = h.target_distance as f32 * 10.0;
+                self.wpno = h.wp_num;
+                // Preserve CurrentState's currentbit == 1 check: only GPS adds text.
+                if h.failure_flags.bits() & 1 == 1 { self.message_high = "ERROR GPS ".into(); }
+                self.yaw = h.heading as f32 * 2.0;
+                self.target_bearing = h.target_heading as f32 * 2.0;
+                self.extra.insert("ch3percent".into(), h.throttle as f64);
+                self.airspeed = h.airspeed as f32 / 5.0;
+                self.extra.insert("targetairspeed".into(), h.airspeed_sp as f64 / 5.0);
+                self.groundspeed = h.groundspeed as f32 / 5.0;
+                self.wind_vel = h.windspeed as f32 / 5.0;
+                self.wind_dir = h.wind_heading as f32 * 2.0;
+                self.gpshdop = h.eph as f32;
+                self.extra.insert("airspeed1_temp".into(), h.temperature_air as f64);
+                // This is the C# display factor, including its existing unit discrepancy.
+                self.extra.insert("climbrate".into(), h.climb_rate as f64 * 10.0);
+                self.battery_remaining = h.battery as i32;
             }
             MavMessage::SYS_STATUS(s) => {
                 self.load = s.load as f32 / 10.0;
@@ -549,6 +637,7 @@ impl CurrentState {
                 self.airspeed = v.airspeed;
                 self.groundspeed = v.groundspeed;
                 self.verticalspeed = v.climb;
+                self.extra.insert("climbrate".into(), v.climb as f64);
                 self.throttle = v.throttle as f32;
             }
             MavMessage::NAV_CONTROLLER_OUTPUT(n) => {
@@ -840,6 +929,11 @@ impl CurrentState {
             }
             _ => {}
         }
+        // DATA's route consumes position from high-latency messages too.
+        if (self.lat != 0.0 || self.lng != 0.0) && self.track.last().map(|&(a,b)| (a-self.lat).abs() > 1e-6 || (b-self.lng).abs() > 1e-6).unwrap_or(true) {
+            self.track.push((self.lat, self.lng));
+            if self.track.len() > 5000 { self.track.drain(0..1000); }
+        }
     }
 }
 
@@ -865,6 +959,47 @@ fn property_order(a: &str, b: &str) -> std::cmp::Ordering {
 #[cfg(test)]
 mod property_tests {
     use super::*;
+    #[test]
+    fn imu_magnitudes_have_source_defaults_and_follow_each_sensor() {
+        let mut cs = CurrentState::default();
+        for name in ["accelsq", "accelsq2", "accelsq3", "gyrosq", "gyrosq2", "gyrosq3", "magfield", "magfield2", "magfield3"] { assert_eq!(cs.field(name), Some(0.0)); }
+        cs.update(&MavMessage::RAW_IMU(RAW_IMU_DATA { xacc: 3000, yacc: 4000, xgyro: 3, ygyro: 4, xmag: 300, ymag: 400, ..Default::default() }));
+        cs.update(&MavMessage::SCALED_IMU2(SCALED_IMU2_DATA { xacc: -6000, yacc: 8000, xgyro: 6, ygyro: 8, xmag: 600, ymag: 800, ..Default::default() }));
+        cs.update(&MavMessage::SCALED_IMU3(SCALED_IMU3_DATA { xacc: 5000, yacc: 12000, xgyro: 5, ygyro: 12, xmag: 500, ymag: 1200, ..Default::default() }));
+        for (name, value) in [("accelsq",5.0),("accelsq2",10.0),("accelsq3",13.0),("gyrosq",5.0),("gyrosq2",10.0),("gyrosq3",13.0),("magfield",500.0),("magfield2",1000.0),("magfield3",1300.0)] {
+            assert_eq!(cs.field(name), Some(value)); assert_eq!(cs.property(name), serde_json::json!(value));
+            assert!(cs.fields().iter().any(|(n,v)| *n == name && *v == value));
+        }
+        // Source auto-properties remain selectable even before their first packet.
+        assert!(cs.fields().iter().any(|(n,v)| *n == "gen_speed" && *v == 0.0));
+    }
+
+    #[test]
+    fn legacy_high_latency_matches_current_state_conversions_and_mode_gate() {
+        let mut cs = CurrentState { firmware: Firmware::ArduPlane, home: Some(PointLatLngAlt::new(-35.0,149.0,500.0)), ..Default::default() };
+        let h = HIGH_LATENCY_DATA { base_mode: MavModeFlag::MAV_MODE_FLAG_CUSTOM_MODE_ENABLED, custom_mode: 15, landed_state: MavLandedState::MAV_LANDED_STATE_ON_GROUND, roll: -1234, pitch: 345, heading: 12345, throttle: 65, latitude: -351000000, longitude: 1492000000, altitude_amsl: 600, altitude_sp: 120, airspeed: 25, airspeed_sp: 30, groundspeed: 20, climb_rate: -2, gps_nsat: 12, gps_fix_type: GpsFixType::GPS_FIX_TYPE_3D_FIX, battery_remaining: 75, temperature: 24, temperature_air: 26, failsafe: 1, wp_num: 8, wp_distance: 400, ..Default::default() };
+        cs.update(&MavMessage::HIGH_LATENCY(h.clone()));
+        assert_eq!(cs.mode, "Guided"); assert_eq!((cs.altasl,cs.alt,cs.alt_error), (600.0,100.0,20.0));
+        assert!((cs.roll + 12.34).abs() < 0.001); assert_eq!(cs.field("ch3percent"), Some(65.0));
+        assert_eq!(cs.field("climbrate"), Some(-2.0)); assert_eq!(cs.field("targetairspeed"), Some(30.0));
+        assert_eq!(cs.field("targetalt"), Some(60.0)); assert_eq!(cs.property("landed"), true);
+        assert_eq!(cs.property("failsafe"), true); assert_eq!(cs.track, [(-35.1,149.2)]);
+        let mut no_mode = h; no_mode.custom_mode = 10; no_mode.base_mode = MavModeFlag::empty();
+        cs.update(&MavMessage::HIGH_LATENCY(no_mode)); assert_eq!(cs.mode, "Guided");
+    }
+
+    #[test]
+    fn high_latency2_preserves_source_scales_and_unknown_modes() {
+        let mut cs = CurrentState { home: Some(PointLatLngAlt::new(-35.0,149.0,500.0)), ..Default::default() };
+        let mut h = HIGH_LATENCY2_DATA { mavtype: MavType::MAV_TYPE_FIXED_WING, autopilot: MavAutopilot::MAV_AUTOPILOT_ARDUPILOTMEGA, custom_mode: 15, latitude: -351000000, longitude: 1492000000, altitude: 600, target_altitude: 120, target_distance: 40, wp_num: 8, heading: 90, target_heading: 100, throttle: 65, airspeed: 125, airspeed_sp: 150, groundspeed: 100, windspeed: 20, wind_heading: 45, eph: 7, temperature_air: 26, climb_rate: -2, battery: 75, ..Default::default() };
+        cs.update(&MavMessage::HIGH_LATENCY2(h.clone()));
+        assert_eq!(cs.firmware, Firmware::ArduPlane); assert_eq!(cs.mode, "Guided");
+        assert_eq!((cs.alt,cs.alt_error,cs.wp_dist), (100.0,20.0,400.0));
+        assert_eq!((cs.yaw,cs.target_bearing,cs.airspeed,cs.groundspeed,cs.wind_vel,cs.wind_dir), (180.0,200.0,25.0,20.0,4.0,90.0));
+        assert_eq!(cs.field("targetalt"), Some(120.0)); assert_eq!(cs.field("targetairspeed"), Some(30.0));
+        assert_eq!(cs.field("climbrate"), Some(-20.0)); // source's factor is retained
+        h.custom_mode = 999; cs.update(&MavMessage::HIGH_LATENCY2(h)); assert_eq!(cs.mode, "Guided");
+    }
     #[test]
     fn engine_hardware_and_all_sixteen_esc_values_follow_reference_scaling() {
         let mut cs = CurrentState::default();
@@ -917,8 +1052,10 @@ mod property_tests {
         assert!(!numbers.contains(&"mode") && !numbers.contains(&"armed") && !numbers.contains(&"HomeLocation"));
         assert_eq!(cs.property("mode"), "Guided");
         assert_eq!(cs.property("armed"), true);
-        assert!(cs.property("gen_speed").is_null());
-        assert!(cs.field("gen_speed").is_none());
+        assert_eq!(cs.property("gen_speed"), 0.0);
+        assert_eq!(cs.field("gen_speed"), Some(0.0));
+        assert_eq!(cs.field("voltageflag"), Some(1.0));
+        assert!(cs.property("TrackerLocation").is_null());
     }
     #[test]
     fn sensor_and_battery_packets_use_original_names_units_and_precedence() {
@@ -938,6 +1075,6 @@ mod property_tests {
         assert!((cs.field("battery_voltage2").unwrap() - 8.1).abs() < 0.001);
         assert_eq!(cs.field("current2"), Some(12.34));
         assert_eq!(cs.field("battery_temp2"), Some(25.0));
-        assert!(cs.field("capabilities").is_none());
+        assert_eq!(cs.field("capabilities"), Some(0.0));
     }
 }

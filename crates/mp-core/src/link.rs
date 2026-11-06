@@ -94,6 +94,7 @@ pub struct LinkShared {
     pub missions: BTreeMap<(u8, u8), Vec<Locationwp>>,
     /// Last guided target for each MAV, shared by DATA, HTTP and scripting.
     pub guided_targets: BTreeMap<(u8, u8), Locationwp>,
+    pub high_latency_mavs: BTreeSet<(u8, u8)>,
 }
 
 /// What the map and the vehicle selector need about each vehicle on the link.
@@ -121,6 +122,7 @@ pub struct MsgStat {
 }
 
 impl LinkShared {
+    pub fn is_high_latency(&self) -> bool { self.high_latency_mavs.contains(&(self.cs.sysid, self.cs.compid)) }
     pub fn guided_target(&self) -> Locationwp {
         self.guided_targets.get(&(self.cs.sysid, self.cs.compid)).copied()
             .unwrap_or_else(|| Locationwp::waypoint(0.0, 0.0, 0.0, 3))
@@ -431,6 +433,7 @@ struct Worker {
     started: Instant,
     last_heartbeat_tx: Instant,
     got_heartbeat: bool,
+    high_latency_seen: BTreeMap<(u8, u8), u8>,
     param_fetch: Option<ParamFetch>,
     pending_sets: HashMap<String, PendingSet>,
     queued_sets: VecDeque<(String, f32)>,
@@ -481,6 +484,7 @@ impl Worker {
             started: now,
             last_heartbeat_tx: now - Duration::from_secs(10),
             got_heartbeat: false,
+            high_latency_seen: BTreeMap::new(),
             param_fetch: None,
             pending_sets: HashMap::new(),
             queued_sets: VecDeque::new(),
@@ -1023,6 +1027,19 @@ impl Worker {
                         e.armed = hb.base_mode.contains(MavModeFlag::MAV_MODE_FLAG_SAFETY_ARMED);
                         e.last = now;
                     }
+                    MavMessage::HIGH_LATENCY2(h) if h.mavtype != MavType::MAV_TYPE_GCS && hdr.component_id != 0 => {
+                        let key = (hdr.system_id as u8, hdr.component_id);
+                        s.high_latency_mavs.insert(key);
+                        let home_alt = if key == (s.cs.sysid, s.cs.compid) { s.cs.home.map(|p| p.alt as f32).unwrap_or(0.0) } else { 0.0 };
+                        let e = s.mavs.entry(key).or_insert(MavSummary { firmware: Firmware::default(), custom_mode: 0, armed: false, lat: 0.0, lng: 0.0, alt: 0.0, heading: 0.0, last: now });
+                        e.firmware = Firmware::from_heartbeat(h.autopilot, h.mavtype);
+                        e.custom_mode = h.custom_mode as u32;
+                        e.lat = h.latitude as f64 / 1e7;
+                        e.lng = h.longitude as f64 / 1e7;
+                        e.alt = h.altitude as f32 - home_alt;
+                        e.heading = h.heading as f32 * 2.0;
+                        e.last = now;
+                    }
                     MavMessage::GLOBAL_POSITION_INT(g) => {
                         if let Some(e) = s.mavs.get_mut(&(hdr.system_id as u8, hdr.component_id)) {
                             e.lat = g.lat as f64 * 1e-7;
@@ -1055,12 +1072,19 @@ impl Worker {
                 }
             }
         }
-        // Pick the first autopilot that heartbeats as our target (MAVlist[0]).
+        // HIGH_LATENCY2 is an identity message in MAVLinkInterface as well.
+        let mut newly_connected = false;
         if !self.got_heartbeat {
-            if let MavMessage::HEARTBEAT(hb) = &msg {
-                if hb.autopilot != MavAutopilot::MAV_AUTOPILOT_INVALID
-                    && hb.mavtype != MavType::MAV_TYPE_GCS
-                {
+            let identity = match &msg {
+                MavMessage::HEARTBEAT(hb) if hb.autopilot != MavAutopilot::MAV_AUTOPILOT_INVALID && hb.mavtype != MavType::MAV_TYPE_GCS && hdr.component_id != 0 => Some((hb.autopilot, hb.mavtype)),
+                MavMessage::HIGH_LATENCY2(h) if h.mavtype != MavType::MAV_TYPE_GCS && hdr.component_id != 0 => {
+                    let count = self.high_latency_seen.entry((hdr.system_id as u8, hdr.component_id)).or_default();
+                    *count = count.saturating_add(1);
+                    if *count >= if hdr.component_id == 1 { 2 } else { 4 } { Some((h.autopilot, h.mavtype)) } else { None }
+                }
+                _ => None,
+            };
+            if let Some((autopilot, mavtype)) = identity {
                     self.got_heartbeat = true;
                     self.target_sys = hdr.system_id as u8;
                     self.target_comp = hdr.component_id;
@@ -1069,14 +1093,11 @@ impl Worker {
                         s.status = LinkStatus::Connected;
                         s.cs.sysid = hdr.system_id as u8;
                         s.cs.compid = hdr.component_id;
+                        s.cs.firmware = Firmware::from_heartbeat(autopilot, mavtype);
+                        s.cs.mavtype = mavtype as u32;
                         s.progress = None;
                     }
-                    self.event(LinkEvent::Connected);
-                    self.request_datastreams()?;
-                    if !self.shared.read().skip_params {
-                        self.start_param_fetch()?;
-                    }
-                }
+                    newly_connected = true;
             }
         }
         if hdr.system_id != self.target_sys as u32 || !self.got_heartbeat {
@@ -1129,6 +1150,12 @@ impl Worker {
             }
         }
 
+        if newly_connected {
+            // Publish only after the identity packet has populated CurrentState.
+            self.event(LinkEvent::Connected);
+            self.request_datastreams()?;
+            if !self.shared.read().skip_params { self.start_param_fetch()?; }
+        }
         match msg {
             MavMessage::PARAM_VALUE(p) => self.on_param_value(p),
             MavMessage::MISSION_COUNT(c) => self.on_mission_count(c)?,
