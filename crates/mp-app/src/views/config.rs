@@ -450,33 +450,27 @@ mod parameter_file_tests {
     }
 
     #[test]
-    fn param_grid_row_styling_and_ack_state_lifecycle() {
+    fn a_failed_write_keeps_the_edit_and_only_counts_for_its_batch() {
         let mut editor = ParamEditor::default();
         let mut toasts = Toasts::default();
-
-        // Stage edits
         editor.edits.insert("WPNAV_SPEED".into(), 600.0);
         editor.edits.insert("ANGLE_MAX".into(), 4500.0);
-        assert_eq!(editor.edits.len(), 2);
-
-        // Move to pending
+        editor.start_batch(2);
         editor.pending.insert("WPNAV_SPEED".into());
         editor.pending.insert("ANGLE_MAX".into());
-
-        // Failed write event
         editor.on_event(&LinkEvent::ParamSet { name: "WPNAV_SPEED".into(), ok: false }, &mut toasts);
-        assert!(!editor.pending.contains("WPNAV_SPEED"));
-        assert!(editor.failed.contains("WPNAV_SPEED"));
-        assert!(!editor.confirmed.contains("WPNAV_SPEED"));
-        // Edits still retains the value so user can re-try or edit
+        // the cell stays green (still in _changes) and is not "invalid" red
         assert!(editor.edits.contains_key("WPNAV_SPEED"));
-
-        // Successful write event
+        assert!(!editor.failed.contains("WPNAV_SPEED"));
         editor.on_event(&LinkEvent::ParamSet { name: "ANGLE_MAX".into(), ok: true }, &mut toasts);
-        assert!(!editor.pending.contains("ANGLE_MAX"));
-        assert!(!editor.failed.contains("ANGLE_MAX"));
-        assert!(editor.confirmed.contains("ANGLE_MAX"));
         assert!(!editor.edits.contains_key("ANGLE_MAX"));
+        assert_eq!(toasts.0, ["Set WPNAV_SPEED Failed", "Not all parameters successfully saved."]);
+        // the next batch succeeds on its own
+        let mut toasts = Toasts::default();
+        editor.start_batch(1);
+        editor.pending.insert("WPNAV_SPEED".into());
+        editor.on_event(&LinkEvent::ParamSet { name: "WPNAV_SPEED".into(), ok: true }, &mut toasts);
+        assert_eq!(toasts.0, ["1 parameters successfully saved."]);
     }
 
     #[test]
@@ -540,38 +534,47 @@ mod parameter_file_tests {
     }
 
     #[test]
-    fn param_tree_search_synchronization_and_group_filtering() {
-        let mut editor = ParamEditor::default();
-        let mut params: BTreeMap<String, mp_core::link::Param> = BTreeMap::new();
-        params.insert("WPNAV_SPEED".to_string(), mp_core::link::Param { value: 500.0, ptype: 9, index: 0 });
-        params.insert("WPNAV_RADIUS".to_string(), mp_core::link::Param { value: 200.0, ptype: 9, index: 1 });
-        params.insert("AHRS_EKF_TYPE".to_string(), mp_core::link::Param { value: 3.0, ptype: 9, index: 2 });
-        params.insert("BATT_MONITOR".to_string(), mp_core::link::Param { value: 4.0, ptype: 9, index: 3 });
-
-        editor.search = "wpnav".into();
-        let q = editor.search.trim().to_lowercase();
-        let mut matching_groups: BTreeMap<String, usize> = BTreeMap::new();
-        for (k, _) in params.iter() {
-            let g = group_of(k);
-            if k.to_lowercase().contains(&q) {
-                *matching_groups.entry(g).or_default() += 1;
-            }
-        }
-        // Only WPNAV matches
-        assert_eq!(matching_groups.len(), 1);
-        assert_eq!(matching_groups.get("WPNAV").copied(), Some(2));
+    fn build_tree_nests_shared_prefixes_like_buildtree() {
+        let mut names: Vec<String> = ["Q_PLT_Y_RATE", "Q_PLT_Y_RATE_TC", "BATT_MONITOR", "BATT_CAPACITY", "BATT2_MONITOR", "ARMING_CHECK", "RC10_MIN", "RC1_MIN", "RC2_MIN"].iter().map(|s| s.to_string()).collect();
+        names.sort_by(|a, b| natural_compare(a, b));
+        // '_' sorts after digits, so BATT2 comes before BATT_
+        assert_eq!(names, ["ARMING_CHECK", "BATT2_MONITOR", "BATT_CAPACITY", "BATT_MONITOR", "Q_PLT_Y_RATE", "Q_PLT_Y_RATE_TC", "RC1_MIN", "RC2_MIN", "RC10_MIN"]);
+        let t = build_tree(&names);
+        assert_eq!(t.text, "All");
+        let top: Vec<&str> = t.children.iter().map(|c| c.text.as_str()).collect();
+        assert_eq!(top, ["ARMING_CHECK", "BATT2_MONITOR", "BATT", "Q", "RC1_MIN", "RC2_MIN", "RC10_MIN"]);
+        let batt = &t.children[2];
+        let q = &t.children[3];
+        assert_eq!(q.children[0].text, "Q_PLT");
+        assert_eq!(q.children[0].children[0].text, "Q_PLT_Y");
+        assert_eq!(q.children[0].children[0].children.iter().map(|c| c.text.as_str()).collect::<Vec<_>>(), ["Q_PLT_Y_RATE", "Q_PLT_Y_RATE_TC"]);
+        assert_eq!(batt.children.iter().map(|c| c.text.as_str()).collect::<Vec<_>>(), ["BATT_CAPACITY", "BATT_MONITOR"]);
     }
 
     #[test]
-    fn wildcard_glob_parameter_search_matches_asterisk_and_question_mark() {
-        assert!(wildcard_matches("BATT*_VOLT", "BATT_VOLT_PIN"));
-        assert!(wildcard_matches("BATT*_VOLT", "SYSID_BATT2_VOLT_PIN"));
-        assert!(wildcard_matches("SERVO?_MIN", "SERVO1_MIN"));
-        assert!(!wildcard_matches("SERVO?_MIN", "SERVO10_MIN"));
-        assert!(wildcard_matches("*MAX", "ANGLE_MAX"));
-        assert!(wildcard_matches("WPNAV*", "WPNAV_SPEED"));
-        assert!(!wildcard_matches("NONEXISTENT*", "WPNAV_SPEED"));
-        assert!(wildcard_matches("", "ANY_PARAM"));
+    fn filter_list_matches_a_regex_against_every_cell() {
+        let cells = |name: &str, desc: &str, fav: bool| RowCells { name: name.into(), value: "1".into(), default: "NaN".into(), units: String::new(), options: String::new(), desc: desc.into(), fav };
+        let re = search_regex("batt*volt").unwrap();
+        assert!(row_visible(&cells("BATT_VOLT_PIN", "", false), "", Some(&re)));
+        assert!(row_visible(&cells("X", "Battery voltage pin", false), "", Some(&re)), "any cell, case-insensitive");
+        assert!(!row_visible(&cells("ANGLE_MAX", "", false), "", Some(&re)));
+        // the Fav cell's value is True/False
+        assert!(row_visible(&cells("ANGLE_MAX", "", true), "", search_regex("true").as_ref()));
+        // the tree prefix: the node itself or names under it
+        assert!(row_visible(&cells("BATT_MONITOR", "", false), "BATT_", None));
+        assert!(row_visible(&cells("BATT", "", false), "BATT_", None));
+        assert!(!row_visible(&cells("BATT2_MONITOR", "", false), "BATT_", None));
+        assert!(search_regex("(").is_none());
+    }
+
+    #[test]
+    fn tooltips_wrap_like_addnewlinesfortooltip() {
+        assert_eq!(tooltip_lines("short"), "short");
+        let long = "Maximum lean angle in all flight modes except the ones that do not use attitude control";
+        let wrapped = tooltip_lines(long);
+        assert!(wrapped.contains('\n'));
+        assert_eq!(wrapped.replace('\n', " "), long);
+        assert!(wrapped.lines().all(|l| l.len() <= (long.len() as f64).sqrt() as usize * 2 + 12));
     }
 
     #[test]
@@ -607,13 +610,16 @@ mod parameter_file_tests {
     }
 
     #[test]
-    fn disconnect_marks_in_flight_writes_failed() {
+    fn disconnect_mid_write_stops_like_the_write_loop() {
         let mut editor = ParamEditor::default();
+        let mut toasts = Toasts::default();
+        editor.edits.insert("ATC_RAT_RLL_P".into(), 0.2);
         editor.pending.insert("ATC_RAT_RLL_P".to_string());
-        editor.pending.insert("ATC_RAT_PIT_P".to_string());
-        editor.fail_pending();
+        editor.disconnected_mid_write(&mut toasts);
         assert!(editor.pending.is_empty());
-        assert_eq!(editor.failed.len(), 2);
+        assert!(editor.edits.contains_key("ATC_RAT_RLL_P"), "still queued");
+        assert_eq!(toasts.0, ["Your are not connected"]);
+        assert_eq!(toasts.1, ["Error"]);
     }
 }
 
@@ -719,58 +725,233 @@ impl Expr<'_> {
     }
 }
 
-/// Matches search pattern against text, supporting `*` (any sequence) and `?` (any single char).
-/// Mirrors C# ConfigRawParams.cs L895:
-/// `new Regex(searchfor.Replace("*", ".*").Replace("..*", ".*"), RegexOptions.IgnoreCase | RegexOptions.Singleline)`
-pub fn wildcard_matches(pattern: &str, text: &str) -> bool {
-    let p = pattern.trim().to_lowercase();
-    if p.is_empty() {
-        return true;
-    }
-    let t = text.to_lowercase();
-    if !p.contains('*') && !p.contains('?') {
-        return t.contains(&p);
-    }
-
-    let parts: Vec<&str> = p.split('*').collect();
-    let mut current_offset = 0;
-
-    for part in parts {
-        if part.is_empty() {
-            continue;
+/// ConfigRawParams.NaturalStringComparer.NaturalCompare: digit runs compare as numbers
+/// (leading zeros skipped), other characters case-insensitively.
+pub fn natural_compare(x: &str, y: &str) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    let (x, y): (Vec<char>, Vec<char>) = (x.chars().collect(), y.chars().collect());
+    let (mut ix, mut iy) = (0, 0);
+    loop {
+        if ix == x.len() {
+            return if iy == y.len() { Ordering::Equal } else { Ordering::Less };
         }
-        if let Some(pos) = find_substring_with_wildcards(&t[current_offset..], part) {
-            current_offset += pos + part.chars().count();
+        if iy == y.len() {
+            return Ordering::Greater;
+        }
+        let (cx, cy) = (x[ix], y[iy]);
+        if cx.is_ascii_digit() && cy.is_ascii_digit() {
+            while ix < x.len() && x[ix] == '0' {
+                ix += 1;
+            }
+            while iy < y.len() && y[iy] == '0' {
+                iy += 1;
+            }
+            let (mut ex, mut ey) = (ix, iy);
+            while ex < x.len() && x[ex].is_ascii_digit() {
+                ex += 1;
+            }
+            while ey < y.len() && y[ey].is_ascii_digit() {
+                ey += 1;
+            }
+            if ex - ix != ey - iy {
+                return (ex - ix).cmp(&(ey - iy));
+            }
+            while ix < ex {
+                if x[ix] != y[iy] {
+                    return x[ix].cmp(&y[iy]);
+                }
+                ix += 1;
+                iy += 1;
+            }
         } else {
-            return false;
+            let o = cx.to_uppercase().cmp(cy.to_uppercase());
+            if o != Ordering::Equal {
+                return o;
+            }
+            ix += 1;
+            iy += 1;
         }
     }
-    true
 }
 
-fn find_substring_with_wildcards(text: &str, sub: &str) -> Option<usize> {
-    let t_chars: Vec<char> = text.chars().collect();
-    let s_chars: Vec<char> = sub.chars().collect();
-    if s_chars.is_empty() {
-        return Some(0);
+/// A treeView1 node: a shared name prefix (without its trailing '_'), or a parameter.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TreeNode {
+    pub text: String,
+    pub children: Vec<TreeNode>,
+}
+
+fn leaf(text: &str) -> TreeNode {
+    TreeNode { text: text.to_string(), children: Vec::new() }
+}
+
+/// ConfigRawParams.BuildTree over naturally sorted names: a branch for every prefix that this
+/// parameter and the next one share.
+pub fn build_tree(commands: &[String]) -> TreeNode {
+    let mut stack = vec![leaf("All")];
+    let mut prefix = String::new();
+    let pop = |stack: &mut Vec<TreeNode>| {
+        let n = stack.pop().unwrap();
+        stack.last_mut().unwrap().children.push(n);
+    };
+    for (i, param) in commands.iter().enumerate() {
+        // step up while the parameter is outside the current branch
+        while !param.starts_with(&prefix) && stack.len() > 1 {
+            let last = format!("{}_", stack.last().unwrap().text.split('_').last().unwrap_or(""));
+            if prefix.ends_with(&last) {
+                prefix.truncate(prefix.len() - last.len());
+            }
+            pop(&mut stack);
+        }
+        if i == commands.len() - 1 {
+            stack.last_mut().unwrap().children.push(leaf(param));
+            break;
+        }
+        let next = &commands[i + 1];
+        let seg = |prefix: &str| format!("{}_", param[prefix.len()..].split('_').next().unwrap_or(""));
+        let mut node = seg(&prefix);
+        while node.len() > 1 && param.starts_with(&format!("{prefix}{node}")) && next.starts_with(&format!("{prefix}{node}")) {
+            prefix += &node;
+            stack.push(leaf(&prefix[..prefix.len() - 1]));
+            node = seg(&prefix);
+        }
+        stack.last_mut().unwrap().children.push(leaf(param));
     }
-    if t_chars.len() < s_chars.len() {
+    while stack.len() > 1 {
+        pop(&mut stack);
+    }
+    stack.pop().unwrap()
+}
+
+/// treeView1: "All" expanded; selecting a node sets filterPrefix to its text + "_".
+fn tree_ui(ui: &mut egui::Ui, node: &TreeNode, sel: &mut Option<String>, top: bool) {
+    let selected = if top { sel.is_none() } else { sel.as_deref() == Some(node.text.as_str()) };
+    let mut label = |ui: &mut egui::Ui| {
+        if ui.selectable_label(selected, RichText::new(&node.text).color(Color32::WHITE)).clicked() {
+            *sel = if top { None } else { Some(node.text.clone()) };
+        }
+    };
+    if node.children.is_empty() {
+        label(ui);
+        return;
+    }
+    let id = ui.make_persistent_id(("raw_tree_node", &node.text));
+    egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, top)
+        .show_header(ui, |ui| label(ui))
+        .body(|ui| {
+            for c in &node.children {
+                tree_ui(ui, c, sel, false);
+            }
+        });
+}
+
+/// The text of a grid row's cells, as filterList reads them.
+pub struct RowCells {
+    pub name: String,
+    pub value: String,
+    pub default: String,
+    pub units: String,
+    pub options: String,
+    pub desc: String,
+    pub fav: bool,
+}
+
+fn row_cells(name: &str, value: f32, fw: Firmware, defaults: Option<&BTreeMap<String, f32>>, fav: bool) -> RowCells {
+    let meta = param_meta::get(fw, name);
+    RowCells {
+        name: name.to_string(),
+        value: paramfile::format_value(value),
+        default: defaults.and_then(|d| d.get(name)).map(|d| paramfile::format_value(*d)).unwrap_or_else(|| "NaN".into()),
+        units: meta.map(|m| m.units.clone()).unwrap_or_default(),
+        options: meta.map(options_text).unwrap_or_default(),
+        desc: meta.map(|m| m.description.clone()).unwrap_or_default(),
+        fav,
+    }
+}
+
+/// filterList's Regex: '*' becomes ".*", case-insensitive, '.' matching newlines. None when
+/// the text is not a valid expression.
+pub fn search_regex(text: &str) -> Option<regex::Regex> {
+    let pattern = text.replace('*', ".*").replace("..*", ".*");
+    regex::RegexBuilder::new(&pattern).case_insensitive(true).dot_matches_new_line(true).build().ok()
+}
+
+/// filterList for one row: inside the tree prefix, and some cell matching the search.
+pub fn row_visible(cells: &RowCells, prefix: &str, re: Option<&regex::Regex>) -> bool {
+    if cells.name != prefix.trim_end_matches('_') && !cells.name.starts_with(prefix) {
+        return false;
+    }
+    let Some(re) = re else { return true };
+    let fav = if cells.fav { "True" } else { "False" };
+    [cells.name.as_str(), &cells.value, &cells.default, &cells.units, &cells.options, &cells.desc, fav].iter().any(|c| re.is_match(c))
+}
+
+/// The Options cell: the Range metadata, then the values one per line.
+fn options_text(m: &param_meta::ParamMeta) -> String {
+    let range = m.range.map(|(lo, hi)| format!("{lo} {hi}")).unwrap_or_default();
+    let values = m.values.iter().map(|(k, s)| format!("{k}:{s}")).collect::<Vec<_>>().join("\n");
+    format!("{range}\n{values}").trim().to_string()
+}
+
+/// Options.ToolTipText: one value per line, or rows of `columns` past 50 values.
+fn options_tooltip(m: &param_meta::ParamMeta) -> Option<String> {
+    if m.values.is_empty() {
         return None;
     }
-    for i in 0..=(t_chars.len() - s_chars.len()) {
-        let mut matched = true;
-        for j in 0..s_chars.len() {
-            if s_chars[j] != '?' && s_chars[j] != t_chars[i + j] {
-                matched = false;
+    let opts: Vec<String> = m.values.iter().map(|(k, s)| format!("{k}:{s}")).collect();
+    let n = opts.len() - 1; // the comma count
+    if n <= 50 {
+        return Some(opts.join("\n"));
+    }
+    let columns = (n - 1) / 50 + 1;
+    let mut ans = String::new();
+    let mut i = 0;
+    loop {
+        for _ in 0..columns {
+            ans += &format!("{}, ", opts[i]);
+            i += 1;
+            if i >= n {
                 break;
             }
         }
-        if matched {
-            return Some(i);
+        if i >= n {
+            break;
         }
+        ans.push('\n');
     }
-    None
+    Some(ans)
 }
+
+/// AddNewLinesForTooltip: text of 50 characters or more breaks at whitespace after about
+/// 2*sqrt(length) characters per line.
+pub fn tooltip_lines(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() < 50 {
+        return text.to_string();
+    }
+    let line_length = (chars.len() as f64).sqrt() as usize * 2;
+    let mut out = String::new();
+    let mut pos = 0;
+    let mut i = 0;
+    while i < chars.len() {
+        if pos >= line_length && chars[i].is_whitespace() {
+            out.push('\n');
+            pos = 0;
+        }
+        if pos == 0 {
+            while i < chars.len() && chars[i].is_whitespace() {
+                i += 1;
+            }
+        }
+        if i < chars.len() {
+            out.push(chars[i]);
+        }
+        pos += 1;
+        i += 1;
+    }
+    out
+}
+
 
 /// Matches C# ListExtension.SortENABLE:
 /// Orders parameters so those ending with "ENABLE" come first (alphabetically),
@@ -837,6 +1018,13 @@ pub struct ParamEditor {
     pub check_param_count_divergence: bool,
     /// "Out of range" Yes/No for an edited value (name, value)
     range_confirm: Option<(String, f32)>,
+    /// writes of the current batch that failed (BUT_writePIDS_Click's `error`)
+    batch_errors: usize,
+    /// txt_search after the 500 ms filter timer (and filterList's length rule)
+    search_applied: String,
+    search_changed: Option<std::time::Instant>,
+    /// BuildTree's nodes, rebuilt when the parameter list changes
+    tree: Option<(Vec<String>, TreeNode)>,
 }
 
 impl ParamEditor {
@@ -907,11 +1095,11 @@ impl ParamEditor {
                     self.failed.remove(name);
                     self.confirmed.insert(name.clone());
                 } else {
-                    self.failed.insert(name.clone());
+                    self.batch_errors += 1;
                     toasts.error(format!("Set {name} Failed"));
                 }
                 if self.pending.is_empty() {
-                    if !self.failed.is_empty() {
+                    if self.batch_errors > 0 {
                         toasts.message("Not all parameters successfully saved.", "Saved");
                     } else {
                         toasts.message(format!("{} parameters successfully saved.", self.write_count), "Saved");
@@ -937,7 +1125,7 @@ impl ParamEditor {
 
         if !is_connected && !self.pending.is_empty() {
             // the link went away before PARAM_VALUE came back: the write never confirmed
-            self.fail_pending();
+            self.disconnected_mid_write(app.toasts);
         }
 
         if self.check_param_count_divergence {
@@ -1113,62 +1301,39 @@ impl ParamEditor {
 
         // splitContainer1.Panel1: treeView1 (180px) with the "<" collapse button
         let show_tree = tree_page || !self.tree_collapsed;
-        let q = self.search.trim().to_lowercase();
+        // txt_search_TextChanged restarts a 500 ms timer; filterList ignores one character
+        if self.search != self.search_applied && self.search_changed.is_none() {
+            self.search_changed = Some(std::time::Instant::now());
+        }
+        if let Some(t) = self.search_changed {
+            if t.elapsed() >= std::time::Duration::from_millis(500) {
+                self.search_changed = None;
+                if self.search.chars().count() != 1 {
+                    self.search_applied = self.search.clone();
+                }
+            } else {
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(500) - t.elapsed());
+            }
+        }
         if show_tree {
-            let mut groups: BTreeMap<String, usize> = BTreeMap::new();
-            let mut matching_groups: BTreeMap<String, usize> = BTreeMap::new();
-            let mut total_matches = 0usize;
-            for (k, _) in params.iter() {
-                let g = group_of(k);
-                *groups.entry(g.clone()).or_default() += 1;
-                let matches_q = q.is_empty()
-                    || wildcard_matches(&q, k)
-                    || param_meta::get(fw, k).map(|m| wildcard_matches(&q, &m.description) || wildcard_matches(&q, &m.display_name)).unwrap_or(false);
-                if matches_q {
-                    *matching_groups.entry(g).or_default() += 1;
-                    total_matches += 1;
-                }
+            let mut names: Vec<String> = params.keys().cloned().collect();
+            names.sort_by(|a, b| natural_compare(a, b));
+            if self.tree.as_ref().is_none_or(|(n, _)| *n != names) {
+                let t = build_tree(&names);
+                self.tree = Some((names, t));
             }
-            if !q.is_empty() {
-                if let Some(sel) = self.selected_group.as_ref() {
-                    if matching_groups.get(sel).copied().unwrap_or(0) == 0 && total_matches > 0 {
-                        if matching_groups.len() == 1 {
-                            self.selected_group = Some(matching_groups.keys().next().unwrap().clone());
-                        } else {
-                            self.selected_group = None;
-                        }
-                    }
-                } else if matching_groups.len() == 1 {
-                    self.selected_group = Some(matching_groups.keys().next().unwrap().clone());
-                }
-            }
+            let tree = &self.tree.as_ref().unwrap().1;
+            let mut sel = self.selected_group.clone();
             egui::Panel::left("raw_tree").resizable(true).default_size(180.0).frame(egui::Frame::new().fill(theme::control_bg())).show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    let all_label = if q.is_empty() {
-                        RichText::new("All").color(Color32::WHITE)
-                    } else {
-                        RichText::new(format!("All ({total_matches})")).color(Color32::WHITE)
-                    };
-                    if ui.selectable_label(self.selected_group.is_none(), all_label).clicked() {
-                        self.selected_group = None;
-                    }
-                    for (g, total_cnt) in &groups {
-                        let match_cnt = matching_groups.get(g).copied().unwrap_or(0);
-                        if !q.is_empty() && match_cnt == 0 {
-                            continue;
-                        }
-                        let label_text = if q.is_empty() {
-                            format!("+ {g} ({total_cnt})")
-                        } else {
-                            format!("+ {g} ({match_cnt})")
-                        };
-                        let sel = self.selected_group.as_deref() == Some(g);
-                        if ui.selectable_label(sel, RichText::new(label_text).color(Color32::WHITE)).clicked() {
-                            self.selected_group = Some(g.clone());
-                        }
-                    }
+                    tree_ui(ui, tree, &mut sel, true);
                 });
             });
+            // treeView1_AfterSelect
+            self.selected_group = sel;
+        } else {
+            // but_collapse_Click clears filterPrefix
+            self.selected_group = None;
         }
         egui::Panel::left("raw_collapse").exact_size(18.0).resizable(false).frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| {
             let r = Rect::from_min_size(ui.max_rect().min, Vec2::new(18.0, 18.0));
@@ -1185,22 +1350,29 @@ impl ParamEditor {
                 });
                 return;
             }
-            let q = self.search.to_lowercase();
-            let rows: Vec<(String, f32)> = params
+            // filterList: the tree prefix and the search over every cell, then the Modified and
+            // None Default boxes decide on their own
+            let prefix = self.selected_group.as_ref().map(|t| format!("{t}_")).unwrap_or_default();
+            let re = search_regex(&self.search_applied);
+            let favs = app.settings.fav_params.clone();
+            let mut rows: Vec<(String, f32)> = params
                 .iter()
-                .filter(|(k, _)| !show_tree || self.selected_group.as_ref().map(|g| group_of(k) == *g).unwrap_or(true))
-                .filter(|(k, _)| !self.modified_only || self.edits.contains_key(*k))
-                .filter(|(k, p)| !self.none_default || defaults.as_ref().and_then(|d| d.get(*k)).map(|d| *d != p.value).unwrap_or(false))
-                .filter(|(k, _)| {
-                    q.is_empty()
-                        || wildcard_matches(&q, k)
-                        || param_meta::get(fw, k).map(|m| wildcard_matches(&q, &m.description) || wildcard_matches(&q, &m.display_name)).unwrap_or(false)
+                .filter(|(k, p)| {
+                    let shown = self.edits.get(*k).copied().unwrap_or(p.value);
+                    let cells = row_cells(k, shown, fw, defaults.as_ref(), favs.contains(k));
+                    let mut visible = (self.search_applied.is_empty() && prefix.is_empty()) || row_visible(&cells, &prefix, re.as_ref());
+                    if self.modified_only {
+                        visible = self.edits.contains_key(*k);
+                    }
+                    if self.none_default {
+                        visible = cells.default != cells.value;
+                    }
+                    visible
                 })
                 .map(|(k, p)| (k.clone(), p.value))
                 .collect();
-            let mut rows = rows;
-            let favs = app.settings.fav_params.clone();
-            rows.sort_by_key(|(k, _)| !favs.contains(k));
+            // OnParamsOnSortCompare: favourites first, then NaturalCompare
+            rows.sort_by(|a, b| favs.contains(&b.0).cmp(&favs.contains(&a.0)).then_with(|| natural_compare(&a.0, &b.0)));
             self.grid(ui, &mut app.toasts, app.link, fw, &rows, &mut app.settings.fav_params, defaults.as_ref());
         });
         // presaved file arrived: show it in ParamCompare
@@ -1272,8 +1444,16 @@ impl ParamEditor {
         }
     }
 
-    fn fail_pending(&mut self) {
-        self.failed.extend(std::mem::take(&mut self.pending));
+    fn start_batch(&mut self, n: usize) {
+        self.write_count = n;
+        self.batch_errors = 0;
+    }
+
+    /// The write loop's "Your are not connected": it stops, and the rest stay queued.
+    fn disconnected_mid_write(&mut self, toasts: &mut Toasts) {
+        self.pending.clear();
+        self.reboot_required_staged = false;
+        toasts.message("Your are not connected", "Error");
     }
 
     /// Params_CellValueChanged's "Out of range" box: No puts the old value back.
@@ -1363,7 +1543,7 @@ impl ParamEditor {
                     self.reboot_required_staged = true;
                 }
                 if let Some(link) = link {
-                    self.write_count = changes.len();
+                    self.start_batch(changes.len());
                     for (name, _, new) in changes {
                         link.send(LinkCommand::SetParam { name: name.clone(), value: new });
                         self.pending.insert(name);
@@ -1482,13 +1662,11 @@ impl ParamEditor {
                 }
                 let edited = self.edits.get(name).copied();
                 let is_failed = self.failed.contains(name);
-                let is_pending = self.pending.contains(name);
+                // Value cell: Green when queued (_changes), Red when the entry could not be evaluated
                 let val_fill = if is_failed {
-                    Color32::from_rgb(180, 40, 40) // Red: Failed write
-                } else if is_pending {
-                    Color32::from_rgb(180, 160, 0) // Yellow: Writing to vehicle
+                    Color32::RED
                 } else if edited.is_some() {
-                    Color32::from_rgb(0, 128, 0) // Green: Modified / queued
+                    Color32::from_rgb(0, 128, 0)
                 } else {
                     bg
                 };
@@ -1500,70 +1678,17 @@ impl ParamEditor {
                 let txt = |ui: &egui::Ui, r: Rect, s: &str| {
                     ui.painter().with_clip_rect(r.shrink(1.0)).text(r.left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, s, f.clone(), Color32::WHITE);
                 };
-
-                // Detailed documentation tooltip on hover matching Mission Planner
-                let tip = if let Some(m) = meta {
-                    let mut s = format!("{}: {}\n{}", name, m.display_name, m.description);
-                    if let Some((lo, hi)) = m.range {
-                        s.push_str(&format!("\nRange: [{lo}, {hi}]"));
-                    }
-                    if !m.units.is_empty() {
-                        s.push_str(&format!("\nUnits: {}", m.units));
-                    }
-                    if let Some(d) = defaults.and_then(|d| d.get(name)) {
-                        s.push_str(&format!("\nDefault: {}", paramfile::format_value(*d)));
-                    }
-                    if !m.values.is_empty() {
-                        s.push_str("\nOptions:");
-                        for (k, val_str) in &m.values {
-                            s.push_str(&format!("\n  {k}: {val_str}"));
-                        }
-                    }
-                    if !m.bitmask.is_empty() {
-                        s.push_str("\nBitmask:");
-                        for (b, bit_str) in &m.bitmask {
-                            s.push_str(&format!("\n  Bit {b}: {bit_str}"));
-                        }
-                    }
-                    if edited.is_some() {
-                        s.push_str(&format!("\n[Modified - vehicle value: {}]", paramfile::format_value(*value)));
-                    }
-                    if is_failed {
-                        s.push_str("\n[Status: Set Failed on Autopilot]");
-                    } else if is_pending {
-                        s.push_str("\n[Status: Writing to Autopilot...]");
-                    }
-                    s
-                } else {
-                    let mut s = format!("{name}: {}", paramfile::format_value(*value));
-                    if edited.is_some() {
-                        s.push_str(&format!("\n[Modified - vehicle value: {}]", paramfile::format_value(*value)));
-                    }
-                    s
-                };
+                // ToolTipText: the word-wrapped description on Name, Value and Desc
+                let tip = meta.map(|m| m.description.as_str()).filter(|d| !d.is_empty()).map(tooltip_lines);
 
                 txt(ui, cells[0], name);
-                let name_resp = ui.interact(cells[0], ui.scope_id().with(("pn", name)), Sense::click().union(Sense::hover()))
-                    .on_hover_text(&tip);
+                let mut name_resp = ui.interact(cells[0], ui.scope_id().with(("pn", name)), Sense::click().union(Sense::hover()));
+                if let Some(t) = &tip {
+                    name_resp = name_resp.on_hover_text(t);
+                }
                 if name_resp.clicked() {
                     self.current = Some(name.clone());
                 }
-                let mut ctx_revert = false;
-                let mut ctx_default = None;
-                name_resp.context_menu(|ui| {
-                    if let Some(d) = defaults.and_then(|d| d.get(name)) {
-                        if ui.button(format!("Set to default ({})", paramfile::format_value(*d))).clicked() {
-                            ctx_default = Some(*d);
-                            ui.close();
-                        }
-                    }
-                    if edited.is_some() || is_failed {
-                        if ui.button("Revert changes").clicked() {
-                            ctx_revert = true;
-                            ui.close();
-                        }
-                    }
-                });
 
                 // Value cell: editable
                 let v = edited.unwrap_or(*value);
@@ -1582,21 +1707,9 @@ impl ParamEditor {
                 let mut queued: Option<f64> = None;
                 if !editing {
                     let mut resp = child.put(cells[1].shrink(1.0), egui::Label::new(egui::RichText::new(paramfile::format_value(v)).color(Color32::WHITE)).sense(Sense::click().union(Sense::hover())));
-                    resp = resp.on_hover_text(&tip);
-                    resp.context_menu(|ui| {
-                        if let Some(d) = defaults.and_then(|d| d.get(name)) {
-                            if ui.button(format!("Set to default ({})", paramfile::format_value(*d))).clicked() {
-                                ctx_default = Some(*d);
-                                ui.close();
-                            }
-                        }
-                        if edited.is_some() || is_failed {
-                            if ui.button("Revert changes").clicked() {
-                                ctx_revert = true;
-                                ui.close();
-                            }
-                        }
-                    });
+                    if let Some(t) = &tip {
+                        resp = resp.on_hover_text(t);
+                    }
                     if resp.clicked() {
                         self.editing = Some((name.clone(), paramfile::format_value(v)));
                         self.current = Some(name.clone());
@@ -1640,27 +1753,16 @@ impl ParamEditor {
                         self.editing = None;
                     }
                 }
-                if let Some(d) = ctx_default {
-                    queued = Some(d as f64);
-                }
-                if ctx_revert {
-                    self.edits.remove(name);
-                    self.failed.remove(name);
-                } else if let Some(nv) = queued {
+                if let Some(nv) = queued {
                     self.queue_value(name, nv, *value, meta, toasts);
                 }
-                if let Some(d) = defaults.and_then(|d| d.get(name)) {
-                    txt(ui, cells[2], &paramfile::format_value(*d));
+                // Default_value: the vehicle's default, else "NaN"
+                if let Some(d) = defaults {
+                    txt(ui, cells[2], &d.get(name).map(|v| paramfile::format_value(*v)).unwrap_or_else(|| "NaN".into()));
                 }
                 txt(ui, cells[3], meta.map(|m| m.units.as_str()).unwrap_or(""));
                 if let Some(m) = meta {
-                    let opts = if let Some((lo, hi)) = m.range {
-                        format!("{lo} {hi}")
-                    } else if !m.bitmask.is_empty() {
-                        m.bitmask.iter().map(|(b, s)| format!("{b}:{s}")).collect::<Vec<_>>().join(", ")
-                    } else {
-                        m.values.iter().map(|(k, s)| format!("{k}:{s}")).collect::<Vec<_>>().join(", ")
-                    };
+                    let opts = options_text(m);
                     let current = self.current.as_deref() == Some(name.as_str());
                     if current && !m.bitmask.is_empty() {
                         // a bitmask gets a button that opens the checkbox editor
@@ -1687,9 +1789,15 @@ impl ParamEditor {
                         }
                     } else {
                         txt(ui, cells[4], &opts);
+                        // Options.ToolTipText: the values one per line (in columns past 50)
+                        if let Some(t) = options_tooltip(m) {
+                            ui.interact(cells[4], ui.scope_id().with(("po", name)), Sense::hover()).on_hover_text(t);
+                        }
                     }
                     txt(ui, cells[5], &m.description);
-                    ui.interact(cells[5], ui.scope_id().with(("pd", name)), Sense::hover()).on_hover_text(&tip);
+                    if let Some(t) = &tip {
+                        ui.interact(cells[5], ui.scope_id().with(("pd", name)), Sense::hover()).on_hover_text(t);
+                    }
                 }
                 let mut fav = favs.contains(name);
                 if ui.put(Rect::from_center_size(cells[6].center(), Vec2::splat(16.0)), egui::Checkbox::without_text(&mut fav)).changed() {
@@ -1736,10 +1844,6 @@ impl ParamEditor {
             self.bitmask_edit = None;
         }
     }
-}
-
-fn group_of(name: &str) -> String {
-    name.split('_').next().unwrap_or(name).to_string()
 }
 
 // ------------------------------------------------------------------ ConfigFlightModes

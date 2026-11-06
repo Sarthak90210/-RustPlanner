@@ -407,7 +407,8 @@ fn guided_fly_to_switches_mode_and_moves_the_copter() {
             std::thread::sleep(Duration::from_millis(50));
         }
     };
-    wait_for("takeoff", 15, &|cs| cs.alt > 5.0);
+    // generous: the whole workspace runs its simulators in parallel
+    wait_for("takeoff", 40, &|cs| cs.alt > 5.0);
     // LOITER, then a zero target changes nothing
     link.send(LinkCommand::SetMode(5));
     ack(&link);
