@@ -1,0 +1,8 @@
+[package]
+name = "mp-plugin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Native plugin ABI for Mission Planner RS (the MissionPlanner.Plugin.Plugin lifecycle over C)"
+
+[dependencies]

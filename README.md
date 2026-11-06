@@ -297,6 +297,16 @@ it. GStreamer is loaded dynamically, so the build does not depend on it. An igno
 real 1280x720 videotestsrc frames and parse-error reporting. Capture 61 (`MP_GSTREAMER=1`,
 `MP_GST_DIR=<runtime dir>`) renders the HUD over GStreamer video.
 
+Plugins follow PluginLoader's lifecycle as native libraries, since .NET assemblies cannot load into this
+program. A shared library in the `plugins` folder beside the program exports `mp_plugin_entry`; the ABI
+is in the `mp-plugin` crate. The lifecycle runs Init, then Loaded once every plugin is initialised, Loop
+on the plugin thread at the plugin's loopratehz, and Exit when the program closes. The host services
+mirror PluginHost: CurrentState fields, config get/set, doCommand, AddWPtoList, and items in the DATA map,
+HUD and PLAN map context menus with their click position. PluginManager (Ctrl+P) lists loaded plugins
+and disabled files with the original colours. Save & Close stores "DisabledPlugins" and shows the
+restart warning. Show Errors explains files that could not load, including .NET `.dll` and `.cs`
+plugins. `crates/mp-plugin-example` is a working plugin, and a test runs its whole lifecycle.
+
 ## License
 
 GPL-3.0, like Mission Planner. Icons and marker images are Mission Planner / GMap.NET assets under the same license.

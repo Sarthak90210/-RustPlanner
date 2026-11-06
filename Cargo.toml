@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/mp-core", "crates/mp-app"]
+members = ["crates/mp-core", "crates/mp-app", "crates/mp-plugin", "crates/mp-plugin-example"]
 
 [workspace.package]
 version = "0.1.0"

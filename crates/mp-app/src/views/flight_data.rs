@@ -1303,6 +1303,14 @@ impl FlightDataView {
                     ui.close();
                 }
             }
+            // PluginHost.FDMenuMap items, at MouseDownStart
+            for (label, plugin, id) in crate::plugins::menu_items(mp_plugin::MENU_FD_MAP) {
+                if ui.button(label).clicked() {
+                    let ll: (f64, f64) = ui.ctx().data(|d| d.get_temp(egui::Id::unique("fd_ctx_ll"))).unwrap_or_default();
+                    crate::plugins::click(plugin, id, ll.0, ll.1);
+                    ui.close();
+                }
+            }
         });
         if let Some(a) = ctx_action {
             let ll: (f64, f64) = ui.ctx().data(|d| d.get_temp(egui::Id::unique("fd_ctx_ll"))).unwrap_or_default();

@@ -540,6 +540,13 @@ impl FlightPlanView {
             }
             ui.close();
         }
+        // PluginHost.FPMenuMap items, at MouseDownEnd
+        for (label, plugin, id) in crate::plugins::menu_items(mp_plugin::MENU_FP_MAP) {
+            if ui.button(label).clicked() {
+                crate::plugins::click(plugin, id, lat, lng);
+                ui.close();
+            }
+        }
     }
 
     fn transfer(&mut self, app: &mut AppCtx, mt: usize, read: bool) {

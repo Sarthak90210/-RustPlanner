@@ -15,6 +15,7 @@ pub mod hud;
 pub mod joystick;
 pub mod gstreamer;
 pub mod httpserver;
+pub mod plugins;
 pub mod i18n;
 pub mod swarm;
 pub mod log_browse;

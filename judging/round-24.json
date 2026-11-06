@@ -1,0 +1,243 @@
+{
+  "round": 24,
+  "review_type": "independent fixed-revision source/reference review, regenerated-table audit, native image inspection (including zoomed Arabic crops) and CI status check",
+  "reviewed_head": "eb9252e182f8afb19c37c6d89c66ad8da5df901e",
+  "reviewed_base": "5a5941e7859e55cd3ce291f25c385c5d24a442bb",
+  "date": "2026-11-06",
+  "verdict": "Run 24 is a real step forward. GStreamer and HereLink video now play behind the HUD through a faithful port of LookForGstreamer, SetGSTPath, DownloadGStreamer and the appsink loop, which closes most of round 23's priority-3 video gap. Quick view captions follow GetNameandUnit with the original L10NU tables. The four localization defects round 23 named are gone from the regenerated tables: ja '0' to '5', the zh-Hans PLAN Loiter, ko-KR Load File, and literal '&' mnemonics. Labels no longer translate data from the shared map. The per-view rework introduced two visible regressions, though. Tab strips resolve the caller inside a closure in theme.rs, so they never see view tables, and the zh-Hans DATA 'Actions' tab is English again where the original shows 动作. Arabic text that mixes in Latin or digits is drawn reversed ('mk 0059.0', 'LMK'). Gimbal video, plugins, mobile runtime and native transports are still open, and the reviewed HEAD has no CI.",
+  "scores": {
+    "overall": 8.9,
+    "ui_ux": 9.0,
+    "features": 8.8,
+    "scale": "Qualitative exact-original parity scores, not completion percentages. Overall equally weights UI/UX and features (8.9). Features credits working GStreamer/HereLink HUD video verified against a real runtime. UI/UX credits the closed localization defects, Quick view L10NU captions and the PLAN distance overlay. It is held back by the new tab-strip and Arabic bidi regressions and by the stale per-English residue inside views."
+  },
+  "rationale": "Quick view: name_and_unit (flight_data.rs:1935) applies the DisplayText, then L10NU.GetString, then the (dist)/(speed)/(alt) else-if chain, as CurrentState.cs:4620-4648 with DisplayTextAttribute.cs:47-50 does. quick_label (flight_data.rs:1958-1966) keeps the designer desc until Settings quickView<n> exists, as FlightData.cs:467-513 does. The chooser lists GetFieldDesc results sorted by description (FlightData.cs:4715-4760, CurrentState.cs:4581-4616). The L10NU assets match ExtLibs/Utilities/Resources/strings_zhHans.txt and strings_uk.txt apart from BOM and line endings, and the parser keeps the original's exactly-two-fields rule (L10NU.cs:33-42). The zh-Hans render (58) shows 地速/航点距离/偏航/升降速度 with 'Altitude (m)' left in English. That is faithful, because the table has 'Altitude (dist)' but CurrentState uses 'Altitude (alt)'. GStreamer: look_for_gstreamer, set_gst_path, download and run (gstreamer.rs:50-90, 93-110, 113-160, 288-380) follow GStreamer.cs:1184-1310, 1323-1360, 1376-1438 and 1446-1505. That covers the same directories and the _64 bitness filter, PATH/GSTREAMER_ROOT/GST_PLUGIN_PATH, the 1.14.4 zip URLs, the 0/50/100 status steps with 3 retries, outsink drop/max-buffers=1, the zero-timeout initial bus check, try_pull_sample, BGRA mapping and the conditional NULL state. The Set GStreamer Source and HereLink prompts save gstreamer_url/herelinkip, and HereLink proceeds on Cancel (FlightData.cs:3186-3214, 4946-4982). Render 61 shows videotestsrc bars behind the HUD. Localization: the exporter now builds per-resx view tables, a shared map of unanimous translations, strips mnemonics and drops non-alphabetic or single-character keys (export_translations.py:48-51, 119-129). Recomputed from the committed JSON: no numeric keys and no '&' in any table, ja-JP has no '0', zh-Hans FlightPlanner Loiter is Loiter留待, ko-KR FlightPlanner Load File is 파일 로드. theme::label uses tr_view (theme.rs:579-582).",
+  "scope": {
+    "inspected": [
+      "git diff 5a5941e..eb9252e: i18n.rs, theme.rs, app.rs, flight_data.rs, flight_plan.rs, setup.rs, config.rs, swarm.rs, joystick.rs, gstreamer.rs, mjpeg.rs, state.rs, state_properties.rs DISPLAY, export_translations.py, export_state_properties.py, Cargo.toml, README.md",
+      "CurrentState.cs:4575-4648; DisplayTextAttribute.cs; DisplayFieldNameAttribute.cs; L10NU.cs; Resources/strings_zhHans.txt and strings_uk.txt (diffed against assets)",
+      "FlightData.cs:465-515, 3181-3214, 4700-4770, 4946-4982 and 6666-6830 (gimbal video); GStreamer.cs:1184-1549; GStreamerUI.cs",
+      "FlightPlanner.cs:1253-1305, 1439-1445, 2024-2033, 3519-3545 and 7440-7455; FlightPlanner.resx/ar/zh-Hans lbl_* entries; FlightPlanner.ko-KR.resx:317-342 and 943-958",
+      "FlightData.resx/zh-Hans/es-ES quick-button and tabActions entries; ConfigAccelerometerCalibration.es-ES.resx label5; InitialSetup.cs:311-337",
+      "ConfigPlanner.cs:106-135",
+      "All 16 committed i18n/*.json tables: numeric keys, ampersands, mode-name keys per view and shared map, and the view-only (ambiguous) key lists for zh-Hans and ko-KR",
+      "Retained-gap source: fd_tabs.rs:345-347, hotkey_tools.rs:95-115, comms.rs:26-46, platform.rs:176-213 (no changes in range)",
+      "judging/round-23.json"
+    ],
+    "rust_render_images_viewed": [
+      "target/judging/round24/58_data_zh_hans.png",
+      "target/judging/round24/59_setup_rangefinder_zh_hans.png",
+      "target/judging/round24/60_plan_ko_kr.png",
+      "target/judging/round24/61_data_gstreamer_hud.png",
+      "target/judging/round24/62_plan_ar.png (plus 5x nearest-neighbour crops of the distance overlay and the View KML link)",
+      "target/judging/round24/63_plan_zh_hans.png"
+    ],
+    "capture_integrity": {
+      "finding": "All six manifests give binary sha256 22E0FD04..., which matches the current target/debug/missionplanner.exe (built 17:37 +05:30). The captures were taken 17:38-17:40 and commit eb9252e is 17:41:09, so the binary came from the working tree just before the commit. Observed behaviour matches eb9252e source (Load File 파일 로드, View KML translated, Prev/Home resx text before pointer movement, the 'Actions' tab fallthrough), so the renders are accepted as representative. Byte-level identity to the commit is not proven.",
+      "observed": "58 zh-Hans DATA: Quick captions per L10NU, 'DistToMAV' designer caption, 调试/自动平移/缩放 and the GPS追踪（黑） legend translated. The 'Actions' tab is English while the other tabs are translated. 59: rangefinder 声呐/距离:/电压:; 'Antenna Tracker' stays English, which is faithful because InitialSetup.cs:333 passes a literal. 60 ko-KR PLAN: 거리: 0.9500 km, 이전, 원점, KML 보기, 파일 로드; the Up/Down headers still show 상/하. 61: videotestsrc colour bars behind the HUD (started by the MP_GSTREAMER developer switch, not by the menu). 62 ar: the Arabic strings shape, but mixed runs are reversed ('mk 0059.0 :المسافة', 'عرض LMK'). 63 zh-Hans PLAN: 距离/上一点/家, 查看KML, 加载航点文件."
+    },
+    "reviewer_executed_verification": [
+      "Checked out eb9252e182f8afb19c37c6d89c66ad8da5df901e detached; worktree clean.",
+      "Did not run cargo, as instructed. The main session reports 156 passing workspace tests, 1 ignored (real GStreamer runtime, reported passing when run explicitly). Not independently rerun.",
+      "Scratch Python over the committed i18n JSON: numeric/ampersand scan, per-view lookups for the round-23 defect keys, mode-name keys per view, and ambiguous (view-only) keys.",
+      "Diffed the L10NU assets against the original resource text files (only BOM/CRLF differ).",
+      "Hashed target/debug/missionplanner.exe against the capture manifests.",
+      "gh run list: newest run is 42201707835 (04ae5af, success); none for 5a5941e, 749a479, 4a4da0f or eb9252e. Remote master is still 2c5e30b."
+    ],
+    "verification_limits": [
+      "Original Mission Planner was not launched in any culture or with GStreamer for side-by-side comparison.",
+      "The GStreamer capture used a developer environment switch. The menu-driven prompt, download dialog and HereLink RTSP path were checked against source only, and no RTSP/H.264 source was exercised.",
+      "No mobile device/emulator, APK installation, iOS bundle or non-Windows GUI run.",
+      "Not an exhaustive audit of every page, property or translation."
+    ],
+    "reviewer_actions": "Read-only source/reference/data/image/CI inspection. Authored judging/round-24.json only. No implementation changes, commits, pushes or subagents."
+  },
+  "run24_dispositions": [
+    {
+      "area": "Quick view captions and field chooser (749a479)",
+      "status": "closed",
+      "closed_parts": "Captions use DisplayText through L10NU with the original unit substitution order. Tiles keep the designer desc ('DistToMAV') until quickView<n> is saved, the chooser saves Settings quickView<n>, and the GetFieldDesc descriptions are sorted. The DISPLAY export pairs each property with its DisplayText and DisplayFieldName key. English GetFieldDesc returns the name, as TryTranslate(defaultTo: null) does.",
+      "remaining": "Minor layout differences: the chooser is a fixed 4-column row-major grid, where the original is column-major with a column count from 80% of screen width over the longest description, and checked boxes have a green BackColor (FlightData.cs:4745-4766). The sort is lowercase-then-ordinal rather than culture CompareTo.",
+      "evidence": [
+        "crates/mp-app/src/views/flight_data.rs:910-925",
+        "crates/mp-app/src/views/flight_data.rs:1935-1966",
+        "crates/mp-core/src/state.rs:249-258",
+        "crates/mp-app/src/i18n.rs:86-112",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:4581-4648",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:467-513",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4715-4766",
+        "reference/MissionPlanner/ExtLibs/Utilities/L10NU.cs:14-57"
+      ]
+    },
+    {
+      "area": "DATA GStreamer / HereLink video (4a4da0f)",
+      "status": "partial",
+      "closed_parts": "Runtime discovery, SetGSTPath, the original 1.14.4 download into the data directory with 3 retries and status text, a dynamically loaded appsink pipeline with drop/max-buffers=1, BGRA/BGRx frames behind the HUD, GStreamer Stop, the gstreamer_url and herelinkip prompts with original defaults and text, the HereLink Cancel quirk, and gstlaunchexe saved. The ignored real-runtime test and render 61 show real videotestsrc frames.",
+      "remaining": "Gimbal video (BUT_GimbalVideo, gimbalVideoFullSized/Mini/PopOut, GimbalVideoControl) is still a toast stub (fd_tabs.rs:345-347 vs FlightData.cs:6666-6830, Designer 2106). Cancel on Set GStreamer Source should call hudGStreamer.Stop() (FlightData.cs:4979-4982); Rust returns without stopping. The download window has no Cancel, where ProgressReporterDialogue does (GStreamerUI.cs:10-19). Pipeline errors raise a 'Video source failed' toast where the original only logs (GStreamer.cs:1236-1241). GStreamer Stop also stops an MJPEG source because the two share one slot. Android has no bundled libgstreamer_android.so (the original treats Android as present).",
+      "evidence": [
+        "crates/mp-app/src/gstreamer.rs:50-160",
+        "crates/mp-app/src/gstreamer.rs:288-380",
+        "crates/mp-app/src/views/flight_data.rs:418-425",
+        "crates/mp-app/src/views/flight_data.rs:488-501",
+        "crates/mp-app/src/views/flight_data.rs:533-575",
+        "crates/mp-app/src/views/flight_data.rs:643-666",
+        "crates/mp-app/src/views/fd_tabs.rs:345-347",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3181-3214",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4946-4982",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:6757-6830",
+        "reference/MissionPlanner/ExtLibs/Utilities/GStreamer.cs:1184-1549",
+        "reference/MissionPlanner/Utilities/GStreamerUI.cs:8-22"
+      ]
+    },
+    {
+      "area": "Round-23 localization defects: data values, vote conflicts, mnemonics (eb9252e)",
+      "status": "closed",
+      "closed_parts": "Re-tested against the regenerated tables. No table has a numeric or single-character key; ja-JP and id-ID have no '0'. zh-Hans FlightPlanner 'Loiter' is Loiter留待 (FlightPlanner.zh-Hans.resx:480-481), and it-IT/ru-RU/es-ES/fr PLAN Loiter now come from FlightPlanner. ko-KR FlightPlanner 'Load File' is 파일 로드 (render 60). No value contains '&', and form texts go through the same mnemonic strip (MyButton.cs:148-151). theme::label uses tr_view, so Param Compare, servo PWM, counts and the Formation mode cell are no longer rewritten through the shared map. de 'Name' is no longer applied as 'Komando' in views that have their own 'Name'. FlightData's own quick-button Loiter mapping to 手动/Manual is the original resx's own text (FlightData.zh-Hans.resx:230-231), so it is faithful.",
+      "remaining": "Covered under new_regression_findings (tab strips) and remaining_software_gaps (per-English residue inside a view).",
+      "evidence": [
+        "scripts/export_translations.py:48-51",
+        "scripts/export_translations.py:109-129",
+        "crates/mp-app/src/i18n.rs:54-84",
+        "crates/mp-app/src/i18n.rs:129-165",
+        "crates/mp-app/src/theme.rs:579-582",
+        "crates/mp-app/assets/i18n/zh-Hans.json",
+        "crates/mp-app/assets/i18n/ko-KR.json",
+        "crates/mp-app/assets/i18n/ja-JP.json"
+      ]
+    },
+    {
+      "area": "Coverage of strings the original translates (eb9252e)",
+      "status": "partial",
+      "closed_parts": "View KML, the GPS Track legend, Tuning/Auto Pan/Zoom, SETUP painter text (Accelerometer Calibration, FS Pwm, ESC Calibration, compass text), the Param Compare/Search For titles, joystick checkboxes and exact-match toasts now go through tr. 'Antenna Tracker' is a literal in InitialSetup.cs:333, so English is faithful; round 23's casing note is withdrawn.",
+      "remaining": "Pages whose original .resx is not in views_for (ConfigAccelerometerCalibration, ConfigFailSafe, ConfigBatteryMonitoring, ConfigFrameType, ConfigMount and others drawn from setup.rs) get only the unanimous shared map, so their ambiguous keys stay English (e.g. zh-Hans 'Radio', ko-KR 'Battery Capacity', 'Manual'). Toasts match only when the Rust literal equals the Strings.resx English.",
+      "evidence": [
+        "crates/mp-app/src/i18n.rs:63-66",
+        "crates/mp-app/src/views/setup.rs:760-811",
+        "crates/mp-app/src/app.rs:151-158",
+        "crates/mp-app/src/views/flight_plan.rs:402"
+      ]
+    },
+    {
+      "area": "Default UI culture (eb9252e)",
+      "status": "closed",
+      "closed_parts": "With no saved 'language', the OS UI language (GetUserDefaultUILanguage via LCIDToLocaleName, else LC_ALL/LC_MESSAGES/LANG) is resolved to the exact culture or its neutral parent. zh-CN/zh-SG map to zh-Hans and zh-TW to zh-TW. The ConfigPlanner combo shows the active culture, which covers ConfigPlanner.cs:120-133 in practice.",
+      "remaining": "Minor: zh-HK/zh-MO resolve to English, where .NET falls back through zh-Hant (zh-Hant .resx exist for some forms, e.g. ConfigAccelerometerCalibration.zh-Hant.resx). The combo preselects the resolved culture even when the original IsChildOf loop would leave it unselected (e.g. en-GB).",
+      "evidence": [
+        "crates/mp-app/src/i18n.rs:166-202",
+        "crates/mp-app/src/app.rs:264-267",
+        "crates/mp-app/src/views/config.rs:1087-1116",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:106-135"
+      ]
+    },
+    {
+      "area": "PLAN Distance/Prev/Home overlay (eb9252e)",
+      "status": "closed",
+      "closed_parts": "Prev measures from pointlist's last point (the last located waypoint, else home) to the pointer, with ' AZ: ' and a 0-decimal bearing. Home measures from home to the pointer. Distance is the route total with FormatDistance(…, false). Units follow Settings distunits (m/km or ft/miles with the original formats). Until the pointer has been over the map the labels show their resx text, as the Designer labels do. Labels use rm.GetString-equivalent FlightPlanner lookups (zh-Hans 距离/上一点/家, ar المسافة/السابق/البداية).",
+      "remaining": "Arabic rendering of the overlay is reversed; see new_regression_findings.",
+      "evidence": [
+        "crates/mp-app/src/views/flight_plan.rs:1033-1060",
+        "crates/mp-app/src/views/flight_plan.rs:1082-1091",
+        "crates/mp-app/src/views/flight_plan.rs:1497-1506",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:1253-1305",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:1439-1445",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:3519-3545"
+      ]
+    }
+  ],
+  "new_regression_findings": [
+    {
+      "severity": "medium",
+      "area": "Tab strips lose their view's resources (#[track_caller] does not cross closures)",
+      "finding": "tab_strip and tab_strip_multiline are #[track_caller], but they call i18n::t from inside `labels.iter().map(|l| crate::i18n::t(l))`. Closures do not inherit the caller location, so Location::caller() is theme.rs, views_for returns no views, and only the unanimous shared map applies. Any tab label whose translation differs across .resx files reverts to English. zh-Hans DATA 'Actions' is English in render 58, though FlightData.zh-Hans.resx:295-296 gives tabActions 动作, and round 23's render had it translated. Every tab strip in the app is affected the same way.",
+      "evidence": [
+        "crates/mp-app/src/theme.rs:315-317",
+        "crates/mp-app/src/theme.rs:390-392",
+        "crates/mp-app/src/views/flight_data.rs:741-743",
+        "crates/mp-app/src/i18n.rs:142-148",
+        "crates/mp-app/assets/i18n/zh-Hans.json (views.FlightData.Actions present, text.Actions absent)",
+        "reference/MissionPlanner/GCSViews/FlightData.zh-Hans.resx:295-296",
+        "target/judging/round24/58_data_zh_hans.png"
+      ]
+    },
+    {
+      "severity": "medium",
+      "area": "Arabic mixed-direction text drawn reversed",
+      "finding": "In the ar culture, strings that mix Arabic with Latin letters or digits render with the LTR runs reversed character by character. The PLAN distance overlay shows 'mk 0059.0 :المسافة' for 0.9500 km, and View KML shows 'عرض LMK'. WinForms/GDI applies the Unicode bidi algorithm, so the original shows 'المسافة: 0.9500 km' with the number and unit intact. The app has no bidi handling (no reordering in fonts.rs, i18n.rs or theme.rs). This was first observable this round, since round 23 had no Arabic render. Any ar label with a number, unit, acronym or format value is affected.",
+      "evidence": [
+        "target/judging/round24/62_plan_ar.png",
+        "crates/mp-app/src/views/flight_plan.rs:1055-1060",
+        "crates/mp-app/src/fonts.rs:61-67",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.ar.resx:276-277"
+      ]
+    }
+  ],
+  "new_regression_findings_limit": "Both are confirmed by render and source. The tab issue affects only keys that are ambiguous across .resx files (20 in zh-Hans, 39 in ko-KR overall, not all of them tabs). Not an exhaustive defect list.",
+  "remaining_software_gaps": [
+    {
+      "priority": 1,
+      "status": "open",
+      "area": "Localization residue: tab strips, Arabic bidi, per-control fidelity, unmapped views",
+      "next_fix": "Translate tab labels without the closure (a loop, or have callers pass translated labels) so FlightData's 动作 returns. Run text through a Unicode bidi reorder (unicode-bidi) before layout for RTL cultures so Latin and digit runs keep their order. Key view tables by control name where it matters: ko-KR Up/Down column headers are empty in FlightPlanner.ko-KR.resx:317-342, but Rust shows 상/하 taken from dataGridViewImageColumn1/2 (943-958). Add the per-page .resx types (ConfigAccelerometerCalibration, ConfigFailSafe, ConfigBatteryMonitoring, ConfigFrameType, ConfigMount, ConfigHWCompass and others) to the setup.rs view list. Capture zh-Hans/ko-KR/ar again from the committed binary.",
+      "evidence": [
+        "crates/mp-app/src/theme.rs:315-317",
+        "crates/mp-app/src/theme.rs:390-392",
+        "crates/mp-app/src/i18n.rs:54-84",
+        "crates/mp-app/src/views/flight_plan.rs:627",
+        "reference/MissionPlanner/GCSViews/FlightData.zh-Hans.resx:295-296",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.ko-KR.resx:317-342",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.ko-KR.resx:943-958",
+        "target/judging/round24/62_plan_ar.png"
+      ]
+    },
+    {
+      "priority": 2,
+      "status": "open",
+      "area": "Native packages, runtime and mobile file access",
+      "next_fix": "Install and launch the debug APK. Exercise Sequence save/load, overwrite, cancel and restart persistence at a mobile viewport. Add the iOS app wrapper, a stable data path, signing and packaging. Implement Android SAF and iOS document providers for the remaining mobile open paths. Run CI on the reviewed HEAD: no run exists for 5a5941e..eb9252e, and libloading/Win32_Globalization are new dependencies.",
+      "evidence": [
+        "crates/mp-app/src/platform.rs:176-213",
+        "judging/platform-build-22.json",
+        "README.md:111-119"
+      ],
+      "limits": "The APK is built and structurally inspected only."
+    },
+    {
+      "priority": 3,
+      "status": "open",
+      "area": "Gimbal/payload video and GStreamer edge behaviour",
+      "next_fix": "Port GimbalVideoControl: full-sized, mini and pop-out placement with the mini map / swap / close context menu, BUT_GimbalVideo, and autoconnect to the first reported stream. Make Cancel on Set GStreamer Source stop the stream, add Cancel to the download progress dialog, keep MJPEG and GStreamer stop separate, and bundle or locate GStreamer on Android.",
+      "evidence": [
+        "crates/mp-app/src/views/fd_tabs.rs:345-347",
+        "crates/mp-app/src/views/flight_data.rs:643-652",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4979-4982",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:6666-6830",
+        "reference/MissionPlanner/Utilities/GStreamerUI.cs:8-22"
+      ]
+    },
+    {
+      "priority": 4,
+      "status": "open",
+      "area": "Plugin execution",
+      "next_fix": "Implement a compatible plugin lifecycle and callbacks. The page still lists files with disabled checkboxes.",
+      "evidence": [
+        "crates/mp-app/src/hotkey_tools.rs:95-112",
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:146-179"
+      ]
+    },
+    {
+      "priority": 5,
+      "status": "open",
+      "area": "Native transports, remaining CurrentState getters and map/tool parity",
+      "next_fix": "Add BLE/WinUSB/custom and Android USB-serial adapters. Port the computed getters (ch1percent/ch3percent with SERVO params, alt-derivative verticalspeed) and the HEARTBEAT 2/4 selection rule. Close the GDAL raster/opacity and geocoder gaps and drive native DATA/guided/MAV-switch workflows.",
+      "evidence": [
+        "crates/mp-core/src/comms.rs:26-46",
+        "crates/mp-core/src/link.rs:1079",
+        "reference/MissionPlanner/MainV2.cs:3629-3641",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:336-349",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:939-1000",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:905-925"
+      ]
+    }
+  ],
+  "ten_out_of_ten_criterion": "An honest 10 requires no known material software discrepancy within the promised exact-clone scope, plus adequate interaction and native-platform evidence. Run 24 closes HUD GStreamer/HereLink video, Quick view captions, the PLAN overlay and round 23's localization defects. It adds two visible localization regressions (tab strips, Arabic bidi), and gimbal video, plugins, mobile runtime, native transports and CI on the reviewed HEAD remain open. Physical flight qualification is separate from this software parity score."
+}

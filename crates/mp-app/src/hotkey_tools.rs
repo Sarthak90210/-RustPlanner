@@ -1,6 +1,6 @@
 //! Windows behind MainV2.ProcessCmdKey: Ctrl+P PluginUI, Ctrl+X GMAPCache, Ctrl+J DevopsUI.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{Duration, SystemTime};
 
 use egui::{Color32, RichText};
@@ -14,6 +14,7 @@ use crate::theme;
 #[derive(Default)]
 pub struct HotkeyTools {
     pub plugins_open: bool,
+    plugin_rows: Option<Vec<(String, String, String, String, bool, Color32)>>,
     pub cache_open: bool,
     pub devops_open: bool,
     cache_rows: Option<Vec<(String, u64, u64)>>,
@@ -72,48 +73,110 @@ fn remove_older(p: &Path, age: Option<Duration>) -> u64 {
 
 impl HotkeyTools {
     pub fn ui(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
-        self.plugins_ui(ctx);
+        self.plugins_ui(ctx, app);
         self.cache_ui(ctx, app.toasts);
         self.devops_ui(ctx, app);
     }
 
-    /// PluginUI: the plugins folder and what was loaded from it.
-    fn plugins_ui(&mut self, ctx: &egui::Context) {
+    /// PluginUI ("PluginManager"): loaded plugins and disabled files, Enabled per file,
+    /// Save & Close into Settings "DisabledPlugins", Show Errors.
+    fn plugins_ui(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
         if !self.plugins_open {
+            self.plugin_rows = None;
             return;
         }
-        let dir = crate::platform::data_dir().join("plugins");
-        let _ = std::fs::create_dir_all(&dir);
-        let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
-            .map(|r| r.flatten().map(|e| e.path()).collect())
-            .unwrap_or_default();
-        files.sort();
+        let rows = self.plugin_rows.get_or_insert_with(|| {
+            crate::plugins::with(|l| {
+                // (name, author, version, file, enabled, row colour)
+                let mut rows: Vec<(String, String, String, String, bool, Color32)> = l
+                    .plugins
+                    .iter()
+                    .map(|p| {
+                        let on = !l.disabled.iter().any(|d| d.eq_ignore_ascii_case(&p.file));
+                        (p.name.clone(), p.author.clone(), p.version.clone(), p.file.clone(), on, if on { Color32::from_rgb(0, 128, 0) } else { Color32::from_rgb(255, 140, 0) })
+                    })
+                    .collect();
+                for d in &l.disabled {
+                    let loaded = l.plugins.iter().any(|p| p.file.contains(d.as_str()));
+                    if l.dir.join(d).exists() && !loaded {
+                        rows.push(("Not loaded".into(), "--".into(), "--".into(), d.clone(), false, Color32::from_rgb(139, 0, 0)));
+                    }
+                }
+                rows
+            })
+            .unwrap_or_default()
+        });
         let mut open = true;
-        egui::Window::new(crate::i18n::t("Plugins")).open(&mut open).default_size([520.0, 300.0]).show(ctx, |ui| {
-            egui::Grid::new("plugins").num_columns(4).striped(true).show(ui, |ui| {
-                for h in ["Name", "Author", "Version", "Enabled"] {
-                    ui.label(RichText::new(h).strong().color(Color32::WHITE));
-                }
-                ui.end_row();
-                for f in &files {
-                    let name = f.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-                    theme::label(ui, &name);
-                    theme::label(ui, "");
-                    theme::label(ui, "");
-                    // .NET plugins (.dll / .cs) are not loadable by this build
-                    ui.add_enabled(false, egui::Checkbox::new(&mut false, ""));
-                    ui.end_row();
-                }
-            });
-            if files.is_empty() {
-                theme::label(ui, "No plugins found.");
+        let mut save = false;
+        let mut errors = false;
+        egui::Window::new("PluginManager").open(&mut open).collapsible(false).resizable(false).fixed_size([673.0, 373.0]).show(ctx, |ui| {
+            let (area, _) = ui.allocate_exact_size(egui::vec2(673.0, 373.0), egui::Sense::hover());
+            let o = area.min;
+            let r = |x: f32, y: f32, w: f32, h: f32| egui::Rect::from_min_size(o + egui::vec2(x, y), egui::vec2(w, h));
+            if ui.put(r(11.0, 8.0, 73.0, 31.0), |ui: &mut egui::Ui| theme::button_sized(ui, "Save & Close", egui::vec2(73.0, 31.0))).clicked() {
+                save = true;
             }
-            ui.add_space(6.0);
-            theme::label(ui, format!("Plugin folder: {}\nMission Planner .NET plugins (.dll / .cs) cannot be loaded by this build; use the Scripts tab for Python and Lua automation.", dir.display()));
-            if theme::button(ui, "Open Folder").clicked() {
-                ui.ctx().open_url(egui::OpenUrl::new_tab(format!("file://{}", dir.display())));
+            let restart = crate::plugins::with(|l| l.restart_required).unwrap_or(false);
+            if restart {
+                ui.painter().text(o + egui::vec2(88.0, 8.0), egui::Align2::LEFT_TOP, crate::i18n::t("Enable/Disable settings changed, till restart \rnot loaded but enabled plugins will be shown as not loaded").replace('\r', "\n"), crate::fonts::ui_id(crate::fonts::UI_SIZE), Color32::RED);
+            }
+            if ui.put(r(316.0, 8.0, 73.0, 31.0), |ui: &mut egui::Ui| theme::button_sized(ui, "Show Errors", egui::vec2(73.0, 31.0))).clicked() {
+                errors = true;
+            }
+            // dgvPlugins
+            let grid = r(9.0, 51.0, 655.0, 303.0);
+            ui.painter().rect_filled(grid, 0.0, theme::control_bg());
+            let cols = [("Plugin Name", 170.0), ("Author", 150.0), ("Version", 70.0), ("FileName", 200.0), ("Enabled", 60.0)];
+            let f = crate::fonts::ui_id(crate::fonts::UI_SIZE);
+            let mut x = grid.min.x;
+            for (h, w) in cols {
+                let hr = egui::Rect::from_min_size(egui::pos2(x, grid.min.y), egui::vec2(w, 21.0));
+                ui.painter().rect_stroke(hr, 0.0, egui::Stroke::new(1.0, Color32::GRAY), egui::StrokeKind::Inside);
+                ui.painter().text(hr.left_center() + egui::vec2(3.0, 0.0), egui::Align2::LEFT_CENTER, crate::i18n::t(h), f.clone(), Color32::WHITE);
+                x += w;
+            }
+            for (i, row) in rows.iter_mut().enumerate() {
+                let y = grid.min.y + 21.0 + i as f32 * 22.0;
+                if y + 22.0 > grid.max.y {
+                    break;
+                }
+                let rr = egui::Rect::from_min_size(egui::pos2(grid.min.x, y), egui::vec2(650.0, 22.0));
+                ui.painter().rect_filled(rr, 0.0, row.5);
+                let mut x = grid.min.x;
+                for (k, (_, w)) in cols.iter().enumerate() {
+                    let cr = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(*w, 22.0));
+                    match k {
+                        4 => {
+                            ui.put(cr.shrink(2.0), egui::Checkbox::without_text(&mut row.4));
+                        }
+                        _ => {
+                            let t = [&row.0, &row.1, &row.2, &row.3][k];
+                            ui.painter().with_clip_rect(cr).text(cr.left_center() + egui::vec2(3.0, 0.0), egui::Align2::LEFT_CENTER, t, f.clone(), Color32::WHITE);
+                        }
+                    }
+                    x += w;
+                }
             }
         });
+        if errors {
+            // but_errors_Click
+            let msg = crate::plugins::with(|l| l.errors.iter().map(|(f, e)| format!("{f}: {e}\n")).collect::<String>()).unwrap_or_default();
+            app.toasts.error(if msg.is_empty() { "No Errors".to_string() } else { msg });
+        }
+        if save {
+            // UpdateDisabledPlugins, bRestartRequired, Close
+            let disabled: Vec<String> = rows.iter().filter(|r| !r.4).map(|r| r.3.to_ascii_lowercase()).collect();
+            if disabled.is_empty() {
+                app.settings.planner.remove("DisabledPlugins");
+            } else {
+                app.settings.planner.insert("DisabledPlugins".into(), disabled.join(","));
+            }
+            crate::plugins::with(|l| {
+                l.disabled = disabled;
+                l.restart_required = true;
+            });
+            open = false;
+        }
         self.plugins_open = open;
     }
 

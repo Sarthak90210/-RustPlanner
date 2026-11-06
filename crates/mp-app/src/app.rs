@@ -276,6 +276,8 @@ impl MissionPlannerApp {
         }
         // MainV2: DisplayConfiguration from "displayview", forcing the parameter pages
         crate::display::force_on_load(&mut settings.planner);
+        // MainV2: PluginLoader.LoadAll
+        crate::plugins::start(&settings.planner);
         // MainV2: "start http" - the web service on port 56781
         crate::httpserver::start();
         // Developer switches: MP_AUTOSIM=1 starts the simulator, MP_VIEW picks the screen.
@@ -1122,6 +1124,11 @@ impl MissionPlannerApp {
 }
 
 impl eframe::App for MissionPlannerApp {
+    /// MainV2 closing: every plugin's Exit.
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        crate::plugins::shutdown();
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.drain_events();
@@ -1139,6 +1146,20 @@ impl eframe::App for MissionPlannerApp {
         self.inspector.show(&ctx, self.link.as_ref(), &mut self.toasts);
         self.tools.ui(&ctx, self.link.as_ref(), &mut self.toasts);
         self.more_tools.ui(&ctx, self.link.as_ref(), &mut self.toasts);
+        // PluginHost: CurrentState and config for the plugins; their commands and waypoints
+        {
+            let fields = self.link.as_ref().map(|l| l.shared.read().cs.fields()).unwrap_or_default();
+            let rows = self.flight_plan.row_count();
+            let (commands, waypoints) = crate::plugins::sync(&fields, &mut self.settings.planner, rows);
+            if let Some(l) = &self.link {
+                for (command, params) in commands {
+                    l.send(mp_core::link::LinkCommand::CommandLong { command, params });
+                }
+            }
+            for (command, p) in waypoints {
+                self.flight_plan.add_command(command, p);
+            }
+        }
         let links: Vec<&Link> = self.link.iter().chain(self.extra_links.iter()).collect();
         self.more_tools.formation.ui(&ctx, &links, &mut self.toasts);
         self.more_tools.layout_editor.ui(&ctx, &links, &mut self.toasts);

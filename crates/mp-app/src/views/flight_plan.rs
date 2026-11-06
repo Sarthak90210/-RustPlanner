@@ -192,6 +192,16 @@ fn put_button(ui: &mut egui::Ui, r: Rect, text: &str) -> bool {
 }
 
 impl FlightPlanView {
+    /// Commands grid rows (PluginHost.AddWPtoList returns the new row's index).
+    pub fn row_count(&self) -> usize {
+        self.items.len()
+    }
+
+    /// FlightPlanner.AddCommand from a plugin: [p1, p2, p3, p4, x (lat), y (lng), z (alt)].
+    pub fn add_command(&mut self, command: u16, p: [f64; 7]) {
+        self.items.push(Locationwp { id: command, p1: p[0] as f32, p2: p[1] as f32, p3: p[2] as f32, p4: p[3] as f32, lat: p[4], lng: p[5], alt: p[6] as f32, frame: 3, ..Default::default() });
+    }
+
     /// The web service's view of the planner: mission, home, links and stream rates.
     pub fn update_kml(&mut self, link: Option<&mp_core::link::Link>, extra: &[mp_core::link::Link], settings: &crate::app::Settings) {
         let mut links = Vec::new();
