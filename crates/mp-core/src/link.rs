@@ -202,6 +202,8 @@ pub enum LinkCommand {
     SendRaw(Vec<u8>),
     /// Forward every received message with this id to `tx` (MAVFtp and other tools).
     Subscribe { msgid: u32, tx: Sender<MavMessage> },
+    /// Subscribe to one source vehicle/component, independent of later target selection.
+    SubscribeFrom { msgid: u32, sysid: u8, compid: u8, tx: Sender<MavMessage> },
     /// Forward the raw payload (sysid, compid, bytes) of a message id, for messages the
     /// dialect cannot decode (REMOTE_LOG_DATA_BLOCK carries plain u32 sequence numbers).
     SubscribeRaw { msgid: u32, tx: Sender<(u8, u8, Vec<u8>)> },
@@ -391,6 +393,7 @@ struct Worker {
     pending_alt: Option<(MISSION_ITEM_DATA, Instant, u8)>,
     mirror: Option<(std::net::UdpSocket, std::net::SocketAddr, bool)>,
     subscribers: Vec<(u32, Sender<MavMessage>)>,
+    source_subscribers: Vec<(u32, u8, u8, Sender<MavMessage>)>,
     raw_subscribers: Vec<(u32, Sender<(u8, u8, Vec<u8>)>)>,
 }
 
@@ -441,6 +444,7 @@ impl Worker {
             pending_alt: None,
             mirror: None,
             subscribers: Vec::new(),
+            source_subscribers: Vec::new(),
             raw_subscribers: Vec::new(),
         }
     }
@@ -670,6 +674,7 @@ impl Worker {
                 }
             }
             LinkCommand::Subscribe { msgid, tx } => self.subscribers.push((msgid, tx)),
+            LinkCommand::SubscribeFrom { msgid, sysid, compid, tx } => self.source_subscribers.push((msgid, sysid, compid, tx)),
             LinkCommand::SubscribeRaw { msgid, tx } => self.raw_subscribers.push((msgid, tx)),
             LinkCommand::SetTarget { sysid, compid } => {
                 if sysid != self.target_sys || compid != self.target_comp {
@@ -906,6 +911,12 @@ impl Worker {
     // ---------------------------------------------------------------- incoming messages
 
     fn handle_message(&mut self, hdr: MavHeader, msg: MavMessage) -> io::Result<()> {
+        if !self.source_subscribers.is_empty() {
+            let id = <MavMessage as mavlink::Message>::message_id(&msg);
+            self.source_subscribers.retain(|(m, sys, comp, tx)| {
+                *m != id || *sys as u32 != hdr.system_id || *comp != hdr.component_id || tx.send(msg.clone()).is_ok()
+            });
+        }
         if !self.subscribers.is_empty() {
             let id = <MavMessage as mavlink::Message>::message_id(&msg);
             self.subscribers.retain(|(m, tx)| *m != id || tx.send(msg.clone()).is_ok());

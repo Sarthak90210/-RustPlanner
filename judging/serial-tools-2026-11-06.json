@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-06",
+  "kind": "implementation and validation receipt, not an independent parity score",
+  "scope": "Continue the interrupted MAVLink serial port work and related Terminal/GPS tools",
+  "implemented": [
+    "SERIAL_CONTROL transport pinned to the selected vehicle and component, with per-device/reply/destination filtering, bounded reads, 70-byte writes and release on close/drop",
+    "SiK settings through TELEM1 while connected, retaining direct COM configuration while disconnected",
+    "SiK transport errors propagate instead of producing successful empty settings",
+    "NSH Terminal through SHELL, raw serial board choices, reference settings/radio/test commands, legacy Logs console menu, Log Browse, history, CR-only input and unterminated +++",
+    "Terminal IO errors are reported and leaving the page closes its transport",
+    "GPS1 TCP passthrough uses the shared transport, supports Stop and window-close cleanup, and can be reopened after stopping"
+  ],
+  "validation": {
+    "host": "Windows x86_64",
+    "cargo_test_workspace": { "passed": 81, "failed": 0, "ignored": 0 },
+    "final_ui_changes": "cargo test -p mp-app: 36 passed, 0 failed",
+    "build": "cargo build -p mp-app passed",
+    "wire_tests": "Independent TCP MAVLink peer tests target pinning, device/source/destination isolation, chunking, buffering, polling, malformed replies, timeout, link disconnect, close/drop release, and SiK load/save/reload",
+    "worker_tests": "Terminal command bytes, replies, fatal IO errors and deactivation cleanup; TCP bridge binary roundtrip, reconnect and stop cleanup",
+    "render": "target/judging/serial-tools-20261106/terminal.png, inspected at 1280x800; input field at bottom, no clipping in the captured layout",
+    "render_receipt": "target/judging/serial-tools-20261106/terminal.manifest.json",
+    "binary_sha256": "014E0B847A1D94C64D80930C4178C20683106D58A837BDC77381030DAAD17DD9"
+  },
+  "remaining_in_this_area": [
+    "Terminal SSH transport and legacy board reboot/startup sequence",
+    "Dedicated legacy serial CLI log download dialog; current Logs button opens the console menu",
+    "Physical autopilot, SiK radio and GPS qualification"
+  ],
+  "overall_goal": "Still in progress. Full Mission Planner source/behavior/visual parity and native macOS/Linux/Android/iOS packaging and device validation remain open. Historical round-08 score is unchanged."
+}

@@ -351,8 +351,8 @@ impl MoreTools {
 
     /// MAVSerial pass: TCP port 500 <-> SERIAL_CONTROL (GPS1, exclusive).
     fn start_serial_pass(&mut self, l: &Link, toasts: &mut Toasts) {
-        if self.serial_pass.is_some() {
-            toasts.error("MAVSerial pass is already running on TCP port 500");
+        if self.serial_pass.as_ref().is_some_and(|s| !s.load(std::sync::atomic::Ordering::Relaxed)) {
+            self.text = Some(("MAVSerial pass".into(), "Listening on TCP port 500 (GPS1 over SERIAL_CONTROL).\nConnect u-center or similar to this PC, port 500.".into()));
             return;
         }
         let listener = match std::net::TcpListener::bind("0.0.0.0:500") {
@@ -364,59 +364,21 @@ impl MoreTools {
         };
         let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         self.serial_pass = Some(stop.clone());
-        let (stx, srx) = crossbeam_channel::unbounded();
-        l.send(LinkCommand::Subscribe { msgid: 126, tx: stx });
-        let tx = l.sender();
-        let (sys, comp) = {
-            let s = l.shared.read();
-            (s.cs.sysid, s.cs.compid)
-        };
-        std::thread::spawn(move || {
-            let send = |data: &[u8]| {
-                let mut d = [0u8; 70];
-                d[..data.len()].copy_from_slice(data);
-                let _ = tx.send(LinkCommand::Send(Box::new(MavMessage::SERIAL_CONTROL(SERIAL_CONTROL_DATA {
-                    baudrate: 0,
-                    timeout: 10,
-                    device: SerialControlDev::SERIAL_CONTROL_DEV_GPS1,
-                    flags: SerialControlFlag::SERIAL_CONTROL_FLAG_EXCLUSIVE | SerialControlFlag::SERIAL_CONTROL_FLAG_RESPOND | SerialControlFlag::SERIAL_CONTROL_FLAG_MULTI,
-                    count: data.len() as u8,
-                    data: d,
-                    target_system: sys,
-                    target_component: comp,
-                    ..Default::default()
-                }))));
-            };
-            let _ = listener.set_nonblocking(true);
-            while !stop.load(std::sync::atomic::Ordering::Relaxed) {
-                let Ok((mut sock, _)) = listener.accept() else {
-                    std::thread::sleep(Duration::from_millis(100));
-                    continue;
-                };
-                let _ = sock.set_read_timeout(Some(Duration::from_millis(20)));
-                let mut buf = [0u8; 70];
-                let mut last_poll = Instant::now();
-                loop {
-                    match sock.read(&mut buf) {
-                        Ok(0) => break,
-                        Ok(n) => send(&buf[..n]),
-                        Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
-                        Err(_) => break,
-                    }
-                    if last_poll.elapsed() > Duration::from_millis(100) {
-                        last_poll = Instant::now();
-                        send(&[]);
-                    }
-                    while let Ok(MavMessage::SERIAL_CONTROL(r)) = srx.try_recv() {
-                        if sock.write_all(&r.data[..(r.count as usize).min(70)]).is_err() {
-                            break;
-                        }
-                    }
-                    if stop.load(std::sync::atomic::Ordering::Relaxed) {
-                        break;
-                    }
-                }
+        let mut port = match mp_core::mavserial::MavSerialPort::new(l, SerialControlDev::SERIAL_CONTROL_DEV_GPS1, 0) {
+            Ok(p) => p,
+            Err(e) => {
+                self.serial_pass = None;
+                toasts.error(e.to_string());
+                return;
             }
+        };
+        port.read_timeout = Duration::from_millis(20);
+        let shared = l.shared.clone();
+        std::thread::spawn(move || {
+            let run = run_serial_pass(listener, port, &stop, || shared.read().status == mp_core::link::LinkStatus::Connected);
+            if let Err(e) = run { log::warn!("MAVSerial pass: {e}"); }
+            // Release GPS1 before reporting that the listener stopped.
+            stop.store(true, std::sync::atomic::Ordering::Relaxed);
         });
         self.text = Some(("MAVSerial pass".into(), "Listening on TCP port 500 (GPS1 over SERIAL_CONTROL).\nConnect u-center or similar to this PC, port 500.".into()));
     }
@@ -427,9 +389,21 @@ impl MoreTools {
             egui::Window::new(t.as_str()).id(egui::Id::new("more_tools_text")).open(&mut open).collapsible(false).show(ctx, |ui| {
                 egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
                     ui.label(egui::RichText::new(body.as_str()).monospace().color(Color32::WHITE));
+                    if t == "MAVSerial pass" {
+                        if let Some(stop) = &self.serial_pass {
+                            if stop.load(std::sync::atomic::Ordering::Relaxed) {
+                                ui.label("Stopped");
+                            } else if theme::button(ui, "Stop").clicked() {
+                                stop.store(true, std::sync::atomic::Ordering::Relaxed);
+                            }
+                        }
+                    }
                 });
             });
             if !open {
+                if t == "MAVSerial pass" {
+                    if let Some(stop) = &self.serial_pass { stop.store(true, std::sync::atomic::Ordering::Relaxed); }
+                }
                 self.text = None;
             }
         }
@@ -730,3 +704,101 @@ impl MoreTools {
     }
 }
 
+
+impl Drop for MoreTools {
+    fn drop(&mut self) {
+        if let Some(stop) = &self.serial_pass { stop.store(true, std::sync::atomic::Ordering::Relaxed); }
+    }
+}
+
+fn run_serial_pass(
+    listener: std::net::TcpListener,
+    mut port: impl mp_core::comms::Transport,
+    stop: &std::sync::atomic::AtomicBool,
+    connected: impl Fn() -> bool,
+) -> std::io::Result<()> {
+    listener.set_nonblocking(true)?;
+    while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+        if !connected() { break; }
+        let mut sock = match listener.accept() {
+            Ok((sock, _)) => sock,
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(Duration::from_millis(20));
+                continue;
+            }
+            Err(e) => return Err(e),
+        };
+        sock.set_read_timeout(Some(Duration::from_millis(20)))?;
+        sock.set_write_timeout(Some(Duration::from_millis(200)))?;
+        let mut buf = [0u8; 512];
+        while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+            match sock.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => port.write_all(&buf[..n])?,
+                Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
+                Err(_) => break,
+            }
+            match port.read(&mut buf) {
+                Ok(n) => if sock.write_all(&buf[..n]).is_err() { break; },
+                Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
+                Err(e) => return Err(e),
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod serial_pass_tests {
+    use super::*;
+    use std::io;
+    use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+
+    struct EchoPort {
+        bytes: std::collections::VecDeque<u8>,
+        released: crossbeam_channel::Sender<()>,
+    }
+    impl Read for EchoPort {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            if self.bytes.is_empty() {
+                std::thread::sleep(Duration::from_millis(2));
+                return Err(io::ErrorKind::TimedOut.into());
+            }
+            let n = self.bytes.len().min(buf.len());
+            for (dst, byte) in buf.iter_mut().zip(self.bytes.drain(..n)) { *dst = byte; }
+            Ok(n)
+        }
+    }
+    impl Write for EchoPort {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.bytes.extend(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    }
+    impl Drop for EchoPort {
+        fn drop(&mut self) { let _ = self.released.send(()); }
+    }
+
+    #[test]
+    fn serial_pass_stream_roundtrip_reconnect_and_stop_release_transport() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let worker_stop = stop.clone();
+        let (released, rx) = crossbeam_channel::unbounded();
+        let worker = std::thread::spawn(move || run_serial_pass(listener, EchoPort { bytes: Default::default(), released }, &worker_stop, || true));
+        for size in [151, 1024] {
+            let mut client = std::net::TcpStream::connect(addr).unwrap();
+            client.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+            let input: Vec<u8> = (0..size).map(|n| n as u8).collect();
+            client.write_all(&input).unwrap();
+            let mut out = vec![0; size];
+            client.read_exact(&mut out).unwrap();
+            assert_eq!(out, input);
+        }
+        stop.store(true, Ordering::Relaxed);
+        rx.recv_timeout(Duration::from_secs(2)).expect("GPS transport was not released on stop");
+        worker.join().unwrap().unwrap();
+    }
+}

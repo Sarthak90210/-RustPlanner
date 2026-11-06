@@ -56,7 +56,7 @@ impl Sik {
         Ok(Self::new(crate::comms::open_serial_port(port, baud)?))
     }
 
-    fn read_for(&mut self, d: Duration, until: Option<&str>) -> String {
+    fn read_for(&mut self, d: Duration, until: Option<&str>) -> io::Result<String> {
         let end = Instant::now() + d;
         let mut out = Vec::new();
         let mut buf = [0u8; 256];
@@ -78,10 +78,10 @@ impl Sik {
                     }
                 }
                 Err(e) if matches!(e.kind(), io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock) => std::thread::sleep(Duration::from_millis(5)),
-                Err(_) => break,
+                Err(e) => return Err(e),
             }
         }
-        String::from_utf8_lossy(&out).to_string()
+        Ok(String::from_utf8_lossy(&out).to_string())
     }
 
     /// "+++" with the 1 s guard times; true when the radio answers OK.
@@ -89,7 +89,7 @@ impl Sik {
         std::thread::sleep(guard);
         self.port.write_all(b"+++")?;
         self.port.flush()?;
-        let r = self.read_for(guard + Duration::from_millis(500), Some("OK"));
+        let r = self.read_for(guard + Duration::from_millis(500), Some("OK"))?;
         if r.contains("OK") {
             return Ok(true);
         }
@@ -99,10 +99,10 @@ impl Sik {
 
     /// doCommand: send one command, return the reply without the echo.
     pub fn cmd(&mut self, c: &str) -> io::Result<String> {
-        let _ = self.read_for(Duration::from_millis(20), None);
+        self.read_for(Duration::from_millis(20), None)?;
         self.port.write_all(format!("{c}\r\n").as_bytes())?;
         self.port.flush()?;
-        let r = self.read_for(Duration::from_millis(700), None);
+        let r = self.read_for(Duration::from_millis(700), None)?;
         Ok(r.lines().filter(|l| l.trim() != c).collect::<Vec<_>>().join("\n").trim().to_string())
     }
 

@@ -127,21 +127,126 @@ pub struct SetupView {
     term_port: String,
     term_baud: u32,
     term_input: String,
+    term_board: String,
+    term_text: String,
+    term_history: Vec<String>,
+    term_history_pos: usize,
+    term_log_browse: crate::log_browse::LogBrowse,
     firmware: crate::firmware_ui::FirmwareInstaller,
     extra: crate::views::setup_pages::ExtraPages,
     dev: crate::views::device_pages::DevicePages,
 }
 
 struct Terminal {
-    rx: crossbeam_channel::Receiver<Vec<u8>>,
+    rx: crossbeam_channel::Receiver<Result<Vec<u8>, String>>,
     tx: crossbeam_channel::Sender<Vec<u8>>,
-    text: String,
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl Drop for Terminal {
     fn drop(&mut self) {
         self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+impl Terminal {
+    fn start(mut port: Box<dyn mp_core::comms::Transport>, ctx: egui::Context) -> Self {
+        let (otx, rx) = crossbeam_channel::unbounded();
+        let (tx, irx) = crossbeam_channel::unbounded::<Vec<u8>>();
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let st = stop.clone();
+        std::thread::spawn(move || {
+            let result = (|| -> std::io::Result<()> {
+                let mut buf = [0; 512];
+                while !st.load(std::sync::atomic::Ordering::Relaxed) {
+                    while let Ok(data) = irx.try_recv() {
+                        port.write_all(&data)?;
+                        port.flush()?;
+                    }
+                    match port.read(&mut buf) {
+                        Ok(0) => return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "Terminal connection closed")),
+                        Ok(n) => {
+                            if otx.send(Ok(buf[..n].to_vec())).is_err() { break; }
+                            ctx.request_repaint();
+                        }
+                        Err(e) if matches!(e.kind(), std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock) => {}
+                        Err(e) => return Err(e),
+                    }
+                }
+                Ok(())
+            })();
+            if let Err(e) = result {
+                let _ = otx.send(Err(e.to_string()));
+                ctx.request_repaint();
+            }
+            // Dropping a MAVLink serial transport releases SHELL, also on errors.
+        });
+        Self { rx, tx, stop }
+    }
+}
+
+/// ConfigTerminal sends CR only, and the SiK escape sequence has no terminator.
+fn terminal_command(text: &str) -> Vec<u8> {
+    if text == "+++" { text.as_bytes().to_vec() } else { format!("{text}\r").into_bytes() }
+}
+
+#[cfg(test)]
+mod terminal_tests {
+    use super::*;
+    use std::io;
+    use std::time::Duration;
+
+    struct Console {
+        written: crossbeam_channel::Sender<Vec<u8>>,
+        replies: crossbeam_channel::Receiver<io::Result<Vec<u8>>>,
+        closed: crossbeam_channel::Sender<()>,
+    }
+    impl Read for Console {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            match self.replies.recv_timeout(Duration::from_millis(20)) {
+                Ok(Ok(data)) => { buf[..data.len()].copy_from_slice(&data); Ok(data.len()) }
+                Ok(Err(e)) => Err(e),
+                Err(_) => Err(io::ErrorKind::TimedOut.into()),
+            }
+        }
+    }
+    impl Write for Console {
+        fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+            self.written.send(data.to_vec()).map_err(|_| io::ErrorKind::BrokenPipe)?;
+            Ok(data.len())
+        }
+        fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    }
+    impl Drop for Console {
+        fn drop(&mut self) { let _ = self.closed.send(()); }
+    }
+
+    #[test]
+    fn terminal_io_preserves_escape_and_cr_commands_and_surfaces_errors() {
+        let (tx, written) = crossbeam_channel::unbounded();
+        let (reply, rx) = crossbeam_channel::unbounded();
+        let (closed, released) = crossbeam_channel::unbounded();
+        let terminal = Terminal::start(Box::new(Console { written: tx, replies: rx, closed }), egui::Context::default());
+        for (command, bytes) in [("+++", b"+++".as_slice()), ("help", b"help\r".as_slice()), ("", b"\r".as_slice())] {
+            terminal.tx.send(terminal_command(command)).unwrap();
+            assert_eq!(written.recv_timeout(Duration::from_secs(2)).unwrap(), bytes);
+        }
+        reply.send(Ok(b"nsh> ".to_vec())).unwrap();
+        assert_eq!(terminal.rx.recv_timeout(Duration::from_secs(2)).unwrap().unwrap(), b"nsh> ");
+        reply.send(Err(io::Error::new(io::ErrorKind::BrokenPipe, "peer disconnected"))).unwrap();
+        assert!(terminal.rx.recv_timeout(Duration::from_secs(2)).unwrap().unwrap_err().contains("peer disconnected"));
+        released.recv_timeout(Duration::from_secs(2)).expect("Terminal failed to release the transport after an IO error");
+    }
+
+    #[test]
+    fn leaving_terminal_releases_transport() {
+        let (written, _rx) = crossbeam_channel::unbounded();
+        let (_reply, replies) = crossbeam_channel::unbounded();
+        let (closed, released) = crossbeam_channel::unbounded();
+        let mut setup = SetupView::default();
+        setup.term = Some(Terminal::start(Box::new(Console { written, replies, closed }), egui::Context::default()));
+        setup.close_terminal();
+        released.recv_timeout(Duration::from_secs(2)).expect("Terminal kept the transport after deactivation");
     }
 }
 
@@ -170,6 +275,11 @@ impl Default for SetupView {
             term_port: String::new(),
             term_baud: 115200,
             term_input: String::new(),
+            term_board: "APM".into(),
+            term_text: "*NOTE* Please click connect above\nCLI Works only on first connect of power, log download only over USB\n".into(),
+            term_history: Vec::new(),
+            term_history_pos: 0,
+            term_log_browse: Default::default(),
             firmware: Default::default(),
             extra: Default::default(),
             dev: Default::default(),
@@ -183,6 +293,10 @@ struct RadioCal {
 }
 
 impl SetupView {
+    pub fn close_terminal(&mut self) {
+        self.term = None;
+    }
+
     /// Select a page by its BackstageView label.
     pub fn goto(&mut self, name: &str) {
         if let Some(i) = PAGES.iter().position(|p| p.0 == name) {
@@ -210,6 +324,7 @@ impl SetupView {
             self.page = visible[sel];
         }
         let name = PAGES[if sel != before { self.page } else { shown }].0;
+        if name != "Terminal" { self.close_terminal(); }
         egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::bg()).inner_margin(6)).show(ui, |ui| {
             match name {
                 "Install Firmware" if app.connected() => return self.extra.fw_disabled(ui, app),
@@ -276,73 +391,118 @@ impl SetupView {
     }
 
 
-    /// ConfigTerminal: raw serial terminal to the autopilot / a radio.
+    /// ConfigTerminal: raw COM terminal or NSH over the active MAVLink link.
     fn terminal(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
-        ui.horizontal(|ui| {
-            let ports = mp_core::comms::serial_ports();
-            egui::ComboBox::from_id_salt("term_port").width(110.0).selected_text(self.term_port.clone()).show_ui(ui, |ui| {
-                for p in &ports {
-                    ui.selectable_value(&mut self.term_port, p.clone(), p);
-                }
-            });
-            egui::ComboBox::from_id_salt("term_baud").width(90.0).selected_text(self.term_baud.to_string()).show_ui(ui, |ui| {
-                for b in mp_core::comms::BAUD_RATES {
-                    ui.selectable_value(&mut self.term_baud, *b, b.to_string());
-                }
-            });
-            let label = if self.term.is_some() { "Disconnect" } else { "Connect" };
-            if theme::button(ui, label).clicked() {
-                if self.term.is_some() {
-                    self.term = None;
-                } else {
-                    match mp_core::comms::open(&ConnectionSpec::Serial { port: self.term_port.clone(), baud: self.term_baud }) {
-                        Ok(mut t) => {
-                            let (otx, orx) = crossbeam_channel::unbounded::<Vec<u8>>();
-                            let (itx, irx) = crossbeam_channel::unbounded::<Vec<u8>>();
-                            let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-                            let st = stop.clone();
-                            let ctx = ui.ctx().clone();
-                            std::thread::spawn(move || {
-                                let mut buf = [0u8; 512];
-                                while !st.load(std::sync::atomic::Ordering::Relaxed) {
-                                    while let Ok(d) = irx.try_recv() {
-                                        let _ = t.write_all(&d);
-                                        let _ = t.flush();
-                                    }
-                                    if let Ok(n) = t.read(&mut buf) {
-                                        if n > 0 {
-                                            let _ = otx.send(buf[..n].to_vec());
-                                            ctx.request_repaint();
-                                        }
-                                    }
-                                }
-                            });
-                            self.term = Some(Terminal { rx: orx, tx: itx, text: String::new(), stop });
-                        }
-                        Err(e) => app.toasts.error(format!("Error: {e}")),
+        ui.horizontal_wrapped(|ui| {
+            ui.add_enabled_ui(self.term.is_none(), |ui| {
+                egui::ComboBox::from_id_salt("term_board").width(100.0).selected_text(&self.term_board).show_ui(ui, |ui| {
+                    for name in ["APM", "PX4/PIXHAWK", "VRX/VRBRAIN", "NSH"] {
+                        ui.selectable_value(&mut self.term_board, name.to_string(), name);
                     }
+                });
+            });
+            if theme::button(ui, "Connect").clicked() && self.term.is_none() {
+                let opened: std::io::Result<Box<dyn mp_core::comms::Transport>> = if self.term_board == "NSH" {
+                    match app.link.filter(|_| app.connected()) {
+                        Some(l) => mp_core::mavserial::MavSerialPort::new(l, mp_core::mavlink::dialects::ardupilotmega::SerialControlDev::SERIAL_CONTROL_DEV_SHELL, 0).map(|mut p| {
+                            p.read_timeout = std::time::Duration::from_millis(20);
+                            Box::new(p) as Box<dyn mp_core::comms::Transport>
+                        }),
+                        None => Err(std::io::Error::new(std::io::ErrorKind::NotConnected, "Please Connect First")),
+                    }
+                } else if app.connected() {
+                    Err(std::io::Error::other("Select NSH to open the connected autopilot's shell, or disconnect before opening a raw COM port."))
+                } else {
+                    mp_core::comms::open(&ConnectionSpec::Serial { port: self.term_port.clone(), baud: self.term_baud })
+                };
+                match opened {
+                    Ok(port) => {
+                        let terminal = Terminal::start(port, ui.ctx().clone());
+                        let _ = terminal.tx.send(b"\r".to_vec());
+                        self.term = Some(terminal);
+                    }
+                    Err(e) => app.toasts.error(format!("Error: {e}")),
                 }
+            }
+            ui.add_enabled_ui(self.term.is_none() && self.term_board != "NSH", |ui| {
+                let ports = mp_core::comms::serial_ports();
+                if self.term_port.is_empty() && ports.contains(&app.settings.port) {
+                    self.term_port = app.settings.port.clone();
+                    self.term_baud = app.settings.baud;
+                }
+                egui::ComboBox::from_id_salt("term_port").width(100.0).selected_text(&self.term_port).show_ui(ui, |ui| {
+                    for p in &ports { ui.selectable_value(&mut self.term_port, p.clone(), p); }
+                });
+                egui::ComboBox::from_id_salt("term_baud").width(80.0).selected_text(self.term_baud.to_string()).show_ui(ui, |ui| {
+                    for b in mp_core::comms::BAUD_RATES { ui.selectable_value(&mut self.term_baud, *b, b.to_string()); }
+                });
+            });
+            if theme::button(ui, "Disconnect").clicked() {
+                self.term = None;
+                self.term_text.push_str("Closed\n");
             }
         });
-        if let Some(t) = self.term.as_mut() {
-            while let Ok(d) = t.rx.try_recv() {
-                t.text.push_str(&String::from_utf8_lossy(&d));
+        ui.horizontal_wrapped(|ui| {
+            for (label, cmd) in [
+                ("Show Settings", "exit\rsetup\rshow\r"),
+                ("Setup Radio", "exit\rsetup\r\nradio\r"),
+                ("Tests", "exit\rtest\r?\r\n"),
+                ("Logs", "exit\rlogs\r"),
+            ] {
+                ui.add_enabled_ui(self.term.is_some(), |ui| {
+                    if theme::button_sized(ui, label, Vec2::new(87.0, 23.0)).clicked() {
+                        if let Some(t) = &self.term { let _ = t.tx.send(cmd.as_bytes().to_vec()); }
+                    }
+                });
             }
+            if theme::button_sized(ui, "Log Browse", Vec2::new(87.0, 23.0)).clicked() {
+                if let Some(path) = crate::log_browse::pick_bin() { self.term_log_browse.load(path); }
+            }
+        });
+        self.term_log_browse.ui(ui.ctx());
+        let mut error = None;
+        if let Some(t) = &self.term {
+            while let Ok(result) = t.rx.try_recv() {
+                match result {
+                    Ok(data) => self.term_text.push_str(&String::from_utf8_lossy(&data).replace('\0', "").replace("\x1b[K", "")),
+                    Err(e) => { error = Some(e); break; }
+                }
+            }
+        }
+        if let Some(e) = error {
+            self.term_text.push_str(&format!("\nError: {e}\n"));
+            app.toasts.error(e);
+            self.term = None;
         }
         let (rr, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), (ui.available_height() - 30.0).max(100.0)), Sense::hover());
         ui.painter().rect_filled(rr, 0.0, Color32::BLACK);
-        let text = self.term.as_ref().map(|t| t.text.clone()).unwrap_or_default();
         ui.scope_builder(egui::UiBuilder::new().max_rect(rr.shrink(4.0)), |ui| {
             egui::ScrollArea::vertical().stick_to_bottom(true).show(ui, |ui| {
-                ui.label(RichText::new(text).monospace().color(Color32::WHITE));
+                ui.label(RichText::new(&self.term_text).monospace().color(Color32::WHITE));
             });
         });
+        ui.advance_cursor_after_rect(rr);
         let resp = ui.add(egui::TextEdit::singleline(&mut self.term_input).desired_width(ui.available_width()));
+        if resp.has_focus() {
+            if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp)) && self.term_history_pos > 0 {
+                self.term_history_pos -= 1;
+                self.term_input = self.term_history[self.term_history_pos].clone();
+            }
+            if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown)) {
+                self.term_history_pos = (self.term_history_pos + 1).min(self.term_history.len());
+                self.term_input = self.term_history.get(self.term_history_pos).cloned().unwrap_or_default();
+            }
+        }
         if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
             if let Some(t) = &self.term {
-                let _ = t.tx.send(format!("{}\r\n", self.term_input).into_bytes());
+                if t.tx.send(terminal_command(&self.term_input)).is_ok() {
+                    if !self.term_input.is_empty() && self.term_history.last() != Some(&self.term_input) {
+                        self.term_history.push(self.term_input.clone());
+                    }
+                    self.term_history_pos = self.term_history.len();
+                    self.term_input.clear();
+                }
             }
-            self.term_input.clear();
             resp.request_focus();
         }
     }
@@ -657,25 +817,37 @@ impl SetupView {
         matches!(&*self.sik_done.lock().unwrap(), Some(SikDone::Busy(_)))
     }
 
-    /// Run `job` against the radio on the selected COM port, in the background.
+    /// Sikradio.Connect: use TELEM1 through the autopilot while connected,
+    /// otherwise use the selected radio COM port.
     fn sik_run(&self, app: &mut AppCtx, label: &str, job: impl FnOnce(&mut mp_core::sik::Sik) -> Result<SikDone, String> + Send + 'static) {
         if self.sik_busy() {
             return;
         }
-        if app.connected() {
-            app.toasts.error("Please disconnect from the autopilot first.\nThe radio is configured on its own COM port.");
-            return;
-        }
         let (port, baud) = (app.settings.port.clone(), app.settings.baud);
-        if port.is_empty() || port == "AUTO" || port == "TCP" || port == "UDP" || port == "UDPCl" {
+        let via_mav = if let Some(l) = app.link.filter(|_| app.connected()) {
+            match mp_core::mavserial::MavSerialPort::new(l, mp_core::mavlink::dialects::ardupilotmega::SerialControlDev::SERIAL_CONTROL_DEV_TELEM1, 0) {
+                Ok(mut p) => {
+                    p.read_timeout = std::time::Duration::from_millis(20);
+                    Some(p)
+                }
+                Err(e) => {
+                    app.toasts.error(e.to_string());
+                    return;
+                }
+            }
+        } else { None };
+        if via_mav.is_none() && (port.is_empty() || port == "AUTO" || port == "TCP" || port == "UDP" || port == "UDPCl") {
             app.toasts.error("Select the radio's COM port and baud rate (top right) first.");
             return;
         }
         *self.sik_done.lock().unwrap() = Some(SikDone::Busy(label.to_string()));
         let slot = self.sik_done.clone();
         std::thread::spawn(move || {
-            let r = mp_core::sik::Sik::open(&port, baud)
-                .map_err(|e| format!("{port}: {e}"))
+            let opened = match via_mav {
+                Some(p) => Ok(mp_core::sik::Sik::new(Box::new(p))),
+                None => mp_core::sik::Sik::open(&port, baud).map_err(|e| format!("{port}: {e}")),
+            };
+            let r = opened
                 .and_then(|mut sik| {
                     if !sik.enter_command_mode(std::time::Duration::from_millis(1100)).map_err(|e| e.to_string())? {
                         return Err("Failed to enter command mode".into());

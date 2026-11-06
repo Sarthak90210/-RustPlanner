@@ -81,6 +81,24 @@ and connecting without an automatic parameter download. Editing shortcuts stay w
 transactions, the radio test double, core algorithms and egui input events for the map controls.
 TCP lets the transaction tests intentionally omit ACKs without depending on host UDP packet delivery.
 
+SiK setup can now use TELEM1 over the connected autopilot's `SERIAL_CONTROL` interface, or the
+selected radio COM port while disconnected. The shared serial transport pins the source vehicle and
+component, filters replies by device and destination, chunks writes into 70-byte packets, and releases
+the device when closed. Independent TCP MAVLink tests exercise radio settings load/save, device
+isolation, target changes, polling, malformed replies, timeouts, disconnects and release packets.
+
+SETUP > Advanced > Terminal supports NSH over the active MAVLink link and raw serial connections.
+It includes Show Settings, Setup Radio, Tests, the legacy Logs console menu, Log Browse, command
+history, CR-only input and the unterminated SiK `+++` escape. Leaving Terminal releases its transport;
+IO failures appear in the console and error dialog. SSH, the legacy board reboot/startup sequence,
+and the dedicated serial CLI log downloader remain incomplete. The Logs button opens the console
+menu; it does not implement the original Log Download dialog.
+
+The MAVSerial pass tool uses the same transport for GPS1 on TCP port 500. Stop and closing its window
+send a release packet while the MAVLink connection is active. Link disconnection also ends the bridge.
+Its TCP bridge has a separate binary roundtrip/reconnect/stop test. These checks use local peers and
+transport doubles, without hardware.
+
 Fresh rendered screens can be exported with `MP_CAPTURE=<absolute.png>` and `MP_CAPTURE_AFTER=7`.
 The application captures its actual eframe viewport and exits; these images exclude OS title bars and
 other applications. `MP_DATA_DIR` isolates preferences, cache and logs from the normal installation.

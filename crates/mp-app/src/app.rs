@@ -1170,6 +1170,7 @@ impl eframe::App for MissionPlannerApp {
                     ..
                 } = self;
                 let view = settings.view;
+                if view != View::Setup { setup.close_terminal(); }
                 let mut app = AppCtx {
                     link: link.as_ref(),
                     extra_links: extra_links.as_slice(),
