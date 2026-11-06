@@ -47,6 +47,33 @@ pub struct Table {
 
 static ACTIVE: OnceLock<Option<Table>> = OnceLock::new();
 
+/// Utilities.L10NU: the key=value tables for zh-Hans and uk (CurrentState DisplayText and
+/// DisplayFieldName), chosen by CurrentUICulture.Name.
+fn l10nu_table(culture: &str) -> HashMap<&'static str, &'static str> {
+    let text: &'static str = match culture {
+        "zh-CN" | "zh-Hans" => include_str!("../assets/i18n/l10nu_zhHans.txt"),
+        "uk" | "uk-UA" => include_str!("../assets/i18n/l10nu_uk.txt"),
+        _ => return HashMap::new(),
+    };
+    text.lines()
+        .filter(|l| !l.starts_with('#'))
+        .filter_map(|l| {
+            let mut kv = l.split('=');
+            match (kv.next(), kv.next(), kv.next()) {
+                (Some(k), Some(v), None) => Some((k, v)),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+static L10NU: OnceLock<HashMap<&'static str, &'static str>> = OnceLock::new();
+
+/// L10NU.GetString(key): None when the culture has no entry.
+pub fn l10nu(key: &str) -> Option<&'static str> {
+    L10NU.get_or_init(|| l10nu_table(culture())).get(key).copied()
+}
+
 /// The table for a culture name (case-insensitive, as CultureInfo names are).
 pub fn table(culture: &str) -> Option<Table> {
     TABLES.iter().find(|(c, _)| c.eq_ignore_ascii_case(culture)).and_then(|(_, json)| serde_json::from_str(json).ok())
@@ -149,6 +176,15 @@ mod tests {
         assert_eq!(zh.text["Basic Tuning"], "基本调参");
         assert!(zh.forms["rangefinder"].contains_key("label1"));
         assert!(table("xx").is_none());
+    }
+
+    #[test]
+    fn l10nu_tables_parse_like_the_original() {
+        let uk = l10nu_table("uk");
+        assert_eq!(uk["roll.Field"], "(fieldName) (крен)");
+        assert_eq!(uk["Roll (deg)"], "Крен (deg)");
+        assert!(l10nu_table("zh-Hans").contains_key("Roll (deg)"));
+        assert!(l10nu_table("fr").is_empty());
     }
 
     #[test]

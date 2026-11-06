@@ -246,6 +246,16 @@ impl Default for CurrentState {
 
 #[path = "state_properties.rs"]
 mod properties;
+
+/// The [DisplayText] of a CurrentState property, untranslated ("Altitude (alt)").
+pub fn display_text(name: &str) -> Option<&'static str> {
+    properties::DISPLAY.iter().find(|(n, ..)| *n == name).and_then(|(_, t, _)| *t)
+}
+
+/// The [DisplayFieldName] translation key of a CurrentState property ("alt.Field").
+pub fn field_key(name: &str) -> Option<&'static str> {
+    properties::DISPLAY.iter().find(|(n, ..)| *n == name).and_then(|(_, _, k)| *k)
+}
 use properties::{PropertyKind, PROPERTIES, AUTO_DEFAULTS};
 
 fn default_extra() -> std::collections::BTreeMap<String, f64> {

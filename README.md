@@ -277,7 +277,10 @@ saves the choice as Settings "language" and asks for a restart, as MainV2.change
 
 Strings the original never translated stay English. A system CJK or Arabic font is added as a fallback,
 standing in for GDI font linking. `MP_LANGUAGE=<culture>` overrides the setting for captures 58-60.
-Captions taken from CurrentState DisplayText (Quick view) are not yet translated.
+Quick view captions follow CurrentState.GetNameandUnit: [DisplayText] (exported with the property table)
+passed through the original L10NU tables for zh-Hans and uk, with units filled in. A tile keeps the
+designer's desc until Settings "quickView<n>" is chosen, so the sixth tile reads "DistToMAV" as it does
+originally. The field chooser lists GetFieldDesc descriptions, sorted by description.
 
 ## License
 

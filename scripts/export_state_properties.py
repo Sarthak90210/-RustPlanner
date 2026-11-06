@@ -18,6 +18,7 @@ for ch in clean:
     depth += (ch == '{') - (ch == '}')
 properties = []
 defaults = []
+display = []
 for m in re.finditer(r'\bpublic\s+(?:static\s+)?([\w.<>?,\[\] ()]+?)\s+(\w+)\s*(?=\{|=>)', clean):
     if depths[m.start()] != 2:
         continue
@@ -26,6 +27,20 @@ for m in re.finditer(r'\bpublic\s+(?:static\s+)?([\w.<>?,\[\] ()]+?)\s+(\w+)\s*(
         continue
     kind = 'Number' if typ in {'float', 'double', 'byte', 'sbyte', 'short', 'ushort', 'int', 'uint', 'long', 'ulong', 'decimal'} else 'Bool' if typ == 'bool' else 'Text' if typ == 'string' else 'Object'
     properties.append((name, kind))
+    # the attribute lines above the declaration: [DisplayText("...")], DisplayFieldName("x.Field")
+    line_start = src.rfind('\n', 0, m.start()) + 1
+    attrs = [src[line_start:m.start()]]
+    for line in reversed(src[:line_start].split('\n')[:-1]):
+        t = line.strip()
+        if t.startswith('[') or not t or t.startswith('//'):
+            attrs.append(t)
+            continue
+        break
+    block = ' '.join(attrs)
+    dt = re.search(r'DisplayText\("((?:[^"\\]|\\.)*)"\)', block)
+    fk = re.search(r'DisplayFieldName(?:Attribute)?\("((?:[^"\\]|\\.)*)"\)', block)
+    if dt or fk:
+        display.append((name, dt[1] if dt else None, fk[1] if fk else None))
     # C# auto-properties have a language-defined zero/false default, unless
     # initialized. Computed getters require an explicit port instead.
     auto = re.match(r'\s*\{\s*get;\s*(?:(?:private|protected|internal)\s+)?set;\s*\}', clean[m.end():])
@@ -52,5 +67,10 @@ out += '];\n'
 out += '\npub const AUTO_DEFAULTS: &[(&str, f64)] = &[\n'
 out += ''.join(f'    ({json.dumps(name)}, {value!r}),\n' for name, value in defaults)
 out += '];\n'
+out += '\n/// (property, DisplayText, DisplayFieldName translation key)\n'
+out += 'pub const DISPLAY: &[(&str, Option<&str>, Option<&str>)] = &[\n'
+opt = lambda v: 'None' if v is None else f'Some({json.dumps(v, ensure_ascii=False)})'
+out += ''.join(f'    ({json.dumps(n)}, {opt(t)}, {opt(k)}),\n' for n, t, k in display)
+out += '];\n'
 (root / 'crates/mp-core/src/state_properties.rs').write_text(out, encoding='utf-8')
-print(f'Exported {len(properties)} properties, {len(defaults)} source auto-property defaults')
+print(f'Exported {len(properties)} properties, {len(defaults)} source auto-property defaults, {len(display)} display attributes')

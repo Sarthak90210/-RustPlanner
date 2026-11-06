@@ -770,7 +770,7 @@ impl FlightDataView {
             let name = app.settings.quick_fields[i].clone();
             let val = crate::units::field(&name, cs.field(&name).unwrap_or(0.0)).0;
             let resp = ui.interact(r, ui.scope_id().with(("qv", i)), Sense::click());
-            quick_view(ui.painter(), r, &quick_label(&name), val, QUICK_COLORS[i % QUICK_COLORS.len()]);
+            quick_view(ui.painter(), r, &quick_label(&app.settings.planner, i, &name), val, QUICK_COLORS[i % QUICK_COLORS.len()]);
             if resp.double_clicked() {
                 if !crate::display::flag(&app.settings.planner, "lockQuickView") {
                     self.quick_edit = Some(i);
@@ -829,10 +829,15 @@ impl FlightDataView {
             let mut open = true;
             egui::Window::new(crate::i18n::t("Display This")).open(&mut open).collapsible(false).show(ui.ctx(), |ui| {
                 egui::ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
+                    // the fields by GetFieldDesc, sorted by that description
+                    let mut fields: Vec<(&str, String)> = cs.fields().into_iter().map(|(n, _)| (n, field_desc(n))).collect();
+                    fields.sort_by(|a, b| a.1.to_lowercase().cmp(&b.1.to_lowercase()).then(a.1.cmp(&b.1)));
                     egui::Grid::new("qsel").num_columns(4).show(ui, |ui| {
-                        for (k, (n, _)) in cs.fields().into_iter().enumerate() {
-                            if ui.checkbox(&mut (app.settings.quick_fields[i] == n), n).clicked() {
+                        for (k, (n, desc)) in fields.into_iter().enumerate() {
+                            if ui.checkbox(&mut (app.settings.quick_fields[i] == n), desc).clicked() {
                                 app.settings.quick_fields[i] = n.to_string();
+                                // Settings["quickView" + f]
+                                app.settings.planner.insert(format!("quickView{}", i + 1), n.to_string());
                                 self.quick_edit = None;
                             }
                             if k % 4 == 3 {
@@ -1844,19 +1849,38 @@ fn quick_view(p: &egui::Painter, r: Rect, desc: &str, number: f64, color: Color3
     p.galley(pos, ng, color);
 }
 
-fn quick_label(name: &str) -> String {
+/// CurrentState.GetNameandUnit: the (L10NU-translated) DisplayText with its unit placeholder
+/// filled in, or the name itself.
+pub(crate) fn name_and_unit(name: &str) -> String {
     use crate::units::{alt_unit, dist_unit, speed_unit};
-    match name {
-        "alt" => format!("Altitude ({})", alt_unit()),
-        "groundspeed" => format!("GroundSpeed ({})", speed_unit()),
-        "wp_dist" => format!("Dist to WP ({})", dist_unit()),
-        "yaw" => "Yaw (deg)".into(),
-        "verticalspeed" => format!("Vertical Speed ({})", speed_unit()),
-        "DistToHome" => format!("DistToMAV ({})", dist_unit()),
-        n => match crate::units::field(n, 0.0).1 {
-            Some(u) => format!("{n} ({u})"),
-            None => n.to_string(),
-        },
+    let desc = match mp_core::state::display_text(name) {
+        Some(text) => crate::i18n::l10nu(text).unwrap_or(text).to_string(),
+        None => name.to_string(),
+    };
+    if desc.contains("(dist)") {
+        desc.replace("(dist)", &format!("({})", dist_unit()))
+    } else if desc.contains("(speed)") {
+        desc.replace("(speed)", &format!("({})", speed_unit()))
+    } else if desc.contains("(alt)") {
+        desc.replace("(alt)", &format!("({})", alt_unit()))
+    } else {
+        desc
+    }
+}
+
+/// CurrentState.GetFieldDesc: the translated DisplayFieldName with (fieldName), or the name.
+pub(crate) fn field_desc(name: &str) -> String {
+    mp_core::state::field_key(name).and_then(crate::i18n::l10nu).map(|t| t.replace("(fieldName)", name)).unwrap_or_else(|| name.to_string())
+}
+
+/// The designer's quickView1..6 desc before Settings "quickView<n>" exists.
+const QUICK_DESIGNER: [&str; 6] = ["alt", "groundspeed", "wp_dist", "yaw", "verticalspeed", "DistToMAV"];
+
+/// QV.desc: GetNameandUnit of the chosen field, else of the designer's predefined desc.
+fn quick_label(planner: &std::collections::BTreeMap<String, String>, index: usize, name: &str) -> String {
+    match planner.get(&format!("quickView{}", index + 1)) {
+        Some(chosen) => name_and_unit(chosen),
+        None => name_and_unit(QUICK_DESIGNER.get(index).copied().unwrap_or(name)),
     }
 }
 
@@ -2214,5 +2238,25 @@ mod guided_tests {
         link.shared.write().cs.sysid = 1;
         assert_eq!(active_guided(Some(&link)).frame, 10);
         assert_eq!(active_guided(Some(&link)).alt, 27.0 / crate::units::alt(1.0));
+    }
+}
+
+#[cfg(test)]
+mod quick_caption_tests {
+    use super::*;
+
+    #[test]
+    fn captions_follow_get_name_and_unit_and_the_designer_defaults() {
+        let mut pl = std::collections::BTreeMap::new();
+        assert_eq!(quick_label(&pl, 0, "alt"), "Altitude (m)");
+        assert_eq!(quick_label(&pl, 1, "groundspeed"), "GroundSpeed (m/s)");
+        assert_eq!(quick_label(&pl, 3, "yaw"), "Yaw (deg)");
+        // designer quickView6.desc has no CurrentState property behind it
+        assert_eq!(quick_label(&pl, 5, "DistToHome"), "DistToMAV");
+        pl.insert("quickView6".to_string(), "DistToHome".to_string());
+        assert_eq!(quick_label(&pl, 5, "DistToHome"), "Dist to Home (m)");
+        assert_eq!(name_and_unit("not_a_property"), "not_a_property");
+        // English GetFieldDesc has no L10NU entry: the name itself
+        assert_eq!(field_desc("roll"), "roll");
     }
 }
