@@ -1,0 +1,87 @@
+{
+  "round": 40,
+  "date": "2026-11-06",
+  "review_type": "Independent adversarial source, parity, and safety review of offline parameter editing, Write Params confirmation dialog, and SortENABLE transmission order",
+  "reviewed_head": "d6af581b1272d36bdd9c6d3b802531919a712e3a",
+  "reviewed_uncommitted_worktree": false,
+  "reviewed_files": [
+    "crates/mp-app/src/views/config.rs",
+    "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigRawParams.cs",
+    "reference/MissionPlanner/ExtLibs/Utilities/ListExtension.cs"
+  ],
+  "verdict": "REJECTED for exact-clone parity (Score: 5.5/10). Critical offline workflow and safety improvements verified: offline parameter file loading, viewing, in-place cell editing, and modified parameter saving operate seamlessly without vehicle link; parameter transmission via 'Write Params' strictly enforces C# ListExtension.SortENABLE order (ENABLE keys sorted first alphabetically, followed by non-ENABLE keys alphabetically); and interactive change review modal ('Confirm Parameter Changes') provides diff inspection ({name}: {old} -> {new}) for <= 20 params and count confirmation for > 20 params with clean Escape/Cancel dismissal. All 201 workspace tests pass cleanly. However, native mobile document provider integration (Android SAF, iOS UIDocumentPicker) remains unimplemented, and parameter grid styling (yellow modified, red failed, green confirmed write highlights, and parameter metadata tooltips) remains incomplete.",
+  "scores": {
+    "overall": 5.5,
+    "ui_ux": 5.5,
+    "features": 6.5,
+    "cross_platform_delivery": 3.5,
+    "scale": "Adversarial parity evaluation on a 0-10 exact-clone scale. 10/10 requires 100% feature, UI/UX, behavioral, and architectural equivalence to Mission Planner C# across all target platforms."
+  },
+  "independent_validation": [
+    {
+      "command": "cargo test --workspace",
+      "result": "PASS: 201 passed, 0 failed, 1 ignored (64 mp-core unit, 25 mp-core integration, 112 mp-app unit)",
+      "scope": "Reviewer independently executed the full workspace test suite locally on Windows. Zero test failures, zero regressions, zero hangs across all crates."
+    },
+    {
+      "command": "cargo test -p mp-app --lib views::config::parameter_file_tests",
+      "result": "PASS: 5 passed, 0 failed",
+      "scope": "Independently verified sort_enable_matches_csharp_sorter, offline_parameter_editing_loads_file_edits_and_saves, write_confirm_dialog_flow_escape_cancels_and_modal_presents_sorted_changes, and file picker state persistence."
+    },
+    {
+      "command": "gh run view 42249930513",
+      "result": "PASS: iOS build succeeded (1m31s), Android debug APK succeeded (1m45s), Windows desktop succeeded (6m32s), Ubuntu desktop succeeded (4m5s), macOS runner in queue/execution",
+      "scope": "Verified remote multi-platform GitHub Actions CI run 42249930513 triggered on commit d6af581."
+    }
+  ],
+  "verified_improvements": [
+    "R39-01 resolved: ParamEditor::ui no longer gates on app.link or exits early with 'Please Connect First'. In offline mode, Load from file populates offline_params, renders in the grid, supports in-place cell editing with green highlight, and saves modified parameter values via Save to file. Vehicle link operations (Write Params, Refresh Params, Reset to Default, Commit Params, Load Presaved) are cleanly disabled via ui.add_enabled_ui(is_connected).",
+    "R39-02 resolved: sort_enable() precisely mirrors C# ListExtension.SortENABLE, sorting keys ending with ENABLE first alphabetically, followed by non-ENABLE keys alphabetically. BUT_writePIDS_Click confirmation dialog is implemented: <= 20 changed params displays the modal diff list '{name}: {old} -> {new}' under 'Confirm Parameter Changes' with 'Do you want to proceed?', > 20 changed params displays count confirmation, and Escape or 'No' aborts transmission without sending SetParam commands.",
+    "Full workspace test hygiene: the workspace expanded from 198 to 201 passing tests with 3 dedicated unit tests covering offline editing, SortENABLE ordering, and write confirmation flow.",
+    "Multi-platform CI health: multi-platform builds (Android APK, iOS, Windows, Ubuntu) continue to build cleanly with zero compile warnings or link regressions."
+  ],
+  "findings": [
+    {
+      "id": "R40-01",
+      "priority": "P1",
+      "subsystem": "Native mobile file provider integration",
+      "status": "still open (carried from R39-03)",
+      "evidence": [
+        "Mobile selection continues to browse app-local sandboxed directories in crates/mp-app/src/platform.rs.",
+        "Android Storage Access Framework (SAF / Intent.ACTION_OPEN_DOCUMENT) and iOS UIDocumentPickerViewController integrations remain unimplemented for parameter, mission, and log files."
+      ],
+      "impact": "Mobile operators on Android and iOS cannot open or save parameter, mission, or telemetry files from external SD cards, Google Drive, iCloud, or Downloads folders.",
+      "required_fix": "Implement platform-native document pickers for Android (SAF via JNI) and iOS (UIDocumentPickerViewController via objc/swift bindings) in platform.rs."
+    },
+    {
+      "id": "R40-02",
+      "priority": "P2",
+      "subsystem": "Raw parameter grid UI/UX fidelity and visual states",
+      "status": "visual / interaction gap (carried from R39-04)",
+      "evidence": [
+        "In C# ConfigRawParams.cs, parameters reflect distinct row states: yellow highlight for modified/pending changes, red for failed writes, green for confirmed writes, and right-click context menu options ('Set to default', 'Revert to original').",
+        "The current ParamEditor grid displays green highlight for edited cells, but lacks yellow pending state while writes are awaiting ACK, red failed write state, and row context menus."
+      ],
+      "impact": "Operators lack visual feedback on transient parameter write status and convenient per-row reset/revert actions during tuning sessions.",
+      "required_fix": "Add multi-state row styling (staged, pending-ack, failed, confirmed) and right-click context menu for parameter rows in ParamEditor::grid."
+    },
+    {
+      "id": "R40-03",
+      "priority": "P2",
+      "subsystem": "Parameter metadata tooltips and descriptions in grid",
+      "status": "interaction gap",
+      "evidence": [
+        "In C# ConfigRawParams.cs, hovering over parameter names, options, or values presents rich balloon tooltips showing human-readable description, range, units, and reboot requirement.",
+        "In Rust ParamEditor::grid, tooltips are attached to clicks on parameter names for current row selection, but hovering over grid cells does not display instantaneous multi-line parameter metadata tooltips."
+      ],
+      "impact": "Operators must select rows or consult external documentation to see parameter ranges and reboot requirements.",
+      "required_fix": "Add egui::Hover tooltips displaying parameter metadata (description, range, reboot required) across all parameter grid rows."
+    }
+  ],
+  "next_concrete_task": "Implement multi-state parameter row styling (staged yellow, pending-ack blue/yellow, failed red, confirmed green) and hover metadata tooltips in ParamEditor::grid.",
+  "not_verified": [
+    "No physical autopilot was connected via hardware USB/telemetry radios.",
+    "Mobile APK was compiled in CI but not tested on physical Android or iOS hardware.",
+    "Pixel-level font rendering and GDI+ anti-aliasing were not diffed against WinForms."
+  ]
+}

@@ -59,6 +59,35 @@ pub fn tile_cache_dir() -> PathBuf {
     data_dir().join("tiles")
 }
 
+/// Available storage roots for document browsing across desktop and mobile targets.
+pub fn document_roots() -> Vec<(String, PathBuf)> {
+    #[allow(unused_mut)]
+    let mut roots = vec![("App Storage".into(), files_dir())];
+    #[cfg(target_os = "android")]
+    {
+        for (label, p) in [
+            ("Downloads", "/sdcard/Download"),
+            ("Documents", "/sdcard/Documents"),
+            ("Internal Storage", "/storage/emulated/0"),
+        ] {
+            let path = PathBuf::from(p);
+            if path.exists() {
+                roots.push((label.into(), path));
+            }
+        }
+    }
+    #[cfg(target_os = "ios")]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            let docs = PathBuf::from(home).join("Documents");
+            if docs.exists() {
+                roots.push(("Documents".into(), docs));
+            }
+        }
+    }
+    roots
+}
+
 pub const HAS_NATIVE_DIALOGS: bool = cfg!(not(any(target_os = "android", target_os = "ios")));
 
 /// Desktop OS dialog, or a deferred browser of the mobile app's files.
@@ -66,6 +95,8 @@ pub struct FilePicker {
     id: egui::Id,
     title: String,
     root: PathBuf,
+    pub current_dir: PathBuf,
+    pub roots: Vec<(String, PathBuf)>,
     exts: Vec<String>,
     name: String,
     save: bool,
@@ -77,11 +108,15 @@ pub struct FilePicker {
 
 impl FilePicker {
     pub fn new(title: &str, exts: &[&str], save_name: Option<&str>) -> Self {
-        Self::native_or_browser(title, files_dir(), exts, save_name, false)
+        let mut picker = Self::native_or_browser(title, files_dir(), exts, save_name, false);
+        picker.roots = document_roots();
+        picker
     }
 
     pub fn open_from(title: &str, root: PathBuf, exts: &[&str], multiple: bool) -> Self {
-        Self::native_or_browser(title, root, exts, None, multiple)
+        let mut picker = Self::native_or_browser(title, root, exts, None, multiple);
+        picker.roots = document_roots();
+        picker
     }
 
     fn native_or_browser(title: &str, root: PathBuf, exts: &[&str], save_name: Option<&str>, multiple: bool) -> Self {
@@ -98,13 +133,28 @@ impl FilePicker {
 
     pub(crate) fn in_directory(title: &str, root: PathBuf, exts: &[&str], save_name: Option<&str>) -> Self {
         static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-        Self { id: egui::Id::new(("file_picker", NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed))), title: title.into(), root, exts: exts.iter().map(|s| s.to_string()).collect(), name: save_name.unwrap_or_default().into(), save: save_name.is_some(), overwrite: false, ready: None, multiple: false, selected_names: Default::default() }
+        let current_dir = root.clone();
+        let roots = vec![("Storage".into(), root.clone())];
+        Self {
+            id: egui::Id::new(("file_picker", NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed))),
+            title: title.into(),
+            root,
+            current_dir,
+            roots,
+            exts: exts.iter().map(|s| s.to_string()).collect(),
+            name: save_name.unwrap_or_default().into(),
+            save: save_name.is_some(),
+            overwrite: false,
+            ready: None,
+            multiple: false,
+            selected_names: Default::default(),
+        }
     }
 
     fn selected_path(&self) -> Option<PathBuf> {
         let name = if self.save { self.name.trim() } else { self.name.as_str() };
         if name.is_empty() || name == "." || name == ".." || name.chars().any(|c| matches!(c, '/' | '\\' | ':' | '\0')) { return None; }
-        let mut path = self.root.join(name);
+        let mut path = self.current_dir.join(name);
         if self.save && !self.exts.is_empty() {
             match path.extension().and_then(|s| s.to_str()).filter(|s| !s.is_empty()) {
                 None => { path.set_extension(&self.exts[0]); }
@@ -125,12 +175,45 @@ impl FilePicker {
         if let Some(done) = self.ready.take() { return Some(done); }
         let mut done = None;
         let modal = egui::Modal::new(self.id).show(ctx, |ui| {
-            ui.set_min_width(280.0);
+            ui.set_min_width(300.0);
             crate::theme::label(ui, &self.title);
+            if self.roots.len() > 1 {
+                ui.horizontal(|ui| {
+                    for (lbl, p) in &self.roots {
+                        let is_sel = &self.current_dir == p || self.current_dir.starts_with(p);
+                        if ui.selectable_label(is_sel, lbl).clicked() {
+                            self.current_dir = p.clone();
+                            self.name.clear();
+                            self.selected_names.clear();
+                        }
+                    }
+                });
+            }
             let exts: Vec<_> = self.exts.iter().map(String::as_str).collect();
+            let (dirs, files) = list_entries_in(&self.current_dir, &exts);
+
+            // Up button if not at storage root
+            if let Some(parent) = self.current_dir.parent() {
+                let at_root = self.roots.iter().any(|(_, r)| &self.current_dir == r) || &self.current_dir == &self.root;
+                if !at_root && parent.exists() {
+                    if ui.button("📁 .. (Up)").clicked() {
+                        self.current_dir = parent.to_path_buf();
+                        self.name.clear();
+                        self.selected_names.clear();
+                    }
+                }
+            }
+
             egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
-                let files = list_files_in(&self.root, &exts);
-                if files.is_empty() { crate::theme::label(ui, "No files"); }
+                if dirs.is_empty() && files.is_empty() { crate::theme::label(ui, "No files"); }
+                for dir in dirs {
+                    let dirname = dir.file_name().unwrap_or_default().to_string_lossy().into_owned();
+                    if ui.selectable_label(false, format!("📁 {dirname}")).clicked() {
+                        self.current_dir = dir;
+                        self.name.clear();
+                        self.selected_names.clear();
+                    }
+                }
                 for path in files {
                     let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
                     let selected = if self.multiple { self.selected_names.contains(&name) } else { self.name == name };
@@ -145,7 +228,7 @@ impl FilePicker {
             let path = self.selected_path();
             let paths: Vec<PathBuf> = if self.multiple {
                 let exts: Vec<_> = self.exts.iter().map(String::as_str).collect();
-                list_files_in(&self.root, &exts).into_iter().filter(|p| p.file_name().is_some_and(|n| self.selected_names.contains(n.to_string_lossy().as_ref()))).collect()
+                list_files_in(&self.current_dir, &exts).into_iter().filter(|p| p.file_name().is_some_and(|n| self.selected_names.contains(n.to_string_lossy().as_ref()))).collect()
             } else { path.clone().filter(|p| self.save || p.is_file()).into_iter().collect() };
             let valid = !paths.is_empty();
             ui.horizontal(|ui| {
@@ -253,6 +336,30 @@ mod file_picker_tests {
         assert!(a.is_none()); assert_eq!(b, Some(None));
         std::fs::remove_dir(root).unwrap();
     }
+    #[test]
+    fn mobile_document_roots_and_subdirectory_navigation() {
+        let root = picker_test_support::root();
+        let sub = root.join("missions");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(sub.join("survey.waypoints"), b"QGC WPL 110\n").unwrap();
+        let (dirs, files) = list_entries_in(&root, &["waypoints"]);
+        assert_eq!(dirs, vec![sub.clone()]);
+        assert!(files.is_empty());
+
+        let mut picker = FilePicker::in_directory("Open Mission", root.clone(), &["waypoints"], None);
+        assert_eq!(picker.current_dir, root);
+        picker.current_dir = sub.clone();
+        picker.name = "survey.waypoints".into();
+        assert_eq!(picker.selected_path(), Some(sub.join("survey.waypoints")));
+
+        let roots = document_roots();
+        assert!(!roots.is_empty());
+        assert_eq!(roots[0].0, "App Storage");
+
+        std::fs::remove_file(sub.join("survey.waypoints")).unwrap();
+        std::fs::remove_dir(sub).unwrap();
+        std::fs::remove_dir(root).unwrap();
+    }
 }
 
 /// Returns (file name, contents).
@@ -311,6 +418,27 @@ pub fn save_text(
 
 /// Files in the app's directory with an allowed extension.
 pub fn list_files(exts: &[&str]) -> Vec<PathBuf> { list_files_in(&files_dir(), exts) }
+
+/// Entries in `dir` (directories and files), sorted.
+pub fn list_entries_in(dir: &std::path::Path, exts: &[&str]) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    let mut dirs = Vec::new();
+    let mut files = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                if !p.file_name().unwrap_or_default().to_string_lossy().starts_with('.') {
+                    dirs.push(p);
+                }
+            } else if p.is_file() && (exts.is_empty() || exts.contains(&"*") || p.extension().is_some_and(|e| exts.iter().any(|x| e.eq_ignore_ascii_case(x)))) {
+                files.push(p);
+            }
+        }
+    }
+    dirs.sort();
+    files.sort();
+    (dirs, files)
+}
 
 /// Files in `dir`, sorted. Directories with file-like names are not selectable.
 pub fn list_files_in(dir: &std::path::Path, exts: &[&str]) -> Vec<PathBuf> {

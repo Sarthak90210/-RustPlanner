@@ -448,6 +448,36 @@ mod parameter_file_tests {
         assert!(editor.write_confirm.is_none());
         assert!(editor.pending.is_empty());
     }
+
+    #[test]
+    fn param_grid_row_styling_and_ack_state_lifecycle() {
+        let mut editor = ParamEditor::default();
+        let mut toasts = Toasts::default();
+
+        // Stage edits
+        editor.edits.insert("WPNAV_SPEED".into(), 600.0);
+        editor.edits.insert("ANGLE_MAX".into(), 4500.0);
+        assert_eq!(editor.edits.len(), 2);
+
+        // Move to pending
+        editor.pending.insert("WPNAV_SPEED".into());
+        editor.pending.insert("ANGLE_MAX".into());
+
+        // Failed write event
+        editor.on_event(&LinkEvent::ParamSet { name: "WPNAV_SPEED".into(), ok: false }, &mut toasts);
+        assert!(!editor.pending.contains("WPNAV_SPEED"));
+        assert!(editor.failed.contains("WPNAV_SPEED"));
+        assert!(!editor.confirmed.contains("WPNAV_SPEED"));
+        // Edits still retains the value so user can re-try or edit
+        assert!(editor.edits.contains_key("WPNAV_SPEED"));
+
+        // Successful write event
+        editor.on_event(&LinkEvent::ParamSet { name: "ANGLE_MAX".into(), ok: true }, &mut toasts);
+        assert!(!editor.pending.contains("ANGLE_MAX"));
+        assert!(!editor.failed.contains("ANGLE_MAX"));
+        assert!(editor.confirmed.contains("ANGLE_MAX"));
+        assert!(!editor.edits.contains_key("ANGLE_MAX"));
+    }
 }
 
 /// Matches C# ListExtension.SortENABLE:
@@ -501,6 +531,10 @@ pub struct ParamEditor {
     pub offline_params: BTreeMap<String, mp_core::link::Param>,
     /// Write parameters confirmation dialog: list of (name, old_value, new_value)
     pub write_confirm: Option<Vec<(String, f32, f32)>>,
+    /// Set of parameter names whose write to vehicle failed
+    pub failed: BTreeSet<String>,
+    /// Set of parameter names whose write was confirmed during session
+    pub confirmed: BTreeSet<String>,
 }
 
 impl ParamEditor {
@@ -558,7 +592,10 @@ impl ParamEditor {
             if self.pending.remove(name) {
                 if *ok {
                     self.edits.remove(name);
+                    self.failed.remove(name);
+                    self.confirmed.insert(name.clone());
                 } else {
+                    self.failed.insert(name.clone());
                     toasts.error(format!("Set {name} Failed"));
                 }
                 if self.pending.is_empty() {
@@ -990,21 +1027,90 @@ impl ParamEditor {
                     x += w;
                 }
                 let edited = self.edits.get(name).copied();
+                let is_failed = self.failed.contains(name);
+                let is_pending = self.pending.contains(name);
+                let val_fill = if is_failed {
+                    Color32::from_rgb(180, 40, 40) // Red: Failed write
+                } else if is_pending {
+                    Color32::from_rgb(180, 160, 0) // Yellow: Writing to vehicle
+                } else if edited.is_some() {
+                    Color32::from_rgb(0, 128, 0) // Green: Modified / queued
+                } else {
+                    bg
+                };
                 for (c, r) in cells.iter().enumerate().filter(|(_, r)| r.width() > 0.0) {
-                    // edited values are highlighted green, as Mission Planner does
-                    let fill = if c == 1 && edited.is_some() { Color32::from_rgb(0, 128, 0) } else { bg };
+                    let fill = if c == 1 { val_fill } else { bg };
                     ui.painter().rect_filled(*r, 0.0, fill);
                     ui.painter().rect_stroke(*r, 0.0, Stroke::new(1.0, line), StrokeKind::Inside);
                 }
                 let txt = |ui: &egui::Ui, r: Rect, s: &str| {
                     ui.painter().with_clip_rect(r.shrink(1.0)).text(r.left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, s, f.clone(), Color32::WHITE);
                 };
-                txt(ui, cells[0], name);
-                if let Some(m) = meta {
-                    if ui.interact(cells[0], ui.scope_id().with(("pn", name)), Sense::click()).on_hover_text(format!("{}\n{}", m.display_name, m.description)).clicked() {
-                        self.current = Some(name.clone());
+
+                // Detailed documentation tooltip on hover matching Mission Planner
+                let tip = if let Some(m) = meta {
+                    let mut s = format!("{}: {}\n{}", name, m.display_name, m.description);
+                    if let Some((lo, hi)) = m.range {
+                        s.push_str(&format!("\nRange: [{lo}, {hi}]"));
                     }
+                    if !m.units.is_empty() {
+                        s.push_str(&format!("\nUnits: {}", m.units));
+                    }
+                    if let Some(d) = defaults.and_then(|d| d.get(name)) {
+                        s.push_str(&format!("\nDefault: {}", paramfile::format_value(*d)));
+                    }
+                    if !m.values.is_empty() {
+                        s.push_str("\nOptions:");
+                        for (k, val_str) in &m.values {
+                            s.push_str(&format!("\n  {k}: {val_str}"));
+                        }
+                    }
+                    if !m.bitmask.is_empty() {
+                        s.push_str("\nBitmask:");
+                        for (b, bit_str) in &m.bitmask {
+                            s.push_str(&format!("\n  Bit {b}: {bit_str}"));
+                        }
+                    }
+                    if edited.is_some() {
+                        s.push_str(&format!("\n[Modified - vehicle value: {}]", paramfile::format_value(*value)));
+                    }
+                    if is_failed {
+                        s.push_str("\n[Status: Set Failed on Autopilot]");
+                    } else if is_pending {
+                        s.push_str("\n[Status: Writing to Autopilot...]");
+                    }
+                    s
+                } else {
+                    let mut s = format!("{name}: {}", paramfile::format_value(*value));
+                    if edited.is_some() {
+                        s.push_str(&format!("\n[Modified - vehicle value: {}]", paramfile::format_value(*value)));
+                    }
+                    s
+                };
+
+                txt(ui, cells[0], name);
+                let name_resp = ui.interact(cells[0], ui.scope_id().with(("pn", name)), Sense::click().union(Sense::hover()))
+                    .on_hover_text(&tip);
+                if name_resp.clicked() {
+                    self.current = Some(name.clone());
                 }
+                let mut ctx_revert = false;
+                let mut ctx_default = None;
+                name_resp.context_menu(|ui| {
+                    if let Some(d) = defaults.and_then(|d| d.get(name)) {
+                        if ui.button(format!("Set to default ({})", paramfile::format_value(*d))).clicked() {
+                            ctx_default = Some(*d);
+                            ui.close();
+                        }
+                    }
+                    if edited.is_some() || is_failed {
+                        if ui.button("Revert changes").clicked() {
+                            ctx_revert = true;
+                            ui.close();
+                        }
+                    }
+                });
+
                 // Value cell: editable
                 let mut v = edited.unwrap_or(*value);
                 let mut child = ui.new_child(egui::UiBuilder::new().max_rect(cells[1].shrink(1.0)));
@@ -1020,7 +1126,22 @@ impl ParamEditor {
                 let editing = self.editing.as_ref().map(|(n, _)| n == name).unwrap_or(false);
                 let mut changed = false;
                 if !editing {
-                    let resp = child.put(cells[1].shrink(1.0), egui::Label::new(egui::RichText::new(paramfile::format_value(v)).color(Color32::WHITE)).sense(Sense::click()));
+                    let mut resp = child.put(cells[1].shrink(1.0), egui::Label::new(egui::RichText::new(paramfile::format_value(v)).color(Color32::WHITE)).sense(Sense::click().union(Sense::hover())));
+                    resp = resp.on_hover_text(&tip);
+                    resp.context_menu(|ui| {
+                        if let Some(d) = defaults.and_then(|d| d.get(name)) {
+                            if ui.button(format!("Set to default ({})", paramfile::format_value(*d))).clicked() {
+                                ctx_default = Some(*d);
+                                ui.close();
+                            }
+                        }
+                        if edited.is_some() || is_failed {
+                            if ui.button("Revert changes").clicked() {
+                                ctx_revert = true;
+                                ui.close();
+                            }
+                        }
+                    });
                     if resp.clicked() {
                         self.editing = Some((name.clone(), paramfile::format_value(v)));
                         self.current = Some(name.clone());
@@ -1058,7 +1179,14 @@ impl ParamEditor {
                         self.editing = None;
                     }
                 }
-                if changed {
+                if let Some(d) = ctx_default {
+                    v = d;
+                    changed = true;
+                }
+                if ctx_revert {
+                    self.edits.remove(name);
+                    self.failed.remove(name);
+                } else if changed {
                     if v == *value {
                         self.edits.remove(name);
                     } else {
@@ -1108,9 +1236,7 @@ impl ParamEditor {
                         txt(ui, cells[4], &opts);
                     }
                     txt(ui, cells[5], &m.description);
-                    if !m.description.is_empty() {
-                        ui.interact(cells[5], ui.scope_id().with(("pd", name)), Sense::hover()).on_hover_text(&m.description);
-                    }
+                    ui.interact(cells[5], ui.scope_id().with(("pd", name)), Sense::hover()).on_hover_text(&tip);
                 }
                 let mut fav = favs.contains(name);
                 if ui.put(Rect::from_center_size(cells[6].center(), Vec2::splat(16.0)), egui::Checkbox::without_text(&mut fav)).changed() {
