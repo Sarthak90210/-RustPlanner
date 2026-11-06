@@ -258,6 +258,12 @@ Sequence Swarm uses a platform file chooser. Desktop keeps OS dialogs; mobile ca
 and choose background images in the app's files directory. This browser does not implement Android
 SAF or iOS document-provider access. CI caches Rust dependencies and cancels superseded branch builds.
 
+Run 22 normalizes extensionless names in the mobile sequence Save browser to `.txt` and rejects
+unsupported extensions, so saved files appear in Load. Cancelling background selection preserves
+the existing image. Tests cover saving and loading the real sequence file and the cancel interaction.
+Android CI produces a debug-signed APK for installation tests; distribution release signing is not
+configured. The preceding iOS CI job built the aarch64 release library, which is not an iOS app bundle.
+
 ## License
 
 GPL-3.0, like Mission Planner. Icons and marker images are Mission Planner / GMap.NET assets under the same license.

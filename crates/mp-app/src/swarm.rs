@@ -1431,13 +1431,18 @@ impl LayoutEditor {
                         if let Some(path) = path { if let Err(e) = self.seq.save(&path) { toasts.error(e.to_string()); } }
                     }
                     SequenceFile::Image => {
-                        if let Some(img) = path.and_then(|p| image::open(p).ok()) {
-                            let rgba = img.to_rgba8();
-                            let size = [rgba.width() as usize, rgba.height() as usize];
-                            let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
-                            self.grid.bg = Some(ctx.load_texture("swarm_bg", color, Default::default()));
-                            self.image_buttons = true;
-                        } else { self.grid.bg = None; }
+                        if let Some(path) = path {
+                            match image::open(path) {
+                                Ok(img) => {
+                                    let rgba = img.to_rgba8();
+                                    let size = [rgba.width() as usize, rgba.height() as usize];
+                                    let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+                                    self.grid.bg = Some(ctx.load_texture("swarm_bg", color, Default::default()));
+                                    self.image_buttons = true;
+                                }
+                                Err(e) => toasts.error(e.to_string()),
+                            }
+                        }
                     }
                 },
             }
@@ -1478,6 +1483,27 @@ impl LayoutEditor {
 #[cfg(test)]
 mod sequence_tests {
     use super::*;
+
+    #[test]
+    fn cancelling_background_selection_keeps_the_existing_image() {
+        let ctx = egui::Context::default();
+        let mut editor = LayoutEditor::default();
+        editor.show();
+        editor.grid.bg = Some(ctx.load_texture("existing_background", egui::ColorImage::from_rgba_unmultiplied([1,1], &[1,2,3,255]), Default::default()));
+        let before = editor.grid.bg.as_ref().unwrap().id();
+        editor.image_buttons = true;
+        editor.file_picker = Some((SequenceFile::Image, crate::platform::FilePicker::in_directory("Background image", std::env::temp_dir(), &["png"], None)));
+        let mut toasts = Toasts::default();
+        let mut out = ctx.run_ui(egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(1280.0,800.0))),
+            events: vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }],
+            ..Default::default()
+        }, |ui| editor.ui(ui.ctx(), &[], &mut toasts));
+        out.textures_delta.clear();
+        assert!(editor.file_picker.is_none());
+        assert_eq!(editor.grid.bg.as_ref().unwrap().id(), before);
+        assert!(editor.image_buttons && toasts.0.is_empty());
+    }
 
     #[test]
     fn sequence_json_matches_the_original_file_format() {

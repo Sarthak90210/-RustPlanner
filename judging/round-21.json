@@ -1,0 +1,233 @@
+{
+  "round": 21,
+  "review_type": "independent fixed-revision source/reference review, native image inspection, full Windows test rerun and live CI verification",
+  "reviewed_head": "0e4a905c4d97b619380da2c2fa2485cd473f4e01",
+  "reviewed_base": "fde8670d2e504928f9926a85c6b9f50ecc2cae51",
+  "date": "2026-11-06",
+  "evidence_cutoff_utc": "2026-11-06T10:13:11Z",
+  "verdict": "Run 21 fixes the inspected mobile compiler blockers and Android SDK setup failure. Current iOS release-library compilation succeeds; Android Rust release compilation succeeds but release APK packaging fails for missing signing configuration. The mobile chooser introduces a save-name round-trip defect and retains the original-clone background-image cancellation discrepancy. Wider exact-clone gaps remain. No 10/10.",
+  "scores": {
+    "overall": 8.5,
+    "ui_ux": 8.7,
+    "features": 8.3,
+    "scale": "Qualitative exact-original software parity scores, not completion percentages. Overall equally weights UI/UX and features. Scores are held at round 20: stronger platform compile evidence does not close package, mobile workflow or wider behavior gaps. Prior reports supply context, not fresh verification of all earlier claims."
+  },
+  "rationale": "The new screenshot matches the current executable hash and shows the native Sequence editor. All 140 workspace tests pass in the reviewer rerun. Target-specific eframe features now permit an actual iOS release library build, and both mobile builds get past the former unguarded rfd calls. However, the new mobile browser can save a sequence under a name that its Load browser cannot list. Cancelling background selection still clears an existing image, while the original leaves it intact. Neither mobile provider access nor a mobile device workflow is implemented or demonstrated. Android packaging has a confirmed signing failure; iOS has no installable wrapper. The unchanged decoder, video, plugin, language and transport omissions still matter to the exact-clone promise.",
+  "scope": {
+    "inspected": [
+      "Fixed HEAD and diff from round-20 HEAD, including workflow, README, Cargo features, platform FilePicker and Sequence editor callers",
+      "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs load, save and background-image handlers",
+      "Current mobile entry points, data directories, file listing and text-file fallbacks",
+      "Current decoder defaults/property fallback, DATA video actions, plugin controls, language selector and connection types",
+      "judging/round-20.json for broader gap context"
+    ],
+    "rust_render_images_viewed": [
+      "target/judging/round21/54_swarm_sequence.png"
+    ],
+    "capture_integrity": {
+      "binary": "target/debug/missionplanner.exe",
+      "independently_verified_sha256": "E537B1458E36250FF90B4ACC8357A81401B41BA389DAEF382DEA4AE99605AF60",
+      "manifest": "target/judging/round21/54_swarm_sequence.manifest.json",
+      "captured_utc": "2026-11-06T10:09:18.2742720Z",
+      "receipt_scope": "Manifest hash matches the independently hashed executable. Receipt identifies a native eframe viewport capture at 1280x800 with simulator connection and completed 3115-parameter download. The visible editor is empty. This proves rendering, not chooser interaction or sequence-file round trips."
+    },
+    "reviewer_executed_verification": [
+      "Fixed HEAD matched and the worktree was initially clean.",
+      "cargo test --workspace passed all 140 tests: 83 mp-app unit tests, 37 mp-core unit tests, 7 altitude_change tests, 9 link_sim tests and 4 mavserial tests. No failures or ignored tests.",
+      "The full rerun includes file-picker name/Escape validation, both sequence-format/editor tests and the three-vehicle Sequence simulator flight test.",
+      "Viewed the new capture and independently compared its manifest with Get-FileHash of the current executable.",
+      "Fetched current GitHub Actions jobs and completed iOS/Android job logs through the GitHub connector.",
+      "Verified via the GitHub run API that run 42200366381 uses the exact reviewed HEAD."
+    ],
+    "ci": {
+      "run_url": "https://github.com/Sarthak90210/-RustPlanner/actions/runs/42200366381",
+      "verified_head_sha": "0e4a905c4d97b619380da2c2fa2485cd473f4e01",
+      "ios": {
+        "job_id": 127833849988,
+        "status": "completed",
+        "conclusion": "success",
+        "verified_command": "cargo build -p mp-app --lib --release --target aarch64-apple-ios",
+        "log_evidence": "Release profile finished successfully at 2026-11-06T10:11:48Z. This is an iOS library compile, not an installed application."
+      },
+      "android": {
+        "job_id": 127833849646,
+        "status": "completed",
+        "conclusion": "failure",
+        "verified_command": "cargo apk build -p mp-app --lib --release --target aarch64-linux-android",
+        "passed_parts": "setup-android, SDK/NDK installation, cargo-apk installation and Rust release compilation succeeded.",
+        "failure": "After release compilation finished at 2026-11-06T10:12:39Z, cargo-apk exited 1: Configure a release keystore via [package.metadata.android.signing.release]. The APK artifact upload was skipped."
+      },
+      "desktop": {
+        "windows": "Current job 127833849723 was in progress at cargo test --workspace at cutoff. Local reviewer Windows tests passed separately.",
+        "macos": "Current job 127833849439 was in progress at cargo test --workspace at cutoff. Older-revision macOS success is not credited to this fixed HEAD.",
+        "linux": "Current job 127833849138 was in progress installing Linux dependencies at cutoff. No current test/build success is claimed."
+      }
+    },
+    "verification_limits": [
+      "No original/native equal-state interaction or pixel comparison was performed.",
+      "No desktop OS file dialog was driven, and no mobile emulator or device was used.",
+      "The new picker test checks path rejection and Escape cancellation. It does not click Save/Open, verify extension normalization, test overwrite confirmation or replay background-image cancellation.",
+      "The save-name and image-cancellation findings are source-confirmed paths, not device workflow reproductions.",
+      "A successful iOS library build and successful Android Rust compilation do not establish packaging, installation, rendering, suspend/resume, file persistence or USB serial behavior.",
+      "No exhaustive fresh audit of every prior page, decoder branch or tool was performed."
+    ],
+    "reviewer_actions": "Read-only source/CI/image inspection and the full test rerun; authored judging/round-21.json only. No implementation edits, commit, push or subagents."
+  },
+  "run21_dispositions": [
+    {
+      "area": "Android SDK setup requests an existing package",
+      "status": "closed",
+      "closed_parts": "The workflow requests platform-tools. Current setup-android and explicit SDK/NDK installation steps succeed.",
+      "remaining": "This closes the setup failure only. Release APK packaging now fails later for missing signing configuration.",
+      "evidence": [
+        ".github/workflows/build.yml:46-53",
+        "https://github.com/Sarthak90210/-RustPlanner/actions/runs/42200366381/job/127833849646"
+      ]
+    },
+    {
+      "area": "iOS eframe backend and unguarded native-dialog compiler blockers",
+      "status": "closed",
+      "closed_parts": "Common eframe dependencies no longer force Glow; iOS selects WGPU while desktop and Android keep their conditional Glow features. Sequence's three direct rfd calls now route through the platform picker. The current iOS release library and Android Rust release compilation both succeed.",
+      "remaining": "Closure is specific to compilation. Mobile packaging and runtime behavior remain separate.",
+      "evidence": [
+        "crates/mp-app/Cargo.toml:16",
+        "crates/mp-app/Cargo.toml:31-47",
+        "crates/mp-app/src/platform.rs:76-83",
+        "crates/mp-app/src/swarm.rs:1274",
+        "crates/mp-app/src/swarm.rs:1316-1319",
+        "https://github.com/Sarthak90210/-RustPlanner/actions/runs/42200366381/job/127833849988",
+        "https://github.com/Sarthak90210/-RustPlanner/actions/runs/42200366381/job/127833849646"
+      ]
+    },
+    {
+      "area": "Sequence mobile file browser and desktop dialog routing",
+      "status": "partial",
+      "closed_parts": "Desktop retains native OS dialogs. Mobile has deferred app-directory selection with extension filtering, path-component rejection, Escape/Cancel and a second overwrite action. The full suite passes its new focused test.",
+      "remaining": "Save accepts names that Load cannot discover. Native desktop/mobile dialog lifecycles and overwrite behavior lack interaction evidence. Android SAF and iOS document providers remain explicitly unimplemented.",
+      "evidence": [
+        "crates/mp-app/src/platform.rs:65-144",
+        "crates/mp-app/src/platform.rs:220-229",
+        "crates/mp-app/src/swarm.rs:1416-1443",
+        "README.md:255-259"
+      ]
+    },
+    {
+      "area": "Native packages and platform workflow verification",
+      "status": "partial",
+      "closed_parts": "Current iOS release-library and Android Rust release compilation now have real CI evidence. Rust dependency caching and superseded-run cancellation are configured.",
+      "remaining": "Android release signing prevents an APK artifact. The iOS wrapper, signing and installable package are absent. Current desktop CI remains unfinished at cutoff, and native mobile runtime behavior is unverified.",
+      "evidence": [
+        ".github/workflows/build.yml:7-9",
+        ".github/workflows/build.yml:50-57",
+        ".github/workflows/build.yml:59-69",
+        "README.md:47-49",
+        "https://github.com/Sarthak90210/-RustPlanner/actions/runs/42200366381"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "priority": 1,
+      "severity": "P2",
+      "status": "open",
+      "introduced_in_run21": true,
+      "area": "Mobile Save can create sequences hidden from Load",
+      "trigger_and_effect": "Change the default sequence.txt name to formation or formation.dat and save. selected_path accepts the name unchanged and Sequence::save writes that exact path. Load lists only txt/json entries and offers no editable filename, so the saved sequence cannot be selected again through the app browser.",
+      "next_fix": "Append the default extension when absent and reject or normalize unsupported extensions before Save. Verify save-then-load for custom names and existing-file overwrite with real picker events.",
+      "evidence": [
+        "crates/mp-app/src/platform.rs:90-93",
+        "crates/mp-app/src/platform.rs:105",
+        "crates/mp-app/src/platform.rs:112-119",
+        "crates/mp-app/src/platform.rs:220-224",
+        "crates/mp-app/src/swarm.rs:1112-1113",
+        "crates/mp-app/src/swarm.rs:1274",
+        "crates/mp-app/src/swarm.rs:1319",
+        "crates/mp-app/src/swarm.rs:1431",
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:368-373"
+      ]
+    },
+    {
+      "priority": 2,
+      "severity": "P2",
+      "status": "open",
+      "introduced_in_run21": false,
+      "area": "Cancelling background-image selection removes the existing background",
+      "trigger_and_effect": "Set a background, open set image again, then cancel. Some(None) reaches the Image action and its else branch sets grid.bg to None. Original Mission Planner changes BGImage only when the dialog returns OK. This discrepancy existed before run 21 and remains in the rewritten handler.",
+      "next_fix": "Treat cancellation as no change. Preserve the previous image on decode failure and show the error. Verify cancel and invalid-image paths after an image is already loaded.",
+      "evidence": [
+        "crates/mp-app/src/platform.rs:96-98",
+        "crates/mp-app/src/swarm.rs:1433-1440",
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:559-564"
+      ]
+    }
+  ],
+  "remaining_software_gaps": [
+    {
+      "priority": 3,
+      "status": "open",
+      "area": "Installable native packages and mobile file access",
+      "next_fix": "Produce a CI APK with explicit signing appropriate to its distribution, then install and launch it. Add the iOS wrapper and signing/package workflow. Implement Android SAF and iOS document-provider access, stable iOS application-data storage, and exercise load/save/image cancellation and overwrite across app restarts. Validate the fixed 899x494 Sequence editor at mobile viewport sizes.",
+      "evidence": [
+        ".github/workflows/build.yml:51-57",
+        ".github/workflows/build.yml:69",
+        "crates/mp-app/src/lib.rs:60-62",
+        "crates/mp-app/src/lib.rs:78-79",
+        "crates/mp-app/src/lib.rs:95-96",
+        "crates/mp-app/src/platform.rs:38-55",
+        "crates/mp-app/src/swarm.rs:1268-1269",
+        "README.md:47-49",
+        "README.md:258-259"
+      ],
+      "limits": "Without MP_DATA_DIR or a future wrapper supplying a stable directory, the shown iOS path falls back to temp_dir. Persistence and viewport problems are source risks to validate, not device-tested findings."
+    },
+    {
+      "priority": 4,
+      "status": "open",
+      "area": "CurrentState defaults, derived values and decoder coverage",
+      "next_fix": "Resolve the round-20 default/null discrepancy, acceleration magnitudes and HIGH_LATENCY/HIGH_LATENCY2 branches using original-derived fixtures. Audit all remaining registered properties and decoded message branches.",
+      "evidence": [
+        "crates/mp-core/src/state.rs:239",
+        "crates/mp-core/src/state.rs:307-318",
+        "crates/mp-core/src/state.rs:920-921",
+        "crates/mp-core/src/state_properties.rs:78",
+        "crates/mp-core/src/state_properties.rs:91",
+        "crates/mp-core/src/state_properties.rs:104",
+        "judging/round-20.json"
+      ]
+    },
+    {
+      "priority": 5,
+      "status": "open",
+      "area": "DATA video pipelines",
+      "next_fix": "Implement GStreamer discovery/source/stop, HereLink and payload/gimbal video behavior and verify a deterministic stream through visible DATA controls. The current GStreamer actions still display an unconditional missing-GStreamer error.",
+      "evidence": [
+        "crates/mp-app/src/views/flight_data.rs:479-486",
+        "crates/mp-app/src/views/flight_data.rs:1310"
+      ]
+    },
+    {
+      "priority": 6,
+      "status": "open",
+      "area": "Plugin execution and localization",
+      "next_fix": "Implement the original plugin lifecycle and callbacks through a compatible host, and apply translated resources and persisted culture. Disabled file-list controls and an English-only selector remain concrete behavior gaps.",
+      "evidence": [
+        "crates/mp-app/src/hotkey_tools.rs:103-112",
+        "crates/mp-app/src/views/config.rs:1087",
+        "README.md:113"
+      ]
+    },
+    {
+      "priority": 7,
+      "status": "open",
+      "area": "Native transports and remaining map/tool parity",
+      "next_fix": "Add BLE/WinUSB/custom and Android USB-serial adapters. Close GDAL raster/opacity and place-name geocoder gaps, and drive the remaining DATA/guided/MAV-switch desktop workflows. Finish current desktop CI and native smoke evidence before claiming cross-platform runtime parity.",
+      "evidence": [
+        "crates/mp-core/src/comms.rs:26-46",
+        "crates/mp-core/src/comms.rs:131-135",
+        "README.md:111-118",
+        "judging/round-20.json"
+      ]
+    }
+  ],
+  "ten_out_of_ten_criterion": "An honest 10 requires no known material software discrepancy in the promised exact-clone scope and adequate decoder, interaction and native-platform evidence. Current compilation progress is real, but it does not close the source-confirmed chooser defects, failed Android release packaging or wider missing behavior."
+}

@@ -83,14 +83,22 @@ impl FilePicker {
         picker
     }
 
-    fn in_directory(title: &str, root: PathBuf, exts: &[&str], save_name: Option<&str>) -> Self {
+    pub(crate) fn in_directory(title: &str, root: PathBuf, exts: &[&str], save_name: Option<&str>) -> Self {
         Self { title: title.into(), root, exts: exts.iter().map(|s| s.to_string()).collect(), name: save_name.unwrap_or_default().into(), save: save_name.is_some(), overwrite: false, ready: None }
     }
 
     fn selected_path(&self) -> Option<PathBuf> {
         let name = self.name.trim();
         if name.is_empty() || name == "." || name == ".." || name.chars().any(|c| matches!(c, '/' | '\\' | ':' | '\0')) { return None; }
-        Some(self.root.join(name))
+        let mut path = self.root.join(name);
+        if self.save && !self.exts.is_empty() {
+            match path.extension().and_then(|s| s.to_str()).filter(|s| !s.is_empty()) {
+                None => { path.set_extension(&self.exts[0]); }
+                Some(ext) if !self.exts.iter().any(|allowed| ext.eq_ignore_ascii_case(allowed)) => return None,
+                _ => {}
+            }
+        }
+        Some(path)
     }
 
     /// Some(None) means Cancel; None means the browser is still open.
@@ -115,6 +123,7 @@ impl FilePicker {
             ui.horizontal(|ui| {
                 let text = if self.overwrite { "Overwrite" } else if self.save { "Save" } else { "Open" };
                 if ui.add_enabled(valid, egui::Button::new(text)).clicked() {
+                    if self.save { if let Some(p) = &path { self.name = p.file_name().unwrap_or_default().to_string_lossy().into_owned(); } }
                     if self.save && path.as_ref().is_some_and(|p| p.exists()) && !self.overwrite { self.overwrite = true; }
                     else { done = Some(path); }
                 }
@@ -129,6 +138,23 @@ impl FilePicker {
 #[cfg(test)]
 mod file_picker_tests {
     use super::*;
+    #[test]
+    fn extensionless_mobile_sequence_save_is_visible_to_load() {
+        let id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let root = std::env::temp_dir().join(format!("mp-picker-{}-{id}", std::process::id()));
+        std::fs::create_dir(&root).unwrap();
+        let mut picker = FilePicker::in_directory("Save sequence", root.clone(), &["txt"], Some("formation"));
+        let path = picker.selected_path().unwrap();
+        assert_eq!(path.file_name().unwrap(), "formation.txt");
+        let seq = crate::swarm::Sequence::default();
+        seq.save(&path).unwrap();
+        assert_eq!(list_files_in(&root, &["txt", "json"]), [path.clone()]);
+        assert_eq!(crate::swarm::Sequence::load(&path), Some(seq));
+        picker.name = "formation.bad".into(); assert!(picker.selected_path().is_none());
+        picker.name = "formation.TXT".into(); assert!(picker.selected_path().is_some());
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_dir(root).unwrap();
+    }
     #[test]
     fn app_browser_keeps_names_in_its_directory_and_cancel_returns_no_file() {
         let root = std::env::temp_dir().join("mp-picker-no-files");
