@@ -16,6 +16,7 @@ pub mod tracker;
 pub mod repl;
 pub mod missionpck;
 pub mod rtk;
+pub mod dronecan;
 pub mod link;
 pub mod mavcmd;
 pub mod mission;

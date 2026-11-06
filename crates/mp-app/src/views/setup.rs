@@ -122,6 +122,7 @@ pub struct SetupView {
     level_label: String,
     simple_label: String,
     rtk: crate::views::rtk_page::RtkPage,
+    dronecan: crate::views::dronecan_page::DroneCanPage,
     term: Option<Terminal>,
     term_port: String,
     term_baud: u32,
@@ -164,6 +165,7 @@ impl Default for SetupView {
             level_label: "Calibrate Level".into(),
             simple_label: "Simple Accel Cal".into(),
             rtk: Default::default(),
+            dronecan: Default::default(),
             term: None,
             term_port: String::new(),
             term_baud: 115200,
@@ -217,6 +219,7 @@ impl SetupView {
                 "Loading" => return self.extra.param_loading(ui, app),
                 "Antenna Tracker" => return self.extra.tracker(ui, app),
                 "RTK/GPS Inject" => return self.rtk.ui(ui, app),
+                "DroneCAN/UAVCAN" => return self.dronecan.ui(ui, app),
                 "Terminal" => return self.terminal(ui, app),
                 "Advanced" => return advanced(ui, app),
                 "Joystick" => {
@@ -614,7 +617,6 @@ fn form_for(page: &str) -> Option<&'static str> {
         "Bluetooth Setup" => "bluetooth",
         "ESP8266 Setup" => "esp8266",
         "CubeID Update" => "cubeid",
-        "DroneCAN/UAVCAN" => "dronecan",
         "Script REPL" => "repl",
         "Initial Tune Parameter" => "initialparams",
         "Compass/Motor Calib" => "compassmot",
@@ -862,7 +864,7 @@ fn initial_params(prop: f64, cells: f64, cmax: f64, cmin: f64, tmotor: bool, sug
 
 impl SetupView {
     /// Pages rendered from the exported designer layouts, with their button handlers.
-    fn form_page(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, page: &str, form: &'static str) {
+    fn form_page(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, _page: &str, form: &'static str) {
         let mut st_owned = self.forms.remove(form).unwrap_or_default();
         let st = &mut st_owned;
         if form == "initialparams" && st.text.is_empty() {
@@ -929,12 +931,6 @@ impl SetupView {
                 },
                 ("sikradio", b) if self.sik_button(b, app, st) => {}
                 (f, b) if self.dev.button(f, b, st, app) => {}
-                ("dronecan", other) => {
-                    let label = crate::forms::form(form).controls.iter().find(|c| c.name == other).and_then(|c| c.text.clone()).unwrap_or_default();
-                    if !label.is_empty() {
-                        app.toasts.error(format!("{page}: {label}\nNo DroneCAN interface. Connect to an autopilot with CAN, then press Connect (SLCAN over MAVLink)."));
-                    }
-                }
                 _ => {}
             }
         }

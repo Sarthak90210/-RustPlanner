@@ -1,6 +1,7 @@
 pub mod checklist;
 pub mod config;
 pub mod device_pages;
+pub mod dronecan_page;
 pub mod fd_tabs;
 pub mod flight_data;
 pub mod flight_plan;

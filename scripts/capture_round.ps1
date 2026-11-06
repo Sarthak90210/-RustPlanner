@@ -77,20 +77,28 @@ for ($ci = $From - 1; $ci -le $last; $ci++) {
     $env:MP_CAPTURE_AFTER = [string]$case[6]
     $env:MP_CAPTURE = Join-Path $captureRoot ($case[0] + '.png')
     if ($case.Count -gt 7) { Set-Item -Path ('Env:' + $case[7]) -Value $case[8] }
-    $started = [DateTime]::UtcNow
-    $process = $null
-    try {
-        $process = Start-Process -FilePath $captureExe -WindowStyle Hidden -PassThru -RedirectStandardError (Join-Path $captureRoot ($case[0] + '.stderr.log')) -RedirectStandardOutput (Join-Path $captureRoot ($case[0] + '.stdout.log'))
-        if (-not $process.WaitForExit(($case[6] + 40) * 1000)) { throw 'Capture did not exit before its deadline' }
-        $file = Get-Item -LiteralPath $env:MP_CAPTURE
-        if ($file.LastWriteTimeUtc -lt $started) { throw 'Capture is stale' }
-        $receipt = Get-Content -LiteralPath ([IO.Path]::ChangeExtension($env:MP_CAPTURE,'capture.json')) -Raw | ConvertFrom-Json
-        if ($receipt.status -ne 'ok') { throw 'Capture receipt did not report success' }
-        if (($case[2] -or $env:MP_SWARM) -and -not $receipt.runtime.params_complete) { throw 'Simulator parameters were not complete' }
-        [ordered]@{ name=$case[0]; binary_sha256=$binaryHash; desktop=$desktopOne; pid=$process.Id; exit_code=$process.ExitCode; captured_utc=$file.LastWriteTimeUtc.ToString('o'); receipt=$receipt } |
-            ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $captureRoot ($case[0] + '.manifest.json')) -Encoding UTF8
-        Write-Output ($case[0] + ' saved, parameters=' + $receipt.runtime.parameters)
-    } finally {
-        if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -ErrorAction SilentlyContinue }
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+      try {
+        $started = [DateTime]::UtcNow
+        $process = $null
+        try {
+            $process = Start-Process -FilePath $captureExe -WindowStyle Hidden -PassThru -RedirectStandardError (Join-Path $captureRoot ($case[0] + '.stderr.log')) -RedirectStandardOutput (Join-Path $captureRoot ($case[0] + '.stdout.log'))
+            if (-not $process.WaitForExit(($case[6] + 40) * 1000)) { throw 'Capture did not exit before its deadline' }
+            $file = Get-Item -LiteralPath $env:MP_CAPTURE
+            if ($file.LastWriteTimeUtc -lt $started) { throw 'Capture is stale' }
+            $receipt = Get-Content -LiteralPath ([IO.Path]::ChangeExtension($env:MP_CAPTURE,'capture.json')) -Raw | ConvertFrom-Json
+            if ($receipt.status -ne 'ok') { throw 'Capture receipt did not report success' }
+            if (($case[2] -or $env:MP_SWARM) -and -not $receipt.runtime.params_complete) { throw 'Simulator parameters were not complete' }
+            [ordered]@{ name=$case[0]; binary_sha256=$binaryHash; desktop=$desktopOne; pid=$process.Id; exit_code=$process.ExitCode; captured_utc=$file.LastWriteTimeUtc.ToString('o'); receipt=$receipt } |
+                ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $captureRoot ($case[0] + '.manifest.json')) -Encoding UTF8
+            Write-Output ($case[0] + ' saved, parameters=' + $receipt.runtime.parameters)
+        } finally {
+            if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -ErrorAction SilentlyContinue }
+        }
+        break
+      } catch {
+        if ($attempt -ge 2) { throw }
+        Write-Output ($case[0] + ' retry: ' + $_.Exception.Message)
+      }
     }
 }

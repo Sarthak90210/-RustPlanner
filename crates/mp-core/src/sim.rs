@@ -375,6 +375,11 @@ struct Vehicle {
     upload: Option<(u16, Vec<Locationwp>, MavMissionType)>,
     fence: Vec<Locationwp>,
     accel_step: u8,
+    /// MAV_CMD_CAN_FORWARD: bus and when it was last requested (forwarding stops after 5 s)
+    can_forward: Option<(u8, Instant)>,
+    /// the simulated AP_Periph node on CAN1: boot time and transfer id
+    periph: (Instant, u8),
+    can_asm: crate::dronecan::Assembler,
     magcal: Option<u8>,
     param_queue: std::collections::VecDeque<usize>,
     rally: Vec<Locationwp>,
@@ -509,6 +514,9 @@ impl Vehicle {
             upload: None,
             fence: Vec::new(),
             accel_step: 0,
+            can_forward: None,
+            periph: (Instant::now(), 0),
+            can_asm: Default::default(),
             magcal: None,
             param_queue: Default::default(),
             rally: Vec::new(),
@@ -792,6 +800,7 @@ impl Vehicle {
                 }
                 self.send(MavMessage::FILE_TRANSFER_PROTOCOL(FILE_TRANSFER_PROTOCOL_DATA { target_network: 0, target_system: 255, target_component: 190, payload: rep }));
             }
+            MavMessage::CAN_FRAME(f) => self.periph_frame(f.id & 0x1FFF_FFFF, &f.data[..(f.len as usize).min(8)]),
             MavMessage::LOG_REQUEST_LIST(_) => {
                 // two onboard DataFlash logs
                 let size = crate::dataflash::sample_log().len() as u32;
@@ -951,6 +960,14 @@ impl Vehicle {
                 self.ack(c.command, MavResult::MAV_RESULT_ACCEPTED);
                 self.ask_accel_pos();
                 return;
+            }
+            MAV_CMD_CAN_FORWARD => {
+                let first = self.can_forward.is_none();
+                self.can_forward = (c.param1 >= 1.0).then(|| (c.param1 as u8, Instant::now()));
+                if first && self.can_forward.is_some() {
+                    self.periph_log("AP_Periph started");
+                }
+                MavResult::MAV_RESULT_ACCEPTED
             }
             MAV_CMD_SCRIPTING => {
                 // MAV_SCRIPTING_CMD_REPL_START = 0, REPL_STOP = 1
@@ -1230,8 +1247,63 @@ impl Vehicle {
         }));
     }
 
+    /// Send a DroneCAN transfer from the AP_Periph node (id 125) as CAN_FRAMEs.
+    fn periph_send(&mut self, id: crate::dronecan::FrameId, payload: &[u8], sig: u64) {
+        let Some((bus, _)) = self.can_forward else { return };
+        let tid = self.periph.1;
+        self.periph.1 = (tid + 1) & 0x1f;
+        for f in crate::dronecan::frames(payload, sig, tid) {
+            let mut data = [0u8; 8];
+            data[..f.len()].copy_from_slice(&f);
+            self.send(MavMessage::CAN_FRAME(CAN_FRAME_DATA { id: id.encode() | 0x8000_0000, target_system: 255, target_component: 190, bus: bus - 1, len: f.len() as u8, data }));
+        }
+    }
+
+    fn periph_log(&mut self, text: &str) {
+        let src = b"periph";
+        // level INFO (1) in the top 3 bits, then the 5-bit source length
+        let mut p = vec![(1u8 << 5) | (src.len() as u8 & 0x1f)];
+        p.extend_from_slice(src);
+        p.extend_from_slice(text.as_bytes());
+        self.periph_send(crate::dronecan::FrameId::Message { priority: 24, type_id: crate::dronecan::LOGMESSAGE_ID, source: 125 }, &p, 0xd654_a48e_0c04_9d75);
+    }
+
+    fn periph_status(&self) -> crate::dronecan::NodeStatus {
+        crate::dronecan::NodeStatus { uptime: self.periph.0.elapsed().as_secs() as u32, health: 0, mode: 0, sub_mode: 0, vendor: 0 }
+    }
+
+    /// Requests on the bus addressed to the AP_Periph node.
+    fn periph_frame(&mut self, id: u32, data: &[u8]) {
+        use crate::dronecan::*;
+        let Some(payload) = self.can_asm.push(id, data) else { return };
+        if let FrameId::Service { type_id, request: true, dest: 125, source, .. } = FrameId::decode(id) {
+            let reply = FrameId::Service { priority: 30, type_id, request: false, dest: source, source: 125 };
+            match type_id {
+                GETNODEINFO_ID => {
+                    let info = NodeInfo { status: self.periph_status(), sw: (1, 7, 0x5a3c1e2b, 0x0123_4567_89ab_cdef), hw: (1, 0), uid: [0x32, 0x00, 0x2c, 0x00, 0x0d, 0x51, 0x30, 0x34, 0x39, 0x36, 0x31, 0x38, 0, 0, 0, 0], name: "org.ardupilot.ap_periph".into() };
+                    self.periph_send(reply, &info.encode(), GETNODEINFO_SIG);
+                }
+                RESTARTNODE_ID if payload.len() >= 5 && payload[..5] == 0xAC_CE55_1B1E_u64.to_le_bytes()[..5] => {
+                    self.periph_send(reply, &[0x80], RESTARTNODE_SIG);
+                    self.periph.0 = Instant::now();
+                    self.periph_log("Rebooting");
+                }
+                _ => {}
+            }
+        }
+    }
+
     fn slow_telemetry(&mut self) {
         self.magcal_tick();
+        // AP_Periph NodeStatus at 1 Hz while the GCS keeps CAN forwarding alive
+        if let Some((_, t)) = self.can_forward {
+            if t.elapsed() > Duration::from_secs(5) {
+                self.can_forward = None;
+            } else {
+                let ns = self.periph_status().encode();
+                self.periph_send(crate::dronecan::FrameId::Message { priority: 16, type_id: crate::dronecan::NODESTATUS_ID, source: 125 }, &ns, crate::dronecan::NODESTATUS_SIG);
+            }
+        }
         self.adsb_traffic();
         let mut base = MavModeFlag::MAV_MODE_FLAG_CUSTOM_MODE_ENABLED
             | MavModeFlag::MAV_MODE_FLAG_STABILIZE_ENABLED;

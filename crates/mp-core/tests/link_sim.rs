@@ -329,3 +329,30 @@ fn mission_over_mavftp() {
     assert_eq!(back.len(), 3);
     assert_eq!(back[1].alt, 40.0);
 }
+
+#[test]
+fn dronecan_over_mavlink_forwarding() {
+    let port = 14770;
+    let link = Link::connect(ConnectionSpec::UdpListen { port });
+    let _sim = sim::spawn(port).unwrap();
+    wait_event(&link, Duration::from_secs(10), |e| matches!(e, LinkEvent::Connected));
+    let mut session = mp_core::dronecan::Session::default();
+    session.start(Box::new(mp_core::dronecan::MavlinkCan::new(&link, 1)));
+    let end = std::time::Instant::now() + Duration::from_secs(15);
+    loop {
+        let named = session.nodes.lock().get(&125).and_then(|n| n.info.clone()).map(|i| i.name);
+        if named.as_deref() == Some("org.ardupilot.ap_periph") {
+            break;
+        }
+        assert!(std::time::Instant::now() < end, "nodes {:?}", session.nodes.lock().keys().collect::<Vec<_>>());
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert_eq!(session.nodes.lock()[&125].status.health_name(), "OK");
+    // the node's boot message reaches the debug log
+    let end = std::time::Instant::now() + Duration::from_secs(5);
+    while session.log.lock().is_empty() && std::time::Instant::now() < end {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert!(session.log.lock().iter().any(|l| l.0 == 125 && l.3.contains("AP_Periph")), "{:?}", session.log.lock());
+    session.stop();
+}
