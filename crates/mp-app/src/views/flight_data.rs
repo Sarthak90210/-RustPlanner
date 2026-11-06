@@ -2030,7 +2030,7 @@ fn status_ui(ui: &mut egui::Ui, cs: &CurrentState) -> egui::scroll_area::ScrollA
 
     let mut scroll = egui::ScrollArea::horizontal().auto_shrink([false, false]);
     // Native capture of the final column, paired with the actual scrollbar-drag test.
-    if std::env::var_os("MP_STATUS_END").is_some() { scroll = scroll.horizontal_scroll_offset(f32::MAX); }
+    if std::env::var_os("MP_STATUS_END").is_some() { scroll = scroll.horizontal_scroll_offset((total_w - ui.available_width()).max(0.0)); }
     scroll.show(ui, |ui| {
         let (rect, _) = ui.allocate_exact_size(Vec2::new(total_w, col_h + 10.0), Sense::hover());
         let p = ui.painter().clone();

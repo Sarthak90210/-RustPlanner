@@ -445,6 +445,15 @@ impl CurrentState {
     }
 
     /// Port of `CurrentState.UpdateCurrentSettings` message handling.
+    fn esc(&mut self, first: usize, voltage: &[u16; 4], current: &[u16; 4], rpm: &[u16; 4], temperature: &[u8; 4]) {
+        for i in 0..4 {
+            for (suffix, value) in [("volt", voltage[i] as f64 / 100.0), ("curr", current[i] as f64 / 100.0), ("rpm", rpm[i] as f64), ("temp", temperature[i] as f64)] {
+                self.extra.insert(format!("esc{}_{suffix}", first + i), value);
+            }
+        }
+    }
+
+    /// Port of `CurrentState.UpdateCurrentSettings` message handling.
     pub fn update(&mut self, msg: &MavMessage) {
         match msg {
             MavMessage::HEARTBEAT(hb) => {
@@ -696,6 +705,41 @@ impl CurrentState {
                 self.extra.insert("servovoltage".into(), p.Vservo as f64);
                 self.extra.insert("voltageflag".into(), p.flags.bits() as f64);
             }
+            MavMessage::GENERATOR_STATUS(g) => {
+                for (n,v) in [("gen_status", g.status.bits() as f64), ("gen_speed", g.generator_speed as f64), ("gen_current", g.load_current as f64), ("gen_voltage", g.bus_voltage as f64), ("gen_runtime", g.runtime as f64), ("gen_maint_time", g.time_until_maintenance as f64)] { self.extra.insert(n.into(), v); }
+            }
+            MavMessage::HWSTATUS(h) => {
+                self.extra.insert("hwvoltage".into(), h.Vcc as f64 / 1000.0);
+                self.extra.insert("i2cerrors".into(), h.I2Cerr as f64);
+            }
+            MavMessage::MCU_STATUS(m) if m.id == 0 => {
+                for (n,v) in [("mcutemp", m.MCU_temperature as f64 / 100.0), ("mcuvoltage", m.MCU_voltage as f64 / 1000.0), ("mcuminvolt", m.MCU_voltage_min as f64 / 1000.0), ("mcumaxvolt", m.MCU_voltage_max as f64 / 1000.0)] { self.extra.insert(n.into(), v); }
+            }
+            MavMessage::MEMINFO(m) => {
+                self.extra.insert("freemem".into(), if m.freemem32 > 0 { m.freemem32 as f64 } else { m.freemem as f64 });
+                self.extra.insert("brklevel".into(), m.brkval as f64);
+            }
+            MavMessage::RPM(r) => {
+                self.extra.insert("rpm1".into(), r.rpm1 as f64);
+                self.extra.insert("rpm2".into(), r.rpm2 as f64);
+            }
+            MavMessage::AOA_SSA(a) => {
+                self.extra.insert("AOA".into(), a.AOA as f64);
+                self.extra.insert("SSA".into(), a.SSA as f64);
+            }
+            MavMessage::FENCE_STATUS(f) => {
+                self.extra.insert("fenceb_count".into(), f.breach_count as f64);
+                self.extra.insert("fenceb_status".into(), f.breach_status as f64);
+                self.extra.insert("fenceb_type".into(), f.breach_type as u8 as f64);
+                if f.breach_status != 0 { self.message_high = format!("Fence Breach {}", format!("{:?}", f.breach_type).trim_start_matches("FENCE_BREACH_")); }
+            }
+            MavMessage::EFI_STATUS(e) if e.ecu_index == 0.0 => {
+                for (n,v) in [("efi_baro", e.barometric_pressure), ("efi_headtemp", e.cylinder_head_temperature), ("efi_load", e.engine_load), ("efi_health", e.health as f32), ("efi_exhasttemp", e.exhaust_gas_temperature), ("efi_intaketemp", e.intake_manifold_temperature), ("efi_rpm", e.rpm), ("efi_fuelflow", e.fuel_flow), ("efi_fuelconsumed", e.fuel_consumed), ("efi_fuelpressure", if e.fuel_pressure == 0.0 { -1.0 } else { e.fuel_pressure })] { self.extra.insert(n.into(), v as f64); }
+            }
+            MavMessage::ESC_TELEMETRY_1_TO_4(e) => self.esc(1, &e.voltage, &e.current, &e.rpm, &e.temperature),
+            MavMessage::ESC_TELEMETRY_5_TO_8(e) => self.esc(5, &e.voltage, &e.current, &e.rpm, &e.temperature),
+            MavMessage::ESC_TELEMETRY_9_TO_12(e) => self.esc(9, &e.voltage, &e.current, &e.rpm, &e.temperature),
+            MavMessage::ESC_TELEMETRY_13_TO_16(e) => self.esc(13, &e.voltage, &e.current, &e.rpm, &e.temperature),
             MavMessage::AUTOPILOT_VERSION(v) => { self.extra.insert("capabilities".into(), v.capabilities.bits() as f64); }
             MavMessage::LOCAL_POSITION_NED(p) => {
                 self.extra.insert("posn".into(), p.x as f64);
@@ -821,6 +865,47 @@ fn property_order(a: &str, b: &str) -> std::cmp::Ordering {
 #[cfg(test)]
 mod property_tests {
     use super::*;
+    #[test]
+    fn engine_hardware_and_all_sixteen_esc_values_follow_reference_scaling() {
+        let mut cs = CurrentState::default();
+        cs.update(&MavMessage::HWSTATUS(HWSTATUS_DATA { Vcc: 5123, I2Cerr: 7 }));
+        assert_eq!(cs.field("hwvoltage"), Some(5.123));
+        cs.update(&MavMessage::MCU_STATUS(MCU_STATUS_DATA { id: 0, MCU_temperature: 3650, MCU_voltage: 3300, MCU_voltage_min: 3200, MCU_voltage_max: 3400 }));
+        assert_eq!(cs.field("mcutemp"), Some(36.5));
+        assert_eq!(cs.field("mcuminvolt"), Some(3.2));
+        cs.update(&MavMessage::MCU_STATUS(MCU_STATUS_DATA { id: 1, ..Default::default() }));
+        assert_eq!(cs.field("mcutemp"), Some(36.5));
+        cs.update(&MavMessage::MEMINFO(MEMINFO_DATA { brkval: 12, freemem: 32, freemem32: 70000 }));
+        assert_eq!(cs.field("freemem"), Some(70000.0));
+        cs.update(&MavMessage::MEMINFO(MEMINFO_DATA { freemem: 32, ..Default::default() }));
+        assert_eq!(cs.field("freemem"), Some(32.0));
+        cs.update(&MavMessage::GENERATOR_STATUS(GENERATOR_STATUS_DATA { generator_speed: 2400, load_current: 12.5, bus_voltage: 48.0, runtime: 12345, time_until_maintenance: -60, ..Default::default() }));
+        assert_eq!(cs.field("gen_speed"), Some(2400.0));
+        assert_eq!(cs.field("gen_maint_time"), Some(-60.0));
+        cs.update(&MavMessage::EFI_STATUS(EFI_STATUS_DATA { ecu_index: 0.0, rpm: 3000.0, fuel_pressure: 0.0, ..Default::default() }));
+        assert_eq!(cs.field("efi_fuelpressure"), Some(-1.0));
+        cs.update(&MavMessage::EFI_STATUS(EFI_STATUS_DATA { ecu_index: 1.0, ..Default::default() }));
+        assert_eq!(cs.field("efi_rpm"), Some(3000.0));
+        let voltage = [1200, 1210, 1220, 1230];
+        let current = [100, 200, 300, 400];
+        let rpm = [1000, 2000, 3000, 4000];
+        let temperature = [30, 31, 32, 33];
+        for msg in [
+            MavMessage::ESC_TELEMETRY_1_TO_4(ESC_TELEMETRY_1_TO_4_DATA { voltage, current, rpm, temperature, ..Default::default() }),
+            MavMessage::ESC_TELEMETRY_5_TO_8(ESC_TELEMETRY_5_TO_8_DATA { voltage, current, rpm, temperature, ..Default::default() }),
+            MavMessage::ESC_TELEMETRY_9_TO_12(ESC_TELEMETRY_9_TO_12_DATA { voltage, current, rpm, temperature, ..Default::default() }),
+            MavMessage::ESC_TELEMETRY_13_TO_16(ESC_TELEMETRY_13_TO_16_DATA { voltage, current, rpm, temperature, ..Default::default() }),
+        ] { cs.update(&msg); }
+        for n in 1..=16 {
+            let i = (n - 1) % 4;
+            for (suffix, value) in [("volt", voltage[i] as f64 / 100.0), ("curr", current[i] as f64 / 100.0), ("rpm", rpm[i] as f64), ("temp", temperature[i] as f64)] {
+                let name = format!("esc{n}_{suffix}");
+                assert_eq!(cs.field(&name), Some(value));
+                assert!(cs.fields().iter().any(|(k,v)| *k == name && *v == value));
+                assert_eq!(cs.property(&name), serde_json::json!(value));
+            }
+        }
+    }
     #[test]
     fn registry_filters_types_sorts_naturally_and_preserves_values() {
         let cs = CurrentState { mode: "Guided".into(), armed: true, ..Default::default() };

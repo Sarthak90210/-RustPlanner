@@ -6,6 +6,7 @@ use mavlink::dialects::ardupilotmega::*;
 use mp_core::{
     comms::ConnectionSpec,
     link::{Link, LinkCommand, LinkEvent},
+    mission::Locationwp,
     mavlink,
 };
 use std::io::Write;
@@ -101,6 +102,34 @@ fn send(peer: &Peer, component: u8, message: MavMessage) {
     )
     .unwrap();
     peer.writer.lock().unwrap().write_all(&bytes).unwrap();
+}
+
+#[test]
+fn guided_cache_observes_legacy_items_and_mission_type_guards_on_the_wire() {
+    use mavlink::Message;
+    let (link, peer) = Peer::connect();
+    let key = (42, 1);
+    link.shared.write().guided_targets.insert(key, Locationwp::waypoint(-35.0, 149.0, 50.0, 3));
+    for mission_type in [MavMissionType::MAV_MISSION_TYPE_FENCE, MavMissionType::MAV_MISSION_TYPE_RALLY] {
+        for msg in [
+            MavMessage::MISSION_ITEM_INT(MISSION_ITEM_INT_DATA { current: 2, target_system: 42, target_component: 1, mission_type, z: 999.0, ..Default::default() }),
+            MavMessage::MISSION_ITEM(MISSION_ITEM_DATA { current: 2, target_system: 42, target_component: 1, mission_type, z: 999.0, ..Default::default() }),
+        ] {
+            let id = msg.message_id(); link.send(LinkCommand::Send(Box::new(msg)));
+            receive(&peer, Duration::from_secs(3), |m| m.message_id() == id);
+            assert_eq!(link.shared.read().guided_target().alt, 50.0);
+        }
+    }
+    link.send(LinkCommand::Send(Box::new(MavMessage::MISSION_ITEM(MISSION_ITEM_DATA { current: 2, target_system: 42, target_component: 1, mission_type: MavMissionType::MAV_MISSION_TYPE_MISSION, x: -34.5, y: 148.5, z: 80.0, frame: MavFrame::MAV_FRAME_GLOBAL, ..Default::default() }))));
+    receive(&peer, Duration::from_secs(3), |m| matches!(m, MavMessage::MISSION_ITEM(_)));
+    let target = link.shared.read().guided_target();
+    assert_eq!((target.lat, target.lng, target.alt, target.frame), (-34.5,148.5,80.0,0));
+    link.send(LinkCommand::Send(Box::new(MavMessage::SET_POSITION_TARGET_GLOBAL_INT(SET_POSITION_TARGET_GLOBAL_INT_DATA {
+        target_system: 42, target_component: 1, lat_int: -330000000, lon_int: 1470000000, alt: 100.0,
+        coordinate_frame: MavFrame::MAV_FRAME_GLOBAL_TERRAIN_ALT, type_mask: PositionTargetTypemask::from_bits_truncate(7), ..Default::default()
+    }))));
+    receive(&peer, Duration::from_secs(3), |m| matches!(m, MavMessage::SET_POSITION_TARGET_GLOBAL_INT(_)));
+    assert_eq!(link.shared.read().guided_target(), Locationwp::waypoint(-33.0,147.0,100.0,10));
 }
 
 #[test]

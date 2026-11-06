@@ -1,0 +1,185 @@
+{
+  "round": 19,
+  "review_type": "independent fixed-revision diff/reference review, native capture inspection and focused test reruns",
+  "reviewed_head": "2f9abcee1b272293608293b50b7bfac4c9e68271",
+  "date": "2026-11-06",
+  "verdict": "Run 19 fixes the main per-MAV DATA guided-state ownership problem and provides an executing scrollbar-drag regression. Exact software parity remains incomplete. The advertised native final-column capture is blank, and the shared guided cache still does not cover the original message forms and guards. No 10/10.",
+  "scores": {
+    "overall": 8.3,
+    "ui_ux": 8.6,
+    "features": 8,
+    "scale": "Qualitative exact-original software parity scores, not completion percentages. Overall equally weights UI/UX and features. Prior reports provide gap context, not fresh proof of every earlier claim."
+  },
+  "rationale": "DATA now reads the selected link's per-system/component shared target. Valid altitude edits update that target without replacing its coordinates, and the map marker follows the selected MAV only while Guided. Production-link and egui keyboard tests support those changes. The Status drag test passes at two small sizes, and the normal native capture shows the reserved bottom scrollbar. However, the MP_STATUS_END capture contains no Status text at all. Its f32::MAX offset is not acceptable visual evidence of the final column. The raw-command observer also supports fewer message variants than the original and omits its mission-type guard. Missing CurrentState values, video pipelines, plugin execution, localization and native transports/mobile behavior remain material barriers to an honest 10.",
+  "scope": {
+    "inspected": [
+      "git diff HEAD^..HEAD at fixed HEAD, including README, flight_data.rs, link.rs, altitude_change.rs, link_sim.rs and capture_round.ps1",
+      "reference/MissionPlanner/GCSViews/FlightData.cs guided altitude, Fly To Here and marker callers",
+      "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs setGuidedModeWP, setPositionTargetGlobalInt and observed mission/position cache updates",
+      "Selected unchanged broad-gap implementations in state.rs, hotkey_tools.rs, views/config.rs, views/flight_data.rs, comms.rs and platform.rs",
+      "judging/round-18.json as prior gap context"
+    ],
+    "rust_render_images_viewed": [
+      "target/judging/round19/05_data_status.png",
+      "target/judging/round19/57_data_status_last_column.png"
+    ],
+    "capture_integrity": {
+      "binary": "target/debug/missionplanner.exe",
+      "independently_verified_sha256": "6CAE00DE04ECCD9B1876952C01CB63B7F53A78E6F5F809869C5956CF595C58E4",
+      "manifests": [
+        "target/judging/round19/05_data_status.manifest.json",
+        "target/judging/round19/57_data_status_last_column.manifest.json"
+      ],
+      "captured_utc": [
+        "2026-11-06T09:46:59.4223235Z",
+        "2026-11-06T09:47:08.0827479Z"
+      ],
+      "receipt_scope": "Both manifests match the independently hashed binary and report native eframe viewport captures at 1280x800 with a connected simulator and completed parameter download. The second image's blank panel means the receipt does not establish visible final-column rendering. MP_STATUS_END is a developer offset override, not a replay of desktop mouse input."
+    },
+    "reviewer_executed_verification": [
+      "git rev-parse HEAD matched the requested fixed revision; initial git status was clean.",
+      "cargo test -p mp-app guided_tests -- --nocapture passed all 3 tests, including actual egui pointer events dragging the Status scrollbar at 300x400 and 260x220 and keyboard save/reject/cancel through the altitude dialog.",
+      "cargo test -p mp-core --test altitude_change -- --nocapture passed all 6 tests, including raw position target addressing, three MAV selections, a second connection, and frame 0/3/10 wire output for Plane and Copter.",
+      "Viewed both native screenshots with view_image and compared manifest SHA256 values with Get-FileHash.",
+      "Compared the changed Rust behavior with the original C# callers and guided-cache message branches."
+    ],
+    "author_reported_verification": [
+      "Parent reports 137 workspace tests passing in a full rerun. One earlier tlog_logs_and_playback wait_event timeout passed in isolation and a full rerun; root cause remains unknown.",
+      "The final MP_STATUS_END capture flag was added after the reported full suite. The parent reran the three guided tests and built the binary."
+    ],
+    "verification_limits": [
+      "This reviewer ran the focused 9 tests, not the full workspace suite. The reported intermittent tlog timeout is unresolved evidence, not an established fixed defect.",
+      "The original C# application was not launched for equal-state native pixel or interaction comparison.",
+      "The drag regression drives real egui events in a test context. No desktop scrollbar drag was replayed against the actual DATA window.",
+      "The final-column native image is blank. It cannot be counted as successful final-column verification.",
+      "No native multi-MAV DATA marker switching, HTTP-to-DATA interaction or separate-connection switching was driven through the desktop window in this review.",
+      "No exhaustive review of earlier pages, swarm algorithms or every CurrentState decoder was repeated.",
+      "Native mobile packages, device runs and non-Windows execution were not verified. Physical flight/camera/radio qualification is separate from this software score."
+    ],
+    "reviewer_actions": "Read-only source/capture inspection and focused test execution; authored judging/round-19.json only. No implementation edits, commits, push or subagents."
+  },
+  "run19_dispositions": [
+    {
+      "area": "DATA per-MAV guided altitude/frame/marker ownership",
+      "status": "closed",
+      "closed_parts": "Removed the view-global guided altitude, frame and marker target. The selected link and sysid/compid key now supply DATA state. Altitude dialog updates preserve that MAV's coordinates. Fly To Here reuses its altitude/frame, and the map marker is drawn only for the selected Guided MAV with a nonzero latitude. Tested vehicle selection and separate connection state stay independent.",
+      "remaining": "Closure is for the ownership defect identified in round 18. It does not claim complete original MAVLink cache/message parity or native multi-MAV interaction verification.",
+      "evidence": [
+        "crates/mp-app/src/views/flight_data.rs:1083",
+        "crates/mp-app/src/views/flight_data.rs:1229",
+        "crates/mp-app/src/views/flight_data.rs:1447",
+        "crates/mp-app/src/views/flight_data.rs:2010",
+        "crates/mp-core/src/link.rs:124-135",
+        "crates/mp-core/tests/altitude_change.rs:107-135",
+        "crates/mp-app/src/views/flight_data.rs:2177-2217",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:2962-2973",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3121-3145",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4346-4353"
+      ]
+    },
+    {
+      "area": "Outgoing raw-command guided cache parity",
+      "status": "partial",
+      "closed_parts": "Worker send observes full-position SET_POSITION_TARGET_GLOBAL_INT and current=2 MISSION_ITEM_INT messages using their addressed system/component, including a nonselected MAV. The raw-position test and Plane/Copter guided wire tests pass.",
+      "remaining": "note_guided_command omits legacy MISSION_ITEM current=2; the original handles both mission forms. It accepts MISSION_ITEM_INT current=2 without checking mission_type==MISSION, unlike the original. Its position mask filter also differs from the original observed SET_POSITION_TARGET_GLOBAL_INT branch, which has no such filter. Add explicit supported-message semantics and fixtures before claiming complete raw-command parity.",
+      "evidence": [
+        "crates/mp-core/src/link.rs:138-146",
+        "crates/mp-core/src/link.rs:554",
+        "crates/mp-core/tests/altitude_change.rs:107-157",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5683-5692",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5706-5715",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5737-5742"
+      ]
+    },
+    {
+      "area": "Status horizontal scrollbar",
+      "status": "partial",
+      "closed_parts": "Content height now reserves room inside the panel. The normal native capture visibly has a bottom scrollbar, and the passing test presses and drags it to the end using pointer events at two small panel sizes.",
+      "remaining": "The final-column capture is blank because the developer path supplies f32::MAX before content painting. Large floating-point translation loses the intended layout precision. Replace it with a finite computed maximum, then inspect final labels. A developer offset capture still does not replace an actual desktop drag.",
+      "evidence": [
+        "crates/mp-app/src/views/flight_data.rs:2020-2037",
+        "crates/mp-app/src/views/flight_data.rs:2138-2159",
+        "scripts/capture_round.ps1:69",
+        "target/judging/round19/05_data_status.png",
+        "target/judging/round19/57_data_status_last_column.png"
+      ]
+    }
+  ],
+  "remaining_software_gaps": [
+    {
+      "priority": 1,
+      "status": "open",
+      "area": "Complete CurrentState values and numeric choosers",
+      "next_fix": "Port missing decoders, defaults and derived values in coherent groups. Compare outputs and chooser membership with original C# fixtures; registered names and explicit nulls do not provide the missing behavior.",
+      "evidence": [
+        "crates/mp-core/src/state.rs:307-319",
+        "crates/mp-core/src/state.rs:439-444",
+        "README.md:235-236"
+      ]
+    },
+    {
+      "priority": 2,
+      "status": "open",
+      "area": "Complete guided message semantics and native proof",
+      "next_fix": "Cover MISSION_ITEM, mission-type guards and partial position masks against the original, including addressed nonselected MAVs. Then drive HTTP/script target changes, altitude edits and MAV/connection switches through DATA and verify selected marker/altitude/frame.",
+      "evidence": [
+        "crates/mp-core/src/link.rs:138-146",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5683-5742"
+      ]
+    },
+    {
+      "priority": 3,
+      "status": "open",
+      "area": "Status final-column capture helper",
+      "next_fix": "Replace f32::MAX with a finite content-width minus viewport-width offset and recapture visible final labels. Record a native desktop drag to the last column at normal and small window sizes.",
+      "evidence": [
+        "crates/mp-app/src/views/flight_data.rs:2033",
+        "target/judging/round19/57_data_status_last_column.png"
+      ]
+    },
+    {
+      "priority": 4,
+      "status": "open",
+      "area": "DATA video pipelines",
+      "next_fix": "Implement actual GStreamer discovery and source pipelines plus HereLink and payload/gimbal video flows. Verify deterministic video through the visible controls.",
+      "evidence": [
+        "crates/mp-app/src/views/flight_data.rs:479-486",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3186-3213",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:6667-6841"
+      ]
+    },
+    {
+      "priority": 5,
+      "status": "open",
+      "area": "Plugin execution",
+      "next_fix": "Implement original plugin lifecycle and callback/page capability through a compatibility host. Listing plugin files with disabled checkboxes is incomplete.",
+      "evidence": [
+        "crates/mp-app/src/hotkey_tools.rs:103-112",
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:146-179"
+      ]
+    },
+    {
+      "priority": 6,
+      "status": "open",
+      "area": "Localization",
+      "next_fix": "Apply translated resources and persisted culture and compare the original language selection behavior beyond English.",
+      "evidence": [
+        "crates/mp-app/src/views/config.rs:1087",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:106-128"
+      ]
+    },
+    {
+      "priority": 7,
+      "status": "open",
+      "area": "Native transports and mobile software",
+      "next_fix": "Implement BLE/WinUSB/custom transport capability and mobile file/USB serial adapters, build native packages and verify their software flows on target devices.",
+      "evidence": [
+        "crates/mp-core/src/comms.rs:26-46",
+        "crates/mp-app/src/platform.rs:76-79",
+        "reference/MissionPlanner/MainV2.cs:3629-3641",
+        "README.md:115-118"
+      ]
+    }
+  ],
+  "ten_out_of_ten_criterion": "An honest 10 requires no known material software discrepancy in the promised exact-clone scope and adequate source, decoder, interaction and native-platform verification. This targeted improvement leaves concrete missing behavior, so a 10 is not supportable."
+}

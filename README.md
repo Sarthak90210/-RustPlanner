@@ -242,6 +242,16 @@ state. Production-link tests cover both selection and commands addressed to a no
 Status reserves room for its solid scrollbar; an egui test drags it to the last column at two panel
 sizes and confirms the bar remains inside the visible panel.
 
+Run 20 completes the observed guided-cache message variants: legacy MISSION_ITEM and
+MISSION_ITEM_INT require current=2 and mission_type=MISSION; position-target packets are observed
+with the original mask-independent behavior. Peer tests verify that fence/rally items leave the
+guided target intact. The final-column capture now uses a finite content offset.
+
+CurrentState decodes hardware voltage/I2C errors, MCU values, free memory, RPM, AOA/SSA, fence state,
+generator and EFI values, and voltage/current/RPM/temperature for all sixteen ESCs. Decoder tests
+cover scales, ECU/MCU selection, unavailable fuel pressure, memory fallback, and all ESC channels.
+This extends the decoder; unsupported properties and the wider parity gaps remain open.
+
 ## License
 
 GPL-3.0, like Mission Planner. Icons and marker images are Mission Planner / GMap.NET assets under the same license.

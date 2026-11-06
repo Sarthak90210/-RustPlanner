@@ -137,10 +137,12 @@ impl LinkShared {
 
     fn note_guided_command(&mut self, message: &MavMessage) {
         let target = match message {
-            MavMessage::SET_POSITION_TARGET_GLOBAL_INT(p) if p.type_mask.bits() & 7 == 0 =>
+            MavMessage::SET_POSITION_TARGET_GLOBAL_INT(p) =>
                 Some(((p.target_system, p.target_component), Locationwp::waypoint(p.lat_int as f64 / 1e7, p.lon_int as f64 / 1e7, p.alt, p.coordinate_frame as u8))),
-            MavMessage::MISSION_ITEM_INT(p) if p.current == 2 =>
+            MavMessage::MISSION_ITEM_INT(p) if p.current == 2 && p.mission_type == MavMissionType::MAV_MISSION_TYPE_MISSION =>
                 Some(((p.target_system, p.target_component), Locationwp::waypoint(p.x as f64 / 1e7, p.y as f64 / 1e7, p.z, p.frame as u8))),
+            MavMessage::MISSION_ITEM(p) if p.current == 2 && p.mission_type == MavMissionType::MAV_MISSION_TYPE_MISSION =>
+                Some(((p.target_system, p.target_component), Locationwp::waypoint(p.x as f64, p.y as f64, p.z, p.frame as u8))),
             _ => None,
         };
         if let Some((key, target)) = target { self.guided_targets.insert(key, target); }
