@@ -355,11 +355,19 @@ impl FlightPlanView {
         let white = Color32::WHITE;
 
         p.text(o + Vec2::new(9.0, 4.0), egui::Align2::LEFT_TOP, "WP Radius", f.clone(), white);
-        ui.put(r(23.0, 20.0, 36.0, 20.0), egui::DragValue::new(&mut app.settings.wp_radius).range(0.0..=1000.0));
+        // TXT_WPRad / TXT_loiterrad (multiplierdist) and TXT_DefaultAlt (multiplieralt) are in
+        // display units; the settings keep metres
+        let unit_box = |ui: &mut egui::Ui, rect: Rect, metres: &mut f32, m: f32, max: f32| {
+            let mut shown = *metres * m;
+            if ui.put(rect, egui::DragValue::new(&mut shown).range(0.0..=max * m).max_decimals(1)).changed() {
+                *metres = shown / m;
+            }
+        };
+        unit_box(ui, r(23.0, 20.0, 36.0, 20.0), &mut app.settings.wp_radius, crate::units::dist(1.0), 1000.0);
         p.text(o + Vec2::new(76.0, 4.0), egui::Align2::LEFT_TOP, "Loiter Radius", f.clone(), white);
-        ui.put(r(89.0, 20.0, 36.0, 20.0), egui::DragValue::new(&mut app.settings.loiter_radius).range(0.0..=10000.0));
+        unit_box(ui, r(89.0, 20.0, 36.0, 20.0), &mut app.settings.loiter_radius, crate::units::dist(1.0), 10000.0);
         p.text(o + Vec2::new(151.0, 4.0), egui::Align2::LEFT_TOP, "Default Alt", f.clone(), white);
-        ui.put(r(154.0, 20.0, 40.0, 20.0), egui::DragValue::new(&mut app.settings.default_alt).range(0.0..=10000.0));
+        unit_box(ui, r(154.0, 20.0, 40.0, 20.0), &mut app.settings.default_alt, crate::units::alt(1.0), 10000.0);
         ui.put(r(213.0, 7.0, 79.0, 21.0), |ui: &mut egui::Ui| {
             let cur = AltMode::from_frame(app.settings.alt_frame);
             egui::ComboBox::from_id_salt("CMB_altmode")
@@ -411,7 +419,11 @@ impl FlightPlanView {
         let mut headers: Vec<String> = COLS.iter().map(|(h, _)| h.to_string()).collect();
         if let Some(l) = mavcmd::labels_for(fw, header_cmd) {
             for (k, col) in [2usize, 3, 4, 5, 6, 7, 8].iter().enumerate() {
-                headers[*col] = l.labels[k].clone();
+                // cmdParamNames: "(unit)" appended for unitType alt / speed / dist
+                headers[*col] = match unit_mult(&l.units[k]) {
+                    Some((_, u)) if !l.labels[k].is_empty() => format!("{} ({u})", l.labels[k]),
+                    _ => l.labels[k].clone(),
+                };
             }
         }
 
@@ -525,12 +537,29 @@ impl FlightPlanView {
                     select = Some(i);
                 }
             };
+            // cmdParamMultipliers of this row's command: cells show value * multiplier and
+            // edits are stored divided by it
+            let mults: [f32; 7] = mavcmd::labels_for(fw, w.id)
+                .map(|l| std::array::from_fn(|k| unit_mult(&l.units[k]).map(|m| m.0).unwrap_or(1.0)))
+                .unwrap_or([1.0; 7]);
             for (k, v) in [&mut w.p1, &mut w.p2, &mut w.p3, &mut w.p4].into_iter().enumerate() {
-                cell_edit(ui, cells[2 + k], egui::DragValue::new(v).speed(0.1).max_decimals(4));
+                let m = mults[k];
+                let mut shown = *v * m;
+                cell_edit(ui, cells[2 + k], egui::DragValue::new(&mut shown).speed(0.1).max_decimals(4));
+                if shown != *v * m {
+                    *v = shown / m;
+                }
             }
             cell_edit(ui, cells[6], egui::DragValue::new(&mut w.lat).speed(0.00001).fixed_decimals(7));
             cell_edit(ui, cells[7], egui::DragValue::new(&mut w.lng).speed(0.00001).fixed_decimals(7));
-            cell_edit(ui, cells[8], egui::DragValue::new(&mut w.alt).speed(0.5).max_decimals(2));
+            {
+                let m = mults[6];
+                let mut shown = w.alt * m;
+                cell_edit(ui, cells[8], egui::DragValue::new(&mut shown).speed(0.5).max_decimals(2));
+                if shown != w.alt * m {
+                    w.alt = shown / m;
+                }
+            }
             ui.put(cells[9].shrink(1.0), |ui: &mut egui::Ui| {
                 let cur = AltMode::from_frame(w.frame);
                 egui::ComboBox::from_id_salt(("frame", i))
@@ -560,7 +589,7 @@ impl FlightPlanView {
                 }
             }
             if let Some((g, a, d, az)) = derived[i] {
-                for (k, v) in [g, a, d, az].iter().enumerate() {
+                for (k, v) in [g, a, crate::units::dist(d as f32) as f64, az].iter().enumerate() {
                     let txt = if k >= 2 { format!("{v:.0}") } else { format!("{v:.1}") };
                     p.text(cells[13 + k].left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, txt, f.clone(), Color32::WHITE);
                 }
@@ -1092,5 +1121,15 @@ fn draw_fence(painter: &egui::Painter, view: &map::MapView, fence: &[Locationwp]
             }
             _ => i += 1,
         }
+    }
+}
+
+/// unitType -> (CurrentState multiplier, unit name).
+fn unit_mult(unit: &str) -> Option<(f32, &'static str)> {
+    match unit {
+        "alt" => Some((crate::units::alt(1.0), crate::units::alt_unit())),
+        "speed" => Some((crate::units::speed(1.0), crate::units::speed_unit())),
+        "dist" => Some((crate::units::dist(1.0), crate::units::dist_unit())),
+        _ => None,
     }
 }

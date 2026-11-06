@@ -814,12 +814,19 @@ impl FlightDataView {
             }
             "Clear Track" => link.shared.write().cs.track.clear(),
             "Change Speed" => link.send(LinkCommand::CommandLong { command: 178, params: [0.0, self.change_speed, 0.0, 0.0, 0.0, 0.0, 0.0] }),
-            "Change Alt" => link.send(LinkCommand::ChangeAltitude { alt: self.change_alt }),
+            // modifyandSetAlt: (int)Value / multiplieralt
+            "Change Alt" => link.send(LinkCommand::ChangeAltitude { alt: (self.change_alt.trunc()) / crate::units::alt(1.0) }),
+            // modifyandSetLoiterRad: setParam(["LOITER_RAD", "WP_LOITER_RAD"], (int)Value / multiplierdist)
             "Set Loiter Rad" => {
-                let plane = fw == mp_core::firmware::Firmware::ArduPlane;
-                let name = if plane { "WP_LOITER_RAD" } else { "CIRCLE_RADIUS" };
-                let scale = if plane { 1.0 } else { 100.0 };
-                link.send(LinkCommand::SetParam { name: name.into(), value: self.loiter_rad * scale });
+                let _ = fw;
+                let name = {
+                    let s = link.shared.read();
+                    ["LOITER_RAD", "WP_LOITER_RAD"].into_iter().find(|n| s.params.contains_key(*n))
+                };
+                match name {
+                    Some(n) => link.send(LinkCommand::SetParam { name: n.into(), value: self.loiter_rad.trunc() / crate::units::dist(1.0) }),
+                    None => app.toasts.error("Failed to set LOITER_RAD"),
+                }
             }
             "Abort Landing" => link.send(LinkCommand::CommandLong { command: 191, params: [0.0; 7] }),
             "Set Home Alt" => {

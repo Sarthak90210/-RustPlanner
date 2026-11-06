@@ -65,6 +65,8 @@ pub struct CmdParamLabels {
     pub name: String,
     /// P1, P2, P3, P4, X(Lat), Y(Long), Z(Alt) column headers. Empty means unused.
     pub labels: [String; 7],
+    /// The `unitType` attribute of each slot: "alt", "speed", "dist" or empty.
+    pub units: [String; 7],
 }
 
 fn section_for(fw: Firmware) -> &'static str {
@@ -96,6 +98,7 @@ fn table() -> &'static HashMap<&'static str, Vec<CmdParamLabels>> {
             let mut cmds = Vec::new();
             for cmd in section.children().filter(|n| n.is_element()) {
                 let mut labels: [String; 7] = Default::default();
+                let mut units: [String; 7] = Default::default();
                 for p in cmd.children().filter(|n| n.is_element()) {
                     let idx = match p.tag_name().name() {
                         "P1" => 0,
@@ -108,10 +111,16 @@ fn table() -> &'static HashMap<&'static str, Vec<CmdParamLabels>> {
                         _ => continue,
                     };
                     labels[idx] = p.text().unwrap_or("").trim().to_string();
+                    units[idx] = p.attribute("unitType").unwrap_or("").to_string();
+                    // legacy mavcmd.xml without unitType: "Alt" in Z is an altitude
+                    if units[idx].is_empty() && idx == 6 && labels[idx] == "Alt" {
+                        units[idx] = "alt".into();
+                    }
                 }
                 cmds.push(CmdParamLabels {
                     name: cmd.tag_name().name().to_string(),
                     labels,
+                    units,
                 });
             }
             out.insert(key, cmds);
