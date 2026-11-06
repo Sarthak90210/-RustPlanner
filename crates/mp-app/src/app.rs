@@ -1129,6 +1129,7 @@ impl eframe::App for MissionPlannerApp {
         self.more_tools.formation.ui(&ctx, &links, &mut self.toasts);
         self.more_tools.layout_editor.ui(&ctx, &links, &mut self.toasts);
         self.more_tools.follow_path.ui(&ctx, &links, &mut self.toasts, &mut actions);
+        self.more_tools.wp_control.ui(&ctx, &links, &mut self.toasts);
         // ThemeManager.LoadTheme(CMB_theme.Text)
         let want = (
             self.settings.planner.get("theme").cloned().unwrap_or_else(|| "BurntKermit".into()),

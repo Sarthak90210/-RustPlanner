@@ -1779,6 +1779,735 @@ impl FollowPathControl {
     }
 }
 
+/// Swarm/WaypointLeader/DroneGroup.cs: mode
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum DroneGroupMode {
+    #[default]
+    Idle,
+    Takeoff,
+    FlyToUser,
+    FollowUser,
+    RTH,
+    LandAlt,
+    Land,
+}
+
+impl std::fmt::Display for DroneGroupMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Idle => write!(f, "idle"),
+            Self::Takeoff => write!(f, "takeoff"),
+            Self::FlyToUser => write!(f, "flytouser"),
+            Self::FollowUser => write!(f, "followuser"),
+            Self::RTH => write!(f, "RTH"),
+            Self::LandAlt => write!(f, "LandAlt"),
+            Self::Land => write!(f, "Land"),
+        }
+    }
+}
+
+/// A drone as tracked by WPControl's DroneGroup
+#[derive(Clone, Debug, Default)]
+pub struct DroneState {
+    pub key: Key,
+    pub path_index: usize,
+    pub takeoff_done: bool,
+    pub target_location: (f64, f64, f64),
+    pub target_velocity: (f64, f64, f64),
+}
+
+/// Swarm/WaypointLeader/Path.cs: converts waypoints to 0.1m path increments
+pub fn generate_path(wps: &[mp_core::mission::Locationwp]) -> Vec<(f64, f64, f64)> {
+    let mut result = Vec::new();
+    let mut prev: Option<(f64, f64, f64)> = None;
+    for wp in wps {
+        if prev.is_none() {
+            prev = Some((wp.lat, wp.lng, 0.0));
+            continue;
+        }
+        if wp.id != 16 && wp.id != 82 {
+            continue;
+        }
+        let wp1 = prev.unwrap();
+        let wp2 = (wp.lat, wp.lng, wp.alt as f64);
+        let brng = bearing((wp1.0, wp1.1), (wp2.0, wp2.1));
+        let dist = distance((wp1.0, wp1.1), (wp2.0, wp2.1));
+        let start_alt = if wp1.2 == 0.0 { wp2.2 } else { wp1.2 };
+        let end_alt = wp2.2;
+
+        if dist > 5000.0 || dist < 0.1 {
+            prev = Some(wp2);
+            continue;
+        }
+
+        let mut d = 0.1;
+        while d < dist {
+            let p = newpos((wp1.0, wp1.1), brng, d);
+            let alt = start_alt + (d / dist) * (end_alt - start_alt);
+            result.push((p.0, p.1, alt));
+            d += 0.1;
+        }
+        prev = Some(wp2);
+    }
+    result
+}
+
+/// DroneGroup.GetLocations: finds points along path spaced by separation
+pub fn get_locations(path: &[(f64, f64, f64)], location: (f64, f64, f64), lead: f64, separation: f64) -> Vec<(f64, f64, f64)> {
+    let mut result = Vec::new();
+    if path.is_empty() {
+        return result;
+    }
+    let mut min_dist = f64::MAX;
+    let mut start = 0;
+    for (idx, pt) in path.iter().enumerate() {
+        let d = distance((location.0, location.1), (pt.0, pt.1));
+        if d < min_dist {
+            min_dist = d;
+            start = idx;
+        }
+    }
+    let closest = path[start];
+    let mut a = 0;
+    let mut i = start as isize;
+    while i < (path.len() as isize - 1) {
+        let target_distance = lead - a as f64 * separation;
+        if target_distance < 0.0 {
+            i -= 2;
+        }
+        if i < 0 {
+            break;
+        }
+        let dist = distance((closest.0, closest.1), (path[i as usize].0, path[i as usize].1));
+        if dist >= target_distance.abs() {
+            result.push(path[i as usize]);
+            i = start as isize;
+            if result.len() > 20 || separation <= 0.0 {
+                break;
+            }
+            a += 1;
+        }
+        i += 1;
+    }
+    result
+}
+
+/// DroneGroup.GetLocationsV: V-formation offsets from the path locations
+pub fn get_locations_v(path: &[(f64, f64, f64)], location: (f64, f64, f64), lead: f64, separation: f64) -> Vec<(f64, f64, f64)> {
+    let mut result = Vec::new();
+    let list = get_locations(path, location, lead, separation);
+    if list.is_empty() {
+        return result;
+    }
+    let front = list[0];
+    result.push(front);
+    let mut a = 1;
+    for pt in list.iter().skip(1) {
+        let brng = bearing((pt.0, pt.1), (front.0, front.1));
+        let left = newpos((pt.0, pt.1), brng + 90.0, (separation / 2.0) * a as f64);
+        let right = newpos((pt.0, pt.1), brng - 90.0, (separation / 2.0) * a as f64);
+        result.push((left.0, left.1, pt.2));
+        result.push((right.0, right.1, pt.2));
+        a += 1;
+    }
+    result
+}
+
+/// DroneGroup.GetOffPathDistance: cross-track error to flight plan
+pub fn get_off_path_distance(path: &[(f64, f64, f64)], location: (f64, f64, f64)) -> f64 {
+    let mut dist_total = f64::MAX;
+    let mut line_start: Option<(f64, f64)> = None;
+    for pathpoint in path {
+        let Some(start) = line_start else {
+            line_start = Some((pathpoint.0, pathpoint.1));
+            continue;
+        };
+        let line_end = (pathpoint.0, pathpoint.1);
+        let line_dist = distance(start, line_end);
+        let dist_to_loc = distance(start, (location.0, location.1));
+        let bear_to_loc = bearing(start, (location.0, location.1));
+        let line_bear = bearing(start, line_end);
+
+        let mut angle = bear_to_loc - line_bear;
+        if angle < 0.0 {
+            angle += 360.0;
+        }
+        let along_line = angle.to_radians().cos() * dist_to_loc;
+        if along_line.abs() > line_dist {
+            line_start = Some(line_end);
+            continue;
+        }
+        let dxt2 = angle.to_radians().sin() * dist_to_loc;
+        dist_total = dist_total.min(dxt2.abs());
+        line_start = Some(line_end);
+    }
+    for pathpoint in path {
+        let d = distance((pathpoint.0, pathpoint.1), (location.0, location.1));
+        dist_total = dist_total.min(d);
+    }
+    dist_total
+}
+
+const ZED_COLORS: [Color32; 14] = [
+    Color32::from_rgb(255, 0, 0),     // Red
+    Color32::from_rgb(0, 255, 0),     // Green
+    Color32::from_rgb(0, 128, 255),   // Blue
+    Color32::from_rgb(255, 165, 0),   // Orange
+    Color32::from_rgb(255, 255, 0),   // Yellow
+    Color32::from_rgb(238, 130, 238), // Violet
+    Color32::from_rgb(255, 192, 203), // Pink
+    Color32::from_rgb(0, 128, 128),   // Teal
+    Color32::from_rgb(245, 222, 179), // Wheat
+    Color32::from_rgb(192, 192, 192), // Silver
+    Color32::from_rgb(128, 0, 128),   // Purple
+    Color32::from_rgb(0, 255, 255),   // Aqua
+    Color32::from_rgb(165, 42, 42),   // Brown
+    Color32::from_rgb(245, 245, 245), // WhiteSmoke
+];
+
+const WPCONTROL_HOW_TO: &str = "How to Use:
+1. connect all drones including masters (right click top icon bar \"connection options\")
+2. select the correct vehicle and click set ground master
+3. select the correct vehicle and click set air master
+4. upload the path to the air master drone.
+5. set the seperation and lead options
+6. allow all drones to get gps lock, and calibrate. (failing to do so means they might fail prearm checks, this could be tested beforhand to ensure smooth operation)
+7. ensure your ground master is ready and waiting on the flight path
+8. click start";
+
+/// Swarm/WaypointLeader/WPControl.cs: Follow Swarm
+pub struct WPControl {
+    pub open: bool,
+    pub shown: bool,
+    pub groundmaster: Option<Key>,
+    pub airmaster: Option<Key>,
+    pub running: bool,
+    pub start_enabled: bool,
+    pub separation: f64,
+    pub lead: f64,
+    pub off_path_trigger: f64,
+    pub takeoff_land_alt_sep: f64,
+    pub wpnav_accel: f64,
+    pub v_formation: bool,
+    pub alt_interleave: bool,
+    pub mode: DroneGroupMode,
+    pub drones: Vec<DroneState>,
+    pub path: Vec<(f64, f64, f64)>,
+    pub guided: HashMap<Key, (f64, f64, f64)>,
+    pub last: Instant,
+}
+
+impl Default for WPControl {
+    fn default() -> Self {
+        Self {
+            open: false,
+            shown: false,
+            groundmaster: None,
+            airmaster: None,
+            running: false,
+            start_enabled: false,
+            separation: 5.0,
+            lead: 20.0,
+            off_path_trigger: 10.0,
+            takeoff_land_alt_sep: 2.0,
+            wpnav_accel: 1.0,
+            v_formation: false,
+            alt_interleave: false,
+            mode: DroneGroupMode::Idle,
+            drones: Vec::new(),
+            path: Vec::new(),
+            guided: HashMap::new(),
+            last: Instant::now(),
+        }
+    }
+}
+
+impl WPControl {
+    pub fn show(&mut self) {
+        *self = Self { open: true, ..Default::default() };
+    }
+
+    /// MainV2.comPort.MAV: the active connection's current vehicle.
+    fn current(links: &[&Link], mavs: &[Mav]) -> Option<Mav> {
+        let l = links.first()?;
+        let (sys, comp) = {
+            let s = l.shared.read();
+            (s.cs.sysid, s.cs.compid)
+        };
+        mavs.iter().find(|m| m.key == (0, sys, comp)).cloned()
+    }
+
+    pub fn update_positions(&mut self, links: &[&Link], mavs: &[Mav]) {
+        let Some(am_key) = self.airmaster else { return };
+        let Some(gm_key) = self.groundmaster else { return };
+        let Some(airmaster) = mavs.iter().find(|m| m.key == am_key).cloned() else { return };
+        let Some(groundmaster) = mavs.iter().find(|m| m.key == gm_key).cloned() else { return };
+
+        if self.path.is_empty() {
+            if let Some(l) = links.get(am_key.0) {
+                let s = l.shared.read();
+                let wps = s.missions.get(&(am_key.1, am_key.2)).unwrap_or(&s.mission);
+                if !wps.is_empty() {
+                    self.path = generate_path(wps);
+                }
+            }
+        }
+        if self.path.is_empty() {
+            return;
+        }
+
+        let mut newlist = Vec::new();
+        newlist.push(airmaster.clone());
+        for m in mavs {
+            if m.key != am_key && m.key != gm_key {
+                newlist.push(m.clone());
+            }
+        }
+
+        // Collision check
+        for (i, d1) in newlist.iter().enumerate() {
+            if !d1.armed { continue; }
+            for d2 in newlist.iter().skip(i + 1) {
+                if !d2.armed { continue; }
+                let d = distance((d1.lat, d1.lng), (d2.lat, d2.lng));
+                if d < self.separation / 2.0 && (d1.alt - d2.alt).abs() < 1.0 {
+                    if d1.alt > d2.alt {
+                        guided_wp(links[d1.key.0], d1, d1.lat, d1.lng, d1.alt + self.takeoff_land_alt_sep);
+                    } else {
+                        guided_wp(links[d2.key.0], d2, d2.lat, d2.lng, d2.alt + self.takeoff_land_alt_sep);
+                    }
+                    return;
+                }
+            }
+        }
+
+        // Update path indices
+        for d in &mut self.drones {
+            if let Some(m) = mavs.iter().find(|m| m.key == d.key) {
+                let locs = get_locations(&self.path, (m.lat, m.lng, m.alt), 0.0, 0.0);
+                if let Some(first) = locs.first() {
+                    if let Some(pos) = self.path.iter().position(|p| (p.0 - first.0).abs() < 1e-6 && (p.1 - first.1).abs() < 1e-6) {
+                        d.path_index = pos;
+                    }
+                }
+            }
+        }
+
+        match self.mode {
+            DroneGroupMode::Idle => {
+                self.mode = DroneGroupMode::Takeoff;
+                for m in &newlist {
+                    if m.key != gm_key {
+                        if let Some(l) = links.get(m.key.0) {
+                            l.send(LinkCommand::Send(Box::new(MavMessage::REQUEST_DATA_STREAM(REQUEST_DATA_STREAM_DATA {
+                                req_message_rate: 5,
+                                target_system: m.key.1,
+                                target_component: m.key.2,
+                                req_stream_id: MavDataStream::MAV_DATA_STREAM_POSITION,
+                                start_stop: 1,
+                            }))));
+                        }
+                    }
+                }
+            }
+            DroneGroupMode::Takeoff => {
+                let lead = newlist.len() as f64 * self.separation;
+                let home = (airmaster.lat, airmaster.lng, airmaster.alt);
+                let newpositions = get_locations(&self.path, home, lead, self.separation);
+                if newpositions.is_empty() { return; }
+
+                for (a, m) in newlist.iter().enumerate() {
+                    let l = links[m.key.0];
+                    if !m.mode.eq_ignore_ascii_case("guided") {
+                        set_mode(l, m, "GUIDED");
+                    }
+                    if !m.armed {
+                        command(l, m.key.1, m.key.2, MavCmd::MAV_CMD_COMPONENT_ARM_DISARM, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+                    }
+                    let target_pos = newpositions[a % newpositions.len()];
+                    let target_alt = target_pos.2 + self.takeoff_land_alt_sep * (a % 3) as f64;
+                    let target = (target_pos.0, target_pos.1, target_alt);
+
+                    let d_state = self.drones.iter_mut().find(|d| d.key == m.key);
+                    let takeoff_done = d_state.as_ref().map(|d| d.takeoff_done).unwrap_or(false);
+                    if m.alt < (target_alt - 0.5) && !takeoff_done {
+                        command(l, m.key.1, m.key.2, MavCmd::MAV_CMD_NAV_TAKEOFF, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, target_alt as f32]);
+                        if let Some(d) = d_state {
+                            d.takeoff_done = true;
+                        }
+                    }
+                    guided_wp(l, m, target.0, target.1, target.2);
+                    self.guided.insert(m.key, target);
+                }
+
+                let all_close = newlist.iter().enumerate().all(|(a, m)| {
+                    let target_pos = newpositions[a % newpositions.len()];
+                    distance((m.lat, m.lng), (target_pos.0, target_pos.1)) <= self.separation
+                });
+                if all_close {
+                    self.mode = DroneGroupMode::FlyToUser;
+                }
+            }
+            DroneGroupMode::FlyToUser => {
+                let newpositions2 = get_locations(&self.path, (airmaster.lat, airmaster.lng, airmaster.alt), self.separation, self.separation);
+                if newpositions2.is_empty() {
+                    if let Some(last_pt) = self.path.last() {
+                        if distance((airmaster.lat, airmaster.lng), (last_pt.0, last_pt.1)) < self.separation {
+                            self.mode = DroneGroupMode::RTH;
+                        }
+                    }
+                    return;
+                }
+                for (b, m) in newlist.iter().enumerate() {
+                    if b >= newpositions2.len() { break; }
+                    let mut target = newpositions2[b];
+                    if self.alt_interleave {
+                        target.2 += self.takeoff_land_alt_sep * (b % 2) as f64;
+                    }
+                    guided_wp(links[m.key.0], m, target.0, target.1, target.2);
+                    self.guided.insert(m.key, target);
+                }
+
+                let newpositions_follow = get_locations(&self.path, (groundmaster.lat, groundmaster.lng, groundmaster.alt), self.lead, self.separation);
+                if let Some(first) = newpositions_follow.first() {
+                    if distance((airmaster.lat, airmaster.lng), (first.0, first.1)) < self.separation {
+                        self.mode = DroneGroupMode::FollowUser;
+                    }
+                }
+            }
+            DroneGroupMode::FollowUser => {
+                let newpositions3 = if self.v_formation {
+                    get_locations_v(&self.path, (groundmaster.lat, groundmaster.lng, groundmaster.alt), self.lead, self.separation)
+                } else {
+                    get_locations(&self.path, (groundmaster.lat, groundmaster.lng, groundmaster.alt), self.lead, self.separation)
+                };
+                if newpositions3.is_empty() { return; }
+
+                if get_off_path_distance(&self.path, (groundmaster.lat, groundmaster.lng, groundmaster.alt)) > self.off_path_trigger {
+                    self.mode = DroneGroupMode::RTH;
+                    return;
+                }
+
+                for (c, m) in newlist.iter().enumerate() {
+                    if m.key == gm_key { continue; }
+                    if c >= newpositions3.len() { break; }
+                    let mut target = newpositions3[c];
+                    if self.alt_interleave {
+                        target.2 += self.takeoff_land_alt_sep * (c % 2) as f64;
+                    }
+                    guided_wp(links[m.key.0], m, target.0, target.1, target.2);
+                    self.guided.insert(m.key, target);
+                }
+            }
+            DroneGroupMode::RTH => {
+                let newpositions4 = get_locations(&self.path, (airmaster.lat, airmaster.lng, airmaster.alt), self.separation, self.separation);
+                if newpositions4.is_empty() {
+                    if let Some(last_pt) = self.path.last() {
+                        if distance((airmaster.lat, airmaster.lng), (last_pt.0, last_pt.1)) < self.separation {
+                            self.mode = DroneGroupMode::LandAlt;
+                        }
+                    }
+                    return;
+                }
+                for (d, m) in newlist.iter().enumerate() {
+                    if d >= newpositions4.len() { break; }
+                    let mut target = newpositions4[d];
+                    if self.alt_interleave {
+                        target.2 += self.takeoff_land_alt_sep * (d % 2) as f64;
+                    }
+                    guided_wp(links[m.key.0], m, target.0, target.1, target.2);
+                    self.guided.insert(m.key, target);
+                }
+            }
+            DroneGroupMode::LandAlt => {
+                for (e, m) in newlist.iter().enumerate() {
+                    let target_alt = m.alt + self.takeoff_land_alt_sep * e as f64;
+                    guided_wp(links[m.key.0], m, m.lat, m.lng, target_alt);
+                    self.guided.insert(m.key, (m.lat, m.lng, target_alt));
+                }
+                self.mode = DroneGroupMode::Land;
+            }
+            DroneGroupMode::Land => {
+                for m in &newlist {
+                    set_mode(links[m.key.0], m, "RTL");
+                }
+            }
+        }
+    }
+
+    pub fn ui(&mut self, ctx: &egui::Context, links: &[&Link], _toasts: &mut Toasts) {
+        if !self.open {
+            self.running = false;
+            return;
+        }
+        let mavs = vehicles(links);
+        if !self.shown {
+            self.shown = true;
+            if self.drones.is_empty() {
+                for m in &mavs {
+                    self.drones.push(DroneState { key: m.key, ..Default::default() });
+                }
+            }
+        }
+        if self.running && self.last.elapsed() >= Duration::from_millis(100) {
+            self.last = Instant::now();
+            self.update_positions(links, &mavs);
+        }
+        if self.running {
+            ctx.request_repaint_after(Duration::from_millis(100));
+        }
+
+        let mut open = true;
+        egui::Window::new("WPControl")
+            .id(egui::Id::new("swarm_wp_control"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .order(egui::Order::Foreground)
+            .fixed_size([783.0, 509.0])
+            .show(ctx, |ui| {
+                let (area, _) = ui.allocate_exact_size(Vec2::new(783.0, 509.0), Sense::hover());
+                let o = area.min;
+                let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));
+                let button = |ui: &mut egui::Ui, rect: Rect, text: &str, enabled: bool| -> bool {
+                    ui.put(rect, |ui: &mut egui::Ui| ui.add_enabled_ui(enabled, |ui| theme::button_sized(ui, text, rect.size())).inner).clicked()
+                };
+                let f = crate::fonts::ui_id(crate::fonts::UI_SIZE);
+
+                // but_master: Set Ground Master (12, 12, 75, 37)
+                if button(ui, r(12.0, 12.0, 75.0, 37.0), "Set Ground Master", true) {
+                    if let Some(c) = Self::current(links, &mavs) {
+                        self.groundmaster = Some(c.key);
+                    }
+                    self.drones.clear();
+                    for m in &mavs {
+                        self.drones.push(DroneState { key: m.key, ..Default::default() });
+                    }
+                }
+
+                // but_airmaster: Set Air Master (109, 12, 75, 37)
+                if button(ui, r(109.0, 12.0, 75.0, 37.0), "Set Air Master", true) {
+                    if let Some(c) = Self::current(links, &mavs) {
+                        self.airmaster = Some(c.key);
+                        self.start_enabled = true;
+                        if let Some(l) = links.get(c.key.0) {
+                            let s = l.shared.read();
+                            let wps = s.missions.get(&(c.key.1, c.key.2)).unwrap_or(&s.mission);
+                            if !wps.is_empty() {
+                                self.path = generate_path(wps);
+                            }
+                        }
+                    }
+                    self.drones.clear();
+                    for m in &mavs {
+                        self.drones.push(DroneState { key: m.key, ..Default::default() });
+                    }
+                }
+
+                // txt_mode: (203, 12, 75, 13)
+                ui.painter().text(o + Vec2::new(203.0, 12.0), egui::Align2::LEFT_TOP, self.mode.to_string(), f.clone(), Color32::WHITE);
+
+                // but_resetmode: (282, 7, 75, 23)
+                if button(ui, r(282.0, 7.0, 75.0, 23.0), "Reset Mode", true) {
+                    self.mode = DroneGroupMode::Idle;
+                }
+
+                // but_start: (190, 36, 75, 23)
+                let start_text = if self.running { "Stop" } else { "Start" };
+                if button(ui, r(190.0, 36.0, 75.0, 23.0), start_text, self.start_enabled) {
+                    self.running = !self.running;
+                    self.last = Instant::now() - Duration::from_millis(100);
+                }
+
+                // but_rth: (282, 36, 75, 23)
+                if button(ui, r(282.0, 36.0, 75.0, 23.0), "set mode rth", true) {
+                    self.mode = DroneGroupMode::RTH;
+                }
+
+                // label1: Line Seperation (10, 57) & numericUpDown1 (109, 55, 75, 20)
+                ui.painter().text(o + Vec2::new(10.0, 57.0), egui::Align2::LEFT_TOP, "Line Seperation", f.clone(), Color32::WHITE);
+                ui.put(r(109.0, 55.0, 75.0, 20.0), |ui: &mut egui::Ui| {
+                    ui.add_sized([75.0, 20.0], egui::DragValue::new(&mut self.separation).speed(0.1).range(0.1..=100.0).fixed_decimals(1))
+                });
+
+                // chk_V: (190, 65, 33, 17)
+                ui.put(r(190.0, 65.0, 40.0, 17.0), |ui: &mut egui::Ui| {
+                    ui.checkbox(&mut self.v_formation, "V")
+                });
+
+                // but_setmoderltland: (282, 65, 75, 44)
+                if button(ui, r(282.0, 65.0, 75.0, 44.0), "RTL (abandon mission)", true) {
+                    self.mode = DroneGroupMode::LandAlt;
+                }
+
+                // label2: Lead (10, 83) & numericUpDown2 (109, 81, 75, 20)
+                ui.painter().text(o + Vec2::new(10.0, 83.0), egui::Align2::LEFT_TOP, "Lead", f.clone(), Color32::WHITE);
+                ui.put(r(109.0, 81.0, 75.0, 20.0), |ui: &mut egui::Ui| {
+                    ui.add_sized([75.0, 20.0], egui::DragValue::new(&mut self.lead).speed(0.1).range(-100.0..=100.0).fixed_decimals(1))
+                });
+
+                // chk_alt_interleave: (188, 84, 88, 17)
+                ui.put(r(188.0, 84.0, 95.0, 17.0), |ui: &mut egui::Ui| {
+                    ui.checkbox(&mut self.alt_interleave, "Alt Interleave")
+                });
+
+                // label3: User Offline trig (10, 109) & num_useroffline (109, 107, 75, 20)
+                ui.painter().text(o + Vec2::new(10.0, 109.0), egui::Align2::LEFT_TOP, "User Offline trig", f.clone(), Color32::WHITE);
+                ui.put(r(109.0, 107.0, 75.0, 20.0), |ui: &mut egui::Ui| {
+                    ui.add_sized([75.0, 20.0], egui::DragValue::new(&mut self.off_path_trigger).speed(0.1).range(1.0..=100.0).fixed_decimals(1))
+                });
+
+                // label4: alt seperation (10, 135) & num_rtl_alt (109, 133, 75, 20)
+                ui.painter().text(o + Vec2::new(10.0, 135.0), egui::Align2::LEFT_TOP, "alt seperation", f.clone(), Color32::WHITE);
+                ui.put(r(109.0, 133.0, 75.0, 20.0), |ui: &mut egui::Ui| {
+                    ui.add_sized([75.0, 20.0], egui::DragValue::new(&mut self.takeoff_land_alt_sep).speed(0.1).range(1.0..=100.0).fixed_decimals(1))
+                });
+
+                // label5: WPNAV_ACCEL (190, 135) & num_wpnav_accel (282, 133, 75, 20)
+                ui.painter().text(o + Vec2::new(190.0, 135.0), egui::Align2::LEFT_TOP, "WPNAV_ACCEL", f.clone(), Color32::WHITE);
+                ui.put(r(282.0, 133.0, 75.0, 20.0), |ui: &mut egui::Ui| {
+                    ui.add_sized([75.0, 20.0], egui::DragValue::new(&mut self.wpnav_accel).speed(0.1).range(1.0..=100.0).fixed_decimals(1))
+                });
+
+                // textBox1: How to use (363, 4, 408, 138)
+                let tb_rect = r(363.0, 4.0, 408.0, 138.0);
+                ui.painter().rect_filled(tb_rect, 0.0, Color32::from_gray(30));
+                ui.painter().rect_stroke(tb_rect, 0.0, Stroke::new(1.0, Color32::from_gray(70)), egui::StrokeKind::Inside);
+                let mut tb_job = egui::text::LayoutJob::simple(WPCONTROL_HOW_TO.into(), f.clone(), Color32::WHITE, 396.0);
+                tb_job.wrap.break_anywhere = true;
+                let tb_galley = ui.painter().layout_job(tb_job);
+                ui.painter().with_clip_rect(tb_rect.shrink(4.0)).galley(tb_rect.min + Vec2::new(4.0, 4.0), tb_galley, Color32::WHITE);
+
+                // PNL_status: (13, 159, 758, 173)
+                let pnl_rect = r(13.0, 159.0, 758.0, 173.0);
+                ui.painter().rect_filled(pnl_rect, 0.0, Color32::from_gray(20));
+                ui.painter().rect_stroke(pnl_rect, 0.0, Stroke::new(1.0, Color32::from_gray(60)), egui::StrokeKind::Inside);
+                for (i, m) in mavs.iter().enumerate() {
+                    let b = r(16.0 + i as f32 * 115.0, 162.0, 113.0, 128.0);
+                    if b.right() > o.x + 768.0 { break; }
+                    ui.painter().rect_filled(b, 0.0, Color32::from_gray(30));
+                    ui.painter().rect_stroke(b, 0.0, Stroke::new(1.0, Color32::from_gray(70)), egui::StrokeKind::Inside);
+
+                    let at = |x: f32, y: f32| b.min + Vec2::new(x, y);
+                    let is_am = self.airmaster == Some(m.key);
+                    let is_gm = self.groundmaster == Some(m.key);
+                    let title = if is_am {
+                        format!("MAV {}-{} airmaster", m.key.1, m.key.2)
+                    } else if is_gm {
+                        format!("MAV {}-{} groundmaster", m.key.1, m.key.2)
+                    } else {
+                        format!("MAV {}-{}", m.key.1, m.key.2)
+                    };
+                    let title_col = if is_am || is_gm { Color32::RED } else { Color32::WHITE };
+                    ui.painter().text(at(3.0, 0.0), egui::Align2::LEFT_TOP, title, f.clone(), title_col);
+
+                    for (x, y, t) in [
+                        (3.0, 13.0, "Armed".into()),
+                        (46.0, 13.0, if m.armed { "True" } else { "False" }.into()),
+                        (3.0, 26.0, "Mode".into()),
+                        (46.0, 26.0, m.mode.clone()),
+                        (3.0, 39.0, "GPS".into()),
+                        (46.0, 39.0, if m.gpsstatus >= 3 { format!("OK {}", m.gpsstatus) } else { "Bad".into() }),
+                        (3.0, 52.0, "Guided".into()),
+                        (3.0, 82.0, "Location".into()),
+                        (3.0, 112.0, "Speed".into()),
+                        (46.0, 112.0, format!("{:.2}", m.groundspeed)),
+                    ] {
+                        ui.painter().text(at(x, y), egui::Align2::LEFT_TOP, t, f.clone(), Color32::WHITE);
+                    }
+
+                    let guided = self.guided.get(&m.key).copied().unwrap_or((0.0, 0.0, 0.0));
+                    let mut g_job = egui::text::LayoutJob::simple(format!("{:.5},{:.5},{:.2}", guided.0, guided.1, guided.2), f.clone(), Color32::WHITE, 67.0);
+                    g_job.wrap.break_anywhere = true;
+                    let g_galley = ui.painter().layout_job(g_job);
+                    ui.painter().with_clip_rect(Rect::from_min_size(at(46.0, 52.0), Vec2::new(67.0, 30.0))).galley(at(46.0, 52.0), g_galley, Color32::WHITE);
+
+                    let loc_str = format!("{:.5},{:.5},{:.2}", m.lat, m.lng, m.alt);
+                    let mut l_job = egui::text::LayoutJob::simple(loc_str, f.clone(), Color32::WHITE, 67.0);
+                    l_job.wrap.break_anywhere = true;
+                    let l_galley = ui.painter().layout_job(l_job);
+                    ui.painter().with_clip_rect(Rect::from_min_size(at(47.0, 82.0), Vec2::new(67.0, 30.0))).galley(at(47.0, 82.0), l_galley, Color32::WHITE);
+                }
+
+                // zedGraphControl1: Distance vs Altitude plot (12, 338, 759, 155)
+                let graph_rect = r(12.0, 338.0, 759.0, 155.0);
+                ui.painter().rect_filled(graph_rect, 0.0, Color32::from_rgb(20, 20, 20));
+                let chart = Rect::from_min_max(graph_rect.min + Vec2::new(45.0, 10.0), graph_rect.max - Vec2::new(15.0, 25.0));
+                ui.painter().rect_filled(chart, 0.0, Color32::BLACK);
+                ui.painter().rect_stroke(chart, 0.0, Stroke::new(1.0, Color32::GRAY), egui::StrokeKind::Inside);
+
+                // Axis titles
+                ui.painter().text(Pos2::new(chart.center().x, chart.bottom() + 4.0), egui::Align2::CENTER_TOP, "Distance", f.clone(), Color32::WHITE);
+                ui.painter().text(Pos2::new(graph_rect.left() + 4.0, chart.center().y), egui::Align2::LEFT_CENTER, "Altitude", f.clone(), Color32::WHITE);
+
+                // Range
+                let max_dist = (self.path.len() as f64 * 0.1).max(50.0);
+                let (mut min_alt, mut max_alt) = (0.0f64, 30.0f64);
+                for p in &self.path {
+                    min_alt = min_alt.min(p.2);
+                    max_alt = max_alt.max(p.2);
+                }
+                for m in &mavs {
+                    min_alt = min_alt.min(m.alt);
+                    max_alt = max_alt.max(m.alt);
+                }
+                if (max_alt - min_alt).abs() < 1.0 {
+                    max_alt += 5.0;
+                }
+                let alt_span = max_alt - min_alt;
+
+                let to_pos = |dist: f64, alt: f64| -> Pos2 {
+                    let x = chart.left() + ((dist / max_dist).clamp(0.0, 1.0) as f32) * chart.width();
+                    let y = chart.bottom() - (((alt - min_alt) / alt_span).clamp(0.0, 1.0) as f32) * chart.height();
+                    Pos2::new(x, y)
+                };
+
+                // Grid lines & labels
+                for k in 0..=3 {
+                    let frac = k as f32 / 3.0;
+                    let alt_val = min_alt + alt_span * frac as f64;
+                    let y = chart.bottom() - frac * chart.height();
+                    ui.painter().line_segment([Pos2::new(chart.left(), y), Pos2::new(chart.right(), y)], Stroke::new(1.0, Color32::from_gray(40)));
+                    ui.painter().text(Pos2::new(chart.left() - 3.0, y), egui::Align2::RIGHT_CENTER, format!("{alt_val:.0}"), f.clone(), Color32::WHITE);
+
+                    let dist_val = max_dist * frac as f64;
+                    let x = chart.left() + frac * chart.width();
+                    ui.painter().line_segment([Pos2::new(x, chart.top()), Pos2::new(x, chart.bottom())], Stroke::new(1.0, Color32::from_gray(40)));
+                    ui.painter().text(Pos2::new(x, chart.bottom() + 1.0), egui::Align2::CENTER_TOP, format!("{dist_val:.0}"), f.clone(), Color32::WHITE);
+                }
+
+                // Path curve (Red)
+                if !self.path.is_empty() {
+                    let step = (self.path.len() / 200).max(1);
+                    let pts: Vec<Pos2> = self.path.iter().enumerate().step_by(step).map(|(i, p)| to_pos(i as f64 * 0.1, p.2)).collect();
+                    if pts.len() > 1 {
+                        ui.painter().add(egui::Shape::line(pts, Stroke::new(1.5, Color32::RED)));
+                    }
+                }
+
+                // Drones on graph
+                for (i, d) in self.drones.iter().enumerate() {
+                    let alt = mavs.iter().find(|m| m.key == d.key).map(|m| m.alt).unwrap_or(0.0);
+                    let dist = d.path_index as f64 * 0.1;
+                    let pt = to_pos(dist, alt);
+                    let col = ZED_COLORS[i % ZED_COLORS.len()];
+                    let tri = vec![
+                        pt + Vec2::new(0.0, -5.0),
+                        pt + Vec2::new(-4.0, 4.0),
+                        pt + Vec2::new(4.0, 4.0),
+                    ];
+                    ui.painter().add(egui::Shape::convex_polygon(tri, col, Stroke::NONE));
+                    ui.painter().text(pt + Vec2::new(0.0, -7.0), egui::Align2::CENTER_BOTTOM, format!("MAV {}", d.key.1), f.clone(), col);
+                }
+            });
+
+        if !open {
+            self.open = false;
+            self.running = false;
+        }
+    }
+}
+
 #[cfg(test)]
 mod follow_path_tests {
     use super::*;
@@ -1795,5 +2524,53 @@ mod follow_path_tests {
         assert_eq!(plan.len(), 9, "20 searches, but the trail ends after 9 hops of 3 m");
         let first = plan[0];
         assert!((distance((p.trail[0].0, p.trail[0].1), (first.0, first.1)) - 3.0).abs() < 0.01, "the first point beyond 2 m");
+    }
+}
+
+#[cfg(test)]
+mod wp_control_tests {
+    use super::*;
+
+    #[test]
+    fn generate_path_interpolates_in_tenth_metre_increments() {
+        let wps = vec![
+            mp_core::mission::Locationwp::waypoint(-35.0, 149.0, 0.0, 0),
+            mp_core::mission::Locationwp::waypoint(-35.0009, 149.0, 20.0, 3),
+        ];
+        let path = generate_path(&wps);
+        assert!(!path.is_empty(), "path should not be empty");
+        assert!(path.len() > 500, "100m at 0.1m step is ~1000 points, got {}", path.len());
+        assert!((path.first().unwrap().2 - 20.0).abs() < 1.0);
+        assert!((path.last().unwrap().2 - 20.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn get_locations_and_v_offsets() {
+        let mut path = Vec::new();
+        for i in 0..1000 {
+            path.push((-35.0 + i as f64 / 111_320.0, 149.0, 10.0));
+        }
+        let locs = get_locations(&path, path[0], 20.0, 5.0);
+        assert!(!locs.is_empty());
+        assert_eq!(locs.len(), 5);
+
+        let v_locs = get_locations_v(&path, path[0], 20.0, 5.0);
+        assert!(!v_locs.is_empty());
+        assert_eq!(v_locs.len(), 9);
+    }
+
+    #[test]
+    fn get_off_path_distance_measures_crosstrack() {
+        let path = vec![
+            (-35.0, 149.0, 10.0),
+            (-35.001, 149.0, 10.0),
+        ];
+        let on_path = (-35.0005, 149.0, 10.0);
+        let dist = get_off_path_distance(&path, on_path);
+        assert!(dist < 0.1, "point directly on line should have near-zero distance, got {}", dist);
+
+        let off_path = (-35.0005, 149.001, 10.0);
+        let dist2 = get_off_path_distance(&path, off_path);
+        assert!(dist2 > 50.0 && dist2 < 120.0, "crosstrack distance, got {}", dist2);
     }
 }

@@ -215,7 +215,9 @@ reorder), Takeoff (GUIDED, arm, 2 m), Run Step/Reset and a background image with
 A simulator test flies three Copters through a step. temp > Follow the leader opens FollowPathControl. It records the active vehicle's trail at 5 Hz and plans
 2 m steps from the trail start. Every follower gets setGuidedModeWP to the first planned point, as in the
 original. Deliberate deviation: targets use the relative-altitude frame, because the original's frame-0
-Locationwp would send its relative altitude as AMSL. Follow Swarm still uses the simpler window.
+Locationwp would send its relative altitude as AMSL. temp > Follow Swarm opens WPControl (WaypointLeader),
+with ground/air master selection, collision checking, multi-mode drone group flight states, the original
+ZedGraph distance-altitude elevation plot, and per-vehicle status cards.
 
 ## License
 

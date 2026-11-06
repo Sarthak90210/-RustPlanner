@@ -88,6 +88,10 @@ pub struct LinkShared {
     pub mavs: BTreeMap<(u8, u8), MavSummary>,
     /// MAVLinkInterface.Open(getparams: false): skip the parameter download on connect
     pub skip_params: bool,
+    /// MainV2.comPort.MAV.wps: latest downloaded or uploaded mission
+    pub mission: Vec<Locationwp>,
+    /// Per-vehicle mission by (sysid, compid)
+    pub missions: BTreeMap<(u8, u8), Vec<Locationwp>>,
 }
 
 /// What the map and the vehicle selector need about each vehicle on the link.
@@ -117,6 +121,11 @@ pub struct MsgStat {
 impl LinkShared {
     pub fn firmware(&self) -> Firmware {
         self.cs.firmware
+    }
+
+    pub fn set_mission(&mut self, sys: u8, comp: u8, items: Vec<Locationwp>) {
+        self.mission = items.clone();
+        self.missions.insert((sys, comp), items);
     }
 }
 
@@ -302,6 +311,11 @@ impl Link {
     /// A sender for background producers (e.g. RTK injection).
     pub fn sender(&self) -> Sender<LinkCommand> {
         self.tx.clone()
+    }
+
+    /// Store a mission copy for (sysid, compid) on this link.
+    pub fn set_mission(&self, sys: u8, comp: u8, items: Vec<Locationwp>) {
+        self.shared.write().set_mission(sys, comp, items);
     }
 
     pub fn is_playback(&self) -> bool {
@@ -593,6 +607,9 @@ impl Worker {
             } => {
                 let mt = MavMissionType::from_u8(mission_type)
                     .unwrap_or(MavMissionType::MAV_MISSION_TYPE_MISSION);
+                if mt == MavMissionType::MAV_MISSION_TYPE_MISSION {
+                    self.shared.write().set_mission(self.target_sys, self.target_comp, items.clone());
+                }
                 self.send_mission_count(mt, items.len() as u16)?;
                 self.set_progress(Some(Progress {
                     label: "Set total wps".into(),
@@ -1284,6 +1301,9 @@ impl Worker {
             mission_type: mt,
             opaque_id: 0,
         }))?;
+        if mt == MavMissionType::MAV_MISSION_TYPE_MISSION {
+            self.shared.write().set_mission(self.target_sys, self.target_comp, items.clone());
+        }
         self.event(LinkEvent::MissionDownloaded {
             mission_type: mt as u8,
             items,

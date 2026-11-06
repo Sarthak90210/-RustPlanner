@@ -54,6 +54,8 @@ pub struct MoreTools {
     pub layout_editor: crate::swarm::LayoutEditor,
     /// temp > Follow the leader: FollowPathControl
     pub follow_path: crate::swarm::FollowPathControl,
+    /// temp > Follow Swarm: WPControl
+    pub wp_control: crate::swarm::WPControl,
     swarm_open: Option<&'static str>,
     leader: Option<(u8, u8)>,
     follow: bool,
@@ -79,19 +81,7 @@ impl MoreTools {
             "Swarm" => self.formation.show(),
             "Sequence Swarm" => self.layout_editor.show(),
             "Follow the leader" => self.follow_path.show(),
-            "Follow Swarm" => {
-                self.swarm_open = Some(match name {
-                    "Swarm" => "Swarm",
-                    "Follow the leader" => "Follow the leader",
-                    "Sequence Swarm" => "Sequence Swarm",
-                    _ => "Follow Swarm",
-                });
-                self.follow = name != "Swarm" && name != "Sequence Swarm";
-                if self.takeoff_alt.is_empty() {
-                    self.takeoff_alt = "10".into();
-                    self.spacing = "10".into();
-                }
-            }
+            "Follow Swarm" => self.wp_control.show(),
             "QNH" => {
                 self.qnh_open = true;
                 if self.qnh.is_empty() {

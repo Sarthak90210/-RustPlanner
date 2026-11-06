@@ -1,0 +1,413 @@
+{
+  "round": 16,
+  "review_type": "fresh independent targeted source and evidence review, with a widened scope (unconsumed DisplayView flags, CONFIG start page, DATA Fly To Here Alt semantics, swarm grid context menu)",
+  "reviewed_head": "6ed492a14ae0cd3ff3709aae1951baed986dffcd",
+  "date": "2026-11-06",
+  "verdict": "Solid progress. Two medium gaps are closed with low residuals (DisplayView flags and page predicates, setGuidedModeWP). The high swarm gap is partly closed: FormationControl is a faithful port, but Sequence Swarm, Follow the leader and Follow Swarm still share the old simple window. All four low residuals named in round 15 are fixed. The widened review found only low or low-medium items. Video, plugins, localization, transports and full CurrentState coverage are still open. Not 10/10.",
+  "scores": {
+    "overall": 7.8,
+    "ui_ux": 8.3,
+    "features": 7.3,
+    "scale": "Qualitative exact-C#-parity judgments, not completion percentages. Overall gives equal weight to UI/UX and features."
+  },
+  "rationale": "Run 16 closes round 15's retained priority 6 (DisplayView, medium) and new priority 2 (guided commands, medium). It closes most of new priorities 3 and 4 (web and timer residuals) and the FormationControl part of retained priority 5 (swarm, high). display.rs lists every DisplayView property with the value new DisplayView() gives it. Basic and Advanced differ from the constructor in exactly the flags the C# initialisers set. Custom reads custom.displayview beside the executable and falls back to Advanced. TryParse accepts JSON or XmlSerializer XML, and missing keys keep constructor defaults. The view is saved as JSON in 'displayview', and the startup force of the three parameter-page flags is reproduced. The flags gate the SIMULATION/HELP buttons, every DATA tab (the TabListDisplay mapping), the seven PLAN menu items, Verify Height, and every InitialSetup page, including the Advanced group with Terminal and Script REPL. The InitialSetup predicates match HardwareConfig_Load: Loading only when connected and incomplete, Frame Type as FRAME_CLASS || (isCopter && gotAllParams), Heli, Tracker, and Initial Tune for Copter or QuadPlane. They also gate the SoftwareConfig pages: Full Parameter List only when disconnected or complete, Loading, and Planner behind displayPlannerSettings. The Planner Layout combo is hidden by displayPlannerLayout. Guided now follows setGuidedModeWP. Zero targets are ignored, GUIDED is set first when the mode differs, Plane gets MISSION_ITEM_INT current=2, and other vehicles get SET_POSITION_TARGET_GLOBAL_INT with type_mask 0xFFFF - FORCE - POS_IGNORE, identical to setPositionTargetGlobalInt. The simulator now rejects guided requests outside GUIDED, and a link test goes Loiter to Guided and closes on the target. FormationControl reproduces the 931x471 'Control' form: the button row at the designer coordinates, CMB_mavs as 'PortName sysid compid' across all connections, Set Leader rebasing through getOffsets' (count,0,0) quirk, Update Pos through the leader-zone UTM frame with the (y,x) swap and the 200 m window, Start/Stop at 10 Hz with the leader POSITION stream request, and Formation.SendCommand for both paths. Copter followers get pos+vel targets plus CONDITION_YAW beyond 3 degrees. Plane followers get the PID SET_ATTITUDE_TARGET with euler312 quaternion and type_mask 0x38. The Grid has lines, labels, pan, drag, wheel scale and Vertical, and the Status column is drawn. A three-copter simulator test flies the followers to within 3 m of their slots. The residuals are low. Unconsumed flags leave Commit Params and Auto Commit Params visible where displayParamCommitButton (false in every preset) hides them. CONFIG opens on Full Parameter List where SoftwareConfig activates Basic Tuning or Planner. Guided always uses a relative frame and has no GuidedMode.z alt prompt. Fly To Here Alt now flies to the clicked point and forces GUIDED, where the original only stores the altitude and re-targets only when already Guided. The swarm Status block lacks its Location and Speed labels and the panel does not scroll. Grid 'Change Alt' probably loses its hover target when the pointer moves onto the menu. Features rise 0.3 for the two medium closures and the FormationControl port, with three swarm tools still open. UI/UX rises 0.1, because the layout-dependent navigation now matches, minus the new visibility and start-page findings.",
+  "scope": {
+    "inspected": [
+      "git diff 8e9969f..6ed492a (cedfa2e, 6449036, 6ed492a): display.rs (whole), app.rs, views/config.rs page_list and Planner combo, views/setup.rs PAGES/vis_allows/flags_allow, flight_plan/menu.rs, flight_plan.rs, flight_data.rs tab filter, forms.rs, httpserver.rs, mp-core link.rs Guided, sim.rs, coords.rs, tests/link_sim.rs, swarm.rs (all 1038 lines), more_tools.rs",
+      "ExtLibs/Utilities/DisplayView.cs (whole file), ExtLibs/Utilities/Settings.cs GetDisplayView 212-221, MainV2.cs 355-366, 597-630, 898-935, GCSViews/InitialSetup.cs 64-355, GCSViews/SoftwareConfig.cs 60-320, FlightData.cs 709-739, FlightPlanner.cs 1310-1325, ConfigPlanner.cs 31-79 and 1019-1033, BackstageView.cs 199-205 and 435-522",
+      "Every C# consumer of the DisplayView flags not referenced by the port (grep): autoHideMenuForce MainV2.cs:604, displayParamCommitButton ConfigPlanner.cs:192 and ConfigRawParams.cs:61, standardFlightModesOnly ConfigFlightModes.cs:119, displayPluginAutoWp FlightPlanner.cs:1324, lockQuickView FlightData.cs:4684 and 5159, displayPreFlightTabEdit CheckListControl.cs:244; displayBaudCMB, displaySerialPortCMB, displayAnenometer, displayFullParamTree, displayWizard and displayDonate have no consumer",
+      "MAVLinkInterface.cs setGuidedModeWP 4442-4486, setPositionTargetGlobalInt 4524-4570, setMode 4638-4666; FlightData.cs flyToHereAltToolStripMenuItem_Click 2930-2973 and goHereToolStripMenuItem_Click 3113-3151; httpserver.cs 905-931",
+      "Swarm/FormationControl.cs (whole), Formation.cs (whole), Swarm.cs (whole), Grid.cs (whole), Status.cs, Status.Designer.cs, FormationControl.Designer.cs control geometry; temp.cs 204-222, 684-687 and 807-810 (button to form mapping)",
+      "Retained-gap anchors rechecked at 6ed492a: flight_data.rs:475-482 and 1283, fd_tabs.rs:346, hotkey_tools.rs:103-112, config.rs:1075, comms.rs:26-46, state.rs:288; state.rs, platform.rs and comms.rs have no diff since 8e9969f"
+    ],
+    "rust_render_images_viewed": [
+      "D:\\MY DOCUMENTS\\Projects\\rust planner\\target\\judging\\round16\\53_swarm_formation.png"
+    ],
+    "render_evidence": "53_swarm_formation.png (1280x800) shows the DATA screen with a 'Control' window. It has the full button row: Arm/Disarm (exl leader), Takeoff, Land (all), the CMB_mavs combo reading 'UDP 1 1', Set Leader, Guided/Auto Mode (exl leader), and Update Pos and Start disabled as the designer's Enabled=false gives. Below are the 'Stage 1' tab with the 40x20 grid, red axis labels at every second line, green centre lines, dashed odd lines and the Vertical check box. Three overlapping icons sit at the origin, as getOffsets returning (0,0,0) for every unseen vehicle gives. Three Status blocks show sysid, Armed False, Mode Stabilize, GPS OK, Guided 0,0,0 and a wrapped lat,lng,alt. The 'Location' and 'Speed' captions of Status.Designer are missing. The window is displaced and clipped at the right and bottom because stray pointer input dragged it, so the window position is not evidence either way. No render covers the DisplayView presets, the SETUP/CONFIG page lists or Fly To Here.",
+    "reviewer_executed_verification": [
+      "None beyond source inspection and viewing the render. As instructed, no cargo build or test ran. The worktree was detached to 6ed492a."
+    ],
+    "reported_evidence_not_rerun": [
+      "cargo test --workspace: 125 passed (main session). This includes presets_match_display_view_extensions, custom_json_and_xml_keep_constructor_defaults_for_missing_flags, startup_forces_parameter_pages, setup_pages_follow_vehicle_predicates_and_display_view, config_pages_follow_connection_vehicle_and_display_view, guided_fly_to_switches_mode_and_moves_the_copter, offsets_round_trip_through_the_leader_frame, set_leader_rebases_offsets_and_followers_get_position_targets, grid_scale_and_icon_rules_match_the_original, followers_fly_to_their_formation_offsets and the two swarm egui tests."
+    ],
+    "verification_limits": [
+      "No original C# runtime was run side by side. No real ArduPilot SITL was used. The guided and formation tests run against the project's own simulator, which was changed in the same commit to reject non-GUIDED guided requests.",
+      "The Plane SET_ATTITUDE_TARGET path is checked only by a unit test (mask, thrust range, unit quaternion), not by flight.",
+      "The Grid 'Change Alt' hover loss is inferred from egui response semantics: hover_pos is None while a popup covers the widget. It was not exercised, and no test covers the Change Alt path.",
+      "Native macOS, Linux, Android and iOS were not exercised, and no physical device was used."
+    ],
+    "reviewer_actions": "Read-only source and evidence inspection. Only judging/round-16.json was written."
+  },
+  "run16_dispositions": [
+    {
+      "change": "cedfa2e: DisplayView modelled in full and applied to MainV2 buttons, DATA tabs, PLAN menus, SETUP and CONFIG pages and the Planner Layout combo",
+      "status": "closed (low residuals)",
+      "closed_parts": "FLAGS covers every DisplayView property, and its defaults equal the property initialisers plus constructor assignments (displayTerminal/displayREPL true, Status/Servo/Scripts/AdvActions false, displaySimulation false). basic() and advanced() override exactly the flags whose initialiser values differ from the constructor's. The test asserts that the seven differing flags between Basic and Advanced are the C# set. custom() reads custom.displayview from the program directory, renames it Custom and falls back to Advanced, as DisplayViewExtensions.Custom does. parse() accepts JSON or XmlSerializer XML, and missing keys keep constructor values, as FromJSON/XmlSerializer on new DisplayView() would. Settings holds the ConvertToString JSON. view() defaults to Advanced on first run. force_on_load reproduces the 'Force new view' lines. The SIMULATION and HELP buttons follow displaySimulation and displayHelp (updateLayout). The DATA tab filter maps all 14 TabListDisplay entries. The PLAN Geo-Fence, Rally Points, Spline Circle, Text, Circle Survey, POI and Tracker Home items and CHK_verifyheight follow updateDisplayView. Every InitialSetup page has its flag, the Advanced group needs isAdvancedMode, and Terminal and Script REPL need both their flag and isAdvancedMode. The page predicates match HardwareConfig_Load, including Frame Type = FRAME_CLASS || (isCopter && gotAllParams) and Initial Tune for Copter or QuadPlane. SoftwareConfig: GeoFence for Copter only; Copter/Plane Basic and Extended (QP Extended for Plane) behind their flags; Rover Basic and Tracker Extended without a flag; Standard/Advanced Params, OSD, MAVFtp with the FTP capability, User Params; Full Parameter List only when disconnected or complete; Loading while incomplete; Planner behind displayPlannerSettings. CMB_Layout is hidden with its label when displayPlannerLayout is off, and selecting a preset saves the JSON.",
+      "remaining": "Low. (a) Six flags with C# consumers are not applied. displayParamCommitButton is false in every preset, and the original hides BUT_commitToFlash (ConfigRawParams) and CHK_AutoParamCommit (ConfigPlanner). The port always shows 'Commit Params' and 'Auto Commit Params', so both default layouts show two controls the original hides. autoHideMenuForce (and the persisted menu_autohide), lockQuickView, displayPreFlightTabEdit (checklist Edit button), standardFlightModesOnly (simple/super-simple boxes) and displayPluginAutoWp are not applied. (b) SoftwareConfig activates a start page: Basic Tuning (Copter/Plane/Rover), Extended Tuning (Tracker), Loading while incomplete, or Planner when disconnected. The port's ConfigView starts on Full Parameter List, so first entry to CONFIG while disconnected or connected shows a different page. (c) An unparsable 'displayview' falls back to Advanced, where Settings.GetDisplayView returns new DisplayView() (Basic constructor defaults). The legacy 'advancedview' key is not migrated. (d) The Ateryx CONFIG pages are absent, and Refresh Table is always shown where it requires SlowMachine (ConfigRawParams.cs:62).",
+      "rust_refs": [
+        "crates/mp-app/src/display.rs:28-111",
+        "crates/mp-app/src/display.rs:139-182",
+        "crates/mp-app/src/display.rs:185-231",
+        "crates/mp-app/src/display.rs:239-281",
+        "crates/mp-app/src/display.rs:289-350",
+        "crates/mp-app/src/app.rs:271",
+        "crates/mp-app/src/app.rs:563-580",
+        "crates/mp-app/src/views/flight_data.rs:643-652",
+        "crates/mp-app/src/views/flight_plan/menu.rs:306-316",
+        "crates/mp-app/src/views/flight_plan.rs:536-539",
+        "crates/mp-app/src/views/setup.rs:38-84",
+        "crates/mp-app/src/views/setup.rs:110-137",
+        "crates/mp-app/src/views/config.rs:76-127",
+        "crates/mp-app/src/views/config.rs:200",
+        "crates/mp-app/src/views/config.rs:429",
+        "crates/mp-app/src/views/config.rs:498",
+        "crates/mp-app/src/views/config.rs:1157-1173",
+        "crates/mp-app/src/views/config.rs:1237"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/ExtLibs/Utilities/DisplayView.cs:37-221",
+        "reference/MissionPlanner/ExtLibs/Utilities/DisplayView.cs:225-455",
+        "reference/MissionPlanner/ExtLibs/Utilities/Settings.cs:212-221",
+        "reference/MissionPlanner/MainV2.cs:357-366",
+        "reference/MissionPlanner/MainV2.cs:597-630",
+        "reference/MissionPlanner/MainV2.cs:898-935",
+        "reference/MissionPlanner/GCSViews/InitialSetup.cs:156-353",
+        "reference/MissionPlanner/GCSViews/SoftwareConfig.cs:144-316",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:709-739",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:1310-1325",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:56-79",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:192",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigRawParams.cs:61-62",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigFlightModes.cs:119-130",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4684",
+        "reference/MissionPlanner/Controls/PreFlight/CheckListControl.cs:244-247"
+      ]
+    },
+    {
+      "change": "6449036: guided targets follow setGuidedModeWP; numeric timer, check-box failure text, georef aspect and ter_alt residuals",
+      "status": "closed for the command path (low-medium residuals in the callers); the four residuals are closed",
+      "closed_parts": "LinkCommand::Guided returns early when alt, lat or lng is 0. It sends DO_SET_MODE with the firmware's GUIDED number when cs.mode is not GUIDED (case-insensitive). ArduPlane gets MISSION_ITEM_INT current=2, and every other vehicle gets SET_POSITION_TARGET_GLOBAL_INT with type_mask 0xFFFF - FORCE - POS_IGNORE, the value setPositionTargetGlobalInt(pos only) computes. The simulator ignores position targets and NAKs MISSION_ITEM current=2 outside GUIDED, as ArduPilot does. The link test shows a zero target leaving Loiter unchanged, then Guided with progress toward a target 60 m away. Residuals closed: edit_numeric keeps the first change's deadline, so the write fires 300 ms after the first change with the latest value, matching a running WinForms Timer whose Interval is re-set. Check boxes use edit_check with 'Set X Failed' (ErrorSetValueFailed). Georef JPEGs are fitted inside 640x480 with the aspect ratio kept (ResizeImage). The state JSON carries ter_alt from TERRAIN_REPORT.terrain_height in display units, as CurrentState.ter_alt is.",
+      "remaining": "(a) The frame is always GLOBAL_RELATIVE_ALT. The original passes gotohere.frame, which is GuidedMode.frame from the AltInputBox frame selector for Fly To Here and frame 0 (absolute) for the /guided HTTP API. (b) The DATA callers do not model GuidedMode.z. guided_alt is hard-coded to 100 and not persisted. The original's first Fly To Here prompts with AltInputBox (default 10 x multiplier for Copter, else 100, with a frame combo) and stores guided_alt/guided_alt_frame. (c) New, low-medium: 'Fly To Here Alt' now sends Guided to the right-clicked point, which also forces GUIDED. The original only stores the altitude and frame, and re-sends only when the mode is already Guided, to the current GuidedMode x/y. In Loiter or Auto, the port changes mode and flies the vehicle away. (d) setMode sends DO_SET_MODE only, where the original sends DO_SET_MODE plus SET_MODE twice. For Plane, the setWP ack is not awaited and 'Guided Mode Failed' is not logged. (e) The numeric flush still runs only while the form is drawn.",
+      "rust_refs": [
+        "crates/mp-core/src/link.rs:769-805",
+        "crates/mp-core/src/sim.rs:738-756",
+        "crates/mp-core/tests/link_sim.rs:360-404",
+        "crates/mp-app/src/forms.rs:153-182",
+        "crates/mp-app/src/forms.rs:185",
+        "crates/mp-app/src/forms.rs:279",
+        "crates/mp-app/src/httpserver.rs:532-534",
+        "crates/mp-app/src/httpserver.rs:802-805",
+        "crates/mp-app/src/views/flight_data.rs:176",
+        "crates/mp-app/src/views/flight_data.rs:1217-1229",
+        "crates/mp-app/src/views/flight_data.rs:1391-1397"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4447-4486",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4524-4570",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4638-4666",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:2930-2973",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3113-3151",
+        "reference/MissionPlanner/Utilities/httpserver.cs:905-931",
+        "reference/MissionPlanner/Controls/MavlinkNumericUpDown.cs:131-177",
+        "reference/MissionPlanner/Controls/MavlinkCheckBox.cs:110-141",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:2081-2085",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:3299"
+      ]
+    },
+    {
+      "change": "6ed492a: temp > Swarm opens a port of FormationControl with Formation, Grid and Status",
+      "status": "closed for FormationControl (low residuals); the swarm area stays open for the other three tools",
+      "closed_parts": "temp > Swarm opens FormationControl, as BUT_swarm_Click does. The window is 'Control' at the 931x471 ClientSize and stays on top. Every button sits at its designer location and size: Arm/Disarm/Takeoff/Guided/Auto exclude the leader, Land (all) includes it, and Takeoff sets GUIDED then TAKEOFF alt 5 (Swarm.cs). CMB_mavs lists every MAVState on every connection as 'PortName sysid compid', and selecting one retargets that link (MainV2.comPort/sysidcurrent). When there are no vehicles, the beta notice is skipped and the window is empty, as the constructor's early return gives. Update Pos and Start stay disabled until Set Leader. Set Leader subtracts the selected vehicle's getOffsets from every vehicle's, including the (count,0,0) default for unseen vehicles. getOffsetFromLeader and SendCommand use the leader's zone ((lng+186)/6, hemisphere by leader lat) and the -yaw rotation. Update Pos stores (y,x) inside the 200 m window. Start requests the leader POSITION stream at 10 Hz and sends every 100 ms. Stop and window close end the loop. Copter followers get SET_POSITION_TARGET_GLOBAL_INT in GLOBAL_RELATIVE_ALT_INT with pos+vel, the leader's vx/vy/vz and CONDITION_YAW(leader yaw, 100) beyond 3 degrees. Plane followers get the full PID SET_ATTITUDE_TARGET: trailer/leader points, the 45 degree sign flip, the sine-rule bank, thrust PID with reset beyond 40 m and 0.1-1 clamp, euler312 quaternion, mask 0x38, and AC_PID filter semantics. The Grid reproduces setScale (dist > 6, even ydist, integer px-per-unit bounds), solid even and dashed odd silver lines, green centre lines, red labels, the 20 px pie icons (blue fixed leader, red followers), z text only in horizontal mode, drag with the original formulas, pan on empty space, wheel +/-4, Change Alt and Vertical. The 'Can not move Leader' rule is kept. The Status column shows sysid, Armed, Mode, GPS OK/Bad, Guided and location at the Status.Designer offsets, with red for the leader. The three-copter simulator test flies both followers to within 3 m of their slots.",
+      "remaining": "Low. (a) Status blocks lack the 'Location' caption (3,82) and the 'Speed' caption and lbl_spd (3,112 / 46,112). PNL_status is AutoScroll, while the port stops drawing after three blocks, so a fourth vehicle cannot be seen. (b) The Grid context menu probably loses its target. self.hover is recomputed from hover_pos every frame without a drag, and hover_pos is None while the pointer is over the popup, so 'Change Alt' would read None. WinForms keeps mouseover because the menu takes the mouse. This is inferred from source and untested. (c) The mouse wheel scales only over the grid, where the original handles the form's MouseWheel. (d) setMode sends one SET_MODE, without DO_SET_MODE and the second SET_MODE. Arm uses a raw COMMAND_LONG rather than doARM. (e) The non-leader Status text is white rather than black, a theme adaptation. Follow the leader (FollowPathControl), Sequence Swarm (Sequence.LayoutEditor) and Follow Swarm (WaypointLeader.WPControl) still open the old shared simple window.",
+      "rust_refs": [
+        "crates/mp-app/src/more_tools.rs:75-76",
+        "crates/mp-app/src/app.rs:1128-1129",
+        "crates/mp-app/src/swarm.rs:62-104",
+        "crates/mp-app/src/swarm.rs:134-162",
+        "crates/mp-app/src/swarm.rs:190-246",
+        "crates/mp-app/src/swarm.rs:306-454",
+        "crates/mp-app/src/swarm.rs:457-541",
+        "crates/mp-app/src/swarm.rs:544-608",
+        "crates/mp-app/src/swarm.rs:610-650",
+        "crates/mp-app/src/swarm.rs:652-818",
+        "crates/mp-app/src/swarm.rs:938-990"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/temp.cs:204-207",
+        "reference/MissionPlanner/Swarm/FormationControl.cs:18-372",
+        "reference/MissionPlanner/Swarm/FormationControl.Designer.cs:57-220",
+        "reference/MissionPlanner/Swarm/Formation.cs:25-330",
+        "reference/MissionPlanner/Swarm/Formation.cs:334-515",
+        "reference/MissionPlanner/Swarm/Swarm.cs:21-106",
+        "reference/MissionPlanner/Swarm/Grid.cs",
+        "reference/MissionPlanner/Swarm/Status.Designer.cs:48-180"
+      ]
+    }
+  ],
+  "new_or_remaining_affected_gaps": [
+    {
+      "priority": 1,
+      "severity": "medium",
+      "area": "DATA Status tab / CurrentState coverage",
+      "title": "Expose the full CurrentState property set and the original Status-tab layout",
+      "finding": "Carried from round 15, unchanged (state.rs has no diff). CurrentState::fields() hand-lists about 100 values. The Status tab, Quick View 'Display This' chooser, HUD user items and the state websocket all draw from it. The original uses GetItemList(true): about 270 properties, alphabetised, in 120/50 px rows 15 px apart with 190 px columns and horizontal scroll.",
+      "rust_refs": [
+        "crates/mp-core/src/state.rs:288-341",
+        "crates/mp-app/src/views/flight_data.rs:816-830",
+        "crates/mp-app/src/httpserver.rs:520-537"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightData.cs:6178-6220",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4682-4700",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:4556-4580"
+      ],
+      "next_fix": "Generate the field list from a CurrentState model covering the original properties. Sort it as GetItemList does, draw the column layout, and reuse the list for the choosers and the websocket. Verify with a name-set diff and a render."
+    },
+    {
+      "priority": 2,
+      "severity": "low-medium",
+      "area": "DATA guided callers (Fly To Here / Fly To Here Alt / guided API)",
+      "title": "Model GuidedMode.z/frame and the original Fly To Here Alt semantics",
+      "finding": "New residual from the run-16 closure. guided_alt is hard-coded to 100, not persisted, and has no frame. The first Fly To Here does not prompt with AltInputBox. 'Fly To Here Alt' flies to the clicked point and now forces GUIDED, where the original only stores alt/frame and re-targets the current GuidedMode position when already Guided. The HTTP /guided target is relative, where the original uses frame 0.",
+      "rust_refs": [
+        "crates/mp-core/src/link.rs:769-805",
+        "crates/mp-app/src/views/flight_data.rs:176",
+        "crates/mp-app/src/views/flight_data.rs:1217-1229",
+        "crates/mp-app/src/views/flight_data.rs:1391-1397",
+        "crates/mp-app/src/httpserver.rs:676-680"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightData.cs:2930-2973",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3113-3151",
+        "reference/MissionPlanner/Utilities/httpserver.cs:905-931",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4447-4486"
+      ],
+      "next_fix": "Add a frame to LinkCommand::Guided and keep a per-vehicle GuidedMode (x, y, z, frame), updated from sent targets and vehicle echoes. Prompt with an alt+frame box when z is 0, persist guided_alt/guided_alt_frame, make Fly To Here Alt store and only re-send when Guided, and pass frame 0 from /guided."
+    },
+    {
+      "priority": 3,
+      "severity": "low",
+      "area": "DisplayView consumers / CONFIG navigation",
+      "title": "Apply the remaining DisplayView flags and the SoftwareConfig start page",
+      "finding": "New (widened scope). Commit Params and Auto Commit Params are visible in every layout, while displayParamCommitButton (false in all presets) hides them. autoHideMenuForce, lockQuickView, displayPreFlightTabEdit and standardFlightModesOnly are not applied, and the AutoHide choice is not persisted as menu_autohide. CONFIG opens on Full Parameter List rather than SoftwareConfig's start page (Basic Tuning, Extended Tuning, Loading or Planner). Refresh Table is shown without SlowMachine. An unparsable displayview falls back to Advanced rather than new DisplayView().",
+      "rust_refs": [
+        "crates/mp-app/src/views/config.rs:186",
+        "crates/mp-app/src/views/config.rs:200",
+        "crates/mp-app/src/views/config.rs:429",
+        "crates/mp-app/src/views/config.rs:498",
+        "crates/mp-app/src/views/config.rs:1237",
+        "crates/mp-app/src/app.rs:988",
+        "crates/mp-app/src/display.rs:247-252"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigRawParams.cs:61-62",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:192",
+        "reference/MissionPlanner/MainV2.cs:604-615",
+        "reference/MissionPlanner/MainV2.cs:4400-4405",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4684",
+        "reference/MissionPlanner/Controls/PreFlight/CheckListControl.cs:244-247",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigFlightModes.cs:119-130",
+        "reference/MissionPlanner/GCSViews/SoftwareConfig.cs:144-316",
+        "reference/MissionPlanner/ExtLibs/Utilities/Settings.cs:212-221"
+      ],
+      "next_fix": "Gate the commit controls, checklist Edit, Quick View double-click and simple-mode boxes on their flags, and honour autoHideMenuForce with a persisted menu_autohide. Pick the CONFIG start page as SoftwareConfig_Load does when no last page matches."
+    },
+    {
+      "priority": 4,
+      "severity": "low",
+      "area": "temp > Swarm (FormationControl) residuals",
+      "title": "Complete the Status panel and make Grid Change Alt robust",
+      "finding": "From the run-16 closure. Location and Speed captions and lbl_spd are missing, and the panel does not scroll past three vehicles. Change Alt probably reads a cleared hover target once the pointer is on the menu. The wheel works only over the grid. setMode/Arm use simplified messages.",
+      "rust_refs": [
+        "crates/mp-app/src/swarm.rs:430-447",
+        "crates/mp-app/src/swarm.rs:760-767",
+        "crates/mp-app/src/swarm.rs:780-818",
+        "crates/mp-app/src/swarm.rs:120-129"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/Swarm/Status.Designer.cs:120-180",
+        "reference/MissionPlanner/Swarm/FormationControl.Designer.cs:172-175",
+        "reference/MissionPlanner/Swarm/Grid.cs (changeAltToolStripMenuItem_Click, OnMouseMove)",
+        "reference/MissionPlanner/Swarm/FormationControl.cs:47-64",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4655-4666"
+      ],
+      "next_fix": "Latch the hovered icon when the context menu opens, add the missing captions and a scroll area, handle the wheel window-wide, and reuse the link's setMode/doARM. Add an egui test for Change Alt."
+    },
+    {
+      "priority": 5,
+      "severity": "low",
+      "area": "Web service / direct-write residuals",
+      "title": "Close the remaining httpserver and timer details",
+      "finding": "Carried, reduced. Aspect-fit georef, ter_alt, the first-change timer and the check-box text are closed. Still open: map.jpg/both.jpg refresh only while DATA is drawn; the state JSON is a subset; wps JSON is not MAV.wps; KML/.dae headers differ; websocket/raw closes without a link; the numeric flush needs the form to be drawn; the out-of-range prompt is absent.",
+      "rust_refs": [
+        "crates/mp-app/src/httpserver.rs:357-370",
+        "crates/mp-app/src/httpserver.rs:538-550",
+        "crates/mp-app/src/forms.rs:185",
+        "crates/mp-app/src/forms.rs:279"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/Utilities/httpserver.cs:788-806",
+        "reference/MissionPlanner/Utilities/httpserver.cs:843-876",
+        "reference/MissionPlanner/Utilities/httpserver.cs:1240-1250",
+        "reference/MissionPlanner/Controls/MavlinkNumericUpDown.cs:162-177"
+      ],
+      "next_fix": "Flush delayed writes from the app update loop, render the DATA map offscreen for streams, publish MAV.wps and match the per-route headers."
+    },
+    {
+      "priority": 6,
+      "severity": "low",
+      "area": "PLAN Coords / grid residuals",
+      "title": "ProjNet-accurate grid UTM, typed zone retention, Ocean altsource",
+      "finding": "Carried from round 15, unchanged.",
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_plan.rs:713-763"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/ExtLibs/Utilities/PointLatLngAlt.cs:255-292",
+        "reference/MissionPlanner/ExtLibs/Utilities/srtm.cs:32-33"
+      ],
+      "next_fix": "Use a full-accuracy TM for the grid, keep typed cell text, and add the Ocean source."
+    }
+  ],
+  "retained_baseline_gaps": [
+    {
+      "priority": 6,
+      "severity": "medium",
+      "status": "closed by run16 (low residuals)",
+      "area": "SETUP / CONFIG navigation",
+      "title": "Honor per-page display flags and original vehicle/loading visibility",
+      "finding": "Closed. See run16_dispositions. Residuals are tracked as new_or_remaining_affected_gaps priority 3.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/InitialSetup.cs:156-353",
+        "reference/MissionPlanner/GCSViews/SoftwareConfig.cs:144-316",
+        "reference/MissionPlanner/ExtLibs/Utilities/DisplayView.cs:37-455"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/display.rs:28-350",
+        "crates/mp-app/src/views/setup.rs:38-137",
+        "crates/mp-app/src/views/config.rs:76-127"
+      ],
+      "next_fix": "See priority 3 residuals.",
+      "disposition": "closed by run16 (low residuals)."
+    },
+    {
+      "priority": 2,
+      "severity": "medium",
+      "status": "closed by run16 for the link command (caller residuals remain)",
+      "area": "DATA guided commands",
+      "title": "Match setGuidedModeWP",
+      "finding": "Closed for the command path. Caller-side GuidedMode/frame/Fly To Here Alt gaps are tracked as new_or_remaining_affected_gaps priority 2.",
+      "csharp_refs": [
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4447-4486"
+      ],
+      "rust_refs": [
+        "crates/mp-core/src/link.rs:769-805"
+      ],
+      "next_fix": "See priority 2.",
+      "disposition": "closed by run16 (command path)."
+    },
+    {
+      "priority": 3,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "DATA video and payload",
+      "title": "Implement the advertised GStreamer, HereLink and gimbal video paths",
+      "finding": "Unchanged at 6ed492a. Set GStreamer Source and HereLink Video report that GStreamer was not found. Gimbal Video and Payload Video Control report that no gimbal video stream is configured.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3186-3213",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4946-4972",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:6667-6841"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_data.rs:475-482",
+        "crates/mp-app/src/views/flight_data.rs:1283",
+        "crates/mp-app/src/views/fd_tabs.rs:346"
+      ],
+      "next_fix": "Add backend discovery, pipeline input/start/stop and gimbal stream configuration plus the original display modes. Verify with local video fixtures.",
+      "disposition": "open; unchanged by run16."
+    },
+    {
+      "priority": 5,
+      "severity": "high",
+      "status": "partly closed by run16 (FormationControl); three tools open",
+      "area": "Tools / swarm",
+      "title": "Restore distinct swarm workflows: Sequence Swarm, Follow the leader, Follow Swarm",
+      "finding": "Swarm now opens a faithful FormationControl. Follow the leader (FollowPathControl), Sequence Swarm (Sequence.LayoutEditor: layout load/save, step editor, execution) and Follow Swarm (WaypointLeader.WPControl) still open the old shared simple vehicle window.",
+      "csharp_refs": [
+        "reference/MissionPlanner/temp.cs:219-222",
+        "reference/MissionPlanner/temp.cs:684-687",
+        "reference/MissionPlanner/temp.cs:807-810",
+        "reference/MissionPlanner/Swarm/FollowPathControl.cs",
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:18-150",
+        "reference/MissionPlanner/Swarm/WaypointLeader"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/more_tools.rs:76-89",
+        "crates/mp-app/src/more_tools.rs:454-553"
+      ],
+      "next_fix": "Port Sequence.LayoutEditor first (layout load/save, steps, execution against several simulators), then FollowPathControl and WPControl, reusing the swarm.rs vehicle model.",
+      "disposition": "partly closed by run16."
+    },
+    {
+      "priority": 7,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "Plugins",
+      "title": "Provide original plugin loading and lifecycle compatibility",
+      "finding": "Unchanged. The plugin window says .NET .dll/.cs plugins cannot be loaded.",
+      "csharp_refs": [
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:146-179",
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:256-329",
+        "reference/MissionPlanner/MainV2.cs:2527-2581"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/hotkey_tools.rs:103-112"
+      ],
+      "next_fix": "Implement a compatibility host and page/action bridge, or record an explicit parity exclusion. Validate with a sample plugin.",
+      "disposition": "open; unchanged by run16."
+    },
+    {
+      "priority": 8,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "Localization / Planner",
+      "title": "Restore the original language selector and translated resources",
+      "finding": "Unchanged. The language combo offers only 'English (en-US)'.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:106-128",
+        "reference/MissionPlanner/MainV2.cs:4227-4235"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/config.rs:1075"
+      ],
+      "next_fix": "Load translations, persist the culture and update pages and dialogs on change.",
+      "disposition": "open; unchanged by run16."
+    },
+    {
+      "priority": 9,
+      "severity": "high",
+      "status": "confirmed unsupported paths; native platform execution otherwise unverified",
+      "area": "Platform and connections",
+      "title": "Complete missing transport and mobile import paths",
+      "finding": "Unchanged. ConnectionSpec has Auto, Serial, TCP and UDP listen/client only. There is no BLE, WinUSB or websocket client transport. Mobile serial and file import return Unsupported/None.",
+      "csharp_refs": [
+        "reference/MissionPlanner/MainV2.cs:3629-3641",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4484-4488"
+      ],
+      "rust_refs": [
+        "crates/mp-core/src/comms.rs:26-46",
+        "crates/mp-app/src/platform.rs:76-79"
+      ],
+      "next_fix": "Implement the missing custom transports and mobile file/device access, then produce native launch/import receipts per promised OS.",
+      "disposition": "open; unchanged by run16."
+    }
+  ],
+  "prioritized_next_fixes": [
+    "Implement actual GStreamer discovery/pipelines, HereLink and payload gimbal video display modes, verified with local video fixtures (FlightData.cs:3186-3213, 4946-4972, 6667-6841).",
+    "Port Sequence Swarm (Swarm/Sequence/LayoutEditor.cs:18-150), then FollowPathControl and WaypointLeader.WPControl (temp.cs:219-222, 807-810), reusing swarm.rs.",
+    "Expose the full CurrentState property set, alphabetised, in the original Status-tab column layout, and reuse it for Display This, HUD items and the websocket (FlightData.cs:6178-6220, 4682-4700; CurrentState.cs:4556-4580).",
+    "Model GuidedMode z/frame: the AltInputBox prompt with frame and persisted guided_alt/guided_alt_frame, Fly To Here Alt that stores and only re-sends when Guided, and frame 0 for /guided (FlightData.cs:2930-2973, 3113-3151; httpserver.cs:905-931; MAVLinkInterface.cs:4447-4486).",
+    "Apply the remaining DisplayView consumers and the CONFIG start page: hide Commit Params/Auto Commit by displayParamCommitButton, gate the checklist Edit, lockQuickView, standardFlightModesOnly and autoHideMenuForce, and use SoftwareConfig's start page (ConfigRawParams.cs:61-62; ConfigPlanner.cs:192; CheckListControl.cs:244; FlightData.cs:4684; ConfigFlightModes.cs:119; MainV2.cs:604-615; SoftwareConfig.cs:304-315). After that come plugins, localization and BLE/WinUSB/mobile (PluginLoader.cs:146-329; ConfigPlanner.cs:106-128; MainV2.cs:3629-3641), then the swarm Status/Change Alt and web/timer residuals."
+  ],
+  "ten_out_of_ten_criterion": "No known material UI/UX or feature discrepancy in an adequately reviewed software scope, with the original interactions and promised native platforms verified. This remains a sampled review. Four high-severity areas (video, three swarm tools, plugins, transports/mobile) and two medium areas (CurrentState coverage, localization) are still open, so the port is not near 10/10 even though this round's closures are genuine."
+}
