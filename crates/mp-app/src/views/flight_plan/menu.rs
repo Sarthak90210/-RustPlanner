@@ -29,6 +29,8 @@ pub(super) enum MenuPrompt {
     SplineCircle(f64, f64, String, String),
     PoiAdd(f64, f64, String),
     PoiEdit(usize, String),
+    /// Commands_SelectionChangeCommitted's InputBox for UNKNOWN: row, id text
+    CommandId(usize, String),
 }
 
 fn offset_m(lat: f64, lng: f64, north: f64, east: f64) -> (f64, f64) {
@@ -632,6 +634,7 @@ impl FlightPlanView {
                 MenuPrompt::SplineCircle(..) => "Create Spline Circle",
                 MenuPrompt::PoiAdd(..) => "POI",
                 MenuPrompt::PoiEdit(..) => "POI",
+                MenuPrompt::CommandId(..) => "Mavlink ID",
             };
             egui::Window::new(title).collapsible(false).resizable(false).show(ctx, |ui| {
                 let field = |ui: &mut egui::Ui, l: &str, v: &mut String| {
@@ -667,6 +670,7 @@ impl FlightPlanView {
                         field(ui, "Points", n);
                     }
                     MenuPrompt::PoiAdd(_, _, n) | MenuPrompt::PoiEdit(_, n) => field(ui, "Enter ID", n),
+                    MenuPrompt::CommandId(_, n) => field(ui, "Please enter the command ID", n),
                 }
                 ui.horizontal(|ui| {
                     if theme::button(ui, "OK").clicked() {
@@ -740,6 +744,19 @@ impl FlightPlanView {
                 if let Some(op) = num(&s) {
                     app.settings.fp_map.gdal_opacity = op.clamp(0.0, 1.0) as f32;
                     app.toasts.info(format!("GDAL opacity: {:.2}", app.settings.fp_map.gdal_opacity));
+                }
+            }
+            MenuPrompt::CommandId(row, id) => {
+                // "-1" leaves the command alone; ushort.Parse failures are only logged
+                if id != "-1" {
+                    match id.trim().parse::<u16>() {
+                        Ok(v) => {
+                            if let Some(w) = self.items.get_mut(row) {
+                                w.id = v;
+                            }
+                        }
+                        Err(e) => log::error!("{e}"),
+                    }
                 }
             }
             MenuPrompt::ModifyAlt(a) => {

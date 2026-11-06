@@ -436,6 +436,22 @@ impl FlightPlanView {
         }
     }
 
+    /// Commands_SelectionChangeCommitted: the new command, with TAKEOFF / LAND /
+    /// DO_DIGICAM_CONTROL defaults, and UNKNOWN asking for the MAVLink id.
+    fn command_selected(&mut self, i: usize, name: &str, app: &mut AppCtx) {
+        let default_alt = app.settings.default_alt as f32;
+        let Some(w) = self.items.get_mut(i) else { return };
+        if name != "UNKNOWN" {
+            if let Some(id) = mavcmd::cmd_id(name) {
+                w.id = id;
+            }
+        }
+        apply_command_defaults(w, name, default_alt);
+        if name == "UNKNOWN" {
+            self.menu_prompt = Some(menu::MenuPrompt::CommandId(i, "-1".into()));
+        }
+    }
+
     /// Ctrl+Z: the last history entry back on screen (WPtoScreen)
     fn undo(&mut self) {
         if let Some((home, items)) = self.history.pop() {
@@ -868,23 +884,10 @@ impl FlightPlanView {
             }
         }
 
-        let mut derived = Vec::with_capacity(self.items.len());
-        let mut prev = PointLatLngAlt::new(self.home.lat, self.home.lng, 0.0);
-        let mut prev_alt = 0.0f64;
-        for w in &self.items {
-            if w.has_location() && (w.lat != 0.0 || w.lng != 0.0) {
-                let pt = PointLatLngAlt::new(w.lat, w.lng, 0.0);
-                let d = prev.distance(&pt);
-                let az = prev.bearing(&pt);
-                let dh = w.alt as f64 - prev_alt;
-                let grad = if d > 0.0 { dh / d * 100.0 } else { 0.0 };
-                derived.push(Some((grad, dh.atan2(d).to_degrees(), d, az)));
-                prev = pt;
-                prev_alt = w.alt as f64;
-            } else {
-                derived.push(None);
-            }
-        }
+        // WPOverlay.pointlist and setgradanddistandaz
+        let points = overlay_points(&self.home, &self.items, |lat, lng| crate::srtm::altitude(lat, lng));
+        let derived = grad_dist_az(&self.home, &points, self.items.len(), crate::units::dist(1.0) as f64);
+        let mut cmd_pick: Option<(usize, String)> = None;
 
         let system = coord_system(app);
         let widths: Vec<f32> = COLS.iter().enumerate().map(|(i, c)| if column_visible(i, system) { c.1 } else { 0.0 }).collect();
@@ -943,11 +946,10 @@ impl FlightPlanView {
                     .width(cells[1].width() - 6.0)
                     .selected_text(mavcmd::cmd_name(w.id))
                     .show_ui(ui, |ui| {
-                        for c in cmds {
-                            if ui.selectable_label(false, &c.name).clicked() {
-                                if let Some(id) = mavcmd::cmd_id(&c.name) {
-                                    w.id = id;
-                                }
+                        // Command.DataSource: the firmware's commands, then "UNKNOWN"
+                        for name in cmds.iter().map(|c| c.name.as_str()).chain(["UNKNOWN"]) {
+                            if ui.selectable_label(false, name).clicked() {
+                                cmd_pick = Some((i, name.to_string()));
                             }
                         }
                     })
@@ -1066,15 +1068,18 @@ impl FlightPlanView {
                     }
                 }
             }
-            if let Some((g, a, d, az)) = derived[i] {
-                for (k, v) in [g, a, crate::units::dist(d as f32) as f64, az].iter().enumerate() {
-                    let txt = if k >= 2 { format!("{v:.0}") } else { format!("{v:.1}") };
+            if let Some(cols) = &derived[i] {
+                for (k, txt) in cols.iter().enumerate() {
                     p.text(cells[COL_GRAD + k].left_center() + Vec2::new(3.0, 0.0), egui::Align2::LEFT_CENTER, txt, f.clone(), Color32::WHITE);
                 }
             }
         }
         if let Some(i) = select {
             self.selected = Some(i);
+        }
+        if let Some((i, name)) = cmd_pick {
+            self.selected = Some(i);
+            self.command_selected(i, &name, app);
         }
         if let Some(i) = delete {
             self.update_undo_buffer();
@@ -1708,6 +1713,168 @@ fn split_link(text: &str) -> (String, Option<(String, String)>) {
     match inner.rsplit_once(';') {
         Some((url, label)) => (format!("{}{}", &text[..start], &text[end + 1..]), Some((url.to_string(), label.to_string()))),
         None => (text.to_string(), None),
+    }
+}
+
+/// The parts of Commands_SelectionChangeCommitted that set cells for the chosen command.
+fn apply_command_defaults(w: &mut Locationwp, name: &str, default_alt: f32) {
+    match name {
+        // default takeoff to non 0 alt; lat and lon are not used
+        "TAKEOFF" => {
+            if w.alt == 0.0 {
+                w.alt = default_alt;
+            }
+            w.lat = 0.0;
+            w.lng = 0.0;
+        }
+        "LAND" => w.alt = 0.0,
+        // default to take shot
+        "DO_DIGICAM_CONTROL" => {
+            if w.lat == 0.0 {
+                w.lat = 1.0;
+            }
+        }
+        _ => {}
+    }
+}
+
+/// One entry of WPOverlay.pointlist: absolute altitude and the row it came from ("H" is
+/// None, ROI points are marked).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct OverlayPoint {
+    lat: f64,
+    lng: f64,
+    alt: f64,
+    row: Option<usize>,
+    roi: bool,
+}
+
+/// WPOverlay.CreateOverlay's pointlist (the entries setgradanddistandaz reads): home, then
+/// the located navigation commands, DO_SET_ROI, DO_LAND_START and DO_RETURN_PATH_START with
+/// their altitude made absolute (GetHomeAlt).
+fn overlay_points(home: &Locationwp, items: &[Locationwp], terrain: impl Fn(f64, f64) -> Option<f64>) -> Vec<Option<OverlayPoint>> {
+    const LAST: u16 = 95;
+    let (rtl, continue_alt, delay, guided_enable) = (20, 30, 93, 92);
+    let (land, vtol_land, roi, land_start, return_path) = (21, 85, 201, 189, 188);
+    let mut out = Vec::new();
+    if home.lat != 0.0 || home.lng != 0.0 || home.alt != 0.0 {
+        out.push(Some(OverlayPoint { lat: home.lat, lng: home.lng, alt: home.alt as f64, row: None, roi: false }));
+    }
+    let home_alt = |w: &Locationwp| match w.frame {
+        0 | 5 => 0.0,
+        10 | 11 => terrain(w.lat, w.lng).unwrap_or(-999.0),
+        _ => home.alt as f64,
+    };
+    for (a, w) in items.iter().enumerate() {
+        let c = w.id;
+        if c == 0 {
+            out.push(None);
+            continue;
+        }
+        let nav = c < LAST && ![rtl, continue_alt, delay, guided_enable].contains(&c);
+        if !(nav || c == roi || c == land_start || c == return_path) {
+            // DO commands (DO_JUMP and the rest) leave no located point
+            if c == mavcmd::DO_JUMP {
+                out.push(None);
+            }
+            continue;
+        }
+        let located = w.lat != 0.0 && w.lng != 0.0;
+        let pt = |roi: bool| Some(OverlayPoint { lat: w.lat, lng: w.lng, alt: w.alt as f64 + home_alt(w), row: Some(a), roi });
+        if (c == land || c == vtol_land) && !located {
+            continue;
+        }
+        if c == roi {
+            out.push(pt(true));
+        } else if c == land_start {
+            if located {
+                out.push(pt(false));
+            }
+        } else if located {
+            out.push(pt(false));
+        } else {
+            out.push(None);
+        }
+    }
+    out
+}
+
+/// setgradanddistandaz: Grad, Angle, Dist (slant, in the distance unit) and AZ text per row,
+/// each leg measured from the previous point (home first; an ROI point counts as previous).
+fn grad_dist_az(home: &Locationwp, points: &[Option<OverlayPoint>], rows: usize, dist_mult: f64) -> Vec<Option<[String; 4]>> {
+    let mut out: Vec<Option<[String; 4]>> = vec![None; rows];
+    // `last` starts at the home location whether or not it is on the list
+    let mut last = Some(OverlayPoint { lat: home.lat, lng: home.lng, alt: home.alt as f64, row: None, roi: false });
+    for p in points.iter().flatten() {
+        if let (Some(row), false, Some(l)) = (p.row, p.roi, last) {
+            let a = PointLatLngAlt::new(p.lat, p.lng, p.alt);
+            let b = PointLatLngAlt::new(l.lat, l.lng, l.alt);
+            let height = p.alt - l.alt;
+            let distance = a.distance(&b);
+            let grad = height / distance;
+            if row < rows {
+                out[row] = Some([
+                    dotnet_fixed(grad * 100.0, 1),
+                    dotnet_fixed(grad.atan().to_degrees(), 1),
+                    dotnet_fixed((distance * distance + height * height).sqrt() * dist_mult, 1),
+                    dotnet_fixed((a.bearing(&b) + 180.0) % 360.0, 0),
+                ]);
+            }
+        }
+        last = Some(*p);
+    }
+    out
+}
+
+/// double.ToString("0.0") on .NET Framework: NaN and the infinities by name.
+fn dotnet_fixed(v: f64, dp: usize) -> String {
+    if v.is_nan() {
+        "NaN".into()
+    } else if v.is_infinite() {
+        if v > 0.0 { "Infinity".into() } else { "-Infinity".into() }
+    } else {
+        let s = format!("{v:.dp$}");
+        // .NET rounds "-0.0" to "0.0"
+        if s.trim_start_matches('-').chars().all(|c| c == '0' || c == '.') { s.trim_start_matches('-').to_string() } else { s }
+    }
+}
+
+#[cfg(test)]
+mod grid_stat_tests {
+    use super::*;
+
+    #[test]
+    fn legs_are_slant_distances_from_the_previous_point() {
+        let home = Locationwp { lat: -35.0, lng: 149.0, alt: 100.0, ..Default::default() };
+        let wp = |id, lat: f64, alt, frame| Locationwp { id, lat, lng: 149.0, alt, frame, ..Default::default() };
+        // 0.001 deg north is ~111 m; relative alt 30 over home 100 → 130 absolute
+        let items = [wp(16, -34.999, 30.0, 3), wp(201, -34.998, 0.0, 3), wp(16, -34.997, 30.0, 3), wp(20, 0.0, 0.0, 3), wp(183, 0.0, 0.0, 3)];
+        let pts = overlay_points(&home, &items, |_, _| None);
+        let d = grad_dist_az(&home, &pts, items.len(), 1.0);
+        let row0 = d[0].as_ref().unwrap();
+        let ground = PointLatLngAlt::new(-34.999, 149.0, 0.0).distance(&PointLatLngAlt::new(-35.0, 149.0, 0.0));
+        assert_eq!(row0[2], format!("{:.1}", (ground * ground + 900.0).sqrt()));
+        assert_eq!(row0[0], format!("{:.1}", 30.0 / ground * 100.0));
+        assert_eq!(row0[3], "0", "heading north");
+        assert!(d[1].is_none(), "the ROI row has no figures");
+        // row 2 is measured from the ROI point (alt 100) one step south
+        let row2 = d[2].as_ref().unwrap();
+        assert_eq!(row2[0], format!("{:.1}", 30.0 / ground * 100.0));
+        assert!(d[3].is_none() && d[4].is_none(), "RTL and DO commands");
+    }
+
+    #[test]
+    fn command_defaults_follow_selectionchangecommitted() {
+        let mut w = Locationwp { id: 16, lat: 1.0, lng: 2.0, alt: 0.0, ..Default::default() };
+        apply_command_defaults(&mut w, "TAKEOFF", 50.0);
+        assert_eq!((w.lat, w.lng, w.alt), (0.0, 0.0, 50.0));
+        apply_command_defaults(&mut w, "LAND", 50.0);
+        assert_eq!(w.alt, 0.0);
+        apply_command_defaults(&mut w, "DO_DIGICAM_CONTROL", 50.0);
+        assert_eq!(w.lat, 1.0);
+        assert_eq!(dotnet_fixed(f64::NAN, 1), "NaN");
+        assert_eq!(dotnet_fixed(f64::INFINITY, 1), "Infinity");
+        assert_eq!(dotnet_fixed(-0.04, 1), "0.0");
     }
 }
 
