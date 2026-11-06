@@ -29,10 +29,12 @@ pub enum Provider {
     OpenTopoMap,
     /// "Custom": tiles injected from disk (FlightPlanner Inject Custom Map), cache only
     Custom,
+    /// "GDAL Custom": GDALProvider raster provider
+    GdalCustom,
 }
 
 impl Provider {
-    pub const ALL: [Provider; 13] = [
+    pub const ALL: [Provider; 14] = [
         Provider::GoogleSatellite,
         Provider::GoogleMap,
         Provider::GoogleHybrid,
@@ -46,6 +48,7 @@ impl Provider {
         Provider::EsriWorldTopo,
         Provider::OpenTopoMap,
         Provider::Custom,
+        Provider::GdalCustom,
     ];
 
     pub fn name(&self) -> &'static str {
@@ -63,6 +66,7 @@ impl Provider {
             Provider::EsriWorldTopo => "EsriWorldTopoMap",
             Provider::OpenTopoMap => "OpenTopoMap",
             Provider::Custom => "Custom",
+            Provider::GdalCustom => "GDAL Custom",
         }
     }
 
@@ -81,6 +85,7 @@ impl Provider {
             Provider::EsriWorldTopo => "esri_topo",
             Provider::OpenTopoMap => "opentopo",
             Provider::Custom => "custom",
+            Provider::GdalCustom => "gdal_custom",
         }
     }
 
@@ -88,6 +93,7 @@ impl Provider {
         match self {
             Provider::OpenTopoMap => 17,
             Provider::OpenStreetMap => 19,
+            Provider::GdalCustom => 24,
             _ => 20,
         }
     }
@@ -98,6 +104,7 @@ impl Provider {
             Provider::GoogleSatellite | Provider::GoogleMap | Provider::GoogleHybrid | Provider::GoogleTerrain => "©Google - Map data ©Google",
             Provider::BingSatellite | Provider::BingMap | Provider::BingHybrid => "© Microsoft Corporation",
             Provider::Custom => "Custom",
+            Provider::GdalCustom => "GDAL Custom",
             Provider::OpenTopoMap => {
                 "© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)"
             }
@@ -106,6 +113,9 @@ impl Provider {
     }
 
     fn url(&self, z: u8, x: u32, y: u32) -> String {
+        if matches!(self, Provider::Custom | Provider::GdalCustom) {
+            return String::new();
+        }
         let s = (x + y) % 4;
         // Bing quadkey
         let quad = || -> String {
@@ -136,7 +146,7 @@ impl Provider {
             ),
             Provider::OpenStreetMap => format!("https://tile.openstreetmap.org/{z}/{x}/{y}.png"),
             Provider::OpenTopoMap => format!("https://tile.opentopomap.org/{z}/{x}/{y}.png"),
-            Provider::Custom => String::new(),
+            Provider::Custom | Provider::GdalCustom => String::new(),
         }
     }
 }
@@ -219,6 +229,10 @@ impl MapView {
 
 // ------------------------------------------------------------------ state
 
+fn default_opacity() -> f32 {
+    1.0
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MapState {
     pub lat: f64,
@@ -228,6 +242,9 @@ pub struct MapState {
     /// Heading at the top of the map, in degrees clockwise from north.
     #[serde(default)]
     pub bearing: f64,
+    /// GDAL raster overlay opacity (0.0 to 1.0, default 1.0).
+    #[serde(default = "default_opacity")]
+    pub gdal_opacity: f32,
 }
 
 impl Default for MapState {
@@ -239,6 +256,7 @@ impl Default for MapState {
             // MainV2 default map: GoogleSatelliteMap
             provider: Provider::GoogleSatellite,
             bearing: 0.0,
+            gdal_opacity: 1.0,
         }
     }
 }

@@ -76,6 +76,9 @@ pub struct Settings {
     pub sitl_wipe: bool,
     pub fav_params: Vec<String>,
     pub ui_scale: f32,
+    pub ws_url: String,
+    pub ble_address: String,
+    pub winusb_path: String,
 }
 
 impl Default for Settings {
@@ -93,6 +96,9 @@ impl Default for Settings {
             udp_port: 14550,
             udpcl_host: "127.0.0.1".into(),
             udpcl_port: 14550,
+            ws_url: "ws://127.0.0.1:8080/mavlink".into(),
+            ble_address: String::new(),
+            winusb_path: String::new(),
             fd_map: MapState::default(),
             fp_map: MapState::default(),
             default_alt: 100.0,
@@ -369,7 +375,10 @@ pub fn spec_from(s: &Settings) -> ConnectionSpec {
                 host: s.udpcl_host.clone(),
                 port: s.udpcl_port,
             },
+            "WS" => ConnectionSpec::WebSocket { url: s.ws_url.clone() },
             "AUTO" => ConnectionSpec::Auto,
+            p if p.starts_with("BLE") => ConnectionSpec::Ble { address: s.ble_address.clone() },
+            p if p.starts_with("WinUSB") => ConnectionSpec::WinUsb { path: s.winusb_path.clone() },
             p => ConnectionSpec::Serial {
                 port: p.to_string(),
                 baud: s.baud,
@@ -1061,12 +1070,15 @@ impl MissionPlannerApp {
                 "TCP" => Some(ConnectionSpec::Tcp { host: st.tcp_host.clone(), port: st.tcp_port }),
                 "UDP" => Some(ConnectionSpec::UdpListen { port: st.udp_port }),
                 "UDPCl" => Some(ConnectionSpec::UdpClient { host: st.udpcl_host.clone(), port: st.udpcl_port }),
-                "WS" | "" => None,
+                "WS" => Some(ConnectionSpec::WebSocket { url: st.ws_url.clone() }),
+                p if p.starts_with("BLE") => Some(ConnectionSpec::Ble { address: st.ble_address.clone() }),
+                p if p.starts_with("WinUSB") => Some(ConnectionSpec::WinUsb { path: st.winusb_path.clone() }),
+                "" => None,
                 p => Some(ConnectionSpec::Serial { port: p.to_string(), baud }),
             };
             match spec {
                 Some(spec) => actions.push(AppAction::ConnectExtra(spec)),
-                None => self.toasts.error("Select a serial port, TCP, UDP or UDPCl"),
+                None => self.toasts.error("Select a serial port, TCP, UDP, UDPCl, WS, BLE or WinUSB"),
             }
         }
         if !open {
@@ -1356,6 +1368,12 @@ pub fn parse_connection_list(text: &str) -> Vec<ConnectionSpec> {
             if let Some((port, baud)) = r.rsplit_once(':').and_then(|(p, b)| b.trim().parse::<u32>().ok().map(|b| (p.to_string(), b))) {
                 out.push(ConnectionSpec::Serial { port, baud });
             }
+        } else if line.starts_with("ws://") || line.starts_with("wss://") {
+            out.push(ConnectionSpec::WebSocket { url: line.to_string() });
+        } else if let Some(r) = line.strip_prefix("ble:") {
+            out.push(ConnectionSpec::Ble { address: r.to_string() });
+        } else if let Some(r) = line.strip_prefix("winusb:") {
+            out.push(ConnectionSpec::WinUsb { path: r.to_string() });
         }
     }
     out
@@ -1365,8 +1383,8 @@ pub fn parse_connection_list(text: &str) -> Vec<ConnectionSpec> {
 mod connection_list_tests {
     #[test]
     fn parses_mp_connection_list() {
-        let v = super::parse_connection_list("tcp://127.0.0.1:5760\nudp://0.0.0.0:14550\nudpcl://10.0.0.2:14551\nserial:COM5:57600\njunk\n");
-        assert_eq!(v.len(), 4);
+        let v = super::parse_connection_list("tcp://127.0.0.1:5760\nudp://0.0.0.0:14550\nudpcl://10.0.0.2:14551\nserial:COM5:57600\nws://127.0.0.1:8080/ws\nble:AA:BB:CC\nwinusb:DEV1\njunk\n");
+        assert_eq!(v.len(), 7);
         assert_eq!(v[3].to_string().contains("COM5"), true);
     }
 }

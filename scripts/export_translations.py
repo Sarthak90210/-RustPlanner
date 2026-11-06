@@ -46,7 +46,11 @@ FORM_CLASSES = {
 
 
 # views whose Rust port draws some controls by their original names
-CONTROL_VIEWS = {"FlightPlanner", "FlightData", "MainV2", "InitialSetup", "SoftwareConfig", "ConfigPlanner"}
+CONTROL_VIEWS = {
+    "FlightPlanner", "FlightData", "MainV2", "InitialSetup", "SoftwareConfig", "ConfigPlanner",
+    "ConfigAccelerometerCalibration", "ConfigFailSafe", "ConfigBatteryMonitoring", "ConfigFrameType",
+    "ConfigMount", "ConfigHWCompass", "ConfigRadioInput", "ConfigMotorTest", "ConfigTradHeli4",
+}
 
 
 def mnemonic(text):

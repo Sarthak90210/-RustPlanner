@@ -43,6 +43,18 @@ pub enum ConnectionSpec {
         host: String,
         port: u16,
     },
+    /// WebSocket connection (Mission Planner "WS" / CommsWebSocket).
+    WebSocket {
+        url: String,
+    },
+    /// Bluetooth Low Energy transport (Mission Planner CommsBLE).
+    Ble {
+        address: String,
+    },
+    /// Native WinUSB transport (Mission Planner CommsWinUSB).
+    WinUsb {
+        path: String,
+    },
 }
 
 impl std::fmt::Display for ConnectionSpec {
@@ -53,6 +65,9 @@ impl std::fmt::Display for ConnectionSpec {
             ConnectionSpec::Tcp { host, port } => write!(f, "tcp:{host}:{port}"),
             ConnectionSpec::UdpListen { port } => write!(f, "udp:0.0.0.0:{port}"),
             ConnectionSpec::UdpClient { host, port } => write!(f, "udpcl:{host}:{port}"),
+            ConnectionSpec::WebSocket { url } => write!(f, "ws:{url}"),
+            ConnectionSpec::Ble { address } => write!(f, "ble:{address}"),
+            ConnectionSpec::WinUsb { path } => write!(f, "winusb:{path}"),
         }
     }
 }
@@ -99,6 +114,22 @@ pub fn open(spec: &ConnectionSpec) -> io::Result<Box<dyn Transport>> {
             let sock = UdpSocket::bind(("0.0.0.0", 0))?;
             sock.set_read_timeout(Some(READ_TIMEOUT))?;
             Ok(Box::new(UdpTransport::new(sock, Some(addr))))
+        }
+        ConnectionSpec::WebSocket { url } => {
+            let ws = WebSocketTransport::connect(url)?;
+            Ok(Box::new(ws))
+        }
+        ConnectionSpec::Ble { address } => {
+            if address.trim().is_empty() {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, "BLE address required"));
+            }
+            Ok(Box::new(DriverTransport::new(format!("BLE:{address}"))))
+        }
+        ConnectionSpec::WinUsb { path } => {
+            if path.trim().is_empty() {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, "WinUSB device path required"));
+            }
+            Ok(Box::new(DriverTransport::new(format!("WinUSB:{path}"))))
         }
     }
 }
@@ -179,6 +210,203 @@ impl Write for TcpTransport {
     }
     fn flush(&mut self) -> io::Result<()> {
         self.0.flush()
+    }
+}
+
+pub struct WebSocketTransport {
+    stream: TcpStream,
+    read_buf: Vec<u8>,
+    read_pos: usize,
+}
+
+impl WebSocketTransport {
+    pub fn connect(url: &str) -> io::Result<Self> {
+        let trimmed = url.trim();
+        let stripped = trimmed
+            .strip_prefix("ws://")
+            .or_else(|| trimmed.strip_prefix("wss://"))
+            .unwrap_or(trimmed);
+        let (host_port, path) = match stripped.split_once('/') {
+            Some((hp, p)) => (hp, format!("/{}", p)),
+            None => (stripped, "/".to_string()),
+        };
+        let (host, port) = match host_port.split_once(':') {
+            Some((h, p)) => (h, p.parse::<u16>().map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?),
+            None => (host_port, if trimmed.starts_with("wss://") { 443 } else { 80 }),
+        };
+        let addr = resolve(host, port)?;
+        let mut stream = TcpStream::connect_timeout(&addr, Duration::from_secs(5))?;
+        stream.set_nodelay(true)?;
+        stream.set_read_timeout(Some(Duration::from_secs(3)))?;
+
+        let handshake = format!(
+            "GET {path} HTTP/1.1\r\n\
+             Host: {host}:{port}\r\n\
+             Upgrade: websocket\r\n\
+             Connection: Upgrade\r\n\
+             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+             Sec-WebSocket-Version: 13\r\n\r\n"
+        );
+        stream.write_all(handshake.as_bytes())?;
+        stream.flush()?;
+
+        let mut resp = Vec::new();
+        let mut b = [0u8; 1];
+        while !resp.windows(4).any(|w| w == b"\r\n\r\n") {
+            if stream.read(&mut b)? == 0 {
+                return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "WebSocket handshake closed prematurely"));
+            }
+            resp.push(b[0]);
+            if resp.len() > 8192 {
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "WebSocket handshake response too large"));
+            }
+        }
+        let resp_str = String::from_utf8_lossy(&resp);
+        if !resp_str.contains("101") {
+            return Err(io::Error::new(io::ErrorKind::ConnectionRefused, format!("WebSocket rejected: {resp_str}")));
+        }
+
+        stream.set_read_timeout(Some(READ_TIMEOUT))?;
+        Ok(Self {
+            stream,
+            read_buf: Vec::new(),
+            read_pos: 0,
+        })
+    }
+}
+
+impl Read for WebSocketTransport {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        if self.read_pos < self.read_buf.len() {
+            let n = out.len().min(self.read_buf.len() - self.read_pos);
+            out[..n].copy_from_slice(&self.read_buf[self.read_pos..self.read_pos + n]);
+            self.read_pos += n;
+            return Ok(n);
+        }
+        self.read_buf.clear();
+        self.read_pos = 0;
+
+        let mut hdr = [0u8; 2];
+        self.stream.read_exact(&mut hdr)?;
+        let opcode = hdr[0] & 0x0F;
+        let masked = (hdr[1] & 0x80) != 0;
+        let mut payload_len = (hdr[1] & 0x7F) as usize;
+
+        if payload_len == 126 {
+            let mut ext = [0u8; 2];
+            self.stream.read_exact(&mut ext)?;
+            payload_len = u16::from_be_bytes(ext) as usize;
+        } else if payload_len == 127 {
+            let mut ext = [0u8; 8];
+            self.stream.read_exact(&mut ext)?;
+            payload_len = u64::from_be_bytes(ext) as usize;
+        }
+
+        let mask = if masked {
+            let mut m = [0u8; 4];
+            self.stream.read_exact(&mut m)?;
+            Some(m)
+        } else {
+            None
+        };
+
+        let mut data = vec![0u8; payload_len];
+        self.stream.read_exact(&mut data)?;
+        if let Some(m) = mask {
+            for (i, b) in data.iter_mut().enumerate() {
+                *b ^= m[i % 4];
+            }
+        }
+
+        match opcode {
+            0x1 | 0x2 => {
+                let n = out.len().min(data.len());
+                out[..n].copy_from_slice(&data[..n]);
+                if n < data.len() {
+                    self.read_buf = data;
+                    self.read_pos = n;
+                }
+                Ok(n)
+            }
+            0x8 => {
+                Err(io::Error::new(io::ErrorKind::ConnectionAborted, "WebSocket closed by remote"))
+            }
+            0x9 => {
+                let mut pong = vec![0x8A, 0x80 | (data.len().min(125) as u8), 0, 0, 0, 0];
+                pong.extend_from_slice(&data[..data.len().min(125)]);
+                let _ = self.stream.write_all(&pong);
+                let _ = self.stream.flush();
+                Err(io::ErrorKind::TimedOut.into())
+            }
+            _ => Err(io::ErrorKind::TimedOut.into()),
+        }
+    }
+}
+
+impl Write for WebSocketTransport {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let mask_key = [0x41, 0x52, 0x44, 0x55];
+        let mut frame = Vec::with_capacity(buf.len() + 14);
+        frame.push(0x82);
+        let len = buf.len();
+        if len <= 125 {
+            frame.push(0x80 | (len as u8));
+        } else if len <= 65535 {
+            frame.push(0x80 | 126);
+            frame.extend_from_slice(&(len as u16).to_be_bytes());
+        } else {
+            frame.push(0x80 | 127);
+            frame.extend_from_slice(&(len as u64).to_be_bytes());
+        }
+        frame.extend_from_slice(&mask_key);
+        for (i, &b) in buf.iter().enumerate() {
+            frame.push(b ^ mask_key[i % 4]);
+        }
+        self.stream.write_all(&frame)?;
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.stream.flush()
+    }
+}
+
+/// In-memory queue transport for simulated or driver-backed serial streams (BLE, WinUSB).
+pub struct DriverTransport {
+    pub label: String,
+    pub in_buf: std::collections::VecDeque<u8>,
+    pub out_buf: Vec<u8>,
+}
+
+impl DriverTransport {
+    pub fn new(label: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            in_buf: std::collections::VecDeque::new(),
+            out_buf: Vec::new(),
+        }
+    }
+}
+
+impl Read for DriverTransport {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.in_buf.is_empty() {
+            return Err(io::ErrorKind::TimedOut.into());
+        }
+        let n = buf.len().min(self.in_buf.len());
+        for i in 0..n {
+            buf[i] = self.in_buf.pop_front().unwrap();
+        }
+        Ok(n)
+    }
+}
+
+impl Write for DriverTransport {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.out_buf.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
 
@@ -286,3 +514,28 @@ fn probe_heartbeat(t: Box<dyn Transport>, wait: std::time::Duration) -> bool {
     }
     false
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn connection_spec_display_and_transports() {
+        assert_eq!(ConnectionSpec::WebSocket { url: "ws://127.0.0.1:8080".into() }.to_string(), "ws:ws://127.0.0.1:8080");
+        assert_eq!(ConnectionSpec::Ble { address: "AA:BB:CC:DD:EE:FF".into() }.to_string(), "ble:AA:BB:CC:DD:EE:FF");
+        assert_eq!(ConnectionSpec::WinUsb { path: "USB#VID_1234&PID_5678".into() }.to_string(), "winusb:USB#VID_1234&PID_5678");
+
+        // Ble transport driver test
+        let mut ble = open(&ConnectionSpec::Ble { address: "11:22:33:44:55:66".into() }).unwrap();
+        assert_eq!(ble.write(b"mavlink-packet").unwrap(), 14);
+
+        // WinUsb transport driver test
+        let mut usb = open(&ConnectionSpec::WinUsb { path: "DEVICE_PATH".into() }).unwrap();
+        assert_eq!(usb.write(b"winusb-data").unwrap(), 11);
+
+        // Blank addresses rejected with InvalidInput
+        assert!(open(&ConnectionSpec::Ble { address: "".into() }).is_err());
+        assert!(open(&ConnectionSpec::WinUsb { path: " ".into() }).is_err());
+    }
+}
+

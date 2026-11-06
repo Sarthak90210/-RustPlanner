@@ -59,12 +59,35 @@ fn views_for(file: &str) -> &'static [&'static str] {
     let name = f.rsplit('/').next().unwrap_or("");
     if f.contains("/flight_plan") {
         &["FlightPlanner"]
-    } else if matches!(name, "flight_data.rs" | "fd_tabs.rs" | "hud.rs" | "checklist.rs") {
+    } else if matches!(name, "flight_data.rs" | "fd_tabs.rs" | "hud.rs" | "checklist.rs" | "gimbal_video.rs") {
         &["FlightData"]
     } else if name == "app.rs" {
         &["MainV2", "ConnectionControl"]
-    } else if matches!(name, "setup.rs" | "setup_pages.rs") {
-        &["InitialSetup", "ConfigMandatory", "ConfigOptional"]
+    } else if matches!(name, "setup.rs" | "setup_pages.rs" | "mount.rs" | "rtk_page.rs" | "device_pages.rs") {
+        &[
+            "InitialSetup",
+            "ConfigMandatory",
+            "ConfigOptional",
+            "ConfigAccelerometerCalibration",
+            "ConfigFailSafe",
+            "ConfigBatteryMonitoring",
+            "ConfigFrameType",
+            "ConfigMount",
+            "ConfigHWCompass",
+            "ConfigHWCompass2",
+            "ConfigRadioInput",
+            "ConfigMotorTest",
+            "ConfigTradHeli4",
+            "ConfigOSD",
+            "ConfigHWOSD",
+            "ConfigHWOptFlow",
+            "ConfigHWAirspeed",
+            "ConfigHWRangeFinder",
+            "ConfigSerial",
+            "ConfigADSB",
+            "ConfigCubeID",
+            "ConfigDroneCAN",
+        ]
     } else if name == "config.rs" {
         &["SoftwareConfig", "ConfigPlanner", "ConfigRawParams", "ConfigFriendlyParams"]
     } else if matches!(name, "tuning.rs" | "vehicle_tuning.rs") {

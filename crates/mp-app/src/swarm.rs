@@ -54,6 +54,9 @@ fn port_name(spec: Option<&ConnectionSpec>) -> String {
         Some(ConnectionSpec::Tcp { .. }) => "TCP".into(),
         Some(ConnectionSpec::UdpListen { .. }) => "UDP".into(),
         Some(ConnectionSpec::UdpClient { .. }) => "UDPCl".into(),
+        Some(ConnectionSpec::WebSocket { .. }) => "WS".into(),
+        Some(ConnectionSpec::Ble { .. }) => "BLE".into(),
+        Some(ConnectionSpec::WinUsb { .. }) => "WinUSB".into(),
         _ => "AUTO".into(),
     }
 }

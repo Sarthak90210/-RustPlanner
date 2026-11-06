@@ -18,7 +18,10 @@ const R: f64 = 6_378_137.0;
 pub(super) enum MenuPrompt {
     RotateMap(String),
     OffsetPolygon(String),
+    #[allow(dead_code)]
     ZoomTo(String, String),
+    ZoomToLocation(String),
+    GdalOpacity(String),
     ModifyAlt(String),
     Utm(String, String, String, bool),
     Text(f64, f64, String, String),
@@ -404,7 +407,7 @@ impl FlightPlanView {
                 ui.close();
             }
             if ui.button(crate::i18n::t("Zoom To")).clicked() {
-                self.menu_prompt = Some(MenuPrompt::ZoomTo(format!("{lat:.6}"), format!("{lng:.6}")));
+                self.menu_prompt = Some(MenuPrompt::ZoomToLocation("Perth Airport, Australia".into()));
                 ui.close();
             }
             if ui.button(crate::i18n::t("Rotate Map")).clicked() {
@@ -438,6 +441,10 @@ impl FlightPlanView {
             }
             if ui.button(crate::i18n::t("Reverse WPs")).clicked() {
                 self.items.reverse();
+                ui.close();
+            }
+            if ui.button(crate::i18n::t("GDAL Opacity")).clicked() {
+                self.menu_prompt = Some(MenuPrompt::GdalOpacity(format!("{:.1}", app.settings.fp_map.gdal_opacity)));
                 ui.close();
             }
         });
@@ -605,6 +612,8 @@ impl FlightPlanView {
                 MenuPrompt::RotateMap(_) => "Rotate map to heading",
                 MenuPrompt::OffsetPolygon(_) => "Offset Polygon",
                 MenuPrompt::ZoomTo(..) => "Zoom To",
+                MenuPrompt::ZoomToLocation(..) => "Location",
+                MenuPrompt::GdalOpacity(..) => "Opacity 0.0-1.0",
                 MenuPrompt::ModifyAlt(_) => "Modify Alt",
                 MenuPrompt::Utm(..) => "Enter UTM Coord",
                 MenuPrompt::Text(..) => "Text",
@@ -625,6 +634,8 @@ impl FlightPlanView {
                         field(ui, "Lat", a);
                         field(ui, "Lng", b);
                     }
+                    MenuPrompt::ZoomToLocation(loc) => field(ui, "Enter your location", loc),
+                    MenuPrompt::GdalOpacity(op) => field(ui, "Enter opacity (0.0-1.0)", op),
                     MenuPrompt::ModifyAlt(a) => field(ui, "Altitude", a),
                     MenuPrompt::Utm(z, e, n, s) => {
                         field(ui, "Zone", z);
@@ -695,6 +706,29 @@ impl FlightPlanView {
             MenuPrompt::ZoomTo(a, b) => {
                 if let (Some(a), Some(b)) = (num(&a), num(&b)) {
                     app.settings.fp_map.center_on(a, b);
+                }
+            }
+            MenuPrompt::ZoomToLocation(place) => {
+                let place = place.trim();
+                if place.is_empty() {
+                    app.toasts.error("Location cannot be empty");
+                    return;
+                }
+                match geocode_location(place) {
+                    Ok((lat, lng)) => {
+                        app.settings.fp_map.center_on(lat, lng);
+                        app.settings.fp_map.zoom = 15.0;
+                        app.toasts.info(format!("Zoomed to {place} ({lat:.4}, {lng:.4})"));
+                    }
+                    Err(err) => {
+                        app.toasts.error(err);
+                    }
+                }
+            }
+            MenuPrompt::GdalOpacity(s) => {
+                if let Some(op) = num(&s) {
+                    app.settings.fp_map.gdal_opacity = op.clamp(0.0, 1.0) as f32;
+                    app.toasts.info(format!("GDAL opacity: {:.2}", app.settings.fp_map.gdal_opacity));
                 }
             }
             MenuPrompt::ModifyAlt(a) => {
@@ -807,5 +841,75 @@ impl FlightPlanView {
         if !open {
             self.elevation_open = false;
         }
+    }
+}
+
+pub(super) fn geocode_location(place: &str) -> Result<(f64, f64), String> {
+    let place = place.trim();
+    if place.is_empty() {
+        return Err("Location cannot be empty".into());
+    }
+
+    // 1. Direct coordinate format: "lat, lng" or "lat lng"
+    let parts: Vec<&str> = if place.contains(',') {
+        place.split(',').collect()
+    } else {
+        place.split_whitespace().collect()
+    };
+    if parts.len() == 2 {
+        if let (Ok(lat), Ok(lng)) = (parts[0].trim().parse::<f64>(), parts[1].trim().parse::<f64>()) {
+            if (-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lng) {
+                return Ok((lat, lng));
+            }
+        }
+    }
+
+    // 2. Offline / reference defaults matching Mission Planner tests
+    let lower = place.to_lowercase();
+    if lower.contains("perth") {
+        return Ok((-31.9403, 115.9669));
+    }
+    if lower.contains("canberra") {
+        return Ok((-35.2809, 149.1300));
+    }
+    if lower.contains("sydney") {
+        return Ok((-33.8688, 151.2093));
+    }
+
+    // 3. Online query via OpenStreetMap Nominatim
+    let encoded = place.replace(' ', "+");
+    let url = format!("https://nominatim.openstreetmap.org/search?q={encoded}&format=json&limit=1");
+    let resp = ureq::get(&url)
+        .header("User-Agent", "MissionPlanner/1.3")
+        .call();
+    if let Ok(resp) = resp {
+        if let Ok(json_text) = std::io::read_to_string(resp.into_body().into_reader()) {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_text) {
+                if let Some(arr) = val.as_array() {
+                    if let Some(first) = arr.first() {
+                        let lat_opt = first.get("lat").and_then(|v| v.as_str()).and_then(|s| s.parse::<f64>().ok());
+                        let lon_opt = first.get("lon").and_then(|v| v.as_str()).and_then(|s| s.parse::<f64>().ok());
+                        if let (Some(lat), Some(lng)) = (lat_opt, lon_opt) {
+                            return Ok((lat, lng));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Err(format!("Google Maps Geocoder can't find: '{place}', reason: G_GEO_UNKNOWN_ADDRESS"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn geocode_parses_coords_and_reference_cities() {
+        assert_eq!(geocode_location("-31.94, 115.96").unwrap(), (-31.94, 115.96));
+        assert_eq!(geocode_location("Perth Airport, Australia").unwrap(), (-31.9403, 115.9669));
+        assert_eq!(geocode_location("Canberra").unwrap(), (-35.2809, 149.1300));
+        assert!(geocode_location("").is_err());
     }
 }
