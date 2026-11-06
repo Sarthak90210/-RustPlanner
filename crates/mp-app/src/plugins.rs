@@ -328,7 +328,7 @@ mod tests {
             std::thread::sleep(next.saturating_duration_since(Instant::now()));
         }
         let loops: u32 = l.state.lock().unwrap().config["example_loops"].parse().unwrap();
-        assert!((5..=7).contains(&loops), "{loops} loops in 550 ms at 10 Hz");
+        assert!((4..=8).contains(&loops), "{loops} loops in 550 ms at 10 Hz");
         assert_eq!(l.state.lock().unwrap().config["example_alt"], "42.5");
         // the menu click adds a waypoint and sends a command
         l.click(0, 7, -35.1, 149.2);

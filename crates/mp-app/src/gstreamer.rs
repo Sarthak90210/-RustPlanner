@@ -112,6 +112,10 @@ pub fn download(data_dir: &Path, status: &dyn Fn(i32, &str)) -> Result<(), Strin
 
 /// DownloadGStreamer with the progress dialog's Cancel ("User Request").
 pub fn download_cancellable(data_dir: &Path, status: &dyn Fn(i32, &str), cancel: &AtomicBool) -> Result<(), String> {
+    if cancel.load(Ordering::Relaxed) {
+        status(-1, "User Request");
+        return Err("User Request".into());
+    }
     if cfg!(any(target_arch = "arm", target_arch = "aarch64")) {
         return Err("No GStreamer download for this architecture".into());
     }

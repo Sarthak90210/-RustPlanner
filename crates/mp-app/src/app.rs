@@ -1137,7 +1137,13 @@ impl MissionPlannerApp {
 
 impl eframe::App for MissionPlannerApp {
     /// MainV2 closing: every plugin's Exit.
+    #[cfg(not(target_os = "ios"))]
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        crate::plugins::shutdown();
+    }
+
+    #[cfg(target_os = "ios")]
+    fn on_exit(&mut self) {
         crate::plugins::shutdown();
     }
 
