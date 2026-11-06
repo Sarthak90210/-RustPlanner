@@ -188,6 +188,14 @@ the control shows its own value while the timer runs, and only the final value i
 writes show "Set X Failed" for numerics and "Set X Failed!" for combos and check boxes, as the
 original controls do. The Rover simulator test confirms that nothing is written before the timer fires.
 
+`DisplayView` is modeled in full: all of the original's flags, the Basic/Advanced presets, and a Custom
+view read from `custom.displayview` (JSON or XML). The selected view is saved as JSON in "displayview",
+and startup forces the parameter pages as MainV2 does. The flags control the SIMULATION and HELP
+buttons, every DATA tab, the PLAN menus and Verify Height box, each SETUP and CONFIG page, and the
+Planner Layout selector. Original page predicates apply: Frame Type (FRAME_CLASS or Copter), Initial
+Tune (Copter or QuadPlane), CONFIG Loading while parameters arrive, and Full Parameter List only when
+disconnected or complete. Pure page-list tests cover layouts, connection states and vehicles.
+
 ## License
 
 GPL-3.0, like Mission Planner. Icons and marker images are Mission Planner / GMap.NET assets under the same license.

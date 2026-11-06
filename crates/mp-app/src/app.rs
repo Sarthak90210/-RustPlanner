@@ -265,6 +265,8 @@ impl MissionPlannerApp {
             }
             cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
         }
+        // MainV2: DisplayConfiguration from "displayview", forcing the parameter pages
+        crate::display::force_on_load(&mut settings.planner);
         // MainV2: "start http" - the web service on port 56781
         crate::httpserver::start();
         // Developer switches: MP_AUTOSIM=1 starts the simulator, MP_VIEW picks the screen.
@@ -555,14 +557,24 @@ impl MissionPlannerApp {
 
         let font = crate::fonts::ui_id(crate::fonts::UI_SIZE);
         let a = &self.assets;
-        let items = [
+        // updateLayout: MenuSimulation / MenuHelp follow displaySimulation / displayHelp
+        let pl = &self.settings.planner;
+        let (sim, help) = (crate::display::flag(pl, "displaySimulation"), crate::display::flag(pl, "displayHelp"));
+        let items: Vec<_> = [
             (View::FlightData, "DATA", a.fd.id(), 49.0),
             (View::FlightPlan, "PLAN", a.fp.id(), 49.0),
             (View::Setup, "SETUP", a.setup.id(), 49.0),
             (View::Config, "CONFIG", a.config.id(), 51.0),
             (View::Simulation, "SIMULATION", a.sim.id(), 77.0),
             (View::Help, "HELP", a.help.id(), 49.0),
-        ];
+        ]
+        .into_iter()
+        .filter(|(v, ..)| match v {
+            View::Simulation => sim,
+            View::Help => help,
+            _ => true,
+        })
+        .collect();
         let top = bar.top() + 2.0;
         let item = |ui: &mut egui::Ui, x: f32, w: f32, tex: egui::TextureId, label: &str, selected: bool, id: &str| -> (bool, f32) {
             // ToolStripButton AutoSize with ImageAboveText: 39px image + 13px text + padding

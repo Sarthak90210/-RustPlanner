@@ -24,6 +24,8 @@ enum Page {
     MavFtp,
     UserParams,
     FullParamList,
+    /// ConfigParamLoading while parameters are still arriving
+    Loading,
     Planner,
 }
 
@@ -40,47 +42,122 @@ impl Page {
             Page::MavFtp => "MAVFtp",
             Page::UserParams => "User Params",
             Page::FullParamList => "Full Parameter List",
+            Page::Loading => "Loading",
             Page::Planner => "Planner",
         }
     }
 }
 
-/// SoftwareConfig.cs page list: vehicle pages only once connected with all params.
+/// What SoftwareConfig_Load looks at on the connected vehicle.
+#[derive(Clone, Copy, Default)]
+struct Vehicle {
+    firmware: Firmware,
+    all_params: bool,
+    osd: bool,
+    ftp: bool,
+}
+
 fn pages(app: &AppCtx) -> Vec<Page> {
-    let mut v = Vec::new();
-    if let Some(l) = app.link.filter(|_| app.connected()) {
+    let vehicle = app.link.filter(|_| app.connected()).map(|l| {
         let s = l.shared.read();
-        let fw = s.cs.firmware;
-        let has = |p: &str| s.params.keys().any(|k| k.starts_with(p));
-        if s.params_complete {
-            if fw == Firmware::ArduCopter2 {
-                v.push(Page::GeoFence);
-            }
-            if matches!(fw, Firmware::ArduCopter2 | Firmware::ArduPlane | Firmware::ArduRover) { v.push(Page::BasicTuning); }
-            if matches!(fw, Firmware::ArduCopter2 | Firmware::ArduPlane | Firmware::ArduTracker) {
-                v.push(Page::ExtendedTuning);
-            }
-            if crate::display::friendly_params(&app.settings.planner) {
-                v.push(Page::StandardParams);
-                v.push(Page::AdvancedParams);
-            }
-            if has("OSD") {
-                v.push(Page::OnboardOsd);
-            }
+        Vehicle {
+            firmware: s.cs.firmware,
+            all_params: s.params_complete,
+            osd: s.params.keys().any(|k| k.starts_with("OSD")),
             // MAV_PROTOCOL_CAPABILITY_FTP
-            if s.autopilot_version.map(|(_, caps)| caps & 32 != 0).unwrap_or(false) {
-                v.push(Page::MavFtp);
+            ftp: s.autopilot_version.map(|(_, caps)| caps & 32 != 0).unwrap_or(false),
+        }
+    });
+    page_list(&app.settings.planner, vehicle)
+}
+
+/// SoftwareConfig_Load: vehicle pages once connected with all params, each behind its
+/// DisplayView flag; Full Parameter List, Loading and Planner by connection state.
+fn page_list(pl: &std::collections::BTreeMap<String, String>, vehicle: Option<Vehicle>) -> Vec<Page> {
+    let shown = |flag: &str| crate::display::flag(pl, flag);
+    let mut v = Vec::new();
+    let connected = vehicle.is_some();
+    let all = vehicle.is_some_and(|x| x.all_params);
+    if let Some(x) = vehicle.filter(|x| x.all_params) {
+        if x.firmware == Firmware::ArduCopter2 && shown("displayGeoFence") {
+            v.push(Page::GeoFence);
+        }
+        match x.firmware {
+            Firmware::ArduCopter2 | Firmware::ArduPlane => {
+                if shown("displayBasicTuning") {
+                    v.push(Page::BasicTuning);
+                }
+                if shown("displayExtendedTuning") {
+                    v.push(Page::ExtendedTuning);
+                }
             }
+            // Rover Basic and Tracker Extended are added without a flag
+            Firmware::ArduRover => v.push(Page::BasicTuning),
+            Firmware::ArduTracker => v.push(Page::ExtendedTuning),
+            _ => {}
+        }
+        if shown("displayStandardParams") {
+            v.push(Page::StandardParams);
+        }
+        if shown("displayAdvancedParams") {
+            v.push(Page::AdvancedParams);
+        }
+        if x.osd && shown("displayOSD") {
+            v.push(Page::OnboardOsd);
+        }
+        if shown("displayMavFTP") && x.ftp {
+            v.push(Page::MavFtp);
+        }
+        if shown("displayUserParam") {
             v.push(Page::UserParams);
         }
     }
-    v.push(Page::FullParamList);
-    v.push(Page::Planner);
+    if shown("displayFullParamList") && (!connected || all) {
+        v.push(Page::FullParamList);
+    }
+    if connected && !all {
+        v.push(Page::Loading);
+    }
+    if shown("displayPlannerSettings") {
+        v.push(Page::Planner);
+    }
     v
+}
+
+#[cfg(test)]
+mod page_tests {
+    use super::*;
+    use crate::display::{select, DisplayView, Layout};
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn config_pages_follow_connection_vehicle_and_display_view() {
+        let mut pl = BTreeMap::new();
+        assert_eq!(page_list(&pl, None), [Page::FullParamList, Page::Planner]);
+        let loading = Vehicle { firmware: Firmware::ArduCopter2, ..Default::default() };
+        assert_eq!(page_list(&pl, Some(loading)), [Page::Loading, Page::Planner], "no Full Parameter List while loading");
+        let copter = Vehicle { firmware: Firmware::ArduCopter2, all_params: true, osd: true, ftp: true };
+        assert_eq!(page_list(&pl, Some(copter)), [Page::GeoFence, Page::BasicTuning, Page::ExtendedTuning, Page::OnboardOsd, Page::MavFtp, Page::UserParams, Page::FullParamList, Page::Planner]);
+        let rover = Vehicle { firmware: Firmware::ArduRover, all_params: true, ..Default::default() };
+        let tracker = Vehicle { firmware: Firmware::ArduTracker, all_params: true, ..Default::default() };
+        // a custom view without tuning or user params
+        let mut custom = DisplayView::advanced();
+        for f in ["displayBasicTuning", "displayExtendedTuning", "displayUserParam", "displayGeoFence", "displayPlannerSettings"] {
+            custom.flags.insert(f.into(), false);
+        }
+        custom.flags.insert("displayStandardParams".into(), true);
+        pl.insert("displayview".into(), custom.to_json());
+        assert_eq!(page_list(&pl, Some(copter)), [Page::StandardParams, Page::OnboardOsd, Page::MavFtp, Page::FullParamList]);
+        assert_eq!(page_list(&pl, Some(rover)), [Page::BasicTuning, Page::StandardParams, Page::FullParamList], "Rover tuning has no flag");
+        assert_eq!(page_list(&pl, Some(tracker)), [Page::ExtendedTuning, Page::StandardParams, Page::FullParamList]);
+        select(&mut pl, Layout::Basic);
+        assert_eq!(page_list(&pl, Some(rover)), [Page::BasicTuning, Page::UserParams, Page::FullParamList, Page::Planner]);
+    }
 }
 
 pub struct ConfigView {
     page: Page,
+    loading: crate::views::setup_pages::ExtraPages,
     pub params: ParamEditor,
     extended: crate::views::tuning::ExtendedTuning,
     user_add: String,
@@ -106,7 +183,7 @@ impl Default for ConfigView {
             Some(0) => Page::GeoFence,
             _ => Page::FullParamList,
         };
-        Self { page, params: ParamEditor::default(), extended: Default::default(), user_add: String::new(), ftp: Default::default(), osd: Default::default(), standard: Default::default(), advanced: Default::default(), last_page: None, vehicle_tuning: Default::default() }
+        Self { page, loading: Default::default(), params: ParamEditor::default(), extended: Default::default(), user_add: String::new(), ftp: Default::default(), osd: Default::default(), standard: Default::default(), advanced: Default::default(), last_page: None, vehicle_tuning: Default::default() }
     }
 }
 
@@ -120,7 +197,7 @@ impl ConfigView {
     pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
         let fw = app.link.map(|l| l.shared.read().cs.firmware).unwrap_or_default();
         let list = pages(app);
-        let shown = if list.contains(&self.page) { self.page } else { Page::FullParamList };
+        let shown = if list.contains(&self.page) { self.page } else { list.first().copied().unwrap_or(Page::Planner) };
         let items: Vec<BsvItem> = list.iter().map(|p| BsvItem { label: p.label(fw).to_string(), parent: None }).collect();
         let before = list.iter().position(|p| *p == shown).unwrap_or(0);
         let mut idx = before;
@@ -149,6 +226,7 @@ impl ConfigView {
             Page::MavFtp => self.ftp.ui(ui, app),
             Page::UserParams => self.user_params(ui, app),
             Page::FullParamList => self.params.ui(ui, app, false),
+            Page::Loading => self.loading.param_loading(ui, app),
             Page::Planner => planner(ui, app, fw),
         });
     }
@@ -920,7 +998,6 @@ fn planner(ui: &mut egui::Ui, app: &mut AppCtx, _fw: Firmware) {
             (9.0, 373.0, "Map Follow"),
             (9.0, 398.0, "Log Path"),
             (9.0, 424.0, "Theme"),
-            (9.0, 451.0, "Layout"),
             (9.0, 477.0, "GCS ID"),
             (9.0, 502.0, "Aircraft Icon"),
             (841.0, 502.0, "Line Length"),
@@ -928,6 +1005,9 @@ fn planner(ui: &mut egui::Ui, app: &mut AppCtx, _fw: Firmware) {
             (9.0, 656.0, "Map Access Mode"),
         ] {
             lab(x, y, t);
+        }
+        if crate::display::flag(pl, "displayPlannerLayout") {
+            lab(9.0, 451.0, "Layout");
         }
         lab(252.0, 108.0, "NOTE: Set the low level of SEVERITY to speak");
         lab(480.0, 198.0, "NOTE: The Configuration Tab will NOT display these units,\nas those are raw values.");
@@ -1074,7 +1154,24 @@ fn planner(ui: &mut egui::Ui, app: &mut AppCtx, _fw: Firmware) {
             }
         }
         let pl = &mut app.settings.planner;
-        combo(ui, pl, "displayview", r(107.0, 448.0, 138.0, 21.0), &["Basic", "Advanced", "Custom"], "Advanced");
+        // CMB_Layout: hidden when the view has displayPlannerLayout off
+        if crate::display::flag(pl, "displayPlannerLayout") {
+            let cur = crate::display::layout(pl);
+            let rr = r(107.0, 448.0, 138.0, 21.0);
+            ui.put(rr, |ui: &mut egui::Ui| {
+                egui::ComboBox::from_id_salt(("pl", "displayview"))
+                    .width(rr.width() - 8.0)
+                    .selected_text(cur.name())
+                    .show_ui(ui, |ui| {
+                        for o in [crate::display::Layout::Basic, crate::display::Layout::Advanced, crate::display::Layout::Custom] {
+                            if ui.selectable_label(cur == o, o.name()).clicked() {
+                                crate::display::select(pl, o);
+                            }
+                        }
+                    })
+                    .response
+            });
+        }
         let mut gcsid: f32 = pl.get("gcsid").and_then(|v| v.parse().ok()).unwrap_or(255.0);
         if ui.put(r(107.0, 475.0, 53.0, 20.0), egui::DragValue::new(&mut gcsid).range(1.0..=255.0)).changed() {
             pl.insert("gcsid".into(), gcsid.to_string());

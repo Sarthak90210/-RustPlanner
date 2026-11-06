@@ -303,7 +303,17 @@ impl FlightPlanView {
         }
         ui.separator();
         ui.menu_button("Polygon", |ui| self.polygon_menu(ui, app));
-        ui.menu_button("Geo-Fence", |ui| {
+        let show = |f: &str| crate::display::flag(&app.settings.planner, f);
+        let (fence, rally, spline, text, circle_survey, poi, tracker) = (
+            show("displayGeoFenceMenu"),
+            show("displayRallyPointsMenu"),
+            show("displaySplineCircleAutoWp"),
+            show("displayTextAutoWp"),
+            show("displayCircleSurveyAutoWp"),
+            show("displayPoiMenu"),
+            show("displayTrackerHomeMenu"),
+        );
+        if fence { ui.menu_button("Geo-Fence", |ui| {
             if ui.button("Upload").clicked() {
                 self.transfer(app, 1, false);
                 ui.close();
@@ -329,8 +339,8 @@ impl FlightPlanView {
                 self.fence_list().clear();
                 ui.close();
             }
-        });
-        ui.menu_button("Rally Points", |ui| {
+        }); }
+        if rally { ui.menu_button("Rally Points", |ui| {
             if ui.button("Set Rally Point").clicked() {
                 let alt = app.settings.default_alt;
                 self.rally_list().push(Locationwp { id: 5100, lat, lng, alt, frame: 3, ..Default::default() });
@@ -356,13 +366,13 @@ impl FlightPlanView {
                 self.load_list(2, app);
                 ui.close();
             }
-        });
+        }); }
         ui.menu_button("Auto WP", |ui| {
             if ui.button("Create Wp Circle").clicked() {
                 self.circle_dialog = Some((lat, lng, "50".into(), "8".into()));
                 ui.close();
             }
-            if ui.button("Create Spline Circle").clicked() {
+            if spline && ui.button("Create Spline Circle").clicked() {
                 self.menu_prompt = Some(MenuPrompt::SplineCircle(lat, lng, "50".into(), "8".into()));
                 ui.close();
             }
@@ -371,11 +381,11 @@ impl FlightPlanView {
                 app.toasts.error(format!("Area: {a:.0} m2 ({:.3} km2)", a / 1e6));
                 ui.close();
             }
-            if ui.button("Text").clicked() {
+            if text && ui.button("Text").clicked() {
                 self.menu_prompt = Some(MenuPrompt::Text(lat, lng, "MP".into(), "20".into()));
                 ui.close();
             }
-            if ui.button("Create Circle Survey").clicked() {
+            if circle_survey && ui.button("Create Circle Survey").clicked() {
                 self.menu_prompt = Some(MenuPrompt::CircleSurvey(lat, lng, "100".into(), "20".into()));
                 ui.close();
             }
@@ -483,7 +493,7 @@ impl FlightPlanView {
                 ui.close();
             }
         });
-        ui.menu_button("POI", |ui| {
+        if poi { ui.menu_button("POI", |ui| {
             if ui.button("Add").clicked() {
                 self.menu_prompt = Some(MenuPrompt::PoiAdd(lat, lng, String::new()));
                 ui.close();
@@ -504,8 +514,8 @@ impl FlightPlanView {
                 }
                 ui.close();
             }
-        });
-        if ui.button("Tracker Home").clicked() {
+        }); }
+        if tracker && ui.button("Tracker Home").clicked() {
             app.settings.tracker_home = Some((lat, lng));
             ui.close();
         }

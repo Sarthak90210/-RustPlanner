@@ -533,7 +533,10 @@ impl FlightPlanView {
                 })
                 .response
         });
-        ui.put(r(298.0, 13.0, 95.0, 17.0), egui::Checkbox::new(&mut self.verify_height, "Verify Height"));
+        // CHK_verifyheight.Visible = displayCheckHeightBox
+        if crate::display::flag(&app.settings.planner, "displayCheckHeightBox") {
+            ui.put(r(298.0, 13.0, 95.0, 17.0), egui::Checkbox::new(&mut self.verify_height, "Verify Height"));
+        }
         if put_button(ui, r(398.0, 8.0, 75.0, 23.0), "Add Below") {
             let at = self.selected.map(|i| i + 1).unwrap_or(self.items.len()).min(self.items.len());
             let mut wp = self.new_wp(app, mavcmd::WAYPOINT, 0.0, 0.0);

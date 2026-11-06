@@ -28,6 +28,10 @@ enum Vis {
     Heli,
     /// ArduTracker firmware
     Tracker,
+    /// ConfigFrameType (Copter before 3.5) or ConfigFrameClassType (FRAME_CLASS, Copter 3.5+)
+    Frame,
+    /// (isCopter || isQuadPlane) && all parameters
+    InitialParams,
 }
 
 // BackstageView draws each parent's children in the order they were added, so ADSB
@@ -39,7 +43,7 @@ const PAGES: &[(&str, Option<usize>, Vis)] = &[
     ("Secure", None, Vis::Disc),                      // 3
     ("Mandatory Hardware", None, Vis::Params),        // 4
     ("Heli Setup", Some(4), Vis::Heli),               // 5
-    ("Frame Type", Some(4), Vis::Params),             // 6
+    ("Frame Type", Some(4), Vis::Frame),              // 6
     ("Accel Calibration", Some(4), Vis::Params),      // 7
     ("Compass", Some(4), Vis::Params),                // 8
     ("Radio Calibration", Some(4), Vis::Params),      // 9
@@ -48,7 +52,7 @@ const PAGES: &[(&str, Option<usize>, Vis)] = &[
     ("ESC Calibration", Some(4), Vis::Params),        // 12
     ("Flight Modes", Some(4), Vis::Params),           // 13
     ("FailSafe", Some(4), Vis::Params),               // 14
-    ("Initial Tune Parameter", Some(4), Vis::Params), // 15
+    ("Initial Tune Parameter", Some(4), Vis::InitialParams), // 15
     ("HW ID", Some(4), Vis::Params),                  // 16
     ("ADSB", Some(4), Vis::Params),                   // 17
     ("Optional Hardware", None, Vis::Always),         // 18
@@ -79,27 +83,100 @@ const PAGES: &[(&str, Option<usize>, Vis)] = &[
     ("Script REPL", Some(41), Vis::Conn),             // 43
 ];
 
+/// What InitialSetup looks at on the connected vehicle.
+#[derive(Clone, Copy, Default)]
+struct Vehicle {
+    all_params: bool,
+    firmware: mp_core::firmware::Firmware,
+    mavtype: u32,
+    frame_class: bool,
+    quadplane: bool,
+}
+
+fn vehicle(app: &AppCtx) -> Option<Vehicle> {
+    let link = app.link.filter(|_| app.connected())?;
+    let s = link.shared.read();
+    Some(Vehicle {
+        all_params: crate::views::setup_pages::got_all_params(link),
+        firmware: s.cs.firmware,
+        mavtype: s.cs.mavtype,
+        frame_class: s.params.contains_key("FRAME_CLASS"),
+        quadplane: s.cs.firmware == mp_core::firmware::Firmware::ArduPlane && s.params.get("Q_ENABLE").is_some_and(|p| p.value == 1.0),
+    })
+}
+
 fn page_visible(v: Vis, app: &AppCtx) -> bool {
-    let link = app.link.filter(|_| app.connected());
-    let all = link.map(crate::views::setup_pages::got_all_params).unwrap_or(false);
+    vis_allows(v, vehicle(app))
+}
+
+fn vis_allows(v: Vis, vehicle: Option<Vehicle>) -> bool {
+    use mp_core::firmware::Firmware;
+    let all = vehicle.is_some_and(|x| x.all_params);
     match v {
         Vis::Always => true,
-        Vis::Conn => link.is_some(),
+        Vis::Conn => vehicle.is_some(),
         Vis::Params => all,
-        Vis::Disc => link.is_none(),
-        Vis::Loading => link.is_some() && !all,
-        Vis::Heli => all && link.map(|l| l.shared.read().cs.mavtype == 4).unwrap_or(false),
-        Vis::Tracker => link.map(|l| l.shared.read().cs.firmware == mp_core::firmware::Firmware::ArduTracker).unwrap_or(false),
+        Vis::Disc => vehicle.is_none(),
+        Vis::Loading => vehicle.is_some() && !all,
+        Vis::Heli => all && vehicle.is_some_and(|x| x.mavtype == 4),
+        Vis::Tracker => vehicle.is_some_and(|x| x.firmware == Firmware::ArduTracker),
+        Vis::Frame => vehicle.is_some_and(|x| x.frame_class || (all && x.firmware == Firmware::ArduCopter2)),
+        Vis::InitialParams => all && vehicle.is_some_and(|x| x.firmware == Firmware::ArduCopter2 || x.quadplane),
     }
 }
 
-/// DisplayView flags: the Advanced group needs isAdvancedMode, Terminal displayTerminal.
+/// InitialSetup's DisplayView flags; pages in the Advanced group also need isAdvancedMode.
 fn layout_allows(page: &str, app: &AppCtx) -> bool {
-    let pl = &app.settings.planner;
-    match page {
-        "Advanced" | "Script REPL" => crate::display::advanced_mode(pl),
-        "Terminal" => crate::display::advanced_mode(pl) && crate::display::terminal(pl),
-        _ => true,
+    flags_allow(page, &app.settings.planner)
+}
+
+fn flags_allow(page: &str, pl: &std::collections::BTreeMap<String, String>) -> bool {
+    let own = crate::display::setup_page_flag(page).is_none_or(|f| crate::display::flag(pl, f));
+    let group = !matches!(page, "Terminal" | "Script REPL") || crate::display::advanced_mode(pl);
+    own && group
+}
+
+#[cfg(test)]
+mod page_tests {
+    use super::*;
+    use mp_core::firmware::Firmware;
+
+    fn shown(pl: &std::collections::BTreeMap<String, String>, v: Option<Vehicle>) -> Vec<&'static str> {
+        PAGES.iter().filter(|(name, _, vis)| vis_allows(*vis, v) && flags_allow(name, pl)).map(|(n, ..)| *n).collect()
+    }
+
+    #[test]
+    fn setup_pages_follow_vehicle_predicates_and_display_view() {
+        let mut pl = std::collections::BTreeMap::new();
+        let off = shown(&pl, None);
+        assert!(off.contains(&"Install Firmware Legacy") && off.contains(&"Secure") && !off.contains(&"Frame Type") && !off.contains(&"Loading"));
+        let loading = Vehicle { firmware: Firmware::ArduCopter2, ..Default::default() };
+        let l = shown(&pl, Some(loading));
+        assert!(l.contains(&"Loading") && !l.contains(&"Frame Type") && !l.contains(&"Accel Calibration"));
+        let copter = Vehicle { all_params: true, firmware: Firmware::ArduCopter2, mavtype: 2, ..Default::default() };
+        let c = shown(&pl, Some(copter));
+        assert!(c.contains(&"Frame Type") && c.contains(&"Initial Tune Parameter") && !c.contains(&"Heli Setup") && !c.contains(&"Loading"));
+        let rover = Vehicle { all_params: true, firmware: Firmware::ArduRover, mavtype: 10, ..Default::default() };
+        let r = shown(&pl, Some(rover));
+        assert!(!r.contains(&"Frame Type") && !r.contains(&"Initial Tune Parameter"), "Rover has neither");
+        let r = shown(&pl, Some(Vehicle { frame_class: true, ..rover }));
+        assert!(r.contains(&"Frame Type"), "FRAME_CLASS adds ConfigFrameClassType");
+        let quadplane = Vehicle { all_params: true, firmware: Firmware::ArduPlane, quadplane: true, ..Default::default() };
+        assert!(shown(&pl, Some(quadplane)).contains(&"Initial Tune Parameter"));
+        let heli = Vehicle { mavtype: 4, ..copter };
+        assert!(shown(&pl, Some(heli)).contains(&"Heli Setup"));
+        // Basic hides the Advanced group; a custom view hides chosen pages
+        crate::display::select(&mut pl, crate::display::Layout::Basic);
+        let b = shown(&pl, Some(copter));
+        assert!(!b.contains(&"Advanced") && !b.contains(&"Terminal") && !b.contains(&"Script REPL"));
+        let mut custom = crate::display::DisplayView::advanced();
+        for f in ["displayFrameType", "displayMotorTest", "displayInstallFirmware", "displayTerminal"] {
+            custom.flags.insert(f.into(), false);
+        }
+        pl.insert("displayview".into(), custom.to_json());
+        let x = shown(&pl, Some(copter));
+        assert!(!x.contains(&"Frame Type") && !x.contains(&"Motor Test") && !x.contains(&"Install Firmware"));
+        assert!(x.contains(&"Advanced") && !x.contains(&"Terminal") && x.contains(&"Script REPL"));
     }
 }
 
