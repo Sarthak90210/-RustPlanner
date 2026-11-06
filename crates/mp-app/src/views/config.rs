@@ -243,6 +243,10 @@ pub struct ParamEditor {
     defaults: std::sync::Arc<std::sync::Mutex<Option<BTreeMap<String, f32>>>>,
     defaults_requested: bool,
     editing: Option<(String, String)>,
+    /// Params_RowEnter: the current row, whose Options cell holds the editor control
+    current: Option<String>,
+    /// MavlinkCheckBoxBitMask shown by "Set Bitmask" (param name)
+    bitmask_edit: Option<String>,
 }
 
 impl ParamEditor {
@@ -271,6 +275,10 @@ impl ParamEditor {
             (s.params.clone(), s.cs.firmware)
         };
 
+        {
+            let values: BTreeMap<String, f32> = params.iter().map(|(k, p)| (k.clone(), p.value)).collect();
+            self.bitmask_window(ui.ctx(), fw, &values);
+        }
         // MAVLinkInterface.getParamList: the packed list with defaults over MAVFtp
         if !self.defaults_requested && link.shared.read().autopilot_version.map(|(_, c)| c & 32 != 0).unwrap_or(false) {
             self.defaults_requested = true;
@@ -593,7 +601,9 @@ impl ParamEditor {
                 };
                 txt(ui, cells[0], name);
                 if let Some(m) = meta {
-                    ui.interact(cells[0], ui.scope_id().with(("pn", name)), Sense::hover()).on_hover_text(format!("{}\n{}", m.display_name, m.description));
+                    if ui.interact(cells[0], ui.scope_id().with(("pn", name)), Sense::click()).on_hover_text(format!("{}\n{}", m.display_name, m.description)).clicked() {
+                        self.current = Some(name.clone());
+                    }
                 }
                 // Value cell: editable
                 let mut v = edited.unwrap_or(*value);
@@ -613,6 +623,7 @@ impl ParamEditor {
                     let resp = child.put(cells[1].shrink(1.0), egui::Label::new(egui::RichText::new(paramfile::format_value(v)).color(Color32::WHITE)).sense(Sense::click()));
                     if resp.clicked() {
                         self.editing = Some((name.clone(), paramfile::format_value(v)));
+                        self.current = Some(name.clone());
                     }
                 } else if let Some(m) = meta.filter(|m| !m.values.is_empty()) {
                     let cur = paramfile::format_value(v);
@@ -666,7 +677,36 @@ impl ParamEditor {
                     } else {
                         m.values.iter().map(|(k, s)| format!("{k}:{s}")).collect::<Vec<_>>().join(", ")
                     };
-                    txt(ui, cells[4], &opts);
+                    let current = self.current.as_deref() == Some(name.as_str());
+                    if current && !m.bitmask.is_empty() {
+                        // a bitmask gets a button that opens the checkbox editor
+                        let br = cells[4].shrink(1.0);
+                        if ui.put(br, |ui: &mut egui::Ui| theme::button_sized(ui, "Set Bitmask", br.size())).clicked() {
+                            self.bitmask_edit = Some(name.clone());
+                        }
+                    } else if current && !m.values.is_empty() {
+                        // options: a combo box in the cell
+                        let mut pick = None;
+                        ui.put(cells[4].shrink(1.0), |ui: &mut egui::Ui| {
+                            let sel = m.values.iter().find(|(k, _)| *k as f32 == v).map(|(_, s)| s.clone()).unwrap_or_default();
+                            egui::ComboBox::from_id_salt(("popt", name)).width(cells[4].width() - 8.0).selected_text(sel).show_ui(ui, |ui| {
+                                for (k, s) in &m.values {
+                                    if ui.selectable_label(*k as f32 == v, s).clicked() {
+                                        pick = Some(*k as f32);
+                                    }
+                                }
+                            }).response
+                        });
+                        if let Some(nv) = pick {
+                            if nv == *value {
+                                self.edits.remove(name);
+                            } else {
+                                self.edits.insert(name.clone(), nv);
+                            }
+                        }
+                    } else {
+                        txt(ui, cells[4], &opts);
+                    }
                     txt(ui, cells[5], &m.description);
                     if !m.description.is_empty() {
                         ui.interact(cells[5], ui.scope_id().with(("pd", name)), Sense::hover()).on_hover_text(&m.description);
@@ -682,6 +722,43 @@ impl ParamEditor {
                 }
             }
         });
+    }
+}
+
+impl ParamEditor {
+    /// The MavlinkCheckBoxBitMask window opened from "Set Bitmask"; ticks update the cell value.
+    fn bitmask_window(&mut self, ctx: &egui::Context, fw: Firmware, params: &BTreeMap<String, f32>) {
+        let Some(name) = self.bitmask_edit.clone() else { return };
+        let Some(m) = param_meta::get(fw, &name) else {
+            self.bitmask_edit = None;
+            return;
+        };
+        let cur = self.edits.get(&name).copied().or_else(|| params.get(&name).copied()).unwrap_or(0.0);
+        let mut value = cur as u32;
+        let mut open = true;
+        egui::Window::new(m.display_name.clone()).id(egui::Id::new("raw_bitmask")).open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
+            ui.label(RichText::new(&m.display_name).font(fonts::bold_id(13.0)).color(Color32::WHITE));
+            ui.add(egui::Label::new(RichText::new(&m.description).color(theme::text())).wrap());
+            ui.set_max_width(520.0);
+            ui.horizontal_wrapped(|ui| {
+                for (bit, label) in &m.bitmask {
+                    let mut on = value & (1 << bit) != 0;
+                    if ui.checkbox(&mut on, label).changed() {
+                        value = if on { value | (1 << bit) } else { value & !(1 << bit) };
+                    }
+                }
+            });
+        });
+        if value as f32 != cur {
+            if params.get(&name).copied() == Some(value as f32) {
+                self.edits.remove(&name);
+            } else {
+                self.edits.insert(name.clone(), value as f32);
+            }
+        }
+        if !open {
+            self.bitmask_edit = None;
+        }
     }
 }
 
