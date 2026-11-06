@@ -30,6 +30,10 @@ pub struct FirmwareInstaller {
     confirm: Option<(String, &'static str)>,
     beta: bool,
     choices: Option<Vec<FirmwareInfo>>,
+    /// Lbl_bootloaderupdate: confirmations given so far (0 = none asked)
+    bl_confirm: u8,
+    /// result of a temporary-connection bootloader job
+    bl_job: Option<Arc<Mutex<Option<String>>>>,
 }
 
 impl Default for FirmwareInstaller {
@@ -41,6 +45,8 @@ impl Default for FirmwareInstaller {
             confirm: None,
             beta: false,
             choices: None,
+            bl_confirm: 0,
+            bl_job: None,
         }
     }
 }
@@ -219,6 +225,7 @@ impl FirmwareInstaller {
         let st = self.status.lock().clone();
         if legacy {
             self.legacy_footer(ui, app, o, &st);
+            self.bootloader_dialogs(ui, app);
             self.dialogs(ui);
             return;
         }
@@ -239,9 +246,11 @@ impl FirmwareInstaller {
         if link(ui, 459.0, 57.0, "All Options") {
             self.choices = self.pick("", true);
         }
-        if link(ui, 522.0, 96.0, "Bootloader Update") || link(ui, 624.0, 88.0, "Force Bootloader") {
-            // ConfigFirmwareManifest: the bootloader is updated from the connected page
-            app.toasts.error("Connect to the autopilot, then use Install Firmware > Bootloader Update.\nThe new bootloader is flashed by the running firmware (MAV_CMD_FLASH_BOOTLOADER).");
+        if link(ui, 522.0, 96.0, "Bootloader Update") {
+            self.bl_confirm = 1;
+        }
+        if link(ui, 624.0, 88.0, "Force Bootloader") {
+            self.force_bootloader(app);
         }
         if link(ui, 736.0, 110.0, "Load custom firmware") {
             if let Some(path) = custom_file() {
@@ -255,6 +264,7 @@ impl FirmwareInstaller {
             self.beta = !self.beta;
         }
         ui.allocate_rect(Rect::from_min_size(o, Vec2::new(946.0, 380.0)), Sense::hover());
+        self.bootloader_dialogs(ui, app);
         self.dialogs(ui);
     }
 
@@ -286,7 +296,7 @@ impl FirmwareInstaller {
             self.beta = !self.beta;
         }
         if link(ui, 738.0, 393.0, 88.0, "Force Bootloader") {
-            app.toasts.error("Connect to the autopilot, then use Install Firmware > Bootloader Update.");
+            self.force_bootloader(app);
         }
         // CMB_history_label -> every firmware in the manifest
         if link(ui, 862.0, 393.0, 113.0, "Pick previous firmware") {
@@ -300,6 +310,91 @@ impl FirmwareInstaller {
         p.text(at(3.0, 443.0), egui::Align2::LEFT_TOP, &st.text, f.clone(), if st.error.is_some() { Color32::RED } else { Color32::WHITE });
         p.text(at(862.0, 443.0), egui::Align2::LEFT_TOP, "Images by Max Levine", f, Color32::WHITE);
         ui.allocate_rect(Rect::from_min_size(o, Vec2::new(986.0, 462.0)), Sense::hover());
+    }
+
+    /// Run `job` on a temporary MAVLink connection to the selected port (MainV2.doConnect
+    /// without fetching parameters); its message is shown when it finishes.
+    fn with_temp_link(&mut self, app: &mut AppCtx, fail: &'static str, job: impl FnOnce(&mp_core::link::Link) -> String + Send + 'static) {
+        if self.bl_job.is_some() {
+            return;
+        }
+        let spec = crate::app::spec_from(app.settings);
+        let slot = Arc::new(Mutex::new(None));
+        self.bl_job = Some(slot.clone());
+        self.status.lock().text = format!("Connecting to {spec}");
+        std::thread::spawn(move || {
+            let l = mp_core::link::Link::connect_with_params(spec, None, false);
+            let end = std::time::Instant::now() + Duration::from_secs(15);
+            while l.status() != mp_core::link::LinkStatus::Connected && std::time::Instant::now() < end {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            *slot.lock() = Some(if l.status() == mp_core::link::LinkStatus::Connected { job(&l) } else { fail.to_string() });
+        });
+    }
+
+    /// Lbl_px4bl: reboot the autopilot into its bootloader.
+    fn force_bootloader(&mut self, app: &mut AppCtx) {
+        self.with_temp_link(app, "Failed to connect and send the reboot command", |l| {
+            // doReboot(bootloadermode: true): PREFLIGHT_REBOOT_SHUTDOWN param1 = 3
+            l.send(mp_core::link::LinkCommand::CommandLong { command: 246, params: [3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
+            std::thread::sleep(Duration::from_millis(500));
+            "Please ignore the unplug and plug back in when uploading flight firmware.".into()
+        });
+    }
+
+    /// Lbl_bootloaderupdate: MAV_CMD_FLASH_BOOTLOADER (magic 290876) over a temporary link.
+    fn bootloader_update(&mut self, app: &mut AppCtx) {
+        self.with_temp_link(app, "Failed to find device on mavlink", |l| {
+            l.send(mp_core::link::LinkCommand::CommandLong { command: 42650, params: [0.0, 0.0, 0.0, 0.0, 290876.0, 0.0, 0.0] });
+            let end = std::time::Instant::now() + Duration::from_secs(300);
+            while std::time::Instant::now() < end {
+                if let Ok(mp_core::link::LinkEvent::CommandAck { command: 42650, ok, .. }) = l.events.recv_timeout(Duration::from_millis(500)) {
+                    return if ok { "Upgraded bootloader".into() } else { "Failed to upgrade bootloader".into() };
+                }
+            }
+            "Failed to upgrade bootloader".into()
+        });
+    }
+
+    fn bootloader_dialogs(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
+        if let Some(msg) = self.bl_job.as_ref().and_then(|s| s.lock().take()) {
+            self.bl_job = None;
+            self.status.lock().text = msg.clone();
+            app.toasts.info(msg);
+        }
+        if self.bl_job.is_some() {
+            ui.ctx().request_repaint_after(Duration::from_millis(200));
+        }
+        if self.bl_confirm == 0 {
+            return;
+        }
+        let text = if self.bl_confirm == 1 {
+            "Are you sure you want to upgrade the bootloader? This can brick your board"
+        } else {
+            "Are you sure you want to upgrade the bootloader? This can brick your board, Please allow 5 mins for this process"
+        };
+        let mut answer = None;
+        egui::Modal::new(egui::Id::new("fw_bl_update")).show(ui.ctx(), |ui| {
+            ui.label(egui::RichText::new("BL Update").strong().color(Color32::WHITE));
+            theme::label(ui, text);
+            ui.horizontal(|ui| {
+                if theme::button(ui, "Yes").clicked() {
+                    answer = Some(true);
+                }
+                if theme::button(ui, "No").clicked() {
+                    answer = Some(false);
+                }
+            });
+        });
+        match answer {
+            Some(true) if self.bl_confirm == 1 => self.bl_confirm = 2,
+            Some(true) => {
+                self.bl_confirm = 0;
+                self.bootloader_update(app);
+            }
+            Some(false) => self.bl_confirm = 0,
+            None => {}
+        }
     }
 
     fn dialogs(&mut self, ui: &mut egui::Ui) {

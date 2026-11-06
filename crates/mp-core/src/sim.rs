@@ -961,6 +961,10 @@ impl Vehicle {
                 self.ask_accel_pos();
                 return;
             }
+            MAV_CMD_FLASH_BOOTLOADER if c.param5 == 290876.0 => {
+                self.text(MavSeverity::MAV_SEVERITY_INFO, "Flash bootloader: done");
+                MavResult::MAV_RESULT_ACCEPTED
+            }
             MAV_CMD_CAN_FORWARD => {
                 let first = self.can_forward.is_none();
                 self.can_forward = (c.param1 >= 1.0).then(|| (c.param1 as u8, Instant::now()));

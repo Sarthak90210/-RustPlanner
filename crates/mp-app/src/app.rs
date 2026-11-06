@@ -326,8 +326,14 @@ impl MissionPlannerApp {
     }
 
     fn connection_spec(&self) -> Option<ConnectionSpec> {
-        let s = &self.settings;
-        Some(match s.port.as_str() {
+        Some(spec_from(&self.settings))
+    }
+}
+
+/// The connection the CONNECT button would open (ConnectionControl port and baud).
+pub fn spec_from(s: &Settings) -> ConnectionSpec {
+    {
+        match s.port.as_str() {
             "TCP" => ConnectionSpec::Tcp {
                 host: s.tcp_host.clone(),
                 port: s.tcp_port,
@@ -342,8 +348,11 @@ impl MissionPlannerApp {
                 port: p.to_string(),
                 baud: s.baud,
             },
-        })
+        }
     }
+}
+
+impl MissionPlannerApp {
 
     fn handle_actions(&mut self, actions: Vec<AppAction>) {
         for a in actions {
