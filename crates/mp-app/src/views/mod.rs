@@ -7,6 +7,7 @@ pub mod fd_tabs;
 pub mod flight_data;
 pub mod flight_plan;
 pub mod friendly;
+pub mod gimbal_video;
 pub mod help;
 pub mod mavftp;
 pub mod mavlog;

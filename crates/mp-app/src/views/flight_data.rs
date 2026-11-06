@@ -12,6 +12,7 @@ use mp_core::state::CurrentState;
 
 use crate::app::AppCtx;
 use crate::{fonts, hud, map, theme};
+use super::gimbal_video::{GimbalPlacement, GimbalVideo};
 
 const TABS: [&str; 13] = [
     "Quick",
@@ -161,6 +162,7 @@ pub struct FlightDataView {
     checklist: super::checklist::CheckList,
     mavlog: super::mavlog::MavlinkLog,
     pub(crate) georef: crate::georef_ui::GeorefWindow,
+    pub(crate) gimbal: GimbalVideo,
     logdl_open: bool,
     logdl_busy: bool,
     logdl_queue: Vec<(u16, u32)>,
@@ -210,6 +212,7 @@ impl Default for FlightDataView {
             checklist: Default::default(),
             mavlog: Default::default(),
             georef: Default::default(),
+            gimbal: Default::default(),
             logdl_open: false,
             logdl_busy: false,
             logdl_queue: Vec::new(),
@@ -816,7 +819,13 @@ impl FlightDataView {
                 7 => servo_ui(ui, app, cs),
                 8 => self.extra.aux(ui, app),
                 9 => self.extra.scripts(ui, app),
-                10 => self.extra.payload(ui, app),
+                10 => {
+                    self.extra.payload(ui, app);
+                    if self.extra.open_gimbal_video {
+                        self.extra.open_gimbal_video = false;
+                        self.gimbal.set_placement(GimbalPlacement::PopOut, app, ui.ctx());
+                    }
+                }
                 11 => self.tlogs_ui(ui, app),
                 _ => self.dflogs_ui(ui, app),
             });
@@ -1223,6 +1232,29 @@ impl FlightDataView {
             length: pl.get("GMapMarkerBase_length").and_then(|v| v.parse().ok()).unwrap_or(500.0),
         };
         let track_len: usize = pl.get("NUM_tracklength").and_then(|v| v.parse().ok()).unwrap_or(200);
+        if self.gimbal.placement == GimbalPlacement::FullSized {
+            let mrect = ui.available_rect_before_wrap();
+            self.gimbal.render_video_box(ui, mrect, app);
+            if self.gimbal.show_mini_map {
+                let mw = (mrect.width() * 0.3).min(320.0).max(120.0);
+                let mh = (mrect.height() * 0.3).min(240.0).max(90.0);
+                let mini_map_rect = Rect::from_min_size(mrect.max - Vec2::new(mw, mh), Vec2::new(mw, mh));
+                let mut mini_ui = ui.new_child(egui::UiBuilder::new().max_rect(mini_map_rect));
+                map::show(&mut mini_ui, &mut app.settings.fd_map, app.tiles, |_ui, view, _resp, painter| {
+                    if let Some(h) = home {
+                        map::draw_pin(painter, assets.marker_red.id(), assets.marker_shadow.id(), view.to_screen(h.lat, h.lng));
+                    }
+                    if has_pos {
+                        let p = view.to_screen(cs.lat, cs.lng);
+                        map::draw_quad(painter, p, cs.yaw, cs.sysid.max(1));
+                    }
+                    false
+                });
+                ui.painter().rect_stroke(mini_map_rect, 0.0, Stroke::new(1.0, Color32::from_gray(80)), egui::StrokeKind::Inside);
+            }
+            self.gimbal.extra_ui(ui.ctx(), app);
+            return;
+        }
         let mut context_latlng = None;
         let out = map::show(ui, &mut app.settings.fd_map, app.tiles, |_ui, view, resp, painter| {
             let pts: Vec<Pos2> = mission
@@ -1322,12 +1354,24 @@ impl FlightDataView {
             if ui.checkbox(&mut self.camera_overlap, crate::i18n::t("Camera Overlap")).clicked() {
                 ui.close();
             }
-            for item in ["Jump To Tag", "Gimbal Video"] {
-                if ui.button(item).clicked() {
-                    ctx_action = Some(item);
+            if ui.button(crate::i18n::t("Jump To Tag")).clicked() {
+                ctx_action = Some("Jump To Tag");
+                ui.close();
+            }
+            ui.menu_button(crate::i18n::t("Gimbal Video"), |ui| {
+                if ui.button(crate::i18n::t("Full Sized")).clicked() {
+                    ctx_action = Some("Gimbal Full Sized");
                     ui.close();
                 }
-            }
+                if ui.button(crate::i18n::t("Mini")).clicked() {
+                    ctx_action = Some("Gimbal Mini");
+                    ui.close();
+                }
+                if ui.button(crate::i18n::t("Pop Out")).clicked() {
+                    ctx_action = Some("Gimbal Pop Out");
+                    ui.close();
+                }
+            });
             // PluginHost.FDMenuMap items, at MouseDownStart
             for (label, plugin, id) in crate::plugins::menu_items(mp_plugin::MENU_FD_MAP) {
                 if ui.button(label).clicked() {
@@ -1426,7 +1470,9 @@ impl FlightDataView {
                         self.prompt = Some(Prompt::Input { title: "Jump To Tag".into(), fields: vec![("Tag".into(), "1".into())], then: Inputted::JumpTag });
                     }
                 }
-                "Gimbal Video" => app.toasts.error("No gimbal video stream is configured.\nSet one up under Planner > Video."),
+                "Gimbal Full Sized" => self.gimbal.set_placement(GimbalPlacement::FullSized, app, ui.ctx()),
+                "Gimbal Mini" => self.gimbal.set_placement(GimbalPlacement::Mini, app, ui.ctx()),
+                "Gimbal Pop Out" => self.gimbal.set_placement(GimbalPlacement::PopOut, app, ui.ctx()),
                 _ => {}
             }
         }
@@ -1460,6 +1506,15 @@ impl FlightDataView {
         let gr = Rect::from_min_size(o + Vec2::new(332.0, ly), gl.size());
         p.rect_filled(gr, 0.0, Color32::BLACK);
         p.galley(gr.min, gl, Color32::WHITE);
+        if self.gimbal.placement == GimbalPlacement::Mini {
+            let mw = (mrect.width() * 0.3).min(320.0).max(120.0);
+            let mh = (mrect.height() * 0.3).min(240.0).max(90.0);
+            let mini_vid_rect = Rect::from_min_size(Pos2::new(mrect.right() - mw - 45.0, mrect.bottom() - mh), Vec2::new(mw, mh));
+            let mut vid_ui = ui.new_child(egui::UiBuilder::new().max_rect(mini_vid_rect));
+            self.gimbal.render_video_box(&mut vid_ui, mini_vid_rect, app);
+            ui.painter().rect_stroke(mini_vid_rect, 0.0, Stroke::new(1.0, Color32::from_gray(80)), egui::StrokeKind::Inside);
+        }
+        self.gimbal.extra_ui(ui.ctx(), app);
     }
 }
 

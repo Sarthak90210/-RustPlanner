@@ -32,6 +32,7 @@ pub struct ExtraTabs {
     child: Option<Child>,
     output: Arc<Mutex<Vec<String>>>,
     redirect: bool,
+    pub open_gimbal_video: bool,
 }
 
 impl Default for ExtraTabs {
@@ -51,6 +52,7 @@ impl Default for ExtraTabs {
             child: None,
             output: Default::default(),
             redirect: true,
+            open_gimbal_video: false,
         }
     }
 }
@@ -342,8 +344,8 @@ impl ExtraTabs {
             self.roll = 0.0;
             changed = true;
         }
-        if put_btn(ui, r(73.0, 134.0, 56.0, 23.0), "Video Control") {
-            app.toasts.error("No gimbal video stream is configured.\nSet one up under Planner > Video.");
+        if put_btn(ui, r(73.0, 134.0, 56.0, 23.0), &crate::i18n::t("Video Control")) {
+            self.open_gimbal_video = true;
         }
         if changed {
             match app.link {
