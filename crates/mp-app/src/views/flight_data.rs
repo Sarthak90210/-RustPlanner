@@ -150,6 +150,8 @@ pub struct FlightDataView {
     tabs_customize: bool,
     pub(crate) video: Option<crate::mjpeg::Mjpeg>,
     hud_prompt: Option<HudPrompt>,
+    /// GStreamerUI.DownloadGStreamer in progress: (percent, status), finished, the pipeline to start
+    gst_download: Option<(std::sync::Arc<std::sync::Mutex<(i32, String)>>, std::sync::Arc<std::sync::atomic::AtomicBool>, String)>,
     log_browse: crate::log_browse::LogBrowse,
     analysis: Option<(String, Vec<(String, String, String)>)>,
     raw_sensor: bool,
@@ -197,6 +199,7 @@ impl Default for FlightDataView {
             tabs_customize: false,
             video: None,
             hud_prompt: None,
+            gst_download: None,
             log_browse: Default::default(),
             analysis: None,
             raw_sensor: false,
@@ -410,6 +413,12 @@ impl FlightDataView {
     }
 
     fn hud_ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, cs: &CurrentState, connected: bool, size: Vec2) {
+        // developer switch for captures: MP_GSTREAMER=1 starts the configured GStreamer source
+        if self.video.is_none() && self.gst_download.is_none() && std::env::var_os("MP_GSTREAMER").is_some() && !ui.ctx().data(|d| d.get_temp::<bool>(egui::Id::new("mp_gst_auto"))).unwrap_or(false) {
+            ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("mp_gst_auto"), true));
+            let url = app.settings.planner.get("gstreamer_url").cloned().unwrap_or_else(|| crate::gstreamer::DEFAULT_URL.to_string());
+            self.start_gstreamer(&url, app, ui.ctx());
+        }
         let video = self.video.as_mut().and_then(|v| v.texture(ui.ctx()));
         if let Some(e) = self.video.as_ref().and_then(|v| v.error.lock().unwrap().take()) {
             app.toasts.error(format!("Video source failed\n{e}"));
@@ -476,11 +485,15 @@ impl FlightDataView {
                 }
                 ui.close();
             }
-            for t in ["Set GStreamer Source", "HereLink Video"] {
-                if ui.button(t).clicked() {
-                    app.toasts.error("GStreamer was not found on this system.\nInstall GStreamer, or use \"Set MJPEG source\" for an HTTP MJPEG stream.");
-                    ui.close();
-                }
+            if ui.button(crate::i18n::t("Set GStreamer Source")).clicked() {
+                let url = app.settings.planner.get("gstreamer_url").cloned().unwrap_or_else(|| crate::gstreamer::DEFAULT_URL.to_string());
+                self.hud_prompt = Some(HudPrompt::GStreamer(url));
+                ui.close();
+            }
+            if ui.button(crate::i18n::t("HereLink Video")).clicked() {
+                let ip = app.settings.planner.get("herelinkip").cloned().unwrap_or_else(|| "192.168.43.1".to_string());
+                self.hud_prompt = Some(HudPrompt::HereLink(ip));
+                ui.close();
             }
             if ui.button(crate::i18n::t("GStreamer Stop")).clicked() {
                 self.video = None;
@@ -516,11 +529,58 @@ impl FlightDataView {
         }
     }
 
+    /// GStreamer.GstLaunch = LookForGstreamer(); download when missing, then hudGStreamer.Start.
+    fn start_gstreamer(&mut self, pipeline: &str, app: &mut AppCtx, ctx: &egui::Context) {
+        let data = crate::platform::data_dir();
+        match crate::gstreamer::look_for_gstreamer(&data) {
+            Some(lib) => {
+                app.settings.planner.insert("gstlaunchexe".into(), lib.display().to_string());
+                self.video = Some(crate::mjpeg::Mjpeg::gstreamer(lib, pipeline, ctx));
+            }
+            None if self.gst_download.is_none() => {
+                let status = std::sync::Arc::new(std::sync::Mutex::new((0, "Downloading..".to_string())));
+                let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                let (s, d, c) = (status.clone(), done.clone(), ctx.clone());
+                std::thread::spawn(move || {
+                    let report = |p: i32, t: &str| {
+                        *s.lock().unwrap() = (p, t.to_string());
+                        c.request_repaint();
+                    };
+                    let _ = crate::gstreamer::download(&data, &report);
+                    d.store(true, std::sync::atomic::Ordering::Relaxed);
+                    c.request_repaint();
+                });
+                self.gst_download = Some((status, done, pipeline.to_string()));
+            }
+            None => {}
+        }
+    }
+
+    /// ProgressReporterDialogue for the GStreamer download.
+    fn gst_download_ui(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
+        let Some((status, done, pipeline)) = self.gst_download.clone() else { return };
+        let (pct, text) = status.lock().unwrap().clone();
+        egui::Window::new(crate::i18n::t("Progress")).collapsible(false).resizable(false).fixed_size(Vec2::new(370.0, 90.0)).show(ctx, |ui| {
+            theme::label(ui, &text);
+            theme::progress(ui, pct.max(0) as f32 / 100.0, Vec2::new(358.0, 23.0), "");
+        });
+        if done.load(std::sync::atomic::Ordering::Relaxed) {
+            self.gst_download = None;
+            match crate::gstreamer::look_for_gstreamer(&crate::platform::data_dir()) {
+                Some(_) => self.start_gstreamer(&pipeline, app, ctx),
+                None => app.toasts.error(text),
+            }
+        }
+    }
+
     fn hud_prompt_ui(&mut self, ctx: &egui::Context, app: &mut AppCtx, cs: &CurrentState) {
+        self.gst_download_ui(ctx, app);
         let Some(p) = self.hud_prompt.as_mut() else { return };
         let mut done = None;
         let title = match p {
             HudPrompt::Mjpeg(_) => "MJPEG source",
+            HudPrompt::GStreamer(_) => "GStreamer url",
+            HudPrompt::HereLink(_) => "herelink ip",
             HudPrompt::Cells(_) => "Battery Cell Voltage",
             HudPrompt::Ground(..) => "Ground Color",
             HudPrompt::UserItems => "User Items",
@@ -530,6 +590,14 @@ impl FlightDataView {
                 HudPrompt::Mjpeg(u) => {
                     theme::label(ui, "Enter MJPEG url");
                     ui.add(egui::TextEdit::singleline(u).desired_width(320.0));
+                }
+                HudPrompt::GStreamer(u) => {
+                    theme::label(ui, "Enter the source pipeline\nEnsure the final payload is ! videoconvert ! video/x-raw,format=BGRA ! appsink name=outsink");
+                    ui.add(egui::TextEdit::singleline(u).desired_width(420.0));
+                }
+                HudPrompt::HereLink(ip) => {
+                    theme::label(ui, "Enter herelink ip address");
+                    ui.add(egui::TextEdit::singleline(ip).desired_width(200.0));
                 }
                 HudPrompt::Cells(c) => {
                     theme::label(ui, "Number of cells (0 shows the pack voltage)");
@@ -575,12 +643,25 @@ impl FlightDataView {
         let Some(ok) = done else { return };
         let p = self.hud_prompt.take().unwrap();
         if !ok {
+            // InputBox.Show's result is ignored for HereLink: the address is saved and used
+            if let HudPrompt::HereLink(ip) = p {
+                app.settings.planner.insert("herelinkip".into(), ip.clone());
+                self.start_gstreamer(&crate::gstreamer::herelink_url(&ip), app, ctx);
+            }
             return;
         }
         match p {
             HudPrompt::Mjpeg(u) => {
                 app.settings.mjpeg_url = u.clone();
                 self.video = Some(crate::mjpeg::Mjpeg::start(&u, ctx));
+            }
+            HudPrompt::GStreamer(u) => {
+                app.settings.planner.insert("gstreamer_url".into(), u.clone());
+                self.start_gstreamer(&u, app, ctx);
+            }
+            HudPrompt::HereLink(ip) => {
+                app.settings.planner.insert("herelinkip".into(), ip.clone());
+                self.start_gstreamer(&crate::gstreamer::herelink_url(&ip), app, ctx);
             }
             HudPrompt::Cells(c) => app.settings.hud.cells = c.trim().parse().unwrap_or(0),
             HudPrompt::Ground(a, b) => app.settings.hud.ground = Some([a[0], a[1], a[2], b[0], b[1], b[2]]),
@@ -2122,6 +2203,8 @@ fn servo_ui(ui: &mut egui::Ui, app: &mut AppCtx, cs: &CurrentState) {
 
 enum HudPrompt {
     Mjpeg(String),
+    GStreamer(String),
+    HereLink(String),
     Cells(String),
     Ground([u8; 3], [u8; 3]),
     UserItems,

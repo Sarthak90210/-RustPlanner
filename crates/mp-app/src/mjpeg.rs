@@ -61,6 +61,15 @@ impl Mjpeg {
         Self { url: url.to_string(), frame, stop, error, recorder, texture: None }
     }
 
+    /// hudGStreamer.Start(pipeline) with the runtime found by LookForGstreamer.
+    pub fn gstreamer(lib: std::path::PathBuf, pipeline: &str, ctx: &egui::Context) -> Self {
+        let frame = Arc::new(Mutex::new(None));
+        let stop = Arc::new(AtomicBool::new(false));
+        let error = Arc::new(Mutex::new(None));
+        crate::gstreamer::spawn(lib, pipeline.to_string(), frame.clone(), stop.clone(), error.clone(), ctx.clone());
+        Self { url: pipeline.to_string(), frame, stop, error, recorder: Arc::new(Mutex::new(None)), texture: None }
+    }
+
     /// The latest frame as a texture.
     pub fn texture(&mut self, ctx: &egui::Context) -> Option<egui::TextureId> {
         if let Some(img) = self.frame.lock().unwrap().take() {

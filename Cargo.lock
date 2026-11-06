@@ -1910,6 +1910,7 @@ dependencies = [
  "env_logger",
  "gilrs",
  "image",
+ "libloading",
  "log",
  "mp-core",
  "parking_lot",

@@ -1,0 +1,244 @@
+{
+  "round": 23,
+  "review_type": "independent fixed-revision source/reference review, resx/translation-table audit, native image inspection and CI status check",
+  "reviewed_head": "5a5941e7859e55cd3ce291f25c385c5d24a442bb",
+  "reviewed_base": "04ae5afb27e0ec8ac263aaefe56b76033dcd2d7c",
+  "date": "2026-11-06",
+  "verdict": "Run 23 closes most of round 22's CurrentState gap. HIGH_LATENCY and HIGH_LATENCY2 decoding matches CurrentState.cs field by field. HIGH_LATENCY2 now selects the target with the original 2/4 count rule, auto-property zero defaults are applied, and the IMU magnitudes are implemented. Localization moves from English-only to 17 cultures loaded from the original resx files, with the original restart flow. The English-keyed text map has no context, though. It is applied to data values and to menus that the original translates per control. That produces wrong output in several non-English cultures: '0' displays as '5' in ja-JP/id-ID, the PLAN 'Loiter' submenu shows 'Manual' in zh-Hans, and '&RTL' mnemonics render literally. Coverage is also incomplete. Overall progress is real, but these defects, the stale captures and the unchanged platform, video, plugin and transport gaps keep 10/10 out of reach.",
+  "scores": {
+    "overall": 8.7,
+    "ui_ux": 8.9,
+    "features": 8.6,
+    "scale": "Qualitative exact-original parity scores, not completion percentages. Overall equally weights UI/UX and features, rounded down from 8.75 because of the new non-English data-display regressions. UI/UX credits localization moving from absent to broad but imperfect. Features credits high-latency decoding/identity, source defaults and magnitudes. English-culture behavior is unchanged because tr() passes text through when no table is active."
+  },
+  "rationale": "HIGH_LATENCY (state.rs:503-529) and HIGH_LATENCY2 (state.rs:530-557) reproduce CurrentState.cs:2445-2573. That covers the custom-mode gate and mode lookup, /100 attitude, the altasl-HomeAlt alt, the alt_error setter's targetalt smoothing with banker's rounding, the *2 and /5 scales, wp_dist*10, and the retained climb_rate*10 factor. It also keeps the currentbit==1 quirk, so only GPS failure text appears. Link identity (link.rs:1030-1043, 1075-1158) follows MAVLinkInterface.cs:866-925 and 1168-1183: HIGH_LATENCY2 from non-GCS, non-zero compids, 2 sightings for compid 1 and 4 otherwise, with CurrentState populated before Connected. The new wire test checks the GCS/compid-0 exclusions, the counts and the home-relative alt. accelsq/gyrosq/magfield 1-3 match CurrentState.cs:556-692. AUTO_DEFAULTS are all zero, and CurrentState.cs has no non-zero auto-property initializer, so the defaults are faithful. Localization reads real resx data, and the per-form ApplyResources path for 30 Designer forms is faithful, including the rangefinder sample (声呐, 距离:, 电压:). Backstage labels such as 声呐 match InitialSetup.zh-Hans.resx:166-167. The ConfigPlanner combo offers the 17 cultureCodes, saves 'language', shows 'Please Restart the Planner' and closes, as in ConfigPlanner.cs:106-133 and 417-425 and MainV2.cs:4227-4257. The cross-form English-to-culture map is where the problems come from. Its votes resolve per-control conflicts arbitrarily (39 ko-KR, 20 zh-Hans, 21 ja-JP and 26 de-DE keys have conflicting translations). It keeps WinForms '&' mnemonics, which MyButton strips (MyButton.cs:148-151). It contains non-label numerics ('0' to '5' from FlightData playback controls in ja-JP/id-ID). And theme::label now passes every string through it, values included.",
+  "scope": {
+    "inspected": [
+      "git diff 04ae5af..5a5941e: state.rs, link.rs, state_properties.rs, tests/high_latency.rs, i18n.rs, export_translations.py, app.rs, theme.rs, forms.rs, fonts.rs, config.rs, flight_plan.rs and menu.rs, flight_data.rs, more_tools.rs, tool_windows.rs, hotkey_tools.rs, README.md",
+      "CurrentState.cs:325-349, 553-692, 939-1013, 1104-1113, 1156-1159, 2445-2573, 2956, 3919, 4482-4499 and 4620-4648",
+      "MAVLinkInterface.cs:855-925, 1168-1183, 1215-1232 and 5372-5398",
+      "ConfigPlanner.cs:106-133 and 417-425; MainV2.cs:698-700 and 4227-4257; InitialSetup.cs:246-342; FlightPlanner.cs:1290-1299, 1439 and 2024-2033; MyButton.cs:144-153",
+      "All 16 generated i18n/*.json tables (key counts, ampersands, numeric keys, format placeholders, mode-name keys) and the vote conflicts, recomputed from the original resx with the exporter's own functions",
+      "FlightData/FlightPlanner/InitialSetup zh-Hans, ko-KR and ja-JP resx for sample correctness",
+      "Retained-gap source: flight_data.rs:479-486, hotkey_tools.rs:95-115, comms.rs:26-46, platform.rs:176-212",
+      "judging/round-22.json, judging/platform-build-22.json"
+    ],
+    "rust_render_images_viewed": [
+      "target/judging/round23/58_data_zh_hans.png",
+      "target/judging/round23/59_setup_rangefinder_zh_hans.png",
+      "target/judging/round23/60_plan_ko_kr.png",
+      "target/judging/round13/07_plan_mission.png (English PLAN baseline for comparison)"
+    ],
+    "capture_integrity": {
+      "finding": "The captures do not show the reviewed HEAD. Manifests give binary hashes DD448318... (58, 59) and D7F00AFE... (60), captured 11:26-11:30Z. Commit 5a5941e is 11:50:29Z, and the current target/debug/missionplanner.exe (built 11:54Z) hashes efe2403e.... The 58 render shows English 'Tuning', 'Auto Pan', 'Zoom' and legend text, but HEAD source wraps them in i18n::t (flight_data.rs:1059-1060, 1328-1338). The renders are work-in-progress evidence, not proof of HEAD.",
+      "observed": "58: menu bar and DATA tabs in Chinese, HUD and Quick captions in English (faithful: GetNameandUnit returns English DisplayText, CurrentState.cs:4620-4648). 59: SETUP backstage and rangefinder form translated; 'Antenna Tracker' stays English although the original resx has 天线追踪器 for 'Antenna tracker'. 60: PLAN translated in part. 'View KML' and the 'Distance:/Prev:/Home:' overlay stay English, where the original shows KML 보기 and 거리:/이전:/원점:. 'Load File' renders as 파일 불러오기 where FlightPlanner.ko-KR.resx has 파일 로드. Up/Down headers show 상/하 where the ko-KR Up/Down.HeaderText are empty."
+    },
+    "reviewer_executed_verification": [
+      "Checked out 5a5941e7859e55cd3ce291f25c385c5d24a442bb detached; worktree clean.",
+      "Did not run cargo, as instructed. The main session reports 149 passing workspace tests; not independently rerun.",
+      "Recomputed translation votes from the original resx with scripts/export_translations.py's own read_resx/culture_of/FALLBACK in a scratch script (no source changes).",
+      "Verified the round-22 Android APK receipt: target/packages/round22/MissionPlannerRS.apk sha256 920cd1de... matches platform-build-22.json; gh shows run 42201707835 (04ae5af) completed success.",
+      "gh run list for 5a5941e returns no runs; remote master is 2c5e30b. The reviewed HEAD has no CI."
+    ],
+    "verification_limits": [
+      "Original Mission Planner was not launched in any culture for side-by-side comparison.",
+      "No capture exists from the reviewed binary. No Arabic, Japanese or other-culture render was inspected, so egui bidi/RTL behavior for 'ar' is unverified.",
+      "Mistranslation findings come from source and data inspection (call sites plus table values). They are deterministic, but none was rendered.",
+      "No mobile device/emulator, APK installation, iOS bundle or non-Windows GUI run.",
+      "Not an exhaustive audit of every page, property or translation."
+    ],
+    "reviewer_actions": "Read-only source/reference/data/image/CI inspection. Authored judging/round-23.json only. No implementation changes, commits, pushes or subagents."
+  },
+  "run23_dispositions": [
+    {
+      "area": "HIGH_LATENCY / HIGH_LATENCY2 CurrentState decoding",
+      "status": "closed",
+      "closed_parts": "All fields assigned by CurrentState.cs:2445-2573 are ported with the same scales. That covers the mode gate (base_mode CUSTOM_MODE_ENABLED for HL; unknown modes keep the previous mode), landed, ch3percent, targetairspeed, climbrate (HL2 *10 retained), airspeed1_temp, failsafe, wpno, wp_dist, wind and gpshdop. targetalt follows the alt_error setter (CurrentState.cs:1104-1113). Unit tests cover both messages, the mode gate and the unknown-mode case.",
+      "remaining": "messageHigh uses a hard-coded 'ERROR GPS ' where the original uses Strings.ERROR, which is localized (state.rs:543 vs CurrentState.cs:2551-2552). HL alt_error recomputes targetalt every packet; C# skips this when the value is unchanged. Both are minor.",
+      "evidence": [
+        "crates/mp-core/src/state.rs:503-557",
+        "crates/mp-core/src/state.rs:977-1002",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:2445-2573",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:1104-1113"
+      ]
+    },
+    {
+      "area": "HIGH_LATENCY2 as identity packet",
+      "status": "closed",
+      "closed_parts": "HIGH_LATENCY2 from a non-GCS, non-zero compid is counted per (sysid, compid). Compid 1 connects at 2 sightings, others at 4, as in MAVLinkInterface.cs:905-925. Firmware/mavtype are set as in SetupMavConnect(hl) (MAVLinkInterface.cs:1168-1183), and Connected is published after CurrentState is populated. The MAV list gets HL2 entries (cf. MAVLinkInterface.cs:5372-5398). The wire-level TCP test covers GCS and compid-0 rejection, both counts, home-relative alt and component isolation.",
+      "remaining": "The HEARTBEAT path still connects on the first heartbeat, where the original needs the same 2/4 counts (pre-existing). The original MAVlist also admits GCS-type HL2 senders (type check commented out at 5378). That one is minor.",
+      "evidence": [
+        "crates/mp-core/src/link.rs:1030-1043",
+        "crates/mp-core/src/link.rs:1075-1158",
+        "crates/mp-core/tests/high_latency.rs:49-93",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:866-925",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1168-1183"
+      ]
+    },
+    {
+      "area": "CurrentState auto-property defaults and IMU magnitudes",
+      "status": "closed",
+      "closed_parts": "AUTO_DEFAULTS is exported from every numeric/bool auto-property; gen_speed and capabilities now read 0, matching C# language defaults. voltageflag=1 follows ResetInternals (CurrentState.cs:4498). accelsq/2/3 (/1000), gyrosq/2/3, magfield/2/3, watts, vlen, verticalspeed_fpm and timeInAirMinSec are implemented. No non-zero auto-property initializer exists in CurrentState.cs.",
+      "remaining": "Computed getters are still not ported, e.g. ch1percent/ch3percent derived from SERVO params with a -1 sentinel (CurrentState.cs:66-67, 939-1000). verticalspeed is VFR climb in Rust but the alt-derivative in the alt setter in C# (CurrentState.cs:336-349). A full property-by-property fixture audit is still absent.",
+      "evidence": [
+        "crates/mp-core/src/state.rs:249-256",
+        "crates/mp-core/src/state.rs:399-411",
+        "crates/mp-core/src/state_properties.rs:513",
+        "scripts/export_state_properties.py",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:553-692",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:4482-4499"
+      ]
+    },
+    {
+      "area": "Language selection and persistence",
+      "status": "partial",
+      "closed_parts": "Offers the 17 original cultureCodes with display names, saves Settings 'language', shows 'Please Restart the Planner' and closes. The culture is applied at startup from Settings, and per-culture tables are embedded.",
+      "remaining": "With no saved setting, the original runs in the OS UI culture and preselects it via IsChildOf (ConfigPlanner.cs:120-133); Rust always defaults to en-US (app.rs:264). Resource fallback picks whole files and treats zh-CN as a parent of zh-Hans, while .NET merges per key and zh-CN is a child (export_translations.py:28). That second point is minor.",
+      "evidence": [
+        "crates/mp-app/src/i18n.rs:11-29",
+        "crates/mp-app/src/app.rs:262-267",
+        "crates/mp-app/src/views/config.rs:1087-1116",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:106-133",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:417-425",
+        "reference/MissionPlanner/MainV2.cs:698-700",
+        "reference/MissionPlanner/MainV2.cs:4227-4257"
+      ]
+    },
+    {
+      "area": "Translated resources applied to UI",
+      "status": "partial",
+      "closed_parts": "Designer-exported forms get per-form resx Text the way ApplyResources sets it (forms.rs:294-295). The menu bar, backstage, tab strips, MyButton, theme labels, many checkboxes and windows, and the ConfigPlanner/tuning painter labels use the text map. Spot checks: zh-Hans DATA 飞行数据, tabs 快速/动作/消息/起飞前检查/仪表, backstage 声呐 = InitialSetup.zh-Hans.resx:166-167, rangefinder 距离:/电压:, ko-KR 지점 반경/로이터 반경/기본 고도/높이 검증/아래에 추가/읽기/쓰기/고속 기록/원점 위치. A CJK/Arabic system fallback font is loaded.",
+      "remaining": "Mistranslation and coverage defects are listed under new_regression_findings and remaining_software_gaps.",
+      "evidence": [
+        "crates/mp-app/src/forms.rs:294-295",
+        "crates/mp-app/src/theme.rs:276-300",
+        "crates/mp-app/src/theme.rs:313-315",
+        "crates/mp-app/src/theme.rs:458",
+        "crates/mp-app/src/theme.rs:573-576",
+        "crates/mp-app/src/fonts.rs:61-67",
+        "scripts/export_translations.py:69-118"
+      ]
+    },
+    {
+      "area": "Android debug APK (round-22 carry-over)",
+      "status": "partial",
+      "closed_parts": "Run 42201707835 for 04ae5af completed success on all five jobs. The debug APK artifact matches the local receipt (sha256 920cd1de...).",
+      "remaining": "No install or launch, no iOS bundle, no CI for the reviewed HEAD.",
+      "evidence": [
+        "judging/platform-build-22.json",
+        "https://github.com/Sarthak90210/-RustPlanner/actions/runs/42201707835"
+      ]
+    }
+  ],
+  "new_regression_findings": [
+    {
+      "severity": "high",
+      "area": "Context-free text map applied to data values",
+      "finding": "theme::label now runs every string through i18n::t (theme.rs:573-576), including values. ja-JP and id-ID map '0' to '5', plus '0.1'/'0.25'/'0.5' to fractions; the entries come from FlightData playback-speed control resources. Param Compare (config.rs:620-622) therefore shows a parameter value of 0 as 5, and so do the servo PWM readout (flight_data.rs:2082), the log-download count (flight_data.rs:1757), the map-cache count (hotkey_tools.rs:165) and Warning Manager values (tool_windows.rs:866-867). The Formation grid mode cell (more_tools.rs:468) maps vehicle mode names: Loiter shows as 手动/手動/РУЧНОЙ ('Manual') in zh-Hans/zh-TW/ru-RU and as '&Manual'-style text in es/fr/it/pl, and Land shows as 'Tanah' ('soil') in id-ID. The original shows these values untranslated.",
+      "evidence": [
+        "crates/mp-app/src/theme.rs:573-576",
+        "crates/mp-app/src/views/config.rs:620-622",
+        "crates/mp-app/src/more_tools.rs:466-469",
+        "crates/mp-app/assets/i18n/ja-JP.json",
+        "crates/mp-app/assets/i18n/zh-Hans.json",
+        "reference/MissionPlanner/GCSViews/FlightData.resx:1203-1205",
+        "reference/MissionPlanner/GCSViews/FlightData.ja-JP.resx:150-151"
+      ]
+    },
+    {
+      "severity": "medium",
+      "area": "Per-control translations collapsed by vote",
+      "finding": "The exporter keeps one translation per English string (export_translations.py:114), with ties broken by glob order. zh-Hans 'Loiter' has 手动 (FlightData BUT_quickmanual, a stale 'Manual'), 留待 and Loiter留待 at one vote each. The PLAN right-click Loiter submenu (menu.rs:253) therefore shows 手动 where FlightPlanner.zh-Hans.resx:480-481 has Loiter留待. ko-KR 'Load File' shows 파일 불러오기 where FlightPlanner.ko-KR.resx:1436-1437 has 파일 로드. de 'Name' becomes 'Komando'. 39 ko-KR, 20 zh-Hans, 21 ja-JP and 26 de-DE English keys have conflicting original translations. PLAN grid headers from mavcmd.xml (flight_plan.rs:624) are translated, though the original sets them in English at runtime (FlightPlanner.cs:2024-2033).",
+      "evidence": [
+        "scripts/export_translations.py:105-114",
+        "crates/mp-app/src/views/flight_plan/menu.rs:253",
+        "crates/mp-app/src/views/flight_plan.rs:433",
+        "crates/mp-app/src/views/flight_plan.rs:624",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.zh-Hans.resx:480-481",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.ko-KR.resx:1436-1437"
+      ]
+    },
+    {
+      "severity": "low",
+      "area": "WinForms mnemonics rendered literally",
+      "finding": "de/es/fr/it/pl tables contain '&RTL', '&Auto' and '&Manual...' (FlightData quick buttons). MyButton removes the first '&' before drawing (MyButton.cs:148-151); theme::button_sized draws it.",
+      "evidence": [
+        "crates/mp-app/src/theme.rs:276-292",
+        "reference/MissionPlanner/ExtLibs/Controls/MyButton.cs:148-153",
+        "reference/MissionPlanner/GCSViews/FlightData.de-DE.resx:369-370"
+      ]
+    }
+  ],
+  "new_regression_findings_limit": "Found by source and data inspection; no affected-culture render exists. English behavior is unaffected. Not an exhaustive defect list.",
+  "remaining_software_gaps": [
+    {
+      "priority": 1,
+      "status": "open",
+      "area": "Localization correctness and coverage",
+      "next_fix": "Stop translating values: give theme::label/button a separate untranslated path for data, or translate only at literal call sites. Key translations by original form+control (ComponentResourceManager per view) instead of global English votes. Strip '&' as MyButton does and drop non-label numeric keys. Then cover the strings the original translates that are still English: the PLAN distance overlay (FlightPlanner.cs:1290-1299, 1439 via rm.GetString), lnk_kml 'View KML', the 'GPS Track (Black)' legend, SETUP painter text with existing translations ('Accelerometer Calibration', 'Current Mode:', 'Current PWM:', 'ESC Calibration (AC3.3+)', 'FS Pwm'), 'Antenna tracker' casing, and Strings.resx-driven messages and toasts. Default to the OS UI culture when no setting exists. Recapture from the reviewed binary, including Arabic.",
+      "evidence": [
+        "crates/mp-app/src/theme.rs:573-576",
+        "crates/mp-app/src/views/flight_plan.rs:399",
+        "crates/mp-app/src/views/flight_plan.rs:1034-1035",
+        "crates/mp-app/src/views/flight_data.rs:1340",
+        "crates/mp-app/src/views/setup.rs:760-811",
+        "crates/mp-app/src/views/config.rs:906-908",
+        "crates/mp-app/src/app.rs:148-153",
+        "crates/mp-app/src/app.rs:264",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:1290-1299",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.ko-KR.resx:1361-1362",
+        "reference/MissionPlanner/GCSViews/InitialSetup.zh-Hans.resx:178-179",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:120-133",
+        "reference/MissionPlanner/MainV2.cs:4227-4257"
+      ]
+    },
+    {
+      "priority": 2,
+      "status": "open",
+      "area": "Native packages, runtime and mobile file access",
+      "next_fix": "Install and launch the debug APK. Exercise Sequence save/load, overwrite, cancel and restart persistence at a mobile viewport. Add the iOS app wrapper, a stable data path, signing and packaging. Implement Android SAF and iOS document providers for the remaining mobile open paths. Run CI on the reviewed HEAD.",
+      "evidence": [
+        "crates/mp-app/src/platform.rs:186-212",
+        "judging/platform-build-22.json",
+        "README.md:115-119"
+      ],
+      "limits": "The APK is built and structurally inspected only."
+    },
+    {
+      "priority": 3,
+      "status": "open",
+      "area": "DATA video pipelines",
+      "next_fix": "Implement GStreamer discovery/source/stop, HereLink and payload/gimbal video. The current actions always report missing GStreamer.",
+      "evidence": [
+        "crates/mp-app/src/views/flight_data.rs:479-486",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3186-3213"
+      ]
+    },
+    {
+      "priority": 4,
+      "status": "open",
+      "area": "Plugin execution",
+      "next_fix": "Implement a compatible plugin lifecycle and callbacks. The page still lists files with disabled checkboxes.",
+      "evidence": [
+        "crates/mp-app/src/hotkey_tools.rs:95-112",
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:146-179"
+      ]
+    },
+    {
+      "priority": 5,
+      "status": "open",
+      "area": "Native transports, remaining CurrentState getters and map/tool parity",
+      "next_fix": "Add BLE/WinUSB/custom and Android USB-serial adapters. Port the computed getters (ch1percent/ch3percent with SERVO params, alt-derivative verticalspeed) and the HEARTBEAT 2/4 selection rule. Close the GDAL raster/opacity and geocoder gaps and drive native DATA/guided/MAV-switch workflows.",
+      "evidence": [
+        "crates/mp-core/src/comms.rs:26-46",
+        "crates/mp-core/src/link.rs:1079",
+        "reference/MissionPlanner/MainV2.cs:3629-3641",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:336-349",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/CurrentState.cs:939-1000",
+        "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:905-925",
+        "README.md:111-118"
+      ]
+    }
+  ],
+  "ten_out_of_ten_criterion": "An honest 10 requires no known material software discrepancy within the promised exact-clone scope, plus adequate decoder, interaction and native-platform evidence. Run 23 closes the high-latency/defaults gap and makes localization exist. The localization itself now shows wrong data and wrong menu text in several cultures, misses strings the original translates, and has no capture from the reviewed binary. Mobile runtime, video, plugins and transports remain open. Physical flight qualification is separate from this software parity score."
+}

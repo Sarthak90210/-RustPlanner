@@ -69,12 +69,13 @@ $cases = @(
  @('57_data_status_last_column','data',1,0,6,0,7,'MP_STATUS_END','1'),
  @('58_data_zh_hans','data',1,1,0,0,12,'MP_LANGUAGE','zh-Hans'),
  @('59_setup_rangefinder_zh_hans','setup',1,0,0,28,7,'MP_LANGUAGE','zh-Hans'),
- @('60_plan_ko_kr','plan',1,1,0,0,12,'MP_LANGUAGE','ko-KR')
+ @('60_plan_ko_kr','plan',1,1,0,0,12,'MP_LANGUAGE','ko-KR'),
+ @('61_data_gstreamer_hud','data',1,1,0,0,14,'MP_GSTREAMER','1')
 )
 $last = [Math]::Min($cases.Count, $From - 1 + $Count) - 1
 for ($ci = $From - 1; $ci -le $last; $ci++) {
     $case = $cases[$ci]
-    foreach ($name in @('MP_AUTOSIM','MP_DEMO','MP_SURVEY','MP_INSPECTOR','MP_TEMP','MP_SWARM','MP_COORDS','MP_TOOL','MP_STATUS_END','MP_LANGUAGE')) {
+    foreach ($name in @('MP_AUTOSIM','MP_DEMO','MP_SURVEY','MP_INSPECTOR','MP_TEMP','MP_SWARM','MP_COORDS','MP_TOOL','MP_STATUS_END','MP_LANGUAGE','MP_GSTREAMER')) {
         Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
     }
     $env:MP_COORDS = 'GEO'

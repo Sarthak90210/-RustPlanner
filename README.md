@@ -282,6 +282,15 @@ passed through the original L10NU tables for zh-Hans and uk, with units filled i
 designer's desc until Settings "quickView<n>" is chosen, so the sixth tile reads "DistToMAV" as it does
 originally. The field chooser lists GetFieldDesc descriptions, sorted by description.
 
+DATA video: Set GStreamer Source and HereLink Video follow FlightData.cs. They prompt for the pipeline or
+HereLink IP (saved as "gstreamer_url" / "herelinkip"), look for a GStreamer runtime in the original
+LookForGstreamer directories, and download the original 1.14.4 runtime zip into the data directory if
+none is found. The pipeline then runs with its `outsink` appsink behind the HUD; GStreamer Stop stops
+it. GStreamer is loaded dynamically, so the build does not depend on it. An ignored test
+(`MP_GST_DATA=<dir> cargo test -p mp-app -- --ignored real_runtime`) downloads the runtime and checks
+real 1280x720 videotestsrc frames and parse-error reporting. Capture 61 (`MP_GSTREAMER=1`,
+`MP_GST_DIR=<runtime dir>`) renders the HUD over GStreamer video.
+
 ## License
 
 GPL-3.0, like Mission Planner. Icons and marker images are Mission Planner / GMap.NET assets under the same license.

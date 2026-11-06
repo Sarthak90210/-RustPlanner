@@ -13,6 +13,7 @@ mod demo;
 pub mod hotkey_tools;
 pub mod hud;
 pub mod joystick;
+pub mod gstreamer;
 pub mod httpserver;
 pub mod i18n;
 pub mod swarm;
