@@ -119,30 +119,41 @@ pub struct Ftp {
     comp: u8,
     seq: u16,
     pub timeout: Duration,
+    cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 }
 
 impl Ftp {
     pub fn new(link: &Link) -> Self {
-        let (stx, srx) = crossbeam_channel::unbounded();
-        link.send(LinkCommand::Subscribe { msgid: MSG_ID, tx: stx });
         let (sys, comp) = {
             let s = link.shared.read();
             (s.cs.sysid, s.cs.compid)
         };
-        Self { tx: link.sender(), rx: srx, sys, comp, seq: 0, timeout: Duration::from_millis(1500) }
+        Self::for_target(link, sys, comp)
+    }
+
+    pub fn for_target(link: &Link, sys: u8, comp: u8) -> Self {
+        let (stx, srx) = crossbeam_channel::unbounded();
+        link.send(LinkCommand::SubscribeFrom { msgid: MSG_ID, sysid: sys, compid: comp, tx: stx });
+        Self { tx: link.sender(), rx: srx, sys, comp, seq: 0, timeout: Duration::from_millis(1500), cancel: None }
     }
 
     fn request(&mut self, op: Op, session: u8, offset: u32, data: &[u8], size: u8) -> Result<Packet, String> {
         for _attempt in 0..4 {
+            self.check_cancel()?;
             self.seq = self.seq.wrapping_add(1);
             let pkt = Packet { seq: self.seq, session, opcode: op as u8, size, req_opcode: 0, burst_complete: 0, offset, data: data.to_vec() };
             let msg = MavMessage::FILE_TRANSFER_PROTOCOL(FILE_TRANSFER_PROTOCOL_DATA { target_network: 0, target_system: self.sys, target_component: self.comp, payload: pkt.encode() });
             self.tx.send(LinkCommand::Send(Box::new(msg))).map_err(|_| "link closed".to_string())?;
             let end = Instant::now() + self.timeout;
             while let Some(left) = end.checked_duration_since(Instant::now()) {
-                match self.rx.recv_timeout(left) {
+                // An OPEN already sent can allocate a remote session. Learn its
+                // ACK/session before cancellation unwinds through cleanup.
+                if op != Op::OpenFileRO { self.check_cancel()?; }
+                let wait = if self.cancel.is_some() { left.min(Duration::from_millis(50)) } else { left };
+                match self.rx.recv_timeout(wait) {
                     Ok(MavMessage::FILE_TRANSFER_PROTOCOL(f)) => {
                         let r = Packet::decode(&f.payload);
+                        if op == Op::ReadFile && r.opcode == 128 && r.session != session { continue; }
                         if r.req_opcode == op as u8 && r.seq == self.seq.wrapping_add(1) {
                             self.seq = r.seq;
                             return match r.opcode {
@@ -153,11 +164,48 @@ impl Ftp {
                         }
                     }
                     Ok(_) => {}
-                    Err(_) => break,
+                    Err(crossbeam_channel::RecvTimeoutError::Timeout) => continue,
+                    Err(crossbeam_channel::RecvTimeoutError::Disconnected) => return Err("link closed".into()),
                 }
             }
         }
         Err("timeout".into())
+    }
+
+    fn check_cancel(&self) -> Result<(), String> {
+        if self.cancel.as_ref().is_some_and(|c| c.load(std::sync::atomic::Ordering::Relaxed)) { Err("Camera definition download cancelled".into()) } else { Ok(()) }
+    }
+
+    /// Camera definition download: reject the advertised size before allocation,
+    /// validate completeness, and release the remote session on every exit path.
+    pub fn get_bounded(&mut self, path: &str, limit: usize, cancel: std::sync::Arc<std::sync::atomic::AtomicBool>, mut progress: impl FnMut(u64, u64)) -> Result<Vec<u8>, String> {
+        if path.as_bytes().len() > DATA_LEN || path.contains('\0') { return Err("Invalid MAVFTP filename".into()); }
+        self.cancel = Some(cancel);
+        let (p, n) = Self::path_bytes(path);
+        let open = self.request(Op::OpenFileRO, 0, 0, &p, n);
+        let result = match open {
+            Err(e) => Err(e),
+            Ok(open) => {
+                let session = open.session;
+                let size = open.data.get(..4).map(|b| u32::from_le_bytes(b.try_into().unwrap()) as usize).unwrap_or(0);
+                let result = (|| {
+                    self.check_cancel()?;
+                    if size == 0 || size > limit { return Err("Invalid camera definition size".into()); }
+                    let mut data = Vec::with_capacity(size);
+                    while data.len() < size {
+                        let offset = data.len() as u32;
+                        let reply = self.request(Op::ReadFile, session, offset, &[], DATA_LEN as u8)?;
+                        if reply.offset != offset || reply.data.is_empty() || data.len() + reply.data.len() > size { return Err("Incomplete MAVFTP camera definition".into()); }
+                        data.extend_from_slice(&reply.data); progress(data.len() as u64, size as u64);
+                    }
+                    self.check_cancel()?; Ok(data)
+                })();
+                self.cancel = None;
+                let _ = self.request(Op::TerminateSession, session, 0, &[], 0);
+                result
+            }
+        };
+        self.cancel = None; result
     }
 
     fn path_bytes(path: &str) -> (Vec<u8>, u8) {

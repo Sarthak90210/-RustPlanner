@@ -13,6 +13,7 @@ pub mod ftp;
 pub mod fwupload;
 pub mod geo;
 pub mod gimbal;
+pub mod camdef;
 pub mod georef;
 pub mod signedfw;
 pub mod tracker;

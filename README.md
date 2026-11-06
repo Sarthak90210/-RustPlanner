@@ -373,7 +373,15 @@ FlightData.cs:
   the pointer puts a blue marker on the map where it meets the ground.
 - Shortcuts: opens GimbalControlSettingsForm. It stores "GimbalControlPreferences" in Json.NET's format,
   with WinForms key codes, and asks before applying a clashing binding.
-- Not ported yet: Custom Settings (camera definition settings).
+- Custom Settings opens a camera-definition editor with option lists, step sliders and
+  text/Apply controls. Definitions load from HTTP(S) or a pinned MAVFTP camera target,
+  including xz compression, localization, exclusions and dependent ranges. PARAM_EXT
+  reads/writes use camera-source filtering, retries, IN_PROGRESS handling and readback
+  after rejection/timeouts. ReadOnly disables edits and pending gestures; closing cancels
+  loading and stops session retries. HTTP cancellation can wait for a current blocking
+  network read, bounded by its 15-second per-read timeout. Wire and egui tests cover these
+  software paths; full WinForms pixel equivalence, physical cameras and native mobile
+  runtime qualification remain unverified.
 - Captures: cases 64-66 (`MP_GIMBAL=full|mini|popout`).
 
 PLAN Write and Write Fast follow BUT_write_Click and but_writewpfast_Click. Before uploading they:

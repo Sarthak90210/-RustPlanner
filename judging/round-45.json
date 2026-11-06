@@ -1,0 +1,163 @@
+{
+  "round": 45,
+  "date": "2026-11-07",
+  "review_type": "Independent adversarial source and targeted runtime review of Camera Custom Settings, with a strict provisional whole-product parity judgment",
+  "reviewed_head": "278b749d8a75a721bbede00a2247c4f04df67242",
+  "reviewed_uncommitted_worktree": true,
+  "reviewer": "custom_settings_review_45, a separate agent from the implementer",
+  "verdict": "Exact-clone parity is not achieved. This run adds a functioning Camera Custom Settings implementation and fixes several defects found during independent review. The tested camera paths pass on Windows with local HTTP and TCP MAVLink peers. They do not establish complete Mission Planner behavior, rendered UI equivalence, physical-camera compatibility, or native application delivery on all five requested platforms.",
+  "scores": {
+    "overall": 4.0,
+    "ui_ux": 3.5,
+    "features": 4.5,
+    "cross_platform_delivery": 2.0,
+    "scale": "0 to 10 against the entire requested exact clone, including UI, workflows, features and native delivery on Windows, macOS, Linux, Android and iOS. These are coarse provisional judgments, not measured completion percentages. Earlier numerical ratings were not used as a baseline. A 10 requires a complete feature inventory and passing behavioral, rendered and platform evidence."
+  },
+  "confidence": {
+    "camera_paths_examined": "moderate, based on source comparison and independently executed targeted tests",
+    "whole_product_score": "low, because a complete source inventory and screen-by-screen platform comparison do not exist",
+    "physical_devices": "unverified",
+    "rendered_camera_form_parity": "unverified"
+  },
+  "reviewed_files": [
+    "crates/mp-core/src/camdef.rs",
+    "crates/mp-core/src/ftp.rs",
+    "crates/mp-core/tests/camera_ftp.rs",
+    "crates/mp-app/src/camera_settings.rs",
+    "crates/mp-app/src/views/gimbal_video.rs",
+    "crates/mp-app/src/platform.rs",
+    "crates/mp-core/src/comms.rs",
+    "crates/mp-app/src/lib.rs",
+    "README.md",
+    ".github/workflows/build.yml",
+    "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/CameraDefinition.cs",
+    "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/CameraDefinitionLoader.cs",
+    "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/CameraSettingsSession.cs",
+    "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVFtp.cs",
+    "reference/MissionPlanner/Controls/CameraCustomSettingsForm.cs",
+    "reference/MissionPlanner/Controls/GimbalVideoControl.cs",
+    "reference/MissionPlanner/MissionPlannerTests/Mavlink/CameraSettingsTests.cs"
+  ],
+  "reviewed_source_sha256": {
+    "crates/mp-core/src/camdef.rs": "F3980D13B664FF16C4BC01DF6EE7528C263992B91E3146A8D8B5FA5AEACC598B",
+    "crates/mp-core/src/ftp.rs": "41495547334ABAFFECF6F99206DC696FBBF8B3F3562F14219FFA57DA58F51D48",
+    "crates/mp-core/tests/camera_ftp.rs": "89A127E9E04CAAE81D7D9B58C359913A3655BE44BE45BFF7FB322B0F4D6F7F35",
+    "crates/mp-app/src/camera_settings.rs": "110B503B4F21EE6BA5173E3187D44856F4D9E9C6B76E67D3D45E272004345B48",
+    "crates/mp-app/src/views/gimbal_video.rs": "31E2F44C7543449AB1C88E0F98B0BD6610A180ECC2BB2499A9F8A0CD4F39CD1D"
+  },
+  "independent_validation": [
+    {
+      "command": "cargo test -p mp-core --lib camdef",
+      "result": "PASS, 8 tests, 0 failures",
+      "scope": "Definition parsing, conditional controls, validation and wire encoding, adversarial inputs, full-width integer slider positions, FTP addresses, retries, IN_PROGRESS absolute deadline, readback error retention and idle behavior."
+    },
+    {
+      "command": "cargo test -p mp-core --test camera_ftp",
+      "result": "PASS, 1 test with 4 wire scenarios, 0 failures",
+      "scope": "Production TCP link, explicit camera target, excessive advertised size before allocation, valid session zero, cancellation after Open acknowledgement with session 42 cleanup, unrelated component and wrong-session ACK rejection, and a session-zero NAK while session 42 is active."
+    },
+    {
+      "command": "cargo test -p mp-app camera_settings::tests",
+      "result": "PASS, 3 tests, 0 failures, rerun after the final slider no-op guard",
+      "scope": "Actual egui text and Apply input, read-only gesture cancellation, no redundant write when a slider returns to its confirmed value, pending slider preview, HTTP size and pre-cancellation checks, and local HTTP plus production TCP CAMERA_INFORMATION/PARAM_EXT request, write and ACK routing with component 99 excluded. The TCP write test calls session.set_value directly, so it is separate from the egui input test."
+    },
+    {
+      "command": "cargo build -p mp-core, compile and run target/judging/round45/core_probe.rs against the rebuilt library",
+      "result": "PASS, all 4 previously failing independent probes now succeed",
+      "scope": "Single 1e-7 formats as 1E-07; UTF-16LE BOM XML loads; the maximum uint64 with a 1e-28 step validates without overflow; a percent sign followed by a multibyte Unicode character in an FTP address does not panic."
+    }
+  ],
+  "implementer_validation": [
+    {
+      "command": "cargo test --workspace",
+      "result": "Implementer reports exit 0, 242 passed and 1 ignored after the final fixes",
+      "artifact": "target/run-45-verified-tests.log",
+      "scope": "Not independently invoked by this reviewer; targeted camera checks above were independently executed."
+    },
+    {
+      "command": "cargo build -p mp-app --locked",
+      "result": "Implementer reports exit 0 after the final fixes",
+      "scope": "Windows local build. No current-head cross-platform runtime or device claim follows from this result."
+    }
+  ],
+  "verified_improvements": [
+    "Custom Settings is available from the Gimbal Video menu and pins its camera address and link. CAMERA_INFORMATION, PARAM_EXT_VALUE and PARAM_EXT_ACK subscriptions filter the exact source system and component.",
+    "The form requests fresh camera information, falls back to cached information after five seconds, reloads changed definition metadata, cancels old download jobs, and stops on disconnection or replacement of its link.",
+    "Definitions support plain and XZ XML, localization, ten numeric wire types, custom byte values, limits, steps, options, exclusions, conditional ranges, read-only/write-only settings and dependent updates.",
+    "Compressed output now has a limit during decompression. Integer-step arithmetic uses checked decimal operations. URI decoding handles malformed percent sequences without slicing through Unicode characters. UTF-16 and UTF-32 XML detection is present.",
+    "The new bounded FTP path checks advertised size before allocation, checks read offsets and completion, preserves source/session filtering, handles NAKs independently of ACK session filtering and terminates allocated session zero or nonzero on success, failure and cancellation.",
+    "HTTP loading limits response bytes, uses manual bounded redirects, rejects HTTPS downgrade, and uses per-read timeouts rather than imposing a 15-second total body transfer limit.",
+    "PARAM_EXT writes retain the confirmed camera value until ACK, distinguish read responses from write confirmation, stop resends on IN_PROGRESS, preserve the absolute 30-second deadline, and read back uncertain or adjusted values. Idle sessions do not poll continuously.",
+    "The reviewer identified a read-only slider transition write, premature pending slider reset, precision loss near uint64 maximum, and a redundant slider write after returning to the confirmed value. The final source and independently rerun tests cover the corrections."
+  ],
+  "findings": [
+    {
+      "id": "R45-01",
+      "priority": "P1",
+      "subsystem": "Native platform delivery",
+      "status": "open",
+      "evidence": [
+        "The iOS workflow only runs cargo build --lib for aarch64-apple-ios. README.md states that the Xcode wrapper, signing, packaging and device validation remain incomplete.",
+        "crates/mp-app/src/lib.rs exposes start_mission_planner, but a library export does not establish an installable, running iOS application.",
+        "This review executed Windows tests only. No current-head macOS/Linux GUI run, Android device run or iOS device run was supplied or executed."
+      ],
+      "impact": "The user's requirement for a native application on every requested platform remains unmet.",
+      "required_fix": "Complete the iOS application target and platform adapters, produce installable artifacts, and run the same representative connection, planning, configuration and file workflows visibly on each platform. Retain build and device receipts tied to the reviewed commit."
+    },
+    {
+      "id": "R45-02",
+      "priority": "P1",
+      "subsystem": "Whole-product feature coverage",
+      "status": "open",
+      "evidence": [
+        "crates/mp-core/src/comms.rs returns Unsupported for BLE and WinUSB transports. Its Android/iOS serial branch also returns Unsupported.",
+        "README.md still identifies incomplete GDAL loading, place-name geocoding, existing .NET plugin execution, legacy terminal/log tools, mobile file providers and physical-device qualification.",
+        "The camera tests cover a small subset of a much larger Mission Planner application. There is no complete source-by-source feature inventory with each claimed workflow linked to validation."
+      ],
+      "impact": "Passing the new camera tests cannot justify a whole-application clone rating near 10.",
+      "required_fix": "Keep a complete upstream feature inventory, finish the missing implementations and native adapters, and connect each behavior to source, tests and visible workflow evidence. Track hardware-dependent checks separately from simulator or local-peer tests."
+    },
+    {
+      "id": "R45-03",
+      "priority": "P2",
+      "subsystem": "Camera Custom Settings UI geometry and visual parity",
+      "status": "open",
+      "evidence": [
+        "CameraCustomSettingsForm.cs builds fixed 63-pixel panels with explicit margins and child positions. Its option ComboBox width is 270 pixels, its slider is 200 by 27 pixels and its description and detail labels have explicit ellipsis behavior.",
+        "camera_settings.rs rows_ui uses ordinary egui horizontal rows, an option ComboBox width of 195, an implicitly sized Slider and auto-sized detail labels. These do not reproduce the reference geometry by construction.",
+        "No matched native Windows capture of this populated form and its reference, no screenshot comparison across window sizes, and no screen-reader or mobile touch review were performed in this run. Headless egui input tests do not establish those properties."
+      ],
+      "impact": "The camera form now works, but its exact UI/UX clone claim remains unsupported and its source layout has known differences.",
+      "required_fix": "Match the reference row geometry, editor sizes, clipping and accessible labels, then capture populated, loading, error, dependent-option and read-only states at matched dimensions. Compare the actual native forms and exercise keyboard and touch interactions on the delivered platforms."
+    },
+    {
+      "id": "R45-04",
+      "priority": "P2",
+      "subsystem": "HTTP cancellation",
+      "status": "open",
+      "evidence": [
+        "CameraDefinitionLoader.cs registers cancellation with HttpWebRequest.Abort.",
+        "camera_settings.rs checks an AtomicBool before requests and between reads, but the blocking ureq call and Read operation cannot be interrupted by setting that flag. Per-read and response timeouts are 15 seconds.",
+        "The HTTP cancellation test cancels before a request starts. It does not cover cancellation while a server has accepted a connection and stalled its headers or body."
+      ],
+      "impact": "Closing, refreshing or switching to read-only mode discards the form's job immediately, but its worker and connection can remain blocked until the current operation times out. Immediate network cancellation parity is not established.",
+      "required_fix": "Use a cancellable request/body implementation or an abortable transport, and test cancellation during stalled headers and a stalled partial body. Until then, document the bounded delay rather than claiming immediate abort."
+    },
+    {
+      "id": "R45-05",
+      "priority": "P2",
+      "subsystem": "Camera transport and interaction evidence",
+      "status": "open validation gap",
+      "evidence": [
+        "The local HTTP test covers a successful body, excessive Content-Length and pre-cancellation. It does not run redirect loops, HTTPS downgrade, chunked oversized responses, mid-download cancellation or a slow progressing transfer beyond 15 seconds.",
+        "The FTP wire test covers four valuable scenarios but not lost Open ACK, malformed offsets, truncated advertised contents, persistent inactivity or a slow transfer exceeding 60 seconds with progress.",
+        "The UI test sends actual text and Apply events, but the read-only and no-op slider cases inject Row state. Pointer dragging, wheel and keyboard commit gestures, option interaction and a complete rendered-form-to-wire flow remain untested.",
+        "No physical camera was connected during this independent review."
+      ],
+      "impact": "The tested scenarios are credible evidence for their specific paths. They leave network failure handling, complete gesture behavior and vendor-camera interoperability uncertain.",
+      "required_fix": "Extend adversarial local-peer cases to the remaining loader contracts and actual slider/option gestures, then validate a complete visible settings read/change/ACK/refresh workflow against a real camera."
+    }
+  ],
+  "goal_complete": false,
+  "next_priority": "Complete the camera form visual and gesture comparison and in-flight cancellation checks, while continuing the upstream feature inventory and native mobile delivery work. Another independent review is required after the next implementation run."
+}

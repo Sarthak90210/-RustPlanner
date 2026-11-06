@@ -404,6 +404,7 @@ pub struct GimbalVideo {
     download: Option<Download>,
     selector: Option<Selector>,
     settings: Option<SettingsForm>,
+    custom_settings: Option<crate::camera_settings::CameraSettingsForm>,
 }
 
 impl Default for GimbalVideo {
@@ -429,6 +430,7 @@ impl Default for GimbalVideo {
             download: None,
             selector: None,
             settings: None,
+            custom_settings: None,
         }
     }
 }
@@ -491,6 +493,7 @@ impl GimbalVideo {
         self.download = None;
         self.selector = None;
         self.settings = None;
+        self.custom_settings = None;
     }
 
     fn start(&mut self, pipeline: &str, ctx: &egui::Context) {
@@ -620,7 +623,7 @@ impl GimbalVideo {
 
     /// PreFilterMessage: bound keys while the control's window has focus and no text box does.
     fn keyboard(&mut self, ctx: &egui::Context, app: &AppCtx) {
-        if self.settings.as_ref().is_some_and(|s| s.listening.is_some()) || ctx.egui_wants_keyboard_input() || !ctx.input(|i| i.focused) {
+        if self.custom_settings.is_some() || self.settings.as_ref().is_some_and(|s| s.listening.is_some()) || ctx.egui_wants_keyboard_input() || !ctx.input(|i| i.focused) {
             if !self.held.is_empty() {
                 self.held.clear();
                 self.held_keys(self.last_modifiers, app);
@@ -820,8 +823,7 @@ impl GimbalVideo {
             if item(ui, "Shortcuts", true) {
                 action = Some("shortcuts");
             }
-            // CameraCustomSettingsForm (camera definition settings) is not available yet
-            item(ui, "Custom Settings", false);
+            if item(ui, "Custom Settings", app.connected()) { action = Some("custom_settings"); }
             // FlightData's items: Mini map (Full Sized), Swap with map, Close
             if placement == GimbalPlacement::FullSized {
                 let mut mini = self.show_mini_map;
@@ -850,6 +852,17 @@ impl GimbalVideo {
             Some("rec_start") => self.set_recording(true, app),
             Some("rec_stop") => self.set_recording(false, app),
             Some("shortcuts") => self.settings = Some(SettingsForm { prefs: self.prefs.clone(), listening: None, clash: None }),
+            Some("custom_settings") => {
+                if let Some(link) = app.link {
+                    let target = {
+                        let state = link.shared.read();
+                        self.settings_camera_address.or_else(|| state.inspector.iter().find_map(|(&(sys, comp, _), stat)| match &stat.msg {
+                            mp_core::mavlink::dialects::ardupilotmega::MavMessage::CAMERA_INFORMATION(m) if sys == state.cs.sysid && m.cam_definition_uri.iter().any(|b| *b != 0) => Some((sys,comp)), _ => None,
+                        })).unwrap_or((state.cs.sysid,state.cs.compid))
+                    };
+                    if self.custom_settings.as_ref().is_none_or(|form| form.target != target) { self.custom_settings = Some(crate::camera_settings::CameraSettingsForm::open(link,target,app.readonly)); }
+                }
+            }
             _ => {}
         }
         if let Some(p) = next {
@@ -886,6 +899,9 @@ impl GimbalVideo {
 
     /// Dialogs, the pop-out window, keyboard handling and the auto-connect timer.
     pub fn extra_ui(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
+        if let Some(form) = &mut self.custom_settings {
+            if !form.ui(ctx, app.link, app.readonly) { self.custom_settings = None; }
+        }
         if self.placement == GimbalPlacement::Closed {
             return;
         }
