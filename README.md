@@ -208,7 +208,12 @@ with CONDITION_YAW for multicopters, and the PID SET_ATTITUDE_TARGET path for Ar
 Grid supports dragging, panning, wheel zoom, Change Alt and the Vertical view, and the Status panel
 shows each vehicle. A three-Copter simulator test flies the followers into their slots.
 `MP_TOOL=<button>` opens a temp tool once the startup simulators connect, and capture case 53 renders
-the window. Follow the leader, Sequence Swarm and Follow Swarm still share the simpler window.
+the window. temp > Sequence Swarm opens the LayoutEditor. Sequences load and save in the original JSON
+(Layouts with Id/DelayStart/DelayEnd/Offset, and Steps). The editor has the layout selector, New Layout
+(copies the current offsets), the drone count rule, Add Step, a steps list (select, Delete, drag to
+reorder), Takeoff (GUIDED, arm, 2 m), Run Step/Reset and a background image with its Move Image buttons.
+A simulator test flies three Copters through a step. Follow the leader and Follow Swarm still share the
+simpler window.
 
 ## License
 

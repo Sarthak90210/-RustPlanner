@@ -50,6 +50,8 @@ fn guided_to(l: &Link, sys: u8, comp: u8, lat: f64, lng: f64, alt: f32) {
 pub struct MoreTools {
     /// temp > Swarm: FormationControl, drawn by the app with every connection
     pub formation: crate::swarm::FormationControl,
+    /// temp > Sequence Swarm: LayoutEditor
+    pub layout_editor: crate::swarm::LayoutEditor,
     swarm_open: Option<&'static str>,
     leader: Option<(u8, u8)>,
     follow: bool,
@@ -73,7 +75,8 @@ impl MoreTools {
     pub fn activate(&mut self, name: &str, link: Option<&Link>, toasts: &mut Toasts, settings: &mut crate::app::Settings) -> bool {
         match name {
             "Swarm" => self.formation.show(),
-            "Follow the leader" | "Sequence Swarm" | "Follow Swarm" => {
+            "Sequence Swarm" => self.layout_editor.show(),
+            "Follow the leader" | "Follow Swarm" => {
                 self.swarm_open = Some(match name {
                     "Swarm" => "Swarm",
                     "Follow the leader" => "Follow the leader",

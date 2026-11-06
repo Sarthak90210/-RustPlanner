@@ -302,11 +302,27 @@ struct Grid {
     icons: BTreeMap<Key, Icon>,
     hover: Option<Key>,
     drag: Option<Drag>,
+    bg: Option<egui::TextureHandle>,
+    /// BGImagex, BGImagey, BGImagew, BGImageh (grid cells) and BGImageStepSize
+    bg_rect: [f32; 4],
+    bg_step: f32,
 }
 
 impl Default for Grid {
     fn default() -> Self {
-        Self { xdist: 40, ydist: 40, centerx: 0.0, centery: 0.0, vertical: false, icons: BTreeMap::new(), hover: None, drag: None }
+        Self {
+            xdist: 40,
+            ydist: 40,
+            centerx: 0.0,
+            centery: 0.0,
+            vertical: false,
+            icons: BTreeMap::new(),
+            hover: None,
+            drag: None,
+            bg: None,
+            bg_rect: [0.0, 0.0, 1.0, 1.0],
+            bg_step: 1.0,
+        }
     }
 }
 
@@ -320,6 +336,10 @@ impl Grid {
                 self.ydist += 1;
             }
         }
+    }
+
+    fn clear(&mut self) {
+        self.icons.clear();
     }
 
     /// UpdateIcon
@@ -354,6 +374,11 @@ impl Grid {
         let yline = (rect.height() - 1.0) / self.ydist as f32;
         let silver = Color32::from_rgb(0xc0, 0xc0, 0xc0);
         let dash = |p: &egui::Painter, a: Pos2, b: Pos2| p.extend(egui::Shape::dashed_line(&[a, b], Stroke::new(1.0, silver), 4.0, 2.0));
+        if let Some(tex) = &self.bg {
+            let [bx, by, bw, bh] = self.bg_rect;
+            let r = Rect::from_min_size(rect.min + Vec2::new(bx * xline, by * yline), Vec2::new(bw * xline, bh * yline));
+            p.image(tex.id(), r, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+        }
         for x in 0..=self.xdist {
             let a = rect.min + Vec2::new(x as f32 * xline, 0.0);
             let b = Pos2::new(a.x, rect.max.y);
@@ -1034,5 +1059,502 @@ mod ui_tests {
             out.textures_delta.clear();
         }
         assert_eq!((g.centerx, g.centery), (0.0, 0.0));
+    }
+}
+
+
+/// Swarm/Sequence/Layout.cs: a named set of per-sysid offsets (east, north, alt).
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Layout {
+    #[serde(rename = "Id")]
+    pub id: String,
+    #[serde(rename = "DelayStart", default)]
+    pub delay_start: i32,
+    #[serde(rename = "DelayEnd", default)]
+    pub delay_end: i32,
+    #[serde(rename = "Offset", default)]
+    pub offset: BTreeMap<u32, Xyz>,
+}
+
+/// Utilities.Vector3 as Newtonsoft writes it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Xyz {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+
+/// Swarm/Sequence: the layouts and the ordered steps that name them.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Sequence {
+    #[serde(rename = "Layouts", default)]
+    pub layouts: Vec<Layout>,
+    #[serde(rename = "Steps", default)]
+    pub steps: Vec<String>,
+}
+
+impl Sequence {
+    pub fn load(path: &std::path::Path) -> Option<Self> {
+        serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
+    }
+
+    /// Formatting.Indented
+    pub fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
+        std::fs::write(path, serde_json::to_string_pretty(self).unwrap_or_default())
+    }
+}
+
+/// num_drones_ValueChanged: shrinking removes the sysid equal to the old count, growing adds
+/// max + 1 at (sysid, 0, 0) to every layout.
+pub fn set_drone_count(seq: &mut Sequence, value: u32, known: &mut std::collections::BTreeSet<u32>) {
+    let count = seq.layouts.first().map(|l| l.offset.len() as u32).unwrap_or(0);
+    if value == count {
+        return;
+    }
+    if value < count {
+        for l in &mut seq.layouts {
+            l.offset.remove(&count);
+        }
+    } else {
+        let sysid = seq.layouts.first().and_then(|l| l.offset.keys().max().copied()).map(|m| m + 1).unwrap_or(1);
+        for l in &mut seq.layouts {
+            l.offset.insert(sysid, Xyz { x: sysid as f64, y: 0.0, z: 0.0 });
+        }
+        known.insert(sysid);
+    }
+}
+
+/// Run Step: each drone in the layout goes to startpos.gps_offset(x east, y north) at z.
+pub fn step_targets(layout: &Layout, start: (f64, f64)) -> Vec<(u32, f64, f64, f64)> {
+    layout
+        .offset
+        .iter()
+        .map(|(sysid, v)| {
+            let bearing = v.x.atan2(v.y).to_degrees();
+            let dist = v.x.hypot(v.y);
+            let (lat, lng) = newpos(start, bearing, dist);
+            (*sysid, lat, lng, v.z)
+        })
+        .collect()
+}
+
+/// Sequence/LayoutEditor ("Sequence Swarm")
+#[derive(Default)]
+pub struct LayoutEditor {
+    pub open: bool,
+    seq: Sequence,
+    working: Option<usize>,
+    /// the sysids that have icons (mavs)
+    known: std::collections::BTreeSet<u32>,
+    num_drones: u32,
+    step: usize,
+    label: String,
+    startpos: Option<(f64, f64)>,
+    selected_step: Option<usize>,
+    dragging_step: Option<usize>,
+    grid: Grid,
+    name_prompt: Option<String>,
+    /// "Move Image" button list
+    image_buttons: bool,
+    /// DroneGroup.CurrentMode: position streams requested once per Controller.Start
+    streams_requested: bool,
+}
+
+impl LayoutEditor {
+    pub fn show(&mut self) {
+        *self = Self { open: true, num_drones: 1, label: "label1".into(), ..Default::default() };
+    }
+
+    /// UpdateDisplay
+    fn update_display(&mut self) {
+        let Some(l) = self.working.and_then(|i| self.seq.layouts.get(i)) else { return };
+        self.grid.clear();
+        for (sysid, v) in &l.offset {
+            let key = (0, *sysid as u8, 0);
+            self.grid.update_icon(key, sysid.to_string(), v.x as f32, v.y as f32, v.z as f32, true);
+        }
+    }
+
+    /// Controller.Start: every vehicle on every connection, position streams at 10 Hz.
+    fn start(&mut self, links: &[&Link]) -> Vec<Mav> {
+        let mavs = vehicles(links);
+        if !self.streams_requested {
+            self.streams_requested = true;
+            for m in &mavs {
+                links[m.key.0].send(LinkCommand::Send(Box::new(MavMessage::REQUEST_DATA_STREAM(REQUEST_DATA_STREAM_DATA {
+                    req_message_rate: 10,
+                    target_system: m.key.1,
+                    target_component: m.key.2,
+                    req_stream_id: MavDataStream::MAV_DATA_STREAM_POSITION,
+                    start_stop: 1,
+                }))));
+            }
+        }
+        mavs
+    }
+
+    fn run_step(&mut self, links: &[&Link]) {
+        if self.step >= self.seq.steps.len() {
+            return;
+        }
+        let name = self.seq.steps[self.step].clone();
+        let mavs = self.start(links);
+        if self.startpos.is_none() {
+            self.startpos = mavs.first().map(|m| (m.lat, m.lng));
+        }
+        self.label = format!("{name} : {}", self.step);
+        let Some(layout) = self.seq.layouts.iter().find(|l| l.id == name) else { return };
+        for (sysid, lat, lng, alt) in step_targets(layout, self.startpos.unwrap_or_default()) {
+            if let Some(m) = mavs.iter().find(|m| m.key.1 as u32 == sysid) {
+                // SendPositionVelocity(newpos, Vector3.Zero)
+                links[m.key.0].send(LinkCommand::Send(Box::new(MavMessage::SET_POSITION_TARGET_GLOBAL_INT(SET_POSITION_TARGET_GLOBAL_INT_DATA {
+                    lat_int: (lat * 1e7) as i32,
+                    lon_int: (lng * 1e7) as i32,
+                    alt: alt as f32,
+                    target_system: m.key.1,
+                    target_component: m.key.2,
+                    coordinate_frame: MavFrame::MAV_FRAME_GLOBAL_RELATIVE_ALT_INT,
+                    type_mask: PositionTargetTypemask::from_bits_truncate(u16::MAX - (1 << 9) - 0b111 - 0b111_000),
+                    ..Default::default()
+                }))));
+            }
+        }
+        self.step += 1;
+    }
+
+    fn takeoff(&mut self, links: &[&Link]) {
+        self.streams_requested = false;
+        let mavs = self.start(links);
+        for m in &mavs {
+            if !m.mode.eq_ignore_ascii_case("guided") {
+                set_mode(links[m.key.0], m, "GUIDED");
+            }
+        }
+        for m in &mavs {
+            if !m.armed {
+                command(links[m.key.0], m.key.1, m.key.2, MavCmd::MAV_CMD_COMPONENT_ARM_DISARM, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+            }
+        }
+        for m in &mavs {
+            command(links[m.key.0], m.key.1, m.key.2, MavCmd::MAV_CMD_NAV_TAKEOFF, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0]);
+        }
+    }
+
+    fn select_layout(&mut self, i: usize) {
+        self.working = Some(i);
+        self.grid.clear();
+        self.update_display();
+    }
+
+    pub fn ui(&mut self, ctx: &egui::Context, links: &[&Link], toasts: &mut Toasts) {
+        if !self.open {
+            return;
+        }
+        let _ = &toasts;
+        let mut open = true;
+        egui::Window::new("Layout Editor").id(egui::Id::new("swarm_layout_editor")).open(&mut open).collapsible(false).resizable(false).fixed_size([899.0, 494.0]).show(ctx, |ui| {
+            let (area, _) = ui.allocate_exact_size(Vec2::new(899.0, 494.0), Sense::hover());
+            let o = area.min;
+            let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));
+            let button = |ui: &mut egui::Ui, rect: Rect, text: &str| ui.put(rect, |ui: &mut egui::Ui| theme::button_sized(ui, text, rect.size())).clicked();
+            if button(ui, r(12.0, 3.0, 75.0, 23.0), "Load") {
+                if let Some(path) = rfd::FileDialog::new().add_filter("txt", &["txt"]).pick_file() {
+                    if let Some(load) = Sequence::load(&path) {
+                        self.seq = load;
+                        if let Some(first) = self.seq.layouts.first() {
+                            self.num_drones = first.offset.len() as u32;
+                            self.known = first.offset.keys().copied().collect();
+                            self.select_layout(0);
+                        }
+                    }
+                }
+            }
+            // comboBox1: the layouts by Id
+            let cur = self.working.and_then(|i| self.seq.layouts.get(i)).map(|l| l.id.clone()).unwrap_or_default();
+            let cr = r(93.0, 3.0, 121.0, 21.0);
+            let mut pick = None;
+            ui.put(cr, |ui: &mut egui::Ui| {
+                egui::ComboBox::from_id_salt("seq_layouts").width(cr.width() - 8.0).selected_text(cur.clone()).show_ui(ui, |ui| {
+                    for (i, l) in self.seq.layouts.iter().enumerate() {
+                        if ui.selectable_label(self.working == Some(i), &l.id).clicked() {
+                            pick = Some(i);
+                        }
+                    }
+                }).response
+            });
+            if let Some(i) = pick {
+                self.select_layout(i);
+            }
+            if button(ui, r(220.0, 3.0, 75.0, 23.0), "New Layout") {
+                self.name_prompt = Some("Layout X".into());
+            }
+            let mut n = self.num_drones as f64;
+            let nr = r(301.0, 4.0, 75.0, 20.0);
+            if theme::numeric_updown_fill(ui, nr, &mut n, 1.0, 1000.0, 1.0, 0, theme::control_bg()).changed() {
+                self.num_drones = n.round().clamp(1.0, 1000.0) as u32;
+                set_drone_count(&mut self.seq, self.num_drones, &mut self.known);
+                self.update_display();
+            }
+            if button(ui, r(382.0, 3.0, 75.0, 23.0), "Add Step") {
+                self.seq.steps.push(cur.clone());
+            }
+            if button(ui, r(463.0, 3.0, 59.0, 23.0), "Takeoff") {
+                self.takeoff(links);
+            }
+            if button(ui, r(528.0, 3.0, 75.0, 23.0), "Reset") {
+                self.step = 0;
+            }
+            if button(ui, r(609.0, 3.0, 75.0, 23.0), "Run Step") {
+                self.run_step(links);
+            }
+            ui.painter().text(o + Vec2::new(691.0, 10.0), egui::Align2::LEFT_TOP, &self.label, crate::fonts::ui_id(crate::fonts::UI_SIZE), Color32::WHITE);
+            if button(ui, r(690.0, 26.0, 75.0, 23.0), "set image") {
+                match rfd::FileDialog::new().pick_file().and_then(|p| image::open(p).ok()) {
+                    Some(img) => {
+                        let rgba = img.to_rgba8();
+                        let size = [rgba.width() as usize, rgba.height() as usize];
+                        let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+                        self.grid.bg = Some(ui.ctx().load_texture("swarm_bg", color, Default::default()));
+                        self.image_buttons = true;
+                    }
+                    None => self.grid.bg = None,
+                }
+            }
+            if button(ui, r(812.0, 3.0, 75.0, 23.0), "Save") {
+                if let Some(path) = rfd::FileDialog::new().add_filter("txt", &["txt"]).set_file_name("sequence.txt").save_file() {
+                    if let Err(e) = self.seq.save(&path) {
+                        toasts.error(e.to_string());
+                    }
+                }
+            }
+            let grid_rect = r(12.0, 52.0, 725.0, 430.0);
+            if ui.rect_contains_pointer(grid_rect) {
+                let wheel: f32 = ui.input(|i| i.events.iter().filter_map(|e| if let egui::Event::MouseWheel { delta, .. } = e { Some(delta.y) } else { None }).sum());
+                if wheel != 0.0 {
+                    let scale = self.grid.xdist + if wheel < 0.0 { 4 } else { -4 };
+                    self.grid.set_scale(scale, grid_rect.size());
+                }
+            }
+            let (moved, alt) = self.grid.ui(ui, grid_rect);
+            // grid_UpdateOffsets: the working layout takes the dragged offset
+            if let (Some((k, x, y, z)), Some(l)) = (moved, self.working.and_then(|i| self.seq.layouts.get_mut(i))) {
+                l.offset.insert(k.1 as u32, Xyz { x: x as f64, y: y as f64, z: z as f64 });
+            }
+            if let Some(k) = alt {
+                let _ = k;
+            }
+            // listBox1: the steps; select picks the layout, Delete removes, drag reorders
+            let lr = r(744.0, 52.0, 143.0, 433.0);
+            ui.painter().rect_filled(lr, 0.0, theme::control_bg());
+            ui.painter().rect_stroke(lr, 0.0, Stroke::new(1.0, Color32::from_gray(0x82)), egui::StrokeKind::Inside);
+            let row_h = 13.0;
+            let mut drop_at = None;
+            for (i, step) in self.seq.steps.clone().iter().enumerate() {
+                let rr = Rect::from_min_size(lr.min + Vec2::new(1.0, 1.0 + i as f32 * row_h), Vec2::new(lr.width() - 2.0, row_h));
+                if rr.bottom() > lr.bottom() {
+                    break;
+                }
+                let resp = ui.interact(rr, ui.id().with(("seq_step", i)), Sense::click_and_drag());
+                if self.selected_step == Some(i) {
+                    ui.painter().rect_filled(rr, 0.0, Color32::from_rgb(0x33, 0x99, 0xff));
+                }
+                ui.painter().text(rr.left_center() + Vec2::new(2.0, 0.0), egui::Align2::LEFT_CENTER, step, crate::fonts::ui_id(crate::fonts::UI_SIZE), Color32::WHITE);
+                if resp.is_pointer_button_down_on() && self.dragging_step.is_none() {
+                    self.selected_step = Some(i);
+                    if let Some(li) = self.seq.layouts.iter().position(|l| &l.id == step) {
+                        if self.working != Some(li) {
+                            self.select_layout(li);
+                        }
+                    }
+                }
+                if resp.drag_started() {
+                    self.dragging_step = Some(i);
+                }
+                if self.dragging_step.is_some() && ui.input(|inp| inp.pointer.any_released()) && ui.rect_contains_pointer(rr) {
+                    drop_at = Some(i);
+                }
+            }
+            if let Some(from) = self.dragging_step {
+                if ui.input(|i| i.pointer.any_released()) {
+                    // listBox1_DragDrop: below the last row drops at the end
+                    let to = drop_at.unwrap_or(self.seq.steps.len().saturating_sub(1));
+                    if from < self.seq.steps.len() {
+                        let item = self.seq.steps.remove(from);
+                        let to = to.min(self.seq.steps.len());
+                        self.seq.steps.insert(to, item);
+                        self.selected_step = Some(to);
+                    }
+                    self.dragging_step = None;
+                }
+            }
+            if ui.input(|i| i.key_released(egui::Key::Delete)) {
+                if let Some(i) = self.selected_step.filter(|i| *i < self.seq.steps.len()) {
+                    self.seq.steps.remove(i);
+                    self.selected_step = None;
+                }
+            }
+        });
+        if !open {
+            self.open = false;
+        }
+        if let Some(mut name) = self.name_prompt.take() {
+            let mut done = None;
+            egui::Modal::new(egui::Id::new("seq_layout_name")).show(ctx, |ui| {
+                theme::label(ui, "Layout Name");
+                ui.text_edit_singleline(&mut name);
+                ui.horizontal(|ui| {
+                    if theme::button(ui, "OK").clicked() {
+                        done = Some(true);
+                    }
+                    if theme::button(ui, "Cancel").clicked() {
+                        done = Some(false);
+                    }
+                });
+            });
+            match done {
+                // BUT_new_Click adds the layout whatever the InputBox returns
+                Some(_) => {
+                    let offset = self.working.and_then(|i| self.seq.layouts.get(i)).map(|l| l.offset.clone()).unwrap_or_default();
+                    self.seq.layouts.push(Layout { id: name, offset, ..Default::default() });
+                    let i = self.seq.layouts.len() - 1;
+                    self.select_layout(i);
+                }
+                None => self.name_prompt = Some(name),
+            }
+        }
+        if self.image_buttons {
+            let mut open = true;
+            egui::Window::new("Move Image").id(egui::Id::new("swarm_move_image")).open(&mut open).resizable(false).show(ctx, |ui| {
+                let g = &mut self.grid;
+                let s = g.bg_step;
+                for (text, f) in [
+                    ("Up", [0.0, -s, 0.0, 0.0]),
+                    ("Down", [0.0, s, 0.0, 0.0]),
+                    ("Left", [-s, 0.0, 0.0, 0.0]),
+                    ("Right", [s, 0.0, 0.0, 0.0]),
+                    ("X+", [0.0, 0.0, s, 0.0]),
+                    ("X-", [0.0, 0.0, -s, 0.0]),
+                    ("Y+", [0.0, 0.0, 0.0, s]),
+                    ("Y-", [0.0, 0.0, 0.0, -s]),
+                ] {
+                    if theme::button(ui, text).clicked() {
+                        for (v, d) in g.bg_rect.iter_mut().zip(f) {
+                            *v += d;
+                        }
+                    }
+                }
+                if theme::button(ui, "Scale 0.1").clicked() {
+                    g.bg_step = 0.1;
+                }
+                if theme::button(ui, "Scale 1").clicked() {
+                    g.bg_step = 1.0;
+                }
+            });
+            self.image_buttons = open;
+        }
+    }
+}
+
+#[cfg(test)]
+mod sequence_tests {
+    use super::*;
+
+    #[test]
+    fn sequence_json_matches_the_original_file_format() {
+        let text = r#"{
+  "Layouts": [
+    {
+      "Id": "Layout X",
+      "DelayStart": 0,
+      "DelayEnd": 0,
+      "Offset": {
+        "1": { "x": 1.0, "y": 0.0, "z": 0.0 },
+        "2": { "x": 2.0, "y": 5.0, "z": 10.0 }
+      }
+    }
+  ],
+  "Steps": [ "Layout X", "Layout X" ]
+}"#;
+        let seq: Sequence = serde_json::from_str(text).unwrap();
+        assert_eq!(seq.layouts[0].offset[&2], Xyz { x: 2.0, y: 5.0, z: 10.0 });
+        assert_eq!(seq.steps.len(), 2);
+        let back: serde_json::Value = serde_json::from_str(&serde_json::to_string_pretty(&seq).unwrap()).unwrap();
+        assert_eq!(back, serde_json::from_str::<serde_json::Value>(text).unwrap());
+    }
+
+    #[test]
+    fn drone_count_and_step_targets_follow_the_editor() {
+        let mut seq = Sequence { layouts: vec![Layout { id: "a".into(), ..Default::default() }, Layout { id: "b".into(), ..Default::default() }], steps: vec![] };
+        let mut known = Default::default();
+        set_drone_count(&mut seq, 1, &mut known);
+        set_drone_count(&mut seq, 2, &mut known);
+        assert_eq!(seq.layouts[1].offset[&2], Xyz { x: 2.0, y: 0.0, z: 0.0 });
+        // shrinking removes the sysid equal to the old count
+        set_drone_count(&mut seq, 1, &mut known);
+        assert!(seq.layouts.iter().all(|l| l.offset.keys().copied().collect::<Vec<_>>() == [1]));
+        let l = Layout { id: "x".into(), offset: [(3, Xyz { x: 30.0, y: 40.0, z: 12.0 })].into_iter().collect(), ..Default::default() };
+        let t = step_targets(&l, (-35.0, 149.0));
+        assert_eq!((t[0].0, t[0].3), (3, 12.0));
+        assert!((distance((-35.0, 149.0), (t[0].1, t[0].2)) - 50.0).abs() < 0.1);
+        assert!((bearing((-35.0, 149.0), (t[0].1, t[0].2)) - 36.87).abs() < 0.1, "x east, y north");
+    }
+}
+
+#[cfg(test)]
+mod sequence_sim_tests {
+    use super::*;
+    use mp_core::sim;
+
+    /// Takeoff then Run Step: each simulated Copter flies to startpos + its layout offset.
+    #[test]
+    fn run_step_sends_each_drone_to_its_layout_offset() {
+        let port = std::net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let link = Link::connect_with_params(ConnectionSpec::UdpListen { port }, None, false);
+        let _sims: Vec<_> = (1..=3u8)
+            .map(|i| sim::spawn_with(sim::SimOptions { gcs_port: port, sysid: i, kind: sim::SimKind::Copter, offset: (0.0, i as f64 * 10.0) }).unwrap())
+            .collect();
+        let links = [&link];
+        let mut ed = LayoutEditor::default();
+        ed.show();
+        let poll = |what: &str, secs: u64, f: &dyn Fn(&[Mav]) -> bool, retry: &mut dyn FnMut()| {
+            let end = Instant::now() + Duration::from_secs(secs);
+            let mut next = Instant::now();
+            loop {
+                let mavs = vehicles(&links);
+                if f(&mavs) {
+                    return mavs;
+                }
+                assert!(Instant::now() < end, "timed out: {what}: {mavs:?}");
+                if Instant::now() >= next {
+                    retry();
+                    next = Instant::now() + Duration::from_secs(1);
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        };
+        poll("three vehicles", 15, &|m| m.len() == 3 && m.iter().all(|v| v.lat != 0.0), &mut || {});
+        // but_takeoff_Click (resent like the original's retries over a lossy link)
+        poll("airborne", 30, &|m| m.iter().all(|v| v.alt > 1.5), &mut || ed.takeoff(&links));
+        let mut layout = Layout { id: "line".into(), ..Default::default() };
+        for (sysid, x) in [(1u32, 0.0), (2, 15.0), (3, 30.0)] {
+            layout.offset.insert(sysid, Xyz { x, y: 20.0, z: 8.0 });
+        }
+        ed.seq = Sequence { layouts: vec![layout.clone()], steps: vec!["line".into()] };
+        ed.run_step(&links);
+        assert_eq!(ed.label, "line : 0");
+        assert_eq!(ed.step, 1);
+        let start = ed.startpos.unwrap();
+        let targets = step_targets(&layout, start);
+        poll("drones at their layout positions", 40, &|m| {
+            targets.iter().all(|(sysid, lat, lng, alt)| {
+                m.iter().find(|v| v.key.1 as u32 == *sysid).is_some_and(|v| distance((*lat, *lng), (v.lat, v.lng)).hypot(alt - v.alt) < 3.0)
+            })
+        }, &mut || {
+            ed.step = 0;
+            ed.run_step(&links);
+        });
+        // past the last step nothing more is sent
+        ed.run_step(&links);
+        assert_eq!(ed.step, 1);
     }
 }

@@ -1127,6 +1127,7 @@ impl eframe::App for MissionPlannerApp {
         self.more_tools.ui(&ctx, self.link.as_ref(), &mut self.toasts);
         let links: Vec<&Link> = self.link.iter().chain(self.extra_links.iter()).collect();
         self.more_tools.formation.ui(&ctx, &links, &mut self.toasts);
+        self.more_tools.layout_editor.ui(&ctx, &links, &mut self.toasts);
         // ThemeManager.LoadTheme(CMB_theme.Text)
         let want = (
             self.settings.planner.get("theme").cloned().unwrap_or_else(|| "BurntKermit".into()),
