@@ -138,9 +138,9 @@ egui selector click through the production MAVLink link to simulator readback, a
 checking parameter ACK/rejection and target-switch cancellation, and five-device compass lifecycle tests.
 
 Run 12 adds the original Plane and Rover Basic Tuning pages and the Tracker Extended Tuning page,
-with 234 exported controls and 100 parameter bindings. Plane/Rover controls stage edits until Write
+with 234 exported controls and 100 parameter bindings. Plane controls stage edits until Write
 Params or Ctrl+S, retain pending values until readback, confirm doubled values, and provide full/partial
-refresh. Tracker controls write directly and include yaw/pitch PWM tests and the vertical pitch slider.
+refresh. Rover and Tracker controls write directly. Tracker includes yaw/pitch PWM tests and the vertical pitch slider.
 The layout exporter is `scripts/export_tuning_forms.py`; generated JSON is included in normal builds.
 `MP_SIM_KIND=plane|rover|tracker` selects corresponding built-in simulator fixtures. Their metadata
 parameter sets are development fixtures, not physical firmware qualification.
@@ -150,6 +150,16 @@ modal confirmation and waits for its result before clearing required state or st
 Run 12's validation includes 98 passing tests, numeric-edit/Ctrl+S simulator readback and separate TCP
 ordering tests. `scripts/capture_vehicle_tuning.ps1 -Round 12` exports each actual firmware-specific
 CONFIG page and records the reported firmware, complete parameters and binary hash in its receipts.
+
+Run 13 corrects Rover's direct-edit workflow and its Avoidance visibility predicate, and adds metadata
+tooltips to vehicle tuning combo boxes. Separate egui/simulator tests exercise Plane staged edits and
+Rover direct edits through actual numeric clicks and parameter readback.
+
+PLAN's View KML starts the loopback KML service at `http://127.0.0.1:56781/network.kml`.
+It links to live `location.kml` and mission `wps.kml` documents and serves Mission Planner's aircraft
+model. Active/extra links supply vehicle poses; mission changes update the next KML response. An HTTP
+test validates network links, waypoint absolute/relative heights, mission/aircraft updates, the model,
+HEAD responses, missing resources and server shutdown. Google Earth itself has not been exercised.
 
 ## License
 

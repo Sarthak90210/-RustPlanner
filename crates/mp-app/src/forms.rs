@@ -131,6 +131,7 @@ pub struct FormState {
     pub options: HashMap<String, Vec<(i32, String)>>,
     /// Vehicle PID pages stage edits until Write PIDS or Ctrl+S.
     pub staged: Option<std::collections::BTreeMap<String, f32>>,
+    pub parameter_metadata: bool,
 }
 
 impl FormState {
@@ -275,14 +276,15 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
                 (Some(n), Some(l)) => {
                     let v = params[n].value;
                     ui.scope_builder(egui::UiBuilder::new().max_rect(r), |ui| ui.add_enabled_ui(enabled && !app.readonly, |ui| {
-                        let options = st.options.get(&c.name).cloned().or_else(|| st.staged.as_ref().map(|_| mp_core::param_meta::options(fw, n).into_iter().map(|(k, v)| (k as i32, v)).collect()));
+                        let options = st.options.get(&c.name).cloned().or_else(|| st.parameter_metadata.then(|| mp_core::param_meta::options(fw, n).into_iter().map(|(k, v)| (k as i32, v)).collect()));
                         if let Some(options) = options {
                             let text = options.iter().find(|(k, _)| *k as f32 == v).map(|(_, s)| s.clone()).unwrap_or_else(|| v.to_string());
-                            egui::ComboBox::from_id_salt((name, &c.name)).width(r.width() - 8.0).wrap_mode(egui::TextWrapMode::Truncate).selected_text(text).show_ui(ui, |ui| {
+                            let response = egui::ComboBox::from_id_salt((name, &c.name)).width(r.width() - 8.0).wrap_mode(egui::TextWrapMode::Truncate).selected_text(text).show_ui(ui, |ui| {
                                 for (key, label) in options {
                                     if ui.selectable_label(key as f32 == v, label).clicked() { st.edit(l, n, key as f32); }
                                 }
-                            });
+                            }).response;
+                            if st.parameter_metadata { if let Some(meta) = mp_core::param_meta::get(fw, n) { response.on_hover_text(&meta.description); } }
                         } else { crate::views::config::param_control(ui, l, fw, n, v, r.width() - 8.0); }
                     }));
                 }
@@ -297,7 +299,7 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
                     Some(n) => {
                         let cur = params[n].value as f64;
                         let mut v = cur / scale;
-                        let meta = st.staged.as_ref().and_then(|_| mp_core::param_meta::get(fw, n));
+                        let meta = st.parameter_metadata.then(|| mp_core::param_meta::get(fw, n)).flatten();
                         let inc = meta.and_then(|m| m.increment).or_else(|| c.nums.get(3).copied()).filter(|i| *i > 0.0).unwrap_or(1.0);
                         let (lo, hi) = meta.and_then(|m| m.range).unwrap_or((lo, hi));
                         let (lo, hi) = (lo.min(v), hi.max(v));

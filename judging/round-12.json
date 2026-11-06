@@ -1,0 +1,326 @@
+{
+  "round": 12,
+  "review_type": "fresh independent targeted source, actual-render and interaction review",
+  "reviewed_head": "0c5c8bf8ef53ed251fc56d3afcd6924f348e4093",
+  "date": "2026-11-06",
+  "verdict": "Material software parity gaps remain. Not 10/10.",
+  "scores": {
+    "overall": 7.2,
+    "ui_ux": 7.9,
+    "features": 6.5,
+    "scale": "Qualitative exact-C#-parity judgments, not completion percentages. Overall gives equal weight to UI/UX and features."
+  },
+  "rationale": "The three missing vehicle-specific tuning routes now render recognizable original layouts with real parameter bindings. Plane staging has an actual egui edit/Ctrl+S/readback test. Global FIFO ordering closes the previous cross-name routing defect, and compass reboot state now waits for a result behind a modal confirmation. These are material improvements. The source comparison also finds that Rover controls were incorrectly given Plane-style staging despite the original using their direct-write control behavior. Video, planning coordinate systems/KML, distinct swarm tools, plugins, localization and transport/mobile workflows remain materially incomplete.",
+  "scope": {
+    "inspected": [
+      "Run12 changes to vehicle_tuning.rs, forms.rs, config.rs, theme.rs, compass.rs and the global parameter queue",
+      "ConfigArduplane, ConfigArdurover and ConfigAntennaTracker source and relevant Designer event bindings",
+      "MavlinkNumericUpDown and MavlinkComboBox alias, range and direct-versus-ValueUpdated behavior",
+      "Three final eframe tuning captures and their manifests",
+      "Representative current GStreamer/HereLink, View KML, language and swarm branches, with broader unchanged findings retained from round11"
+    ],
+    "rust_render_images_viewed": [
+      "target/judging/round12/config_plane.png",
+      "target/judging/round12/config_rover.png",
+      "target/judging/round12/config_tracker.png"
+    ],
+    "render_evidence": "All three manifests identify the actual 1280x800 eframe viewport, connected autosim, complete parameter collections, distinct firmware targets and binary SHA256 70B1A37E2E17944BE3170919A833FBA2351D1E18A81C80D3900B698B5FD678FE. Plane has 3578 parameters, Rover 3275 and Tracker 3158. The shared simulation parameter base is not proof of real firmware inventories. Several controls are disabled because their original bindings are absent. The Tracker pitch slider is vertical and contained. Rover option text truncates inside its control rather than overflowing.",
+    "reviewer_executed_verification": [
+      "cargo test -p mp-app views::vehicle_tuning::tests -- --nocapture: 3 passed, including actual egui numeric edit, no early write, Ctrl+S and simulator readback",
+      "cargo test -p mp-app views::compass::tests -- --nocapture: 6 passed",
+      "cargo test -p mp-core --test altitude_change parameter_clear_then_reassign_waits_for_each_readback_and_cancels_on_target_change -- --nocapture: 1 passed",
+      "cargo test -p mp-core --test altitude_change parameter_writes_across_different_names_follow_ack_order -- --nocapture: 1 passed",
+      "JSON parse of judging/round-12.json"
+    ],
+    "reported_evidence_not_rerun": [
+      "cargo test --workspace: 98 passing",
+      "Windows application build"
+    ],
+    "verification_limits": [
+      "No original C# runtime was launched for side-by-side pixel or interaction comparison.",
+      "The executed tuning UI interaction covers one Plane numeric field. Rover edits, Tracker test/reverse controls, doubled-value choices, refresh interactions and rejected tuning writes were inspected in source rather than all clicked through.",
+      "Compass result handling was checked in source and page-state tests. The reboot modal, delayed ACK, timeout and subsequent calibration were not all exercised through an actual rendered peer session.",
+      "The FIFO peer test demonstrates cross-name delay until readback. It does not independently execute every gimbal output branch or certify all parameter workflows under backlog.",
+      "Native macOS, Linux, Android and iOS launch/import behavior and the complete original feature set were not exhaustively exercised.",
+      "No physical device was used. Physical flight qualification is separate from this software parity review."
+    ],
+    "reviewer_actions": "Read-only source/render inspection and 11 bounded passing tests. Only judging/round-12.json was edited."
+  },
+  "run12_dispositions": [
+    {
+      "change": "Vehicle-specific tuning routing and original layout export",
+      "status": "closed",
+      "closed_parts": "Plane Basic, Rover Basic and Tracker Extended now select distinct forms. The three actual captures show the corresponding group layouts and controls. Parameter aliases follow the first available original name. This closes the prior all-vehicles-use-Copter routing omission.",
+      "remaining": "This closes the route/layout omission, not every interaction in those forms. Rover edit timing and conditional visibility remain different as detailed below.",
+      "rust_refs": [
+        "crates/mp-app/src/views/config.rs:56-60",
+        "crates/mp-app/src/views/config.rs:144-145",
+        "crates/mp-app/src/views/vehicle_tuning.rs:14-20",
+        "scripts/export_tuning_forms.py:35-96"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/SoftwareConfig.cs:173-194"
+      ]
+    },
+    {
+      "change": "Vehicle tuning parameter workflows",
+      "status": "partial",
+      "closed_parts": "Plane edits stage until Write Params/Ctrl+S, retain green pending numeric values, clear after matching successful parameter results and stop the queued pass on failure. The actual egui test proves one numeric field stays unwritten until Ctrl+S and then receives a simulator readback. Large-value modal and refresh actions are implemented. Tracker has direct control writes, PWM test commands, telemetry labels and the vertical pitch slider.",
+      "remaining": "Rover is staged even though its original controls write directly. Its absent-sonar group is not hidden. Combo metadata descriptions are not attached in the staged form renderer. Most non-Plane-numeric interactions remain source-reviewed only.",
+      "rust_refs": [
+        "crates/mp-app/src/views/vehicle_tuning.rs:40-109",
+        "crates/mp-app/src/views/vehicle_tuning.rs:112-221",
+        "crates/mp-app/src/forms.rs:274-311"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigArduplane.Designer.cs:216",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigArduplane.cs:328-330",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigArdurover.cs:43-113",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigAntennaTracker.cs:244-301"
+      ]
+    },
+    {
+      "change": "Compass direct/required reboot confirmation and completion",
+      "status": "closed",
+      "closed_parts": "The standalone button now requests OK/Cancel confirmation. Required reboot uses Yes/No. Both use egui::Modal, keep required state until a successful reboot command result, report rejection/disconnection and start deferred calibration only after success. The executed page-state tests cover declined, failed and successful completion.",
+      "remaining": "Rendered delayed/rejected command click-through evidence is still limited. This is a verification limit rather than the previous confirmed early-clear/nonmodal defect.",
+      "rust_refs": [
+        "crates/mp-app/src/views/compass.rs:75-190",
+        "crates/mp-app/src/views/setup.rs:308"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigHWCompass2.cs:147-181",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigHWCompass2.cs:500-506"
+      ]
+    },
+    {
+      "change": "Global ordering of parameter writes across different names",
+      "status": "closed",
+      "closed_parts": "The worker now uses one FIFO and sends the next queued parameter only after the pending write finishes. The independently executed TCP test verifies shutter clear, shutter reassignment, trigger type and axis assignment in order, withholding each readback for 100 ms and asserting no later write appears. The existing rejection/target-switch test also passes.",
+      "remaining": "This closes the previous cross-name ordering defect. It is not a complete end-to-end review of all gimbal legacy/Relay/reverse/min/max interactions.",
+      "rust_refs": [
+        "crates/mp-core/src/link.rs:547-552",
+        "crates/mp-core/src/link.rs:1538-1547",
+        "crates/mp-core/tests/altitude_change.rs:159-172"
+      ]
+    }
+  ],
+  "new_or_remaining_affected_gaps": [
+    {
+      "priority": 1,
+      "severity": "medium",
+      "area": "CONFIG Rover Basic Tuning",
+      "title": "Match the original direct-write behavior instead of forcing Plane staging",
+      "finding": "prepare creates staged state for every form except Tracker. This delays Rover numeric and combo changes until Write Params/Ctrl+S. In the original, ConfigArdurover.Designer.cs attaches no ValueUpdated handlers and ConfigArdurover.cs never adds entries to changes. MavlinkNumericUpDown therefore starts its 300 ms write timer, while MavlinkComboBox writes its selection directly. Plane explicitly subscribes numeric_ValueUpdated and is correctly staged. The presence of a Rover Write Params button and unused changes table does not establish that its original controls stage edits.",
+      "rust_refs": [
+        "crates/mp-app/src/views/vehicle_tuning.rs:50-51",
+        "crates/mp-app/src/forms.rs:144-148",
+        "crates/mp-app/src/forms.rs:278-283",
+        "crates/mp-app/src/forms.rs:309-311"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigArdurover.cs:43-113",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigArdurover.cs:155-175",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigArdurover.Designer.cs:615-620",
+        "reference/MissionPlanner/Controls/MavlinkNumericUpDown.cs:147-169",
+        "reference/MissionPlanner/Controls/MavlinkComboBox.cs:173-180"
+      ],
+      "next_fix": "Record the original event/write mode per form or control. Preserve Plane staging and let Rover controls use the original direct-write path. Keep metadata combo choices when removing Rover staging. Verify a Rover numeric change and combo selection against a peer before pressing Write Params, plus the existing Plane no-early-write case."
+    },
+    {
+      "priority": 2,
+      "severity": "low",
+      "area": "CONFIG Rover Basic Tuning",
+      "title": "Apply the original parameter-dependent Avoidance visibility",
+      "finding": "The final Rover capture displays an Avoidance box with four disabled empty fields. Original Activate hides groupBox1 when neither SONAR_TRIGGER_CM nor RNGFND_TRIGGR_CM exists. The form export preserves only static Designer visibility and VehicleTuning never applies this runtime predicate.",
+      "rust_refs": [
+        "crates/mp-app/src/views/vehicle_tuning.rs:40-56",
+        "crates/mp-app/assets/forms/rover_tuning.json:705-712",
+        "crates/mp-app/src/forms.rs:168-169"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigArdurover.cs:79-87"
+      ],
+      "next_fix": "Set the group visibility from the resolved trigger parameter. Render absent, legacy SONAR and current RNGFND fixtures and confirm descendants hide or bind with the parent."
+    },
+    {
+      "priority": 3,
+      "severity": "low",
+      "area": "CONFIG tuning tooltips",
+      "title": "Attach metadata descriptions to combo controls",
+      "finding": "The form renderer adds metadata hover descriptions only in the numeric branch. Rover C# Activate explicitly adds descriptions for both numeric and combo controls. Combo users lose the original explanation for RC options and motor type.",
+      "rust_refs": [
+        "crates/mp-app/src/forms.rs:274-286",
+        "crates/mp-app/src/forms.rs:308"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigArdurover.cs:91-108"
+      ],
+      "next_fix": "Attach the resolved parameter description to combo responses, retaining full selected text in a hover description when it truncates. Verify representative RC option and motor type controls."
+    }
+  ],
+  "retained_baseline_gaps": [
+    {
+      "priority": 3,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "DATA video and payload",
+      "title": "Implement the advertised GStreamer, HereLink and gimbal video paths",
+      "finding": "Set GStreamer Source and HereLink Video always report that GStreamer was not found without attempting discovery or starting a pipeline. Start Camera starts an HTTP MJPEG reader. Payload Video Control always reports that no stream is configured. The original has pipeline input/discovery/start and full-size, mini and pop-out gimbal video controls.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3186-3213",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4946-4972",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:6667-6841"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_data.rs:464-482",
+        "crates/mp-app/src/views/fd_tabs.rs:345-346"
+      ],
+      "next_fix": "Add actual backend discovery, pipeline input/start/stop and gimbal stream configuration plus the original display modes. Verify with local video fixtures and rendered interaction states.",
+      "disposition": "open; unchanged by run12. Carried forward from round11; representative video, KML, language and swarm branches rechecked in current source."
+    },
+    {
+      "priority": 4,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "PLAN",
+      "title": "Restore coordinate-system switching and editable UTM/MGRS table columns",
+      "finding": "PLAN paints a fixed GEO label and exposes only Lat/Lon columns. The original switches between GEO, UTM and MGRS, changes visible columns and converts edits back to geographic coordinates. The Rust Enter UTM Coord context-menu action exists, but does not replace the missing table/display workflow.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:2741-2757",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:2765-2808",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:2832-2863"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_plan.rs:21-40",
+        "crates/mp-app/src/views/flight_plan.rs:278-283",
+        "crates/mp-app/src/views/flight_plan.rs:596-597",
+        "crates/mp-app/src/views/flight_plan/menu.rs:535-539"
+      ],
+      "next_fix": "Add the coordinate selector, matching columns, reversible conversions and original validation. Verify conversions and edit persistence with known coordinate fixtures.",
+      "disposition": "open; unchanged by run12. Carried forward from round11; representative video, KML, language and swarm branches rechecked in current source."
+    },
+    {
+      "priority": 5,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "Tools / swarm",
+      "title": "Restore distinct swarm workflows, especially Sequence Swarm",
+      "finding": "Swarm, Follow the leader, Sequence Swarm and Follow Swarm all open the same small vehicle grid. Sequence Swarm has no layout/step editor or sequence execution. The follow implementation sends followers to a line behind one leader once per second. This is a useful subset, but not the original tools' UI or behavior.",
+      "csharp_refs": [
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:18-39",
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:89-150"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/more_tools.rs:73-80",
+        "crates/mp-app/src/more_tools.rs:454-553"
+      ],
+      "next_fix": "Give the tools their original distinct state and controls. Start with Sequence layout load/save, editing, steps and execution, verified against deterministic multiple-vehicle peers.",
+      "disposition": "open; unchanged by run12. Carried forward from round11; representative video, KML, language and swarm branches rechecked in current source."
+    },
+    {
+      "priority": 6,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "SETUP / CONFIG navigation",
+      "title": "Honor per-page display flags and original vehicle/loading visibility",
+      "finding": "Rust models only a small subset of DisplayView flags. SETUP gates Advanced and Terminal but not the many individual hardware flags; Frame Type is visible for every parameter-complete connection. CONFIG always appends Full Parameter List and Planner, even while parameters are loading, and has no Loading page. C# applies per-page flags, firmware/version-dependent Frame Type selection, and the loading route.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/InitialSetup.cs:183-216",
+        "reference/MissionPlanner/GCSViews/SoftwareConfig.cs:226-260",
+        "reference/MissionPlanner/ExtLibs/Utilities/DisplayView.cs:78-125"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/display.rs:33-58",
+        "crates/mp-app/src/views/setup.rs:39-51",
+        "crates/mp-app/src/views/setup.rs:82-103",
+        "crates/mp-app/src/views/config.rs:49-82"
+      ],
+      "next_fix": "Represent and apply the original display flags and page predicates. Verify navigation for Basic, Advanced and Custom layouts, disconnected/loading/ready states, Plane, Rover, Tracker and old/new Copter fixtures.",
+      "disposition": "open; unchanged by run12. Carried forward from round11; representative video, KML, language and swarm branches rechecked in current source."
+    },
+    {
+      "priority": 7,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "Plugins",
+      "title": "Provide original plugin loading and lifecycle compatibility",
+      "finding": "The plugin window lists filenames with disabled Enabled checkboxes and explicitly states that .NET .dll/.cs plugins cannot load. The original compiles/loads plugins and invokes Init, Loaded, Loop and Exit; plugins can add application pages. Python/Lua script support is not equivalent to this extension contract.",
+      "csharp_refs": [
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:146-179",
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:256-329",
+        "reference/MissionPlanner/MainV2.cs:2527-2581",
+        "reference/MissionPlanner/GCSViews/InitialSetup.cs:53-58"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/hotkey_tools.rs:80-117"
+      ],
+      "next_fix": "Implement a compatibility host and page/action bridge for the supported plugin contract, or explicitly retain this as an unresolved parity exclusion. Validate a sample plugin that adds a page and uses lifecycle hooks.",
+      "disposition": "open; unchanged by run12. Carried forward from round11; representative video, KML, language and swarm branches rechecked in current source."
+    },
+    {
+      "priority": 8,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "Localization / Planner",
+      "title": "Restore the original language selector and translated resources",
+      "finding": "The language combo contains only English and UI text is hard-coded. C# discovers available language resources and changes the UI culture through MainV2.changelanguage. The single English menu entry is a missing user workflow, not just a translation verification gap.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:106-128",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:417-421",
+        "reference/MissionPlanner/MainV2.cs:4227-4235"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/config.rs:995"
+      ],
+      "next_fix": "Load supported resource translations, persist culture and update main pages and dialogs when the selection changes. Verify representative translated pages and text expansion.",
+      "disposition": "open; unchanged by run12. Carried forward from round11; representative video, KML, language and swarm branches rechecked in current source."
+    },
+    {
+      "priority": 9,
+      "severity": "high",
+      "status": "confirmed unsupported paths; native platform execution otherwise unverified",
+      "area": "Platform and connections",
+      "title": "Complete missing transport and mobile import paths",
+      "finding": "ConnectionSpec has serial, TCP client and UDP only; original BLE and WinUSB custom ports are absent. On Android/iOS open_serial explicitly returns Unsupported and platform::open_text always returns None, so common mission/parameter/file import callers cannot complete through that helper. CI configuration and entry points exist, but are not execution evidence for native platform support.",
+      "csharp_refs": [
+        "reference/MissionPlanner/MainV2.cs:3629-3641",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4150-4150",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4484-4488"
+      ],
+      "rust_refs": [
+        "crates/mp-core/src/comms.rs:20-40",
+        "crates/mp-core/src/comms.rs:121-128",
+        "crates/mp-app/src/platform.rs:76-79",
+        "crates/mp-app/src/views/flight_plan/menu.rs:450-453",
+        ".github/workflows/build.yml:1-62"
+      ],
+      "next_fix": "Implement the missing desktop custom transports and mobile device/file access, connect imports to an actual picker/browser, then produce native build and basic launch/import receipts for each promised OS. Preserve the distinction between an explicit unsupported code path and an OS that has simply not been tested.",
+      "disposition": "open; unchanged by run12. Carried forward from round11; representative video, KML, language and swarm branches rechecked in current source."
+    },
+    {
+      "priority": 11,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "PLAN",
+      "title": "Make View KML open the mission network KML",
+      "finding": "The Rust View KML hyperlink opens the generic ArduPilot planner documentation. The original opens the locally served network.kml mission endpoint. Exporting or viewing the mission in Google Earth cannot be completed by this control.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4332-4340"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_plan.rs:289-289"
+      ],
+      "next_fix": "Provide mission KML/network-link generation and the appropriate local endpoint or exported document, then point this control at it. Verify that changing the mission changes the KML contents.",
+      "disposition": "open; unchanged by run12. Carried forward from round11; representative video, KML, language and swarm branches rechecked in current source."
+    }
+  ],
+  "prioritized_next_fixes": [
+    "Correct Rover direct-write timing and conditional group visibility. Verify Rover numeric/combo writes with a peer while retaining the Plane staging test.",
+    "Implement actual GStreamer discovery/pipelines, HereLink and payload gimbal video display modes with local video fixtures.",
+    "Restore PLAN GEO/UTM/MGRS table switching and edits, and make View KML produce the mission KML endpoint or document.",
+    "Implement distinct sequence swarm tools, original display/loading predicates, plugin lifecycle compatibility, translated resources and the absent transport/mobile import paths.",
+    "Collect rendered rejected/delayed reboot and tuning interactions plus native launch/import receipts for promised platforms. Physical flight tests are not a substitute for software parity."
+  ],
+  "ten_out_of_ten_criterion": "No known material UI/UX or feature discrepancy in an adequately reviewed software scope, with the original interactions and promised native platforms verified. This remains a sampled review; closing only the listed gaps would not certify unreviewed original functionality."
+}

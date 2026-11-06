@@ -75,6 +75,7 @@ pub struct FlightPlanView {
     /// visible map area (min lat, min lng, max lat, max lng)
     view_bounds: Option<(f64, f64, f64, f64)>,
     measure: Option<(f64, f64)>,
+    kml_server: Option<crate::kml_server::KmlServer>,
 }
 
 #[derive(Clone, Copy)]
@@ -124,6 +125,7 @@ impl Default for FlightPlanView {
             view_bounds: None,
             circle_dialog: None,
             measure: None,
+            kml_server: None,
         }
     }
 }
@@ -133,6 +135,16 @@ fn put_button(ui: &mut egui::Ui, r: Rect, text: &str) -> bool {
 }
 
 impl FlightPlanView {
+    pub fn update_kml(&mut self, link: Option<&mp_core::link::Link>, extra: &[mp_core::link::Link]) {
+        if let Some(server) = &self.kml_server {
+            let mut links = Vec::new();
+            if let Some(link) = link { links.push(link.shared.clone()); }
+            links.extend(extra.iter().map(|l| l.shared.clone()));
+            let mission = if self.mission_type == 0 { self.items.clone() } else { self.stash[0].clone() };
+            server.update(crate::kml_server::Snapshot { home: self.home, mission, links });
+        }
+    }
+
     pub fn on_event(&mut self, e: &LinkEvent, toasts: &mut Toasts) {
         match e {
             LinkEvent::MissionDownloaded { mission_type: mt @ (1 | 2), items } => {
@@ -286,7 +298,16 @@ impl FlightPlanView {
         let px = 3.0;
         let py = 64.0;
         ui.put(r(px + 3.0, py + 3.0, 50.0, 17.0), egui::Checkbox::new(&mut self.grid, "Grid"));
-        ui.put(r(px + 62.0, py + 3.0, 60.0, 13.0), egui::Hyperlink::from_label_and_url("View KML", "https://ardupilot.org/planner/"));
+        if ui.put(r(px + 62.0, py + 3.0, 60.0, 13.0), egui::Link::new("View KML")).clicked() {
+            if self.kml_server.is_none() {
+                match crate::kml_server::KmlServer::bind(56781, Default::default()) {
+                    Ok(server) => self.kml_server = Some(server),
+                    Err(e) => app.toasts.error(format!("Failed to open url http://127.0.0.1:56781/network.kml\n{e}")),
+                }
+            }
+            self.update_kml(app.link, app.extra_links);
+            if let Some(server) = &self.kml_server { ui.ctx().open_url(egui::OpenUrl::new_tab(server.network_url())); }
+        }
         ui.put(r(px + 3.0, py + 22.0, 111.0, 21.0), |ui: &mut egui::Ui| {
             let mut prov = app.settings.fp_map.provider;
             provider_combo(ui, &mut prov, "comboBoxMapType");

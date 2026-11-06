@@ -1201,6 +1201,7 @@ impl eframe::App for MissionPlannerApp {
                     View::Help => help::ui(ui),
                 }
                 setup.dialogs(ui.ctx(), &mut app);
+                flight_plan.update_kml(app.link, app.extra_links);
             });
 
         self.progress_window(&ctx);

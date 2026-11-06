@@ -1,5 +1,5 @@
 //! Vehicle-specific CONFIG pages from ConfigArduplane, ConfigArdurover and
-//! ConfigAntennaTracker. Plane/Rover edits are staged; Tracker controls write directly.
+//! ConfigAntennaTracker. Plane edits are staged; Rover/Tracker controls write directly.
 use crate::{
     app::{AppCtx, Toasts},
     forms::{self, FormState},
@@ -44,10 +44,11 @@ impl VehicleTuning {
         self.form = Some(form);
         self.target = Some(target);
         self.st = FormState::default();
+        self.st.parameter_metadata = true;
         self.queue.clear();
         self.waiting = None;
         self.confirm = None;
-        if form != "tracker_tuning" {
+        if form == "plane_tuning" {
             self.st.staged = Some(BTreeMap::new());
         }
         for name in ["myTrackBar1", "myTrackBar2"] {
@@ -151,6 +152,12 @@ impl VehicleTuning {
             (s.params.clone(), s.cs.clone())
         };
         self.prepare(form, (cs.sysid, cs.compid));
+        if form == "rover_tuning" {
+            self.st.visible.insert(
+                "groupBox1".into(),
+                params.contains_key("SONAR_TRIGGER_CM") || params.contains_key("RNGFND_TRIGGR_CM"),
+            );
+        }
         self.st.set("lbl_yawpwm", cs.ch_out[0].to_string());
         self.st.set("lbl_pitchpwm", cs.ch_out[1].to_string());
         let busy = self.waiting.is_some() || !self.queue.is_empty() || self.confirm.is_some();
@@ -244,6 +251,33 @@ mod tests {
 
     #[test]
     fn numeric_edit_stays_staged_until_ctrl_s_and_clears_on_simulator_ack() {
+        numeric_roundtrip(
+            mp_core::sim::SimKind::Plane,
+            Firmware::ArduPlane,
+            "plane_tuning",
+            "TRIM_THROTTLE",
+            true,
+        );
+    }
+
+    #[test]
+    fn rover_numeric_edit_writes_directly_without_ctrl_s() {
+        numeric_roundtrip(
+            mp_core::sim::SimKind::Rover,
+            Firmware::ArduRover,
+            "rover_tuning",
+            "CRUISE_THROTTLE",
+            false,
+        );
+    }
+
+    fn numeric_roundtrip(
+        kind: mp_core::sim::SimKind,
+        firmware: Firmware,
+        form: &'static str,
+        parameter: &str,
+        staged: bool,
+    ) {
         use mp_core::{comms::ConnectionSpec, link::Link};
         let port = std::net::UdpSocket::bind("127.0.0.1:0")
             .unwrap()
@@ -254,7 +288,7 @@ mod tests {
         let _sim = mp_core::sim::spawn_with(mp_core::sim::SimOptions {
             gcs_port: port,
             sysid: 1,
-            kind: mp_core::sim::SimKind::Plane,
+            kind,
             offset: (0.0, 0.0),
         })
         .unwrap();
@@ -267,10 +301,12 @@ mod tests {
             }
         }
         let deadline = Instant::now() + Duration::from_secs(3);
-        while link.shared.read().cs.firmware != Firmware::ArduPlane && Instant::now() < deadline { std::thread::sleep(Duration::from_millis(5)); }
-        assert_eq!(link.shared.read().cs.firmware, Firmware::ArduPlane);
+        while link.shared.read().cs.firmware != firmware && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(link.shared.read().cs.firmware, firmware);
         link.shared.write().params.insert(
-            "TRIM_THROTTLE".into(),
+            parameter.into(),
             Param {
                 value: 50.0,
                 ptype: 9,
@@ -310,13 +346,13 @@ mod tests {
                         readonly: false,
                         joystick: &mut joystick,
                     };
-                    page.ui(ui, &mut app, "plane_tuning");
+                    page.ui(ui, &mut app, form);
                 },
             );
             out.textures_delta.clear();
         };
         frame(Vec::new());
-        let (at, size) = forms::ctl_rect("plane_tuning", "TRIM_THROTTLE").unwrap();
+        let (at, size) = forms::ctl_rect(form, parameter).unwrap();
         let pos = egui::Pos2::ZERO + at + egui::Vec2::new(size.x - 9.0, size.y * 0.25);
         for pressed in [true, false] {
             frame(vec![
@@ -330,19 +366,21 @@ mod tests {
             ]);
         }
         frame(Vec::new());
-        assert!(
-            rx.recv_timeout(Duration::from_millis(100)).is_err(),
-            "Editing wrote before Write Params/Ctrl+S"
-        );
-        frame(vec![egui::Event::Key {
-            key: egui::Key::S,
-            physical_key: None,
-            pressed: true,
-            repeat: false,
-            modifiers: egui::Modifiers::CTRL,
-        }]);
+        if staged {
+            assert!(
+                rx.recv_timeout(Duration::from_millis(100)).is_err(),
+                "Editing wrote before Write Params/Ctrl+S"
+            );
+            frame(vec![egui::Event::Key {
+                key: egui::Key::S,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::CTRL,
+            }]);
+        }
         drop(frame);
-        let desired = page.pending()["TRIM_THROTTLE"];
+        let desired = page.pending().get(parameter).copied().unwrap_or(51.0);
         assert!(desired > 50.0 && desired <= 51.0);
         let end = Instant::now() + Duration::from_secs(5);
         loop {
@@ -351,14 +389,14 @@ mod tests {
                 .recv_timeout(end.saturating_duration_since(Instant::now()))
                 .unwrap();
             let done =
-                matches!(&event, LinkEvent::ParamSet { name, ok: true } if name == "TRIM_THROTTLE");
+                matches!(&event, LinkEvent::ParamSet { name, ok: true } if name == parameter);
             page.on_event(&event, &mut toasts);
             if done {
                 break;
             }
         }
         assert!(page.pending().is_empty());
-        assert_eq!(link.shared.read().params["TRIM_THROTTLE"].value, desired);
+        assert_eq!(link.shared.read().params[parameter].value, desired);
     }
     #[test]
     fn firmware_routes_use_distinct_original_forms_and_aliases() {
@@ -386,6 +424,8 @@ mod tests {
         assert_eq!(page.queue.front(), Some(&("RLL_RATE_P".into(), 0.8)));
         page.prepare("tracker_tuning", (1, 1));
         assert!(page.st.staged.is_none() && page.queue.is_empty());
+        page.prepare("rover_tuning", (1, 1));
+        assert!(page.st.staged.is_none() && page.st.parameter_metadata);
     }
 
     #[test]
