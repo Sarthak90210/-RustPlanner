@@ -1,0 +1,1448 @@
+{
+  "name": "plane_tuning",
+  "w": 621.0,
+  "h": 479.0,
+  "controls": [
+    {
+      "name": "groupBox3",
+      "kind": "group",
+      "parent": "$this",
+      "x": 413.0,
+      "y": 231.0,
+      "w": 195.0,
+      "h": 108.0,
+      "text": "Throttle 0-100%"
+    },
+    {
+      "name": "THR_SLEWRATE",
+      "kind": "mnum",
+      "parent": "groupBox3",
+      "x": 111.0,
+      "y": 82.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "THR_SLEWRATE",
+      "aliases": [
+        "THR_SLEWRATE"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label5",
+      "kind": "label",
+      "parent": "groupBox3",
+      "x": 6.0,
+      "y": 86.0,
+      "w": 80.0,
+      "h": 13.0,
+      "text": "SlewRate"
+    },
+    {
+      "name": "THR_MAX",
+      "kind": "mnum",
+      "parent": "groupBox3",
+      "x": 111.0,
+      "y": 59.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "THR_MAX",
+      "aliases": [
+        "THR_MAX"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label6",
+      "kind": "label",
+      "parent": "groupBox3",
+      "x": 6.0,
+      "y": 63.0,
+      "w": 27.0,
+      "h": 13.0,
+      "text": "Max"
+    },
+    {
+      "name": "THR_MIN",
+      "kind": "mnum",
+      "parent": "groupBox3",
+      "x": 111.0,
+      "y": 36.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "THR_MIN",
+      "aliases": [
+        "THR_MIN"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label7",
+      "kind": "label",
+      "parent": "groupBox3",
+      "x": 6.0,
+      "y": 40.0,
+      "w": 24.0,
+      "h": 13.0,
+      "text": "Min"
+    },
+    {
+      "name": "TRIM_THROTTLE",
+      "kind": "mnum",
+      "parent": "groupBox3",
+      "x": 111.0,
+      "y": 13.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "TRIM_THROTTLE",
+      "aliases": [
+        "TRIM_THROTTLE"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label8",
+      "kind": "label",
+      "parent": "groupBox3",
+      "x": 6.0,
+      "y": 17.0,
+      "w": 99.0,
+      "h": 13.0,
+      "text": "Cruise"
+    },
+    {
+      "name": "groupBox1",
+      "kind": "group",
+      "parent": "$this",
+      "x": 414.0,
+      "y": 339.0,
+      "w": 195.0,
+      "h": 108.0,
+      "text": "Airspeed m/s"
+    },
+    {
+      "name": "ARSPD_RATIO",
+      "kind": "mnum",
+      "parent": "groupBox1",
+      "x": 111.0,
+      "y": 82.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "ARSPD_RATIO",
+      "aliases": [
+        "ARSPD_RATIO"
+      ],
+      "nums": [
+        0.0,
+        2.5,
+        1.0,
+        0.005
+      ]
+    },
+    {
+      "name": "label1",
+      "kind": "label",
+      "parent": "groupBox1",
+      "x": 6.0,
+      "y": 87.0,
+      "w": 32.0,
+      "h": 13.0,
+      "text": "Ratio"
+    },
+    {
+      "name": "ARSPD_FBW_MAX",
+      "kind": "mnum",
+      "parent": "groupBox1",
+      "x": 111.0,
+      "y": 59.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "AIRSPEED_MAX",
+      "aliases": [
+        "AIRSPEED_MAX",
+        "ARSPD_FBW_MAX"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label2",
+      "kind": "label",
+      "parent": "groupBox1",
+      "x": 6.0,
+      "y": 59.0,
+      "w": 53.0,
+      "h": 13.0,
+      "text": "Max"
+    },
+    {
+      "name": "ARSPD_FBW_MIN",
+      "kind": "mnum",
+      "parent": "groupBox1",
+      "x": 111.0,
+      "y": 36.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "AIRSPEED_MIN",
+      "aliases": [
+        "AIRSPEED_MIN",
+        "ARSPD_FBW_MIN"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label3",
+      "kind": "label",
+      "parent": "groupBox1",
+      "x": 6.0,
+      "y": 40.0,
+      "w": 50.0,
+      "h": 13.0,
+      "text": "Min"
+    },
+    {
+      "name": "TRIM_ARSPD_CM",
+      "kind": "mnum",
+      "parent": "groupBox1",
+      "x": 111.0,
+      "y": 13.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "AIRSPEED_CRUISE",
+      "aliases": [
+        "AIRSPEED_CRUISE"
+      ],
+      "nums": [
+        0.0,
+        50.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label4",
+      "kind": "label",
+      "parent": "groupBox1",
+      "x": 6.0,
+      "y": 17.0,
+      "w": 64.0,
+      "h": 13.0,
+      "text": "Cruise"
+    },
+    {
+      "name": "groupBox2",
+      "kind": "group",
+      "parent": "$this",
+      "x": 213.0,
+      "y": 339.0,
+      "w": 195.0,
+      "h": 108.0,
+      "text": "Navigation Angles"
+    },
+    {
+      "name": "LIM_PITCH_MIN",
+      "kind": "mnum",
+      "parent": "groupBox2",
+      "x": 111.0,
+      "y": 59.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "PTCH_LIM_MIN_DEG",
+      "aliases": [
+        "PTCH_LIM_MIN_DEG"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label39",
+      "kind": "label",
+      "parent": "groupBox2",
+      "x": 6.0,
+      "y": 63.0,
+      "w": 51.0,
+      "h": 13.0,
+      "text": "Pitch Min"
+    },
+    {
+      "name": "LIM_PITCH_MAX",
+      "kind": "mnum",
+      "parent": "groupBox2",
+      "x": 111.0,
+      "y": 36.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "PTCH_LIM_MAX_DEG",
+      "aliases": [
+        "PTCH_LIM_MAX_DEG"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label38",
+      "kind": "label",
+      "parent": "groupBox2",
+      "x": 6.0,
+      "y": 40.0,
+      "w": 54.0,
+      "h": 13.0,
+      "text": "Pitch Max"
+    },
+    {
+      "name": "LIM_ROLL_CD",
+      "kind": "mnum",
+      "parent": "groupBox2",
+      "x": 111.0,
+      "y": 13.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "ROLL_LIMIT_DEG",
+      "aliases": [
+        "ROLL_LIMIT_DEG"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label37",
+      "kind": "label",
+      "parent": "groupBox2",
+      "x": 6.0,
+      "y": 17.0,
+      "w": 55.0,
+      "h": 13.0,
+      "text": "Bank Max"
+    },
+    {
+      "name": "groupBox16",
+      "kind": "group",
+      "parent": "$this",
+      "x": 213.0,
+      "y": 231.0,
+      "w": 195.0,
+      "h": 68.0,
+      "text": "Other Mix's"
+    },
+    {
+      "name": "KFF_PTCH2THR",
+      "kind": "mnum",
+      "parent": "groupBox16",
+      "x": 111.0,
+      "y": 13.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "KFF_THR2PTCH",
+      "aliases": [
+        "KFF_THR2PTCH",
+        "KFF_PTCH2THR"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label83",
+      "kind": "label",
+      "parent": "groupBox16",
+      "x": 6.0,
+      "y": 17.0,
+      "w": 36.0,
+      "h": 13.0,
+      "text": "P to T"
+    },
+    {
+      "name": "KFF_RDDRMIX",
+      "kind": "mnum",
+      "parent": "groupBox16",
+      "x": 111.0,
+      "y": 39.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "KFF_RDDRMIX",
+      "aliases": [
+        "KFF_RDDRMIX"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label78",
+      "kind": "label",
+      "parent": "groupBox16",
+      "x": 6.0,
+      "y": 43.0,
+      "w": 61.0,
+      "h": 13.0,
+      "text": "Rudder Mix"
+    },
+    {
+      "name": "groupBox14",
+      "kind": "group",
+      "parent": "$this",
+      "x": 12.0,
+      "y": 339.0,
+      "w": 195.0,
+      "h": 108.0,
+      "text": "Energy/Alt Pid",
+      "hidden": true
+    },
+    {
+      "name": "ENRGY2THR_IMAX",
+      "kind": "mnum",
+      "parent": "groupBox14",
+      "x": 111.0,
+      "y": 82.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "ENRGY2THR_IMAX",
+      "aliases": [
+        "ENRGY2THR_IMAX"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        100.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label73",
+      "kind": "label",
+      "parent": "groupBox14",
+      "x": 6.0,
+      "y": 86.0,
+      "w": 54.0,
+      "h": 13.0,
+      "text": "INT_MAX"
+    },
+    {
+      "name": "ENRGY2THR_D",
+      "kind": "mnum",
+      "parent": "groupBox14",
+      "x": 111.0,
+      "y": 59.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "ENRGY2THR_D",
+      "aliases": [
+        "ENRGY2THR_D"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label74",
+      "kind": "label",
+      "parent": "groupBox14",
+      "x": 6.0,
+      "y": 63.0,
+      "w": 15.0,
+      "h": 13.0,
+      "text": "D"
+    },
+    {
+      "name": "ENRGY2THR_I",
+      "kind": "mnum",
+      "parent": "groupBox14",
+      "x": 111.0,
+      "y": 36.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "ENRGY2THR_I",
+      "aliases": [
+        "ENRGY2THR_I"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label75",
+      "kind": "label",
+      "parent": "groupBox14",
+      "x": 6.0,
+      "y": 40.0,
+      "w": 10.0,
+      "h": 13.0,
+      "text": "I"
+    },
+    {
+      "name": "ENRGY2THR_P",
+      "kind": "mnum",
+      "parent": "groupBox14",
+      "x": 111.0,
+      "y": 13.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "ENRGY2THR_P",
+      "aliases": [
+        "ENRGY2THR_P"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label76",
+      "kind": "label",
+      "parent": "groupBox14",
+      "x": 6.0,
+      "y": 17.0,
+      "w": 14.0,
+      "h": 13.0,
+      "text": "P"
+    },
+    {
+      "name": "groupBox13",
+      "kind": "group",
+      "parent": "$this",
+      "x": 414.0,
+      "y": 123.0,
+      "w": 195.0,
+      "h": 108.0,
+      "text": "Nav Pitch Alt Pid",
+      "hidden": true
+    },
+    {
+      "name": "ALT2PTCH_IMAX",
+      "kind": "mnum",
+      "parent": "groupBox13",
+      "x": 111.0,
+      "y": 82.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "ALT2PTCH_IMAX",
+      "aliases": [
+        "ALT2PTCH_IMAX"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        100.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label69",
+      "kind": "label",
+      "parent": "groupBox13",
+      "x": 6.0,
+      "y": 86.0,
+      "w": 54.0,
+      "h": 13.0,
+      "text": "INT_MAX"
+    },
+    {
+      "name": "ALT2PTCH_D",
+      "kind": "mnum",
+      "parent": "groupBox13",
+      "x": 111.0,
+      "y": 59.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "ALT2PTCH_D",
+      "aliases": [
+        "ALT2PTCH_D"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label70",
+      "kind": "label",
+      "parent": "groupBox13",
+      "x": 6.0,
+      "y": 63.0,
+      "w": 15.0,
+      "h": 13.0,
+      "text": "D"
+    },
+    {
+      "name": "ALT2PTCH_I",
+      "kind": "mnum",
+      "parent": "groupBox13",
+      "x": 111.0,
+      "y": 36.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "ALT2PTCH_I",
+      "aliases": [
+        "ALT2PTCH_I"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label71",
+      "kind": "label",
+      "parent": "groupBox13",
+      "x": 6.0,
+      "y": 40.0,
+      "w": 10.0,
+      "h": 13.0,
+      "text": "I"
+    },
+    {
+      "name": "ALT2PTCH_P",
+      "kind": "mnum",
+      "parent": "groupBox13",
+      "x": 111.0,
+      "y": 13.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "ALT2PTCH_P",
+      "aliases": [
+        "ALT2PTCH_P"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label72",
+      "kind": "label",
+      "parent": "groupBox13",
+      "x": 6.0,
+      "y": 17.0,
+      "w": 14.0,
+      "h": 13.0,
+      "text": "P"
+    },
+    {
+      "name": "groupBox12",
+      "kind": "group",
+      "parent": "$this",
+      "x": 213.0,
+      "y": 123.0,
+      "w": 195.0,
+      "h": 108.0,
+      "text": "Nav Pitch AS Pid",
+      "hidden": true
+    },
+    {
+      "name": "ARSP2PTCH_IMAX",
+      "kind": "mnum",
+      "parent": "groupBox12",
+      "x": 111.0,
+      "y": 82.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "ARSP2PTCH_IMAX",
+      "aliases": [
+        "ARSP2PTCH_IMAX"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        100.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label65",
+      "kind": "label",
+      "parent": "groupBox12",
+      "x": 6.0,
+      "y": 86.0,
+      "w": 54.0,
+      "h": 13.0,
+      "text": "INT_MAX"
+    },
+    {
+      "name": "ARSP2PTCH_D",
+      "kind": "mnum",
+      "parent": "groupBox12",
+      "x": 111.0,
+      "y": 59.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "ARSP2PTCH_D",
+      "aliases": [
+        "ARSP2PTCH_D"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label66",
+      "kind": "label",
+      "parent": "groupBox12",
+      "x": 6.0,
+      "y": 63.0,
+      "w": 15.0,
+      "h": 13.0,
+      "text": "D"
+    },
+    {
+      "name": "ARSP2PTCH_I",
+      "kind": "mnum",
+      "parent": "groupBox12",
+      "x": 111.0,
+      "y": 36.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "ARSP2PTCH_I",
+      "aliases": [
+        "ARSP2PTCH_I"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label67",
+      "kind": "label",
+      "parent": "groupBox12",
+      "x": 6.0,
+      "y": 40.0,
+      "w": 10.0,
+      "h": 13.0,
+      "text": "I"
+    },
+    {
+      "name": "ARSP2PTCH_P",
+      "kind": "mnum",
+      "parent": "groupBox12",
+      "x": 111.0,
+      "y": 13.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "ARSP2PTCH_P",
+      "aliases": [
+        "ARSP2PTCH_P"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label68",
+      "kind": "label",
+      "parent": "groupBox12",
+      "x": 6.0,
+      "y": 17.0,
+      "w": 14.0,
+      "h": 13.0,
+      "text": "P"
+    },
+    {
+      "name": "groupBox10",
+      "kind": "group",
+      "parent": "$this",
+      "x": 414.0,
+      "y": 15.0,
+      "w": 195.0,
+      "h": 108.0,
+      "text": "Servo Yaw"
+    },
+    {
+      "name": "YAW2SRV_IMAX",
+      "kind": "mnum",
+      "parent": "groupBox10",
+      "x": 111.0,
+      "y": 82.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "YAW2SRV_IMAX",
+      "aliases": [
+        "YAW2SRV_IMAX"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        100.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label57",
+      "kind": "label",
+      "parent": "groupBox10",
+      "x": 6.0,
+      "y": 86.0,
+      "w": 99.0,
+      "h": 13.0,
+      "text": "Intergrator Max"
+    },
+    {
+      "name": "YAW2SRV_DAMP",
+      "kind": "mnum",
+      "parent": "groupBox10",
+      "x": 111.0,
+      "y": 59.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "YAW2SRV_DAMP",
+      "aliases": [
+        "YAW2SRV_DAMP"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label58",
+      "kind": "label",
+      "parent": "groupBox10",
+      "x": 6.0,
+      "y": 63.0,
+      "w": 99.0,
+      "h": 13.0,
+      "text": "Dampening"
+    },
+    {
+      "name": "YAW2SRV_INT",
+      "kind": "mnum",
+      "parent": "groupBox10",
+      "x": 111.0,
+      "y": 36.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "YAW2SRV_INT",
+      "aliases": [
+        "YAW2SRV_INT"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label59",
+      "kind": "label",
+      "parent": "groupBox10",
+      "x": 6.0,
+      "y": 40.0,
+      "w": 99.0,
+      "h": 13.0,
+      "text": "Integral"
+    },
+    {
+      "name": "YAW2SRV_RLL",
+      "kind": "mnum",
+      "parent": "groupBox10",
+      "x": 111.0,
+      "y": 13.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "YAW2SRV_RLL",
+      "aliases": [
+        "YAW2SRV_RLL"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label60",
+      "kind": "label",
+      "parent": "groupBox10",
+      "x": 6.0,
+      "y": 17.0,
+      "w": 99.0,
+      "h": 16.0,
+      "text": "Yaw 2 roll"
+    },
+    {
+      "name": "groupBox9",
+      "kind": "group",
+      "parent": "$this",
+      "x": 213.0,
+      "y": 15.0,
+      "w": 195.0,
+      "h": 108.0,
+      "text": "Servo Pitch Pid"
+    },
+    {
+      "name": "PTCH2SRV_IMAX",
+      "kind": "mnum",
+      "parent": "groupBox9",
+      "x": 111.0,
+      "y": 82.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "PTCH2SRV_IMAX",
+      "aliases": [
+        "PTCH2SRV_IMAX",
+        "PTCH_RATE_IMAX"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        100.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label53",
+      "kind": "label",
+      "parent": "groupBox9",
+      "x": 6.0,
+      "y": 86.0,
+      "w": 54.0,
+      "h": 13.0,
+      "text": "INT_MAX"
+    },
+    {
+      "name": "PTCH2SRV_D",
+      "kind": "mnum",
+      "parent": "groupBox9",
+      "x": 111.0,
+      "y": 59.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "PTCH2SRV_D",
+      "aliases": [
+        "PTCH2SRV_D",
+        "PTCH_RATE_D"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label54",
+      "kind": "label",
+      "parent": "groupBox9",
+      "x": 6.0,
+      "y": 63.0,
+      "w": 15.0,
+      "h": 13.0,
+      "text": "D"
+    },
+    {
+      "name": "PTCH2SRV_I",
+      "kind": "mnum",
+      "parent": "groupBox9",
+      "x": 111.0,
+      "y": 36.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "PTCH2SRV_I",
+      "aliases": [
+        "PTCH2SRV_I",
+        "PTCH_RATE_I"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label55",
+      "kind": "label",
+      "parent": "groupBox9",
+      "x": 6.0,
+      "y": 40.0,
+      "w": 10.0,
+      "h": 13.0,
+      "text": "I"
+    },
+    {
+      "name": "PTCH2SRV_P",
+      "kind": "mnum",
+      "parent": "groupBox9",
+      "x": 111.0,
+      "y": 13.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "PTCH2SRV_P",
+      "aliases": [
+        "PTCH2SRV_P",
+        "PTCH_RATE_P"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label56",
+      "kind": "label",
+      "parent": "groupBox9",
+      "x": 6.0,
+      "y": 17.0,
+      "w": 14.0,
+      "h": 13.0,
+      "text": "P"
+    },
+    {
+      "name": "groupBox8",
+      "kind": "group",
+      "parent": "$this",
+      "x": 12.0,
+      "y": 15.0,
+      "w": 195.0,
+      "h": 108.0,
+      "text": "Servo Roll Pid"
+    },
+    {
+      "name": "RLL2SRV_IMAX",
+      "kind": "mnum",
+      "parent": "groupBox8",
+      "x": 111.0,
+      "y": 82.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "RLL2SRV_IMAX",
+      "aliases": [
+        "RLL2SRV_IMAX",
+        "RLL_RATE_IMAX"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        100.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label49",
+      "kind": "label",
+      "parent": "groupBox8",
+      "x": 6.0,
+      "y": 86.0,
+      "w": 54.0,
+      "h": 13.0,
+      "text": "INT_MAX"
+    },
+    {
+      "name": "RLL2SRV_D",
+      "kind": "mnum",
+      "parent": "groupBox8",
+      "x": 111.0,
+      "y": 59.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "RLL2SRV_D",
+      "aliases": [
+        "RLL2SRV_D",
+        "RLL_RATE_D"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label50",
+      "kind": "label",
+      "parent": "groupBox8",
+      "x": 6.0,
+      "y": 63.0,
+      "w": 15.0,
+      "h": 13.0,
+      "text": "D"
+    },
+    {
+      "name": "RLL2SRV_I",
+      "kind": "mnum",
+      "parent": "groupBox8",
+      "x": 111.0,
+      "y": 36.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "RLL2SRV_I",
+      "aliases": [
+        "RLL2SRV_I",
+        "RLL_RATE_I"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label51",
+      "kind": "label",
+      "parent": "groupBox8",
+      "x": 6.0,
+      "y": 40.0,
+      "w": 10.0,
+      "h": 13.0,
+      "text": "I"
+    },
+    {
+      "name": "RLL2SRV_P",
+      "kind": "mnum",
+      "parent": "groupBox8",
+      "x": 111.0,
+      "y": 13.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "RLL2SRV_P",
+      "aliases": [
+        "RLL2SRV_P",
+        "RLL_RATE_P"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label52",
+      "kind": "label",
+      "parent": "groupBox8",
+      "x": 6.0,
+      "y": 17.0,
+      "w": 14.0,
+      "h": 13.0,
+      "text": "P"
+    },
+    {
+      "name": "BUT_writePIDS",
+      "kind": "button",
+      "parent": "$this",
+      "x": 204.0,
+      "y": 451.0,
+      "w": 103.0,
+      "h": 19.0,
+      "text": "Write Params"
+    },
+    {
+      "name": "BUT_rerequestparams",
+      "kind": "button",
+      "parent": "$this",
+      "x": 313.0,
+      "y": 451.0,
+      "w": 103.0,
+      "h": 19.0,
+      "text": "Refresh Params",
+      "hidden": true
+    },
+    {
+      "name": "groupBox4",
+      "kind": "group",
+      "parent": "$this",
+      "x": 12.0,
+      "y": 129.0,
+      "w": 195.0,
+      "h": 56.0,
+      "text": "L1 Control - Turn Control"
+    },
+    {
+      "name": "NAVL1_DAMPING",
+      "kind": "mnum",
+      "parent": "groupBox4",
+      "x": 111.0,
+      "y": 36.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "NAVL1_DAMPING",
+      "aliases": [
+        "NAVL1_DAMPING"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label9",
+      "kind": "label",
+      "parent": "groupBox4",
+      "x": 6.0,
+      "y": 40.0,
+      "w": 61.0,
+      "h": 13.0,
+      "text": "Damping"
+    },
+    {
+      "name": "NAVL1_PERIOD",
+      "kind": "mnum",
+      "parent": "groupBox4",
+      "x": 111.0,
+      "y": 13.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "NAVL1_PERIOD",
+      "aliases": [
+        "NAVL1_PERIOD"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label10",
+      "kind": "label",
+      "parent": "groupBox4",
+      "x": 6.0,
+      "y": 17.0,
+      "w": 52.0,
+      "h": 13.0,
+      "text": "Period"
+    },
+    {
+      "name": "groupBox5",
+      "kind": "group",
+      "parent": "$this",
+      "x": 12.0,
+      "y": 191.0,
+      "w": 195.0,
+      "h": 148.0,
+      "text": "TECS"
+    },
+    {
+      "name": "TECS_SINK_MAX",
+      "kind": "mnum",
+      "parent": "groupBox5",
+      "x": 111.0,
+      "y": 59.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "TECS_SINK_MAX",
+      "aliases": [
+        "TECS_SINK_MAX"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label15",
+      "kind": "label",
+      "parent": "groupBox5",
+      "x": 6.0,
+      "y": 63.0,
+      "w": 99.0,
+      "h": 13.0,
+      "text": "Sink Max (m/s)"
+    },
+    {
+      "name": "TECS_TIME_CONST",
+      "kind": "mnum",
+      "parent": "groupBox5",
+      "x": 111.0,
+      "y": 108.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "TECS_TIME_CONST",
+      "aliases": [
+        "TECS_TIME_CONST"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label14",
+      "kind": "label",
+      "parent": "groupBox5",
+      "x": 6.0,
+      "y": 112.0,
+      "w": 99.0,
+      "h": 13.0,
+      "text": "Time Const"
+    },
+    {
+      "name": "TECS_PTCH_DAMP",
+      "kind": "mnum",
+      "parent": "groupBox5",
+      "x": 111.0,
+      "y": 82.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "TECS_PTCH_DAMP",
+      "aliases": [
+        "TECS_PTCH_DAMP"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label13",
+      "kind": "label",
+      "parent": "groupBox5",
+      "x": 6.0,
+      "y": 86.0,
+      "w": 99.0,
+      "h": 13.0,
+      "text": "Pitch Dampening"
+    },
+    {
+      "name": "TECS_SINK_MIN",
+      "kind": "mnum",
+      "parent": "groupBox5",
+      "x": 111.0,
+      "y": 36.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "TECS_SINK_MIN",
+      "aliases": [
+        "TECS_SINK_MIN"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label11",
+      "kind": "label",
+      "parent": "groupBox5",
+      "x": 6.0,
+      "y": 40.0,
+      "w": 99.0,
+      "h": 13.0,
+      "text": "Sink Min (m/s)"
+    },
+    {
+      "name": "TECS_CLMB_MAX",
+      "kind": "mnum",
+      "parent": "groupBox5",
+      "x": 111.0,
+      "y": 13.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "TECS_CLMB_MAX",
+      "aliases": [
+        "TECS_CLMB_MAX"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "label12",
+      "kind": "label",
+      "parent": "groupBox5",
+      "x": 6.0,
+      "y": 17.0,
+      "w": 99.0,
+      "h": 13.0,
+      "text": "Climb Max (m/s)"
+    },
+    {
+      "name": "BUT_refreshpart",
+      "kind": "button",
+      "parent": "$this",
+      "x": 422.0,
+      "y": 451.0,
+      "w": 103.0,
+      "h": 19.0,
+      "text": "Refresh Screen"
+    }
+  ]
+}

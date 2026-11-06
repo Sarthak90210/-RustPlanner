@@ -1,0 +1,329 @@
+{
+  "round": 11,
+  "review_type": "fresh independent source, actual-render and targeted interaction review",
+  "reviewed_head": "ab9c9548b3d8e3cfc9facf6bcb4e2d7f8c36fa0a",
+  "date": "2026-11-06",
+  "verdict": "Material software parity gaps remain. Not 10/10.",
+  "scores": {
+    "overall": 7.0,
+    "ui_ux": 7.8,
+    "features": 6.2,
+    "scale": "Qualitative judgments against exact C# software parity, not completion percentages. Overall gives equal weight to UI/UX and features."
+  },
+  "rationale": "Run11 closes the compass order persistence defect and the missing gimbal activation writes. The new selector interaction test is stronger evidence than the all-Disable capture: it clicks the actual egui control, runs the production link and receives simulator PARAM_VALUE messages. The independent peer test also confirms separate readbacks for repeated writes to the same parameter. These are useful, bounded improvements. Reboot confirmation/result handling and cross-parameter transaction sequencing still differ, and the unchanged tuning, video, planning, swarm, plugin, localization and transport gaps prevent a high parity score.",
+  "scope": {
+    "inspected": [
+      "Complete run11 diff against round10 for compass.rs, mount.rs, setup.rs, app.rs and link.rs",
+      "C# ConfigHWCompass2 CheckReboot, calibration, UpdateFirst3 and standalone reboot handler",
+      "C# ConfigMount Activate, ensureDisabled, shutter and axis update methods",
+      "New actual-egui selector test and independent TCP parameter sequencing test source",
+      "Current tuning routes, GStreamer menu, language selector, View KML and swarm routes",
+      "Round09 and round10 reports, retaining unchanged broad gaps with their existing source evidence"
+    ],
+    "rust_render_images_viewed": [
+      "target/judging/round11/24_setup_compass.png",
+      "target/judging/round11/35_setup_camera_gimbal.png"
+    ],
+    "render_evidence": "Both manifests identify the eframe viewport at 1280x800, connected autosim, 3115 complete parameters and the same binary SHA256. The compass capture shows three devices; it cannot prove five-device persistence. The gimbal capture has all outputs disabled; interaction claims rely on the executed selector test, not that image.",
+    "reviewer_executed_verification": [
+      "cargo test -p mp-app views:: -- --nocapture: 20 passed, including actual rendered selector click and simulator parameter readback",
+      "cargo test -p mp-core --test altitude_change parameter_clear_then_reassign_waits_for_each_readback_and_cancels_on_target_change -- --nocapture: 1 passed",
+      "JSON parse of judging/round-11.json"
+    ],
+    "reported_evidence_not_rerun": [
+      "cargo test --workspace: 92 passing",
+      "Windows application build"
+    ],
+    "verification_limits": [
+      "No C# runtime was launched for a side-by-side pixel or interaction comparison.",
+      "Compass five-device persistence and reboot choices were verified through page-state tests and source, not a rendered click-through against a peer.",
+      "The executed gimbal click covers a modern tilt-output selection. Legacy output selection, Relay/Transistor switching, reverse/min/max editing and rejected writes through the UI were not all executed.",
+      "Native macOS, Linux, Android and iOS launch/import behavior and the complete original feature set were not exhaustively exercised.",
+      "No physical device was used. Physical flight qualification is not required to close software parity findings."
+    ],
+    "reviewer_actions": "Read-only source/render review and bounded local tests; only this judging JSON was edited."
+  },
+  "run11_dispositions": [
+    {
+      "change": "Preserve the complete compass list across frames",
+      "status": "closed",
+      "closed_parts": "PageState retains the full ordered rows while active. Repeated activate calls no longer rebuild the fourth and fifth rows. The five-device test moves row five above row four, calls activate again, and then moves it into priority three. The UI now uses that retained state and rejects reorder mutations in read-only mode.",
+      "remaining": "Rendered five-device interaction and priority readback were not collected in this review. That is an evidence limitation, not a reason to keep the demonstrated state-loss defect open.",
+      "rust_refs": [
+        "crates/mp-app/src/views/compass.rs:24-57",
+        "crates/mp-app/src/views/compass.rs:226-251",
+        "crates/mp-app/src/views/setup.rs:1886-1888",
+        "crates/mp-app/src/views/setup.rs:1935-1947"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigHWCompass2.cs:184-259"
+      ]
+    },
+    {
+      "change": "Reboot-required prompt and calibration gate",
+      "status": "partial",
+      "closed_parts": "Reordering sets pending reboot state. Leaving the page or SETUP raises the question, and Start calibration is withheld until Yes. No retains pending state and does not start calibration. Target changes clear the stale prompt. The dialog is rendered outside the SETUP page, so navigation does not hide it.",
+      "remaining": "The standalone Reboot button still sends immediately without the original confirmation. Both that path and Yes clear pending state before receiving a reboot result; the reference reports reboot/communication failure. The egui Window is also not modal, allowing other controls to remain active during the question.",
+      "rust_refs": [
+        "crates/mp-app/src/views/compass.rs:41-125",
+        "crates/mp-app/src/views/setup.rs:300-307",
+        "crates/mp-app/src/views/setup.rs:1965-1968",
+        "crates/mp-app/src/app.rs:1195"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigHWCompass2.cs:147-181",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigHWCompass2.cs:264-279",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigHWCompass2.cs:500-506"
+      ]
+    },
+    {
+      "change": "Gimbal activation routing writes",
+      "status": "closed",
+      "closed_parts": "Opening the page now writes the selected shutter/axis assignments and trigger type without forcing mount mode. The actual production page test observes separate clear/reassign readbacks for SERVO9_FUNCTION on activation, then clicks SERVO7 in the tilt selector and confirms the simulator readback and dynamic SERVO7_MIN binding.",
+      "remaining": "This closes the missing-activation behavior identified in round10. It does not certify every selected-output branch or strict inter-parameter ordering.",
+      "rust_refs": [
+        "crates/mp-app/src/views/mount.rs:124-198",
+        "crates/mp-app/src/views/mount.rs:263-410",
+        "crates/mp-app/src/views/mount.rs:413-432"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigMount.cs:104-167",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigMount.cs:190-310"
+      ]
+    },
+    {
+      "change": "Repeated parameter writes receive separate lifecycles",
+      "status": "closed",
+      "closed_parts": "A second write to the same name is queued until its predecessor completes. The independently executed TCP peer test verifies no second value before the first readback, separate results, rejected first-value reporting, subsequent assignment and cancellation of stale wire writes on target change.",
+      "remaining": "Ordering is per parameter name. Writes to different names can still overtake the queued reassignment, so this does not establish the complete C# routing transaction order.",
+      "rust_refs": [
+        "crates/mp-core/src/link.rs:547-560",
+        "crates/mp-core/src/link.rs:685-693",
+        "crates/mp-core/src/link.rs:1538-1547",
+        "crates/mp-core/tests/altitude_change.rs:109-155"
+      ]
+    }
+  ],
+  "new_or_remaining_affected_gaps": [
+    {
+      "priority": 1,
+      "severity": "medium",
+      "area": "SETUP compass",
+      "title": "Complete reboot confirmation and result handling",
+      "finding": "The direct Reboot button bypasses the reference confirmation and clears reboot_required immediately. The Yes dialog path also clears state before the command result is known, with no page-specific handling of a failed reboot. The question uses an ordinary nonmodal egui Window. These leave original interaction behavior incomplete despite the repaired leave/start gate.",
+      "rust_refs": [
+        "crates/mp-app/src/views/setup.rs:1965-1968",
+        "crates/mp-app/src/views/compass.rs:70-77",
+        "crates/mp-app/src/views/compass.rs:98-124"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigHWCompass2.cs:154-181",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigHWCompass2.cs:500-506"
+      ],
+      "next_fix": "Use the reference confirmation on direct Reboot, block conflicting page actions while the question is open, and connect reboot completion/failure to pending state and feedback. Verify Yes, No, rejected command and disconnected-target cases through rendered interactions and a deterministic peer."
+    },
+    {
+      "priority": 2,
+      "severity": "medium",
+      "area": "SETUP Camera Gimbal / parameter transactions",
+      "title": "Verify complete routing order across different parameter names",
+      "finding": "routing_writes emits clear(SERVO9_FUNCTION), reassign(SERVO9_FUNCTION), CAM_TRIGG_TYPE and axis writes in sequence, but only the repeated name waits for readback. CAM_TRIGG_TYPE and axis writes are sent immediately while the shutter reassignment waits. C# updateShutter performs its setParam calls before moving on to axis updates. Existing tests prove same-name order and final state, not the cross-name sequence.",
+      "rust_refs": [
+        "crates/mp-app/src/views/mount.rs:153-181",
+        "crates/mp-core/src/link.rs:547-560",
+        "crates/mp-core/src/link.rs:1538-1547",
+        "crates/mp-core/tests/altitude_change.rs:109-155"
+      ],
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigMount.cs:145-150",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigMount.cs:170-220"
+      ],
+      "next_fix": "Drive the ordered page operation through acknowledged steps, or demonstrate equivalent user-visible results under delayed/rejected readbacks. Add a peer trace containing shutter clear/reassign, trigger type and an axis assignment; exercise legacy output, Relay and reverse/min/max paths in the actual UI."
+    }
+  ],
+  "retained_baseline_gaps": [
+    {
+      "priority": 1,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "CONFIG",
+      "title": "Route tuning to the original vehicle-specific pages",
+      "finding": "All Basic Tuning selections call the copter acsimplepids.xml implementation. Plane and Rover have dedicated original controls and bindings; Tracker should receive its dedicated Extended Tuning page but is excluded from the Rust ExtendedTuning route. A generic full parameter editor does not reproduce these workflows.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/SoftwareConfig.cs:173-194",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigArduplane.cs:87-93",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigArdurover.cs:50-77"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/config.rs:49-64",
+        "crates/mp-app/src/views/config.rs:139-142",
+        "crates/mp-app/src/views/tuning.rs:43-79"
+      ],
+      "next_fix": "Implement Plane, Rover and Tracker tuning layouts, parameter aliases and actions, then route by firmware as the original does. Verify each route with distinct parameter fixtures and rendered pages.",
+      "disposition": "open; unchanged by run11"
+    },
+    {
+      "priority": 3,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "DATA video and payload",
+      "title": "Implement the advertised GStreamer, HereLink and gimbal video paths",
+      "finding": "Set GStreamer Source and HereLink Video always report that GStreamer was not found without attempting discovery or starting a pipeline. Start Camera starts an HTTP MJPEG reader. Payload Video Control always reports that no stream is configured. The original has pipeline input/discovery/start and full-size, mini and pop-out gimbal video controls.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightData.cs:3186-3213",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:4946-4972",
+        "reference/MissionPlanner/GCSViews/FlightData.cs:6667-6841"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_data.rs:464-482",
+        "crates/mp-app/src/views/fd_tabs.rs:345-346"
+      ],
+      "next_fix": "Add actual backend discovery, pipeline input/start/stop and gimbal stream configuration plus the original display modes. Verify with local video fixtures and rendered interaction states.",
+      "disposition": "open; unchanged by run11"
+    },
+    {
+      "priority": 4,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "PLAN",
+      "title": "Restore coordinate-system switching and editable UTM/MGRS table columns",
+      "finding": "PLAN paints a fixed GEO label and exposes only Lat/Lon columns. The original switches between GEO, UTM and MGRS, changes visible columns and converts edits back to geographic coordinates. The Rust Enter UTM Coord context-menu action exists, but does not replace the missing table/display workflow.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:2741-2757",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:2765-2808",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:2832-2863"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_plan.rs:21-40",
+        "crates/mp-app/src/views/flight_plan.rs:278-283",
+        "crates/mp-app/src/views/flight_plan.rs:596-597",
+        "crates/mp-app/src/views/flight_plan/menu.rs:535-539"
+      ],
+      "next_fix": "Add the coordinate selector, matching columns, reversible conversions and original validation. Verify conversions and edit persistence with known coordinate fixtures.",
+      "disposition": "open; unchanged by run11"
+    },
+    {
+      "priority": 5,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "Tools / swarm",
+      "title": "Restore distinct swarm workflows, especially Sequence Swarm",
+      "finding": "Swarm, Follow the leader, Sequence Swarm and Follow Swarm all open the same small vehicle grid. Sequence Swarm has no layout/step editor or sequence execution. The follow implementation sends followers to a line behind one leader once per second. This is a useful subset, but not the original tools' UI or behavior.",
+      "csharp_refs": [
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:18-39",
+        "reference/MissionPlanner/Swarm/Sequence/LayoutEditor.cs:89-150"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/more_tools.rs:73-80",
+        "crates/mp-app/src/more_tools.rs:454-553"
+      ],
+      "next_fix": "Give the tools their original distinct state and controls. Start with Sequence layout load/save, editing, steps and execution, verified against deterministic multiple-vehicle peers.",
+      "disposition": "open; unchanged by run11"
+    },
+    {
+      "priority": 6,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "SETUP / CONFIG navigation",
+      "title": "Honor per-page display flags and original vehicle/loading visibility",
+      "finding": "Rust models only a small subset of DisplayView flags. SETUP gates Advanced and Terminal but not the many individual hardware flags; Frame Type is visible for every parameter-complete connection. CONFIG always appends Full Parameter List and Planner, even while parameters are loading, and has no Loading page. C# applies per-page flags, firmware/version-dependent Frame Type selection, and the loading route.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/InitialSetup.cs:183-216",
+        "reference/MissionPlanner/GCSViews/SoftwareConfig.cs:226-260",
+        "reference/MissionPlanner/ExtLibs/Utilities/DisplayView.cs:78-125"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/display.rs:33-58",
+        "crates/mp-app/src/views/setup.rs:39-51",
+        "crates/mp-app/src/views/setup.rs:82-103",
+        "crates/mp-app/src/views/config.rs:49-82"
+      ],
+      "next_fix": "Represent and apply the original display flags and page predicates. Verify navigation for Basic, Advanced and Custom layouts, disconnected/loading/ready states, Plane, Rover, Tracker and old/new Copter fixtures.",
+      "disposition": "open; unchanged by run11"
+    },
+    {
+      "priority": 7,
+      "severity": "high",
+      "status": "confirmed in source",
+      "area": "Plugins",
+      "title": "Provide original plugin loading and lifecycle compatibility",
+      "finding": "The plugin window lists filenames with disabled Enabled checkboxes and explicitly states that .NET .dll/.cs plugins cannot load. The original compiles/loads plugins and invokes Init, Loaded, Loop and Exit; plugins can add application pages. Python/Lua script support is not equivalent to this extension contract.",
+      "csharp_refs": [
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:146-179",
+        "reference/MissionPlanner/Plugin/PluginLoader.cs:256-329",
+        "reference/MissionPlanner/MainV2.cs:2527-2581",
+        "reference/MissionPlanner/GCSViews/InitialSetup.cs:53-58"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/hotkey_tools.rs:80-117"
+      ],
+      "next_fix": "Implement a compatibility host and page/action bridge for the supported plugin contract, or explicitly retain this as an unresolved parity exclusion. Validate a sample plugin that adds a page and uses lifecycle hooks.",
+      "disposition": "open; unchanged by run11"
+    },
+    {
+      "priority": 8,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "Localization / Planner",
+      "title": "Restore the original language selector and translated resources",
+      "finding": "The language combo contains only English and UI text is hard-coded. C# discovers available language resources and changes the UI culture through MainV2.changelanguage. The single English menu entry is a missing user workflow, not just a translation verification gap.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:106-128",
+        "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigPlanner.cs:417-421",
+        "reference/MissionPlanner/MainV2.cs:4227-4235"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/config.rs:991-991"
+      ],
+      "next_fix": "Load supported resource translations, persist culture and update main pages and dialogs when the selection changes. Verify representative translated pages and text expansion.",
+      "disposition": "open; unchanged by run11"
+    },
+    {
+      "priority": 9,
+      "severity": "high",
+      "status": "confirmed unsupported paths; native platform execution otherwise unverified",
+      "area": "Platform and connections",
+      "title": "Complete missing transport and mobile import paths",
+      "finding": "ConnectionSpec has serial, TCP client and UDP only; original BLE and WinUSB custom ports are absent. On Android/iOS open_serial explicitly returns Unsupported and platform::open_text always returns None, so common mission/parameter/file import callers cannot complete through that helper. CI configuration and entry points exist, but are not execution evidence for native platform support.",
+      "csharp_refs": [
+        "reference/MissionPlanner/MainV2.cs:3629-3641",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4150-4150",
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4484-4488"
+      ],
+      "rust_refs": [
+        "crates/mp-core/src/comms.rs:20-40",
+        "crates/mp-core/src/comms.rs:121-128",
+        "crates/mp-app/src/platform.rs:76-79",
+        "crates/mp-app/src/views/flight_plan/menu.rs:450-453",
+        ".github/workflows/build.yml:1-62"
+      ],
+      "next_fix": "Implement the missing desktop custom transports and mobile device/file access, connect imports to an actual picker/browser, then produce native build and basic launch/import receipts for each promised OS. Preserve the distinction between an explicit unsupported code path and an OS that has simply not been tested.",
+      "disposition": "open; unchanged by run11"
+    },
+    {
+      "priority": 11,
+      "severity": "medium",
+      "status": "confirmed in source",
+      "area": "PLAN",
+      "title": "Make View KML open the mission network KML",
+      "finding": "The Rust View KML hyperlink opens the generic ArduPilot planner documentation. The original opens the locally served network.kml mission endpoint. Exporting or viewing the mission in Google Earth cannot be completed by this control.",
+      "csharp_refs": [
+        "reference/MissionPlanner/GCSViews/FlightPlanner.cs:4332-4340"
+      ],
+      "rust_refs": [
+        "crates/mp-app/src/views/flight_plan.rs:289-289"
+      ],
+      "next_fix": "Provide mission KML/network-link generation and the appropriate local endpoint or exported document, then point this control at it. Verify that changing the mission changes the KML contents.",
+      "disposition": "open; unchanged by run11"
+    }
+  ],
+  "prioritized_next_fixes": [
+    "Implement Plane, Rover and Tracker tuning pages and route them by firmware, with distinct parameter fixtures and rendered interactions.",
+    "Implement GStreamer discovery/pipeline handling, HereLink and payload gimbal video modes using local media fixtures.",
+    "Restore PLAN GEO/UTM/MGRS table switching/editing and mission KML output.",
+    "Complete compass reboot confirmation/results and verify ordered gimbal interactions across all affected parameter names.",
+    "Complete distinct swarm sequence tools, display/loading predicates, plugin lifecycle, localization and missing transport/mobile import paths.",
+    "Collect native launch/import evidence and broader original workflow coverage. Physical flight qualification is separate from software parity."
+  ],
+  "ten_out_of_ten_criterion": "No known material UI/UX or feature discrepancy in an adequately reviewed software scope, with verification of the original interactions and promised native platforms. This remains a sampled review. Closing only the listed gaps would not certify all unreviewed original functionality."
+}

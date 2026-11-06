@@ -56,8 +56,8 @@ fn pages(app: &AppCtx) -> Vec<Page> {
             if fw == Firmware::ArduCopter2 {
                 v.push(Page::GeoFence);
             }
-            v.push(Page::BasicTuning);
-            if matches!(fw, Firmware::ArduCopter2 | Firmware::ArduPlane) {
+            if matches!(fw, Firmware::ArduCopter2 | Firmware::ArduPlane | Firmware::ArduRover) { v.push(Page::BasicTuning); }
+            if matches!(fw, Firmware::ArduCopter2 | Firmware::ArduPlane | Firmware::ArduTracker) {
                 v.push(Page::ExtendedTuning);
             }
             if crate::display::friendly_params(&app.settings.planner) {
@@ -89,6 +89,7 @@ pub struct ConfigView {
     standard: crate::views::friendly::FriendlyParams,
     advanced: crate::views::friendly::FriendlyParams,
     last_page: Option<Page>,
+    vehicle_tuning: crate::views::vehicle_tuning::VehicleTuning,
 }
 
 impl Default for ConfigView {
@@ -105,13 +106,15 @@ impl Default for ConfigView {
             Some(0) => Page::GeoFence,
             _ => Page::FullParamList,
         };
-        Self { page, params: ParamEditor::default(), extended: Default::default(), user_add: String::new(), ftp: Default::default(), osd: Default::default(), standard: Default::default(), advanced: Default::default(), last_page: None }
+        Self { page, params: ParamEditor::default(), extended: Default::default(), user_add: String::new(), ftp: Default::default(), osd: Default::default(), standard: Default::default(), advanced: Default::default(), last_page: None, vehicle_tuning: Default::default() }
     }
 }
 
 impl ConfigView {
+    pub fn leave_vehicle_tuning(&mut self) { self.vehicle_tuning.leave(); }
     pub fn on_event(&mut self, e: &LinkEvent, toasts: &mut Toasts) {
         self.params.on_event(e, toasts);
+        self.vehicle_tuning.on_event(e, toasts);
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
@@ -134,11 +137,12 @@ impl ConfigView {
         if self.last_page == Some(Page::OnboardOsd) && page != Page::OnboardOsd {
             self.osd.leave(app);
         }
+        if self.last_page != Some(page) { self.vehicle_tuning.leave(); }
         self.last_page = Some(page);
         egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::bg()).inner_margin(6)).show(ui, |ui| match page {
             Page::GeoFence => crate::views::tuning::geofence(ui, app),
-            Page::BasicTuning => crate::views::tuning::basic_tuning(ui, app),
-            Page::ExtendedTuning => self.extended.ui(ui, app),
+            Page::BasicTuning => match super::vehicle_tuning::form_for(fw, false) { Some(form) => self.vehicle_tuning.ui(ui, app, form), None => crate::views::tuning::basic_tuning(ui, app) },
+            Page::ExtendedTuning => match super::vehicle_tuning::form_for(fw, true) { Some(form) => self.vehicle_tuning.ui(ui, app, form), None => self.extended.ui(ui, app) },
             Page::StandardParams => self.standard.ui(ui, app, "Standard"),
             Page::AdvancedParams => self.advanced.ui(ui, app, "Advanced"),
             Page::OnboardOsd => self.osd.ui(ui, app),

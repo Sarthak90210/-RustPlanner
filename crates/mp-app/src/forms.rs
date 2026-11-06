@@ -32,6 +32,8 @@ pub struct Ctl {
     #[serde(default)]
     pub param: Option<String>,
     #[serde(default)]
+    pub aliases: Vec<String>,
+    #[serde(default)]
     pub nums: Vec<f64>,
     #[serde(default)]
     pub image: Option<String>,
@@ -52,7 +54,7 @@ macro_rules! forms {
 }
 
 const FORMS: &[(&str, &str)] = forms!(
-    "rangefinder", "airspeed", "optflow", "mount", "parachute", "tracker", "bluetooth", "esp8266", "cubeid", "dronecan", "repl", "initialparams", "compassmot", "serial", "sikradio", "osd", "adsb", "gpsorder", "hwosd", "georef", "fwdisabled", "paramloading", "secureap", "tradheli", "trackerui", "rtkinject", "devops", "gmapcache"
+    "rangefinder", "airspeed", "optflow", "mount", "parachute", "tracker", "bluetooth", "esp8266", "cubeid", "dronecan", "repl", "initialparams", "compassmot", "serial", "sikradio", "osd", "adsb", "gpsorder", "hwosd", "georef", "fwdisabled", "paramloading", "secureap", "tradheli", "trackerui", "rtkinject", "devops", "gmapcache", "plane_tuning", "rover_tuning", "tracker_tuning"
 );
 
 const IMAGES: &[(&str, &[u8])] = &[
@@ -127,6 +129,8 @@ pub struct FormState {
     pub bindings: HashMap<String, String>,
     pub check_values: HashMap<String, (f32, f32)>,
     pub options: HashMap<String, Vec<(i32, String)>>,
+    /// Vehicle PID pages stage edits until Write PIDS or Ctrl+S.
+    pub staged: Option<std::collections::BTreeMap<String, f32>>,
 }
 
 impl FormState {
@@ -136,6 +140,11 @@ impl FormState {
 
     pub fn set(&mut self, ctl: &str, v: impl Into<String>) {
         self.text.insert(ctl.to_string(), v.into());
+    }
+
+    pub fn edit(&mut self, link: &Link, name: &str, value: f32) {
+        if let Some(pending) = &mut self.staged { pending.insert(name.to_string(), value); }
+        else { link.send(LinkCommand::SetParam { name: name.to_string(), value }); }
     }
 }
 
@@ -204,10 +213,13 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
     let o = ui.available_rect_before_wrap().min;
     let p = ui.painter().clone();
     let link: Option<&Link> = app.link;
-    let (params, fw) = link.map(|l| {
+    let (mut params, fw) = link.map(|l| {
         let s = l.shared.read();
         (s.params.clone(), s.cs.firmware)
     }).unwrap_or_default();
+    if let Some(pending) = &st.staged {
+        for (name, value) in pending { if let Some(p) = params.get_mut(name) { p.value = *value; } }
+    }
     let mut clicked = Vec::new();
     let mut maxy: f32 = 0.0;
     for c in &f.controls {
@@ -218,7 +230,8 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
         let r = Rect::from_min_size(at, Vec2::new(c.w.max(1.0), c.h.max(1.0)));
         maxy = maxy.max(r.bottom() - o.y);
         let text = c.text.clone().unwrap_or_default();
-        let bound = st.bindings.get(&c.name).map(String::as_str).or(c.param.as_deref()).and_then(|n| resolve(&params, n));
+        let bound = if let Some(name) = st.bindings.get(&c.name) { resolve(&params, name) }
+            else { c.aliases.iter().find_map(|n| resolve(&params, n)).or_else(|| c.param.as_deref().and_then(|n| resolve(&params, n))) };
         let enabled = !st.disabled.contains(&c.name);
         match c.kind.as_str() {
             "label" => {
@@ -254,7 +267,7 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
                 let resp = ui.put(r, |ui: &mut egui::Ui| ui.add_enabled(cur.is_some() && enabled && !app.readonly, egui::Checkbox::new(&mut on, &text)));
                 if resp.changed() && !app.readonly {
                     if let (Some(l), Some(n)) = (link, &bound) {
-                        l.send(LinkCommand::SetParam { name: n.clone(), value: if on { on_v } else { off_v } });
+                        st.edit(l, n, if on { on_v } else { off_v });
                     }
                 }
             }
@@ -262,11 +275,12 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
                 (Some(n), Some(l)) => {
                     let v = params[n].value;
                     ui.scope_builder(egui::UiBuilder::new().max_rect(r), |ui| ui.add_enabled_ui(enabled && !app.readonly, |ui| {
-                        if let Some(options) = st.options.get(&c.name) {
+                        let options = st.options.get(&c.name).cloned().or_else(|| st.staged.as_ref().map(|_| mp_core::param_meta::options(fw, n).into_iter().map(|(k, v)| (k as i32, v)).collect()));
+                        if let Some(options) = options {
                             let text = options.iter().find(|(k, _)| *k as f32 == v).map(|(_, s)| s.clone()).unwrap_or_else(|| v.to_string());
-                            egui::ComboBox::from_id_salt((name, &c.name)).width(r.width() - 8.0).selected_text(text).show_ui(ui, |ui| {
+                            egui::ComboBox::from_id_salt((name, &c.name)).width(r.width() - 8.0).wrap_mode(egui::TextWrapMode::Truncate).selected_text(text).show_ui(ui, |ui| {
                                 for (key, label) in options {
-                                    if ui.selectable_label(*key as f32 == v, label).clicked() { l.send(LinkCommand::SetParam { name: n.clone(), value: *key as f32 }); }
+                                    if ui.selectable_label(key as f32 == v, label).clicked() { st.edit(l, n, key as f32); }
                                 }
                             });
                         } else { crate::views::config::param_control(ui, l, fw, n, v, r.width() - 8.0); }
@@ -283,13 +297,18 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
                     Some(n) => {
                         let cur = params[n].value as f64;
                         let mut v = cur / scale;
-                        let inc = c.nums.get(3).copied().filter(|i| *i > 0.0).unwrap_or(1.0);
+                        let meta = st.staged.as_ref().and_then(|_| mp_core::param_meta::get(fw, n));
+                        let inc = meta.and_then(|m| m.increment).or_else(|| c.nums.get(3).copied()).filter(|i| *i > 0.0).unwrap_or(1.0);
+                        let (lo, hi) = meta.and_then(|m| m.range).unwrap_or((lo, hi));
                         let (lo, hi) = (lo.min(v), hi.max(v));
                         let dec = theme::decimals_for(inc).max(theme::value_decimals(v as f32));
-                        let resp = ui.add_enabled_ui(enabled && !app.readonly, |ui| theme::numeric_updown(ui, r, &mut v, lo, hi, inc, dec)).inner;
+                        let edited = st.staged.as_ref().is_some_and(|p| p.contains_key(n));
+                        let fill = if edited { Color32::from_rgb(0, 128, 0) } else { theme::control_bg() };
+                        let resp = ui.add_enabled_ui(enabled && !app.readonly, |ui| theme::numeric_updown_fill(ui, r, &mut v, lo, hi, inc, dec, fill)).inner;
+                        if let Some(m) = meta { resp.clone().on_hover_text(&m.description); }
                         if resp.changed() && (v * scale - cur).abs() > 1e-9 && !app.readonly {
                             if let Some(l) = link {
-                                l.send(LinkCommand::SetParam { name: n.clone(), value: (v * scale) as f32 });
+                                st.edit(l, n, (v * scale) as f32);
                             }
                         }
                     }
@@ -369,10 +388,11 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
                     ui.allocate_response(Vec2::ZERO, Sense::hover())
                 });
             }
-            "track" => {
+            "track" | "vtrack" => {
                 let (lo, hi) = st.ranges.get(&c.name).copied().unwrap_or((0.0, 100.0));
                 let mut v = st.text.get(&c.name).and_then(|s| s.parse::<f64>().ok()).unwrap_or(lo.max(0.0).min(hi));
-                if enabled && theme::htrackbar(ui, r, &mut v, lo, hi, 10).changed() {
+                let response = if c.kind == "vtrack" { theme::vtrackbar_ticks(ui, r, &mut v, lo, hi, 10) } else { theme::htrackbar(ui, r, &mut v, lo, hi, 10) };
+                if enabled && response.changed() {
                     st.text.insert(c.name.clone(), format!("{}", v.round()));
                     clicked.push(c.name.clone());
                 }

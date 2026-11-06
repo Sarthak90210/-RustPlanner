@@ -512,7 +512,8 @@ pub fn vtrackbar(ui: &mut Ui, rect: Rect, value: &mut f64, min: f64, max: f64) -
 
 /// Horizontal WinForms TrackBar (TickStyle BottomRight): groove, blue thumb, `ticks` ticks.
 pub fn htrackbar(ui: &mut Ui, rect: Rect, value: &mut f64, min: f64, max: f64, ticks: usize) -> Response {
-    let resp = ui.interact(rect, ui.scope_id().with("htrk").with((rect.left() as i32, rect.top() as i32)), Sense::click_and_drag());
+    let before = *value;
+    let mut resp = ui.interact(rect, ui.scope_id().with("htrk").with((rect.left() as i32, rect.top() as i32)), Sense::click_and_drag());
     let p = ui.painter();
     let groove = Rect::from_min_size(Pos2::new(rect.left() + 13.0, rect.top() + 10.0), Vec2::new(rect.width() - 26.0, 4.0));
     p.rect_filled(groove, 0.0, Color32::from_rgb(0xe7, 0xea, 0xea));
@@ -524,7 +525,7 @@ pub fn htrackbar(ui: &mut Ui, rect: Rect, value: &mut f64, min: f64, max: f64, t
     }
     let span = if max > min { max - min } else { 1.0 };
     if let Some(pos) = resp.interact_pointer_pos() {
-        if resp.dragged() || resp.clicked() {
+        if ui.is_enabled() && (resp.dragged() || resp.clicked()) {
             let f = ((pos.x - groove.left()) / groove.width()).clamp(0.0, 1.0) as f64;
             *value = min + f * span;
         }
@@ -533,6 +534,29 @@ pub fn htrackbar(ui: &mut Ui, rect: Rect, value: &mut f64, min: f64, max: f64, t
     let tx = groove.left() + f * groove.width();
     let thumb = Rect::from_center_size(Pos2::new(tx, groove.center().y + 2.0), Vec2::new(11.0, 21.0));
     p.rect_filled(thumb, 0.0, if resp.hovered() || resp.dragged() { Color32::from_rgb(0x1c, 0x97, 0xea) } else { Color32::from_rgb(0x00, 0x7a, 0xd9) });
+    if *value != before { resp.mark_changed(); }
+    resp
+}
+
+pub fn vtrackbar_ticks(ui: &mut Ui, rect: Rect, value: &mut f64, min: f64, max: f64, ticks: usize) -> Response {
+    let before = *value;
+    let mut resp = ui.interact(rect, ui.scope_id().with("vtrk").with((rect.left() as i32, rect.top() as i32)), Sense::click_and_drag());
+    let p = ui.painter();
+    let groove = Rect::from_min_size(rect.min + Vec2::new(10.0, 13.0), Vec2::new(4.0, (rect.height() - 26.0).max(1.0)));
+    p.rect_filled(groove, 0.0, Color32::from_rgb(0xe7, 0xea, 0xea));
+    let n = ticks.max(1);
+    for s in 0..=n {
+        let y = groove.top() + s as f32 / n as f32 * groove.height();
+        p.line_segment([Pos2::new(groove.right() + 12.0, y), Pos2::new(groove.right() + 16.0, y)], Stroke::new(1.0, Color32::from_rgb(0xc4, 0xc4, 0xc4)));
+    }
+    let span = if max > min { max - min } else { 1.0 };
+    if let Some(pos) = resp.interact_pointer_pos() {
+        if ui.is_enabled() && (resp.dragged() || resp.clicked()) { *value = min + ((groove.bottom() - pos.y) / groove.height()).clamp(0.0, 1.0) as f64 * span; }
+    }
+    let y = groove.bottom() - ((*value - min) / span).clamp(0.0, 1.0) as f32 * groove.height();
+    let thumb = Rect::from_center_size(Pos2::new(groove.center().x + 2.0, y), Vec2::new(21.0, 11.0));
+    p.rect_filled(thumb, 0.0, if resp.hovered() || resp.dragged() { Color32::from_rgb(0x1c, 0x97, 0xea) } else { Color32::from_rgb(0x00, 0x7a, 0xd9) });
+    if *value != before { resp.mark_changed(); }
     resp
 }
 
@@ -555,6 +579,25 @@ pub fn progress(ui: &mut Ui, frac: f32, size: Vec2, text: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trackbars_report_pointer_changes_in_both_orientations() {
+        for vertical in [false, true] {
+            let ctx = egui::Context::default();
+            let mut value = 1500.0;
+            let rect = Rect::from_min_size(Pos2::new(20.0, 20.0), if vertical { Vec2::new(45.0, 154.0) } else { Vec2::new(144.0, 45.0) });
+            let pos = if vertical { Pos2::new(35.0, 42.0) } else { Pos2::new(145.0, 32.0) };
+            let mut changed = false;
+            for events in [Vec::new(), vec![egui::Event::PointerMoved(pos), egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE }], vec![egui::Event::PointerMoved(pos), egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE }]] {
+                let mut output = ctx.run_ui(egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::splat(200.0))), events, ..Default::default() }, |ui| {
+                    let response = if vertical { vtrackbar_ticks(ui, rect, &mut value, 1000.0, 2000.0, 10) } else { htrackbar(ui, rect, &mut value, 1000.0, 2000.0, 10) };
+                    changed |= response.changed();
+                });
+                output.textures_delta.clear();
+            }
+            assert!(changed && value > 1750.0, "vertical={vertical}: value={value}, changed={changed}");
+        }
+    }
 
     #[test]
     fn high_contrast_theme_parses() {
@@ -583,11 +626,15 @@ pub fn decimals_for(increment: f64) -> usize {
 /// WinForms NumericUpDown: a text box with up/down arrows on the right. `changed()` is set
 /// when the value is committed (Enter, focus lost, an arrow click or the mouse wheel).
 pub fn numeric_updown(ui: &mut Ui, rect: Rect, value: &mut f64, min: f64, max: f64, increment: f64, decimals: usize) -> Response {
+    numeric_updown_fill(ui, rect, value, min, max, increment, decimals, control_bg())
+}
+
+pub fn numeric_updown_fill(ui: &mut Ui, rect: Rect, value: &mut f64, min: f64, max: f64, increment: f64, decimals: usize, fill: Color32) -> Response {
     let id = ui.id().with(("nud", (rect.left() as i32, rect.top() as i32)));
     let inc = if increment > 0.0 { increment } else { 1.0 };
     let p = ui.painter().clone();
     let enabled = ui.is_enabled();
-    p.rect_filled(rect, 0.0, control_bg());
+    p.rect_filled(rect, 0.0, fill);
     p.rect_stroke(rect, 0.0, Stroke::new(1.0, Color32::from_gray(0x80)), StrokeKind::Inside);
     let arrows = Rect::from_min_max(Pos2::new(rect.right() - 17.0, rect.top() + 1.0), rect.max - Vec2::new(1.0, 1.0));
     let up = Rect::from_min_max(arrows.min, Pos2::new(arrows.right(), arrows.center().y));

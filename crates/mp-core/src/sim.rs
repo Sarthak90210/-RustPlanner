@@ -36,6 +36,7 @@ pub enum SimKind {
     Copter,
     Plane,
     Rover,
+    Tracker,
 }
 
 /// Options for one simulated vehicle.
@@ -561,6 +562,14 @@ impl Vehicle {
     fn configure(&mut self, o: SimOptions) {
         self.sysid = o.sysid;
         self.kind = o.kind;
+        let firmware = match o.kind {
+            SimKind::Copter => crate::firmware::Firmware::ArduCopter2,
+            SimKind::Plane => crate::firmware::Firmware::ArduPlane,
+            SimKind::Rover => crate::firmware::Firmware::ArduRover,
+            SimKind::Tracker => crate::firmware::Firmware::ArduTracker,
+        };
+        if o.kind != SimKind::Copter { for (name, value) in crate::param_meta::all_defaults(firmware) { self.params.entry(name).or_insert(value); } }
+        self.param_defaults = self.params.clone();
         let lat = SITL_HOME.lat + (o.offset.0 / 6_378_137.0).to_degrees();
         let lng = SITL_HOME.lng + (o.offset.1 / (6_378_137.0 * SITL_HOME.lat.to_radians().cos())).to_degrees();
         self.home = PointLatLngAlt::new(lat, lng, SITL_HOME.alt);
@@ -576,6 +585,7 @@ impl Vehicle {
     fn wire_mode(&self) -> u32 {
         match (self.kind, self.mode) {
             (SimKind::Copter, m) => m,
+            (SimKind::Tracker, m) => m,
             (SimKind::Plane, MODE_AUTO) => 10,
             (SimKind::Plane, MODE_GUIDED) => 15,
             (SimKind::Plane, MODE_LOITER) => 12,
@@ -591,6 +601,7 @@ impl Vehicle {
     }
 
     fn from_wire_mode(&self, m: u32) -> u32 {
+        if self.kind == SimKind::Tracker { return m; }
         match (self.kind, m) {
             (SimKind::Copter, m) => m,
             (_, 10) => MODE_AUTO,
@@ -608,6 +619,7 @@ impl Vehicle {
             SimKind::Copter => "ArduCopter V4.6.0 (rust-sim)",
             SimKind::Plane => "ArduPlane V4.6.0 (rust-sim)",
             SimKind::Rover => "ArduRover V4.6.0 (rust-sim)",
+            SimKind::Tracker => "AntennaTracker V4.6.0 (rust-sim)",
         };
         self.text(MavSeverity::MAV_SEVERITY_INFO, fw);
         self.text(MavSeverity::MAV_SEVERITY_INFO, "ChibiOS: rust-sim");
@@ -1320,6 +1332,7 @@ impl Vehicle {
                 SimKind::Copter => MavType::MAV_TYPE_QUADROTOR,
                 SimKind::Plane => MavType::MAV_TYPE_FIXED_WING,
                 SimKind::Rover => MavType::MAV_TYPE_GROUND_ROVER,
+                SimKind::Tracker => MavType::MAV_TYPE_ANTENNA_TRACKER,
             },
             autopilot: MavAutopilot::MAV_AUTOPILOT_ARDUPILOTMEGA,
             base_mode: base,

@@ -305,6 +305,7 @@ impl SetupView {
 
     /// Select a page by its BackstageView label.
     pub fn dialogs(&mut self, ctx: &egui::Context, app: &mut AppCtx) { self.compass.dialogs(ctx, app); }
+    pub fn on_event(&mut self, event: &mp_core::link::LinkEvent, link: &Link, toasts: &mut crate::app::Toasts) { self.compass.on_event(event, link, toasts); }
 
     pub fn goto(&mut self, name: &str) {
         if let Some(i) = PAGES.iter().position(|p| p.0 == name) {
@@ -1963,8 +1964,7 @@ fn compass(ui: &mut egui::Ui, app: &mut AppCtx, link: &Link, state: &mut super::
     p.text(o + Vec2::new(0.0, 297.0), egui::Align2::LEFT_TOP, "A reboot is required to adjust the ordering.", f.clone(), Color32::WHITE);
     let rb = r(3.0, 313.0, 75.0, 23.0);
     if ui.put(rb, |ui: &mut egui::Ui| theme::button_sized(ui, "Reboot", rb.size())).clicked() && !app.readonly {
-        state.reboot_required = false;
-        link.send(LinkCommand::CommandLong { command: 246, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
+        state.request_reboot();
     }
     p.text(o + Vec2::new(0.0, 339.0), egui::Align2::LEFT_TOP, "A mag calibration is required to remap the above changes.", f.clone(), Color32::WHITE);
     // groupBoxonboardcalib

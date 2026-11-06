@@ -154,6 +154,21 @@ fn parameter_clear_then_reassign_waits_for_each_readback_and_cancels_on_target_c
     let end = Instant::now() + Duration::from_millis(850);
     while Instant::now() < end { assert!(!matches!(peer.message(), Some(MavMessage::PARAM_SET(_))), "An old parameter write survived the vehicle switch"); }
 }
+
+#[test]
+fn parameter_writes_across_different_names_follow_ack_order() {
+    let (link, peer) = Peer::connect();
+    let writes = [("SERVO9_FUNCTION", 0.0), ("SERVO9_FUNCTION", 10.0), ("CAM_TRIGG_TYPE", 0.0), ("SERVO7_FUNCTION", 7.0)];
+    for (name, value) in writes { link.send(LinkCommand::SetParam { name: name.into(), value }); }
+    for (name, value) in writes {
+        let MavMessage::PARAM_SET(p) = receive(&peer, Duration::from_secs(3), |m| matches!(m, MavMessage::PARAM_SET(_))) else { unreachable!() };
+        let actual = String::from_utf8_lossy(&p.param_id[..]).trim_end_matches('\0').to_string();
+        assert_eq!((actual.as_str(), p.param_value), (name, value));
+        let end = Instant::now() + Duration::from_millis(100);
+        while Instant::now() < end { assert!(!matches!(peer.message(), Some(MavMessage::PARAM_SET(_))), "A different parameter overtook the previous readback"); }
+        send(&peer, 1, MavMessage::PARAM_VALUE(PARAM_VALUE_DATA { param_id: p.param_id, param_value: value, param_type: MavParamType::MAV_PARAM_TYPE_REAL32, param_count: 3, param_index: 0 }));
+    }
+}
 fn wait_result(link: &Link) -> Result<(), String> {
     let end = Instant::now() + Duration::from_secs(7);
     loop {

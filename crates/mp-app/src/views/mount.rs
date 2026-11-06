@@ -406,6 +406,13 @@ mod tests {
         drop(frame);
         assert_eq!(page.st.get("mavlinkComboBoxTilt"), "SERVO7");
         assert_eq!(page.st.bindings["mavlinkNumericUpDownTSM"], "SERVO7_MIN");
+        // Message subscriptions publish before the worker commits shared state.
+        // The operation result is emitted after that state update.
+        loop {
+            if let LinkEvent::ParamSet { name, ok } = link.events.recv_timeout(Duration::from_secs(3)).unwrap() {
+                if name == "SERVO7_FUNCTION" { assert!(ok); break; }
+            }
+        }
         assert_eq!(link.shared.read().params["SERVO7_FUNCTION"].value, 7.0);
     }
 

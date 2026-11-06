@@ -18,6 +18,8 @@ pub struct PageState {
     pub reboot_required: bool,
     pub reboot_prompt: bool,
     pub calibrate_after_reboot: bool,
+    awaiting_reboot: bool,
+    standalone_reboot: bool,
 }
 
 impl PageState {
@@ -29,6 +31,8 @@ impl PageState {
                 self.reboot_required = false;
                 self.reboot_prompt = false;
                 self.calibrate_after_reboot = false;
+                self.awaiting_reboot = false;
+                self.standalone_reboot = false;
             }
             self.target = Some(target);
             self.rows = rows(params);
@@ -41,6 +45,7 @@ impl PageState {
     pub fn leave(&mut self) {
         if self.active && self.reboot_required {
             self.reboot_prompt = true;
+            self.standalone_reboot = false;
         }
         self.active = false;
     }
@@ -60,6 +65,7 @@ impl PageState {
     pub fn start_calibration(&mut self) -> bool {
         if self.reboot_required {
             self.reboot_prompt = true;
+            self.standalone_reboot = false;
             self.calibrate_after_reboot = true;
             false
         } else {
@@ -69,21 +75,66 @@ impl PageState {
 
     pub fn answer_reboot(&mut self, yes: bool) -> bool {
         self.reboot_prompt = false;
-        let calibrate = yes && self.calibrate_after_reboot;
+        self.awaiting_reboot = yes;
+        if !yes {
+            self.calibrate_after_reboot = false;
+        }
+        yes
+    }
+
+    pub fn request_reboot(&mut self) {
+        self.reboot_prompt = true;
+        self.standalone_reboot = true;
         self.calibrate_after_reboot = false;
-        if yes {
+    }
+
+    fn complete_reboot(&mut self, ok: bool) -> bool {
+        self.awaiting_reboot = false;
+        let calibrate = ok && self.calibrate_after_reboot;
+        self.calibrate_after_reboot = false;
+        if ok {
             self.reboot_required = false;
         }
         calibrate
     }
 
+    pub fn on_event(
+        &mut self,
+        event: &mp_core::link::LinkEvent,
+        link: &mp_core::link::Link,
+        toasts: &mut crate::app::Toasts,
+    ) {
+        if !self.awaiting_reboot {
+            return;
+        }
+        match event {
+            mp_core::link::LinkEvent::CommandAck {
+                command: 246, ok, ..
+            } => {
+                let calibrate = self.complete_reboot(*ok);
+                if !ok {
+                    toasts.error("Reboot failed. please manually reboot the hardware.");
+                }
+                if calibrate {
+                    begin_calibration(link);
+                }
+            }
+            mp_core::link::LinkEvent::Disconnected(_) => {
+                self.complete_reboot(false);
+                toasts.error("Error communicating with the autopilot during reboot");
+            }
+            _ => {}
+        }
+    }
+
     pub fn dialogs(&mut self, ctx: &egui::Context, app: &mut crate::app::AppCtx) {
-        if !self.reboot_prompt {
+        if !self.reboot_prompt && !self.awaiting_reboot {
             return;
         }
         if !app.connected() {
             self.reboot_prompt = false;
             self.calibrate_after_reboot = false;
+            self.awaiting_reboot = false;
             return;
         }
         if app.link.is_some_and(|link| {
@@ -93,34 +144,48 @@ impl PageState {
             self.reboot_prompt = false;
             self.calibrate_after_reboot = false;
             self.reboot_required = false;
+            self.awaiting_reboot = false;
             return;
         }
         let mut answer = None;
-        egui::Window::new("Reboot")
-            .collapsible(false)
-            .resizable(false)
-            .show(ctx, |ui| {
-                ui.label("Reboot required, reboot now?");
-                ui.horizontal(|ui| {
-                    if ui.button("Yes").clicked() {
-                        answer = Some(true);
-                    }
-                    if ui.button("No").clicked() {
-                        answer = Some(false);
-                    }
-                });
+        egui::Modal::new(egui::Id::new("compass_reboot")).show(ctx, |ui| {
+            ui.heading("Reboot");
+            if self.awaiting_reboot {
+                ui.label("Rebooting...");
+                return;
+            }
+            ui.label(if self.standalone_reboot {
+                "Reboot?"
+            } else {
+                "Reboot required, reboot now?"
             });
+            ui.horizontal(|ui| {
+                if ui
+                    .button(if self.standalone_reboot { "OK" } else { "Yes" })
+                    .clicked()
+                {
+                    answer = Some(true);
+                }
+                if ui
+                    .button(if self.standalone_reboot {
+                        "Cancel"
+                    } else {
+                        "No"
+                    })
+                    .clicked()
+                {
+                    answer = Some(false);
+                }
+            });
+        });
         if let Some(yes) = answer {
-            let calibrate = self.answer_reboot(yes);
+            self.answer_reboot(yes);
             if let Some(link) = app.link.filter(|_| app.connected() && !app.readonly) {
                 if yes {
                     link.send(mp_core::link::LinkCommand::CommandLong {
                         command: 246,
                         params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
                     });
-                }
-                if calibrate {
-                    begin_calibration(link);
                 }
             }
         }
@@ -248,6 +313,8 @@ mod tests {
         assert!(page.reboot_required);
         assert!(!page.start_calibration());
         assert!(page.answer_reboot(true));
+        assert!(page.reboot_required);
+        assert!(page.complete_reboot(true));
         assert!(page.start_calibration());
     }
 
@@ -263,6 +330,25 @@ mod tests {
         page.activate((2, 1), &p);
         assert!(!page.reboot_prompt && !page.reboot_required);
         assert_eq!(page.rows[0].id, 101);
+    }
+
+    #[test]
+    fn standalone_reboot_confirms_and_failed_reboot_preserves_required_state() {
+        let mut page = PageState::default();
+        page.reboot_required = true;
+        page.request_reboot();
+        assert!(page.reboot_prompt && page.standalone_reboot && !page.awaiting_reboot);
+        assert!(!page.answer_reboot(false));
+        assert!(page.reboot_required && !page.awaiting_reboot);
+        page.request_reboot();
+        assert!(page.answer_reboot(true));
+        assert!(page.reboot_required && page.awaiting_reboot);
+        assert!(!page.complete_reboot(false));
+        assert!(page.reboot_required && !page.awaiting_reboot);
+        page.request_reboot();
+        page.answer_reboot(true);
+        page.complete_reboot(true);
+        assert!(!page.reboot_required);
     }
 
     #[test]

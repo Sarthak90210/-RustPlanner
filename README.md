@@ -137,6 +137,20 @@ queue behind its pending readback, preserving clear/reassign operations. Verific
 egui selector click through the production MAVLink link to simulator readback, an independent TCP peer
 checking parameter ACK/rejection and target-switch cancellation, and five-device compass lifecycle tests.
 
+Run 12 adds the original Plane and Rover Basic Tuning pages and the Tracker Extended Tuning page,
+with 234 exported controls and 100 parameter bindings. Plane/Rover controls stage edits until Write
+Params or Ctrl+S, retain pending values until readback, confirm doubled values, and provide full/partial
+refresh. Tracker controls write directly and include yaw/pitch PWM tests and the vertical pitch slider.
+The layout exporter is `scripts/export_tuning_forms.py`; generated JSON is included in normal builds.
+`MP_SIM_KIND=plane|rover|tracker` selects corresponding built-in simulator fixtures. Their metadata
+parameter sets are development fixtures, not physical firmware qualification.
+
+Parameter transactions now preserve ACK order across different names too. Compass reboot uses a
+modal confirmation and waits for its result before clearing required state or starting calibration.
+Run 12's validation includes 98 passing tests, numeric-edit/Ctrl+S simulator readback and separate TCP
+ordering tests. `scripts/capture_vehicle_tuning.ps1 -Round 12` exports each actual firmware-specific
+CONFIG page and records the reported firmware, complete parameters and binary hash in its receipts.
+
 ## License
 
 GPL-3.0, like Mission Planner. Icons and marker images are Mission Planner / GMap.NET assets under the same license.

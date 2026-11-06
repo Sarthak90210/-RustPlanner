@@ -1,0 +1,804 @@
+{
+  "name": "tracker_tuning",
+  "w": 515.0,
+  "h": 435.0,
+  "controls": [
+    {
+      "name": "groupBox22",
+      "kind": "group",
+      "parent": "$this",
+      "x": 7.0,
+      "y": 5.0,
+      "w": 159.0,
+      "h": 42.0,
+      "text": "Board Orientation"
+    },
+    {
+      "name": "mavlinkComboBox1",
+      "kind": "mcombo",
+      "parent": "groupBox22",
+      "x": 6.0,
+      "y": 15.0,
+      "w": 147.0,
+      "h": 21.0,
+      "param": "AHRS_ORIENTATION",
+      "aliases": [
+        "AHRS_ORIENTATION"
+      ]
+    },
+    {
+      "name": "groupBox25",
+      "kind": "group",
+      "parent": "$this",
+      "x": 7.0,
+      "y": 53.0,
+      "w": 203.0,
+      "h": 174.0,
+      "text": "Yaw Servo"
+    },
+    {
+      "name": "lbl_yawpwm",
+      "kind": "label",
+      "parent": "groupBox25",
+      "x": 156.0,
+      "y": 123.0,
+      "w": 31.0,
+      "h": 13.0,
+      "text": "1500"
+    },
+    {
+      "name": "label16",
+      "kind": "label",
+      "parent": "groupBox25",
+      "x": 6.0,
+      "y": 22.0,
+      "w": 31.0,
+      "h": 13.0,
+      "text": "Type"
+    },
+    {
+      "name": "mavlinkComboBoxservo_yaw_type",
+      "kind": "mcombo",
+      "parent": "groupBox25",
+      "x": 72.0,
+      "y": 19.0,
+      "w": 75.0,
+      "h": 21.0,
+      "param": "SERVO_YAW_TYPE",
+      "aliases": [
+        "SERVO_YAW_TYPE"
+      ]
+    },
+    {
+      "name": "BUT_test_yaw",
+      "kind": "button",
+      "parent": "groupBox25",
+      "x": 159.0,
+      "y": 142.0,
+      "w": 38.0,
+      "h": 23.0,
+      "text": "Test"
+    },
+    {
+      "name": "mavlinkNumericUpDown3",
+      "kind": "mnum",
+      "parent": "groupBox25",
+      "x": 72.0,
+      "y": 93.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "RC1_TRIM",
+      "aliases": [
+        "RC1_TRIM"
+      ],
+      "nums": [
+        900.0,
+        2200.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "mavlinkNumericUpDown2",
+      "kind": "mnum",
+      "parent": "groupBox25",
+      "x": 72.0,
+      "y": 70.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "RC1_MAX",
+      "aliases": [
+        "RC1_MAX"
+      ],
+      "nums": [
+        900.0,
+        2200.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "myTrackBar1",
+      "kind": "track",
+      "parent": "groupBox25",
+      "x": 9.0,
+      "y": 142.0,
+      "w": 144.0,
+      "h": 45.0
+    },
+    {
+      "name": "mavlinkNumericUpDown1",
+      "kind": "mnum",
+      "parent": "groupBox25",
+      "x": 72.0,
+      "y": 46.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "RC1_MIN",
+      "aliases": [
+        "RC1_MIN"
+      ],
+      "nums": [
+        900.0,
+        2200.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "mavlinkCheckBox1",
+      "kind": "mcheck",
+      "parent": "groupBox25",
+      "x": 10.0,
+      "y": 119.0,
+      "w": 66.0,
+      "h": 17.0,
+      "text": "Reverse",
+      "param": "RC1_REV",
+      "aliases": [
+        "RC1_REV"
+      ],
+      "nums": [
+        1.0,
+        -1.0
+      ]
+    },
+    {
+      "name": "label17",
+      "kind": "label",
+      "parent": "groupBox25",
+      "x": 6.0,
+      "y": 95.0,
+      "w": 41.0,
+      "h": 13.0,
+      "text": "Neutral"
+    },
+    {
+      "name": "label90",
+      "kind": "label",
+      "parent": "groupBox25",
+      "x": 6.0,
+      "y": 72.0,
+      "w": 27.0,
+      "h": 13.0,
+      "text": "Max"
+    },
+    {
+      "name": "label91",
+      "kind": "label",
+      "parent": "groupBox25",
+      "x": 6.0,
+      "y": 48.0,
+      "w": 24.0,
+      "h": 13.0,
+      "text": "Min"
+    },
+    {
+      "name": "groupBox3",
+      "kind": "group",
+      "parent": "$this",
+      "x": 293.0,
+      "y": 53.0,
+      "w": 203.0,
+      "h": 174.0,
+      "text": "Pitch Servo"
+    },
+    {
+      "name": "lbl_pitchpwm",
+      "kind": "label",
+      "parent": "groupBox3",
+      "x": 6.0,
+      "y": 150.0,
+      "w": 31.0,
+      "h": 13.0,
+      "text": "1500"
+    },
+    {
+      "name": "label15",
+      "kind": "label",
+      "parent": "groupBox3",
+      "x": 6.0,
+      "y": 22.0,
+      "w": 31.0,
+      "h": 13.0,
+      "text": "Type"
+    },
+    {
+      "name": "mavlinkComboBoxservo_pitch_type",
+      "kind": "mcombo",
+      "parent": "groupBox3",
+      "x": 72.0,
+      "y": 19.0,
+      "w": 75.0,
+      "h": 21.0,
+      "param": "SERVO_PITCH_TYPE",
+      "aliases": [
+        "SERVO_PITCH_TYPE"
+      ]
+    },
+    {
+      "name": "BUT_test_pitch",
+      "kind": "button",
+      "parent": "groupBox3",
+      "x": 109.0,
+      "y": 145.0,
+      "w": 38.0,
+      "h": 23.0,
+      "text": "Test"
+    },
+    {
+      "name": "mavlinkNumericUpDown4",
+      "kind": "mnum",
+      "parent": "groupBox3",
+      "x": 72.0,
+      "y": 93.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "RC2_TRIM",
+      "aliases": [
+        "RC2_TRIM"
+      ],
+      "nums": [
+        900.0,
+        2200.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "mavlinkNumericUpDown5",
+      "kind": "mnum",
+      "parent": "groupBox3",
+      "x": 72.0,
+      "y": 70.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "RC2_MAX",
+      "aliases": [
+        "RC2_MAX"
+      ],
+      "nums": [
+        900.0,
+        2200.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "myTrackBar2",
+      "kind": "vtrack",
+      "parent": "groupBox3",
+      "x": 153.0,
+      "y": 14.0,
+      "w": 45.0,
+      "h": 154.0
+    },
+    {
+      "name": "mavlinkNumericUpDown6",
+      "kind": "mnum",
+      "parent": "groupBox3",
+      "x": 72.0,
+      "y": 46.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "RC2_MIN",
+      "aliases": [
+        "RC2_MIN"
+      ],
+      "nums": [
+        900.0,
+        2200.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "mavlinkCheckBox2",
+      "kind": "mcheck",
+      "parent": "groupBox3",
+      "x": 10.0,
+      "y": 119.0,
+      "w": 66.0,
+      "h": 17.0,
+      "text": "Reverse",
+      "param": "RC2_REV",
+      "aliases": [
+        "RC2_REV"
+      ],
+      "nums": [
+        -1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label1",
+      "kind": "label",
+      "parent": "groupBox3",
+      "x": 6.0,
+      "y": 95.0,
+      "w": 41.0,
+      "h": 13.0,
+      "text": "Neutral"
+    },
+    {
+      "name": "label2",
+      "kind": "label",
+      "parent": "groupBox3",
+      "x": 6.0,
+      "y": 72.0,
+      "w": 27.0,
+      "h": 13.0,
+      "text": "Max"
+    },
+    {
+      "name": "label3",
+      "kind": "label",
+      "parent": "groupBox3",
+      "x": 6.0,
+      "y": 48.0,
+      "w": 24.0,
+      "h": 13.0,
+      "text": "Min"
+    },
+    {
+      "name": "groupBox4",
+      "kind": "group",
+      "parent": "$this",
+      "x": 7.0,
+      "y": 233.0,
+      "w": 203.0,
+      "h": 42.0,
+      "text": "Yaw Range of Movement"
+    },
+    {
+      "name": "mavlinkNumericUpDown7",
+      "kind": "mnum",
+      "parent": "groupBox4",
+      "x": 122.0,
+      "y": 14.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "YAW_RANGE",
+      "aliases": [
+        "YAW_RANGE"
+      ],
+      "nums": [
+        0.0,
+        360.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label4",
+      "kind": "label",
+      "parent": "groupBox4",
+      "x": 6.0,
+      "y": 16.0,
+      "w": 66.0,
+      "h": 13.0,
+      "text": "Range (deg)"
+    },
+    {
+      "name": "groupBox5",
+      "kind": "group",
+      "parent": "$this",
+      "x": 293.0,
+      "y": 233.0,
+      "w": 203.0,
+      "h": 61.0,
+      "text": "Pitch Range of Movement"
+    },
+    {
+      "name": "mavlinkNumericUpDown19",
+      "kind": "mnum",
+      "parent": "groupBox5",
+      "x": 122.0,
+      "y": 40.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "PITCH_MAX",
+      "aliases": [
+        "PITCH_MAX"
+      ],
+      "nums": [
+        -90.0,
+        90.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label18",
+      "kind": "label",
+      "parent": "groupBox5",
+      "x": 6.0,
+      "y": 42.0,
+      "w": 54.0,
+      "h": 13.0,
+      "text": "Max (deg)"
+    },
+    {
+      "name": "mavlinkNumericUpDown8",
+      "kind": "mnum",
+      "parent": "groupBox5",
+      "x": 122.0,
+      "y": 14.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "PITCH_MIN",
+      "aliases": [
+        "PITCH_MIN"
+      ],
+      "nums": [
+        -90.0,
+        90.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label5",
+      "kind": "label",
+      "parent": "groupBox5",
+      "x": 6.0,
+      "y": 16.0,
+      "w": 51.0,
+      "h": 13.0,
+      "text": "Min (deg)"
+    },
+    {
+      "name": "groupBox6",
+      "kind": "group",
+      "parent": "$this",
+      "x": 7.0,
+      "y": 296.0,
+      "w": 203.0,
+      "h": 136.0,
+      "text": "Yaw Gain"
+    },
+    {
+      "name": "mavlinkNumericUpDown13",
+      "kind": "mnum",
+      "parent": "groupBox6",
+      "x": 72.0,
+      "y": 110.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "YAW_SLEW_TIME",
+      "aliases": [
+        "YAW_SLEW_TIME"
+      ],
+      "nums": [
+        0.0,
+        100.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "mavlinkNumericUpDown12",
+      "kind": "mnum",
+      "parent": "groupBox6",
+      "x": 72.0,
+      "y": 84.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "YAW2SRV_IMAX",
+      "aliases": [
+        "YAW2SRV_IMAX"
+      ],
+      "nums": [
+        0.0,
+        100.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "mavlinkNumericUpDown11",
+      "kind": "mnum",
+      "parent": "groupBox6",
+      "x": 72.0,
+      "y": 61.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "YAW2SRV_D",
+      "aliases": [
+        "YAW2SRV_D"
+      ],
+      "nums": [
+        0.0,
+        100.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "mavlinkNumericUpDown10",
+      "kind": "mnum",
+      "parent": "groupBox6",
+      "x": 72.0,
+      "y": 38.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "YAW2SRV_I",
+      "aliases": [
+        "YAW2SRV_I"
+      ],
+      "nums": [
+        0.0,
+        100.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "mavlinkNumericUpDown9",
+      "kind": "mnum",
+      "parent": "groupBox6",
+      "x": 72.0,
+      "y": 14.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "YAW2SRV_P",
+      "aliases": [
+        "YAW2SRV_P"
+      ],
+      "nums": [
+        0.0,
+        100.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "label9",
+      "kind": "label",
+      "parent": "groupBox6",
+      "x": 6.0,
+      "y": 112.0,
+      "w": 53.0,
+      "h": 13.0,
+      "text": "Rate Max"
+    },
+    {
+      "name": "label6",
+      "kind": "label",
+      "parent": "groupBox6",
+      "x": 6.0,
+      "y": 63.0,
+      "w": 15.0,
+      "h": 13.0,
+      "text": "D"
+    },
+    {
+      "name": "label88",
+      "kind": "label",
+      "parent": "groupBox6",
+      "x": 6.0,
+      "y": 86.0,
+      "w": 33.0,
+      "h": 13.0,
+      "text": "IMAX"
+    },
+    {
+      "name": "label7",
+      "kind": "label",
+      "parent": "groupBox6",
+      "x": 6.0,
+      "y": 40.0,
+      "w": 10.0,
+      "h": 13.0,
+      "text": "I"
+    },
+    {
+      "name": "label8",
+      "kind": "label",
+      "parent": "groupBox6",
+      "x": 6.0,
+      "y": 16.0,
+      "w": 14.0,
+      "h": 13.0,
+      "text": "P"
+    },
+    {
+      "name": "groupBox7",
+      "kind": "group",
+      "parent": "$this",
+      "x": 293.0,
+      "y": 296.0,
+      "w": 203.0,
+      "h": 136.0,
+      "text": "Pitch Gain"
+    },
+    {
+      "name": "mavlinkNumericUpDown18",
+      "kind": "mnum",
+      "parent": "groupBox7",
+      "x": 72.0,
+      "y": 110.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "PITCH_SLEW_TIME",
+      "aliases": [
+        "PITCH_SLEW_TIME"
+      ],
+      "nums": [
+        0.0,
+        100.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "mavlinkNumericUpDown17",
+      "kind": "mnum",
+      "parent": "groupBox7",
+      "x": 72.0,
+      "y": 84.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "PITCH2SRV_IMAX",
+      "aliases": [
+        "PITCH2SRV_IMAX"
+      ],
+      "nums": [
+        0.0,
+        100.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "mavlinkNumericUpDown16",
+      "kind": "mnum",
+      "parent": "groupBox7",
+      "x": 72.0,
+      "y": 61.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "PITCH2SRV_D",
+      "aliases": [
+        "PITCH2SRV_D"
+      ],
+      "nums": [
+        0.0,
+        100.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "mavlinkNumericUpDown15",
+      "kind": "mnum",
+      "parent": "groupBox7",
+      "x": 72.0,
+      "y": 38.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "PITCH2SRV_I",
+      "aliases": [
+        "PITCH2SRV_I"
+      ],
+      "nums": [
+        0.0,
+        100.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "mavlinkNumericUpDown14",
+      "kind": "mnum",
+      "parent": "groupBox7",
+      "x": 72.0,
+      "y": 14.0,
+      "w": 75.0,
+      "h": 20.0,
+      "param": "PITCH2SRV_P",
+      "aliases": [
+        "PITCH2SRV_P"
+      ],
+      "nums": [
+        0.0,
+        100.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "label10",
+      "kind": "label",
+      "parent": "groupBox7",
+      "x": 6.0,
+      "y": 112.0,
+      "w": 53.0,
+      "h": 13.0,
+      "text": "Rate Max"
+    },
+    {
+      "name": "label11",
+      "kind": "label",
+      "parent": "groupBox7",
+      "x": 6.0,
+      "y": 63.0,
+      "w": 15.0,
+      "h": 13.0,
+      "text": "D"
+    },
+    {
+      "name": "label12",
+      "kind": "label",
+      "parent": "groupBox7",
+      "x": 6.0,
+      "y": 86.0,
+      "w": 33.0,
+      "h": 13.0,
+      "text": "IMAX"
+    },
+    {
+      "name": "label13",
+      "kind": "label",
+      "parent": "groupBox7",
+      "x": 6.0,
+      "y": 40.0,
+      "w": 10.0,
+      "h": 13.0,
+      "text": "I"
+    },
+    {
+      "name": "label14",
+      "kind": "label",
+      "parent": "groupBox7",
+      "x": 6.0,
+      "y": 16.0,
+      "w": 14.0,
+      "h": 13.0,
+      "text": "P"
+    },
+    {
+      "name": "groupBox1",
+      "kind": "group",
+      "parent": "$this",
+      "x": 293.0,
+      "y": 5.0,
+      "w": 159.0,
+      "h": 42.0,
+      "text": "Altitude Source"
+    },
+    {
+      "name": "mavlinkComboBoxalt_source",
+      "kind": "mcombo",
+      "parent": "groupBox1",
+      "x": 6.0,
+      "y": 15.0,
+      "w": 147.0,
+      "h": 21.0,
+      "param": "ALT_SOURCE",
+      "aliases": [
+        "ALT_SOURCE"
+      ]
+    }
+  ]
+}

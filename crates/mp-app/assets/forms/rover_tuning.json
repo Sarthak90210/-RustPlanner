@@ -1,0 +1,980 @@
+{
+  "name": "rover_tuning",
+  "w": 617.0,
+  "h": 350.0,
+  "controls": [
+    {
+      "name": "groupBox3",
+      "kind": "group",
+      "parent": "$this",
+      "x": 213.0,
+      "y": 226.0,
+      "w": 195.0,
+      "h": 95.0,
+      "text": "Throttle and Motors"
+    },
+    {
+      "name": "label22",
+      "kind": "label",
+      "parent": "groupBox3",
+      "x": 6.0,
+      "y": 17.0,
+      "w": 62.0,
+      "h": 13.0,
+      "text": "Motor Type"
+    },
+    {
+      "name": "CRUISE_SPEED",
+      "kind": "mnum",
+      "parent": "groupBox14",
+      "x": 111.0,
+      "y": 157.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "CRUISE_SPEED",
+      "aliases": [
+        "CRUISE_SPEED"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "MOT_PWM_TYPE",
+      "kind": "mcombo",
+      "parent": "groupBox3",
+      "x": 111.0,
+      "y": 14.0,
+      "w": 78.0,
+      "h": 21.0,
+      "param": "MOT_PWM_TYPE",
+      "aliases": [
+        "MOT_PWM_TYPE"
+      ]
+    },
+    {
+      "name": "label12",
+      "kind": "label",
+      "parent": "groupBox14",
+      "x": 6.0,
+      "y": 161.0,
+      "w": 99.0,
+      "h": 16.0,
+      "text": "Cruise Speed"
+    },
+    {
+      "name": "THR_MAX",
+      "kind": "mnum",
+      "parent": "groupBox3",
+      "x": 111.0,
+      "y": 64.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "THR_MAX",
+      "aliases": [
+        "THR_MAX",
+        "MOT_THR_MAX"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label6",
+      "kind": "label",
+      "parent": "groupBox3",
+      "x": 6.0,
+      "y": 68.0,
+      "w": 87.0,
+      "h": 13.0,
+      "text": "Throttle Max (%)"
+    },
+    {
+      "name": "THR_MIN",
+      "kind": "mnum",
+      "parent": "groupBox3",
+      "x": 111.0,
+      "y": 41.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "THR_MIN",
+      "aliases": [
+        "THR_MIN",
+        "MOT_THR_MIN"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label7",
+      "kind": "label",
+      "parent": "groupBox3",
+      "x": 6.0,
+      "y": 45.0,
+      "w": 89.0,
+      "h": 13.0,
+      "text": "Throttle Min (%)"
+    },
+    {
+      "name": "CRUISE_THROTTLE",
+      "kind": "mnum",
+      "parent": "groupBox14",
+      "x": 111.0,
+      "y": 180.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "CRUISE_THROTTLE",
+      "aliases": [
+        "CRUISE_THROTTLE"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label8",
+      "kind": "label",
+      "parent": "groupBox14",
+      "x": 6.0,
+      "y": 184.0,
+      "w": 80.0,
+      "h": 13.0,
+      "text": "Cruise Throttle"
+    },
+    {
+      "name": "groupBox14",
+      "kind": "group",
+      "parent": "$this",
+      "x": 213.0,
+      "y": 4.0,
+      "w": 195.0,
+      "h": 216.0,
+      "text": "Speed/Throttle"
+    },
+    {
+      "name": "label23",
+      "kind": "label",
+      "parent": "groupBox14",
+      "x": 6.0,
+      "y": 133.0,
+      "w": 95.0,
+      "h": 13.0,
+      "text": "Brake"
+    },
+    {
+      "name": "ATC_ACCEL_MAX",
+      "kind": "mnum",
+      "parent": "groupBox14",
+      "x": 111.0,
+      "y": 105.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "ATC_ACCEL_MAX",
+      "aliases": [
+        "ATC_ACCEL_MAX"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "ATC_BRAKE",
+      "kind": "mcombo",
+      "parent": "groupBox14",
+      "x": 111.0,
+      "y": 130.0,
+      "w": 78.0,
+      "h": 21.0,
+      "param": "ATC_BRAKE",
+      "aliases": [
+        "ATC_BRAKE"
+      ]
+    },
+    {
+      "name": "label20",
+      "kind": "label",
+      "parent": "groupBox14",
+      "x": 6.0,
+      "y": 109.0,
+      "w": 95.0,
+      "h": 13.0,
+      "text": "Accel Max (m/s/s)"
+    },
+    {
+      "name": "SPEED2THR_IMAX",
+      "kind": "mnum",
+      "parent": "groupBox14",
+      "x": 111.0,
+      "y": 82.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "SPEED2THR_IMAX",
+      "aliases": [
+        "SPEED2THR_IMAX",
+        "ATC_SPEED_IMAX"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "label73",
+      "kind": "label",
+      "parent": "groupBox14",
+      "x": 6.0,
+      "y": 86.0,
+      "w": 54.0,
+      "h": 13.0,
+      "text": "IMAX"
+    },
+    {
+      "name": "SPEED2THR_D",
+      "kind": "mnum",
+      "parent": "groupBox14",
+      "x": 111.0,
+      "y": 59.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "SPEED2THR_D",
+      "aliases": [
+        "SPEED2THR_D",
+        "ATC_SPEED_D"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "label74",
+      "kind": "label",
+      "parent": "groupBox14",
+      "x": 6.0,
+      "y": 63.0,
+      "w": 15.0,
+      "h": 13.0,
+      "text": "D"
+    },
+    {
+      "name": "SPEED2THR_I",
+      "kind": "mnum",
+      "parent": "groupBox14",
+      "x": 111.0,
+      "y": 36.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "SPEED2THR_I",
+      "aliases": [
+        "SPEED2THR_I",
+        "ATC_SPEED_I"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "label75",
+      "kind": "label",
+      "parent": "groupBox14",
+      "x": 6.0,
+      "y": 40.0,
+      "w": 10.0,
+      "h": 13.0,
+      "text": "I"
+    },
+    {
+      "name": "SPEED2THR_P",
+      "kind": "mnum",
+      "parent": "groupBox14",
+      "x": 111.0,
+      "y": 13.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "SPEED2THR_P",
+      "aliases": [
+        "SPEED2THR_P",
+        "ATC_SPEED_P"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "label76",
+      "kind": "label",
+      "parent": "groupBox14",
+      "x": 6.0,
+      "y": 17.0,
+      "w": 14.0,
+      "h": 13.0,
+      "text": "P"
+    },
+    {
+      "name": "BUT_writePIDS",
+      "kind": "button",
+      "parent": "$this",
+      "x": 213.0,
+      "y": 328.0,
+      "w": 103.0,
+      "h": 19.0,
+      "text": "Write Params"
+    },
+    {
+      "name": "BUT_rerequestparams",
+      "kind": "button",
+      "parent": "$this",
+      "x": 322.0,
+      "y": 328.0,
+      "w": 103.0,
+      "h": 19.0,
+      "text": "Refresh Params",
+      "hidden": true
+    },
+    {
+      "name": "groupBox4",
+      "kind": "group",
+      "parent": "$this",
+      "x": 414.0,
+      "y": 4.0,
+      "w": 195.0,
+      "h": 156.0,
+      "text": "Navigation"
+    },
+    {
+      "name": "WP_SPEED",
+      "kind": "mnum",
+      "parent": "groupBox4",
+      "x": 111.0,
+      "y": 14.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "WP_SPEED",
+      "aliases": [
+        "WP_SPEED"
+      ],
+      "nums": [
+        0.0,
+        100.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "label5",
+      "kind": "label",
+      "parent": "groupBox4",
+      "x": 6.0,
+      "y": 18.0,
+      "w": 99.0,
+      "h": 16.0,
+      "text": "WP Speed"
+    },
+    {
+      "name": "NAVL1_DAMPING",
+      "kind": "mnum",
+      "parent": "groupBox4",
+      "x": 111.0,
+      "y": 130.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "NAVL1_DAMPING",
+      "aliases": [
+        "NAVL1_DAMPING"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.05
+      ]
+    },
+    {
+      "name": "label13",
+      "kind": "label",
+      "parent": "groupBox4",
+      "x": 6.0,
+      "y": 134.0,
+      "w": 98.0,
+      "h": 13.0,
+      "text": "Lat Acc Cntl Damp"
+    },
+    {
+      "name": "NAVL1_PERIOD",
+      "kind": "mnum",
+      "parent": "groupBox4",
+      "x": 111.0,
+      "y": 107.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "NAVL1_PERIOD",
+      "aliases": [
+        "NAVL1_PERIOD"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label18",
+      "kind": "label",
+      "parent": "groupBox4",
+      "x": 6.0,
+      "y": 111.0,
+      "w": 100.0,
+      "h": 13.0,
+      "text": "Lat Acc Cntl Period"
+    },
+    {
+      "name": "WP_OVERSHOOT",
+      "kind": "mnum",
+      "parent": "groupBox4",
+      "x": 111.0,
+      "y": 61.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "WP_OVERSHOOT",
+      "aliases": [
+        "WP_OVERSHOOT"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "label19",
+      "kind": "label",
+      "parent": "groupBox4",
+      "x": 6.0,
+      "y": 65.0,
+      "w": 99.0,
+      "h": 16.0,
+      "text": "WP Overshoot"
+    },
+    {
+      "name": "WP_RADIUS",
+      "kind": "mnum",
+      "parent": "groupBox4",
+      "x": 111.0,
+      "y": 38.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "WP_RADIUS",
+      "aliases": [
+        "WP_RADIUS"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "label9",
+      "kind": "label",
+      "parent": "groupBox4",
+      "x": 6.0,
+      "y": 42.0,
+      "w": 99.0,
+      "h": 16.0,
+      "text": "WP Radius"
+    },
+    {
+      "name": "TURN_G_MAX",
+      "kind": "mnum",
+      "parent": "groupBox4",
+      "x": 111.0,
+      "y": 84.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "TURN_MAX_G",
+      "aliases": [
+        "TURN_MAX_G",
+        "ATC_TURN_MAX_G"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "label10",
+      "kind": "label",
+      "parent": "groupBox4",
+      "x": 6.0,
+      "y": 88.0,
+      "w": 99.0,
+      "h": 16.0,
+      "text": "Turn G Max"
+    },
+    {
+      "name": "groupBox5",
+      "kind": "group",
+      "parent": "$this",
+      "x": 12.0,
+      "y": 3.0,
+      "w": 195.0,
+      "h": 156.0,
+      "text": "Steering Rate"
+    },
+    {
+      "name": "ATC_STR_RAT_FF",
+      "kind": "mnum",
+      "parent": "groupBox5",
+      "x": 111.0,
+      "y": 106.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "ATC_STR_RAT_FF",
+      "aliases": [
+        "ATC_STR_RAT_FF"
+      ],
+      "nums": [
+        0.0,
+        100.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "label24",
+      "kind": "label",
+      "parent": "groupBox5",
+      "x": 6.0,
+      "y": 110.0,
+      "w": 54.0,
+      "h": 13.0,
+      "text": "FF"
+    },
+    {
+      "name": "STEER2SRV_IMAX",
+      "kind": "mnum",
+      "parent": "groupBox5",
+      "x": 111.0,
+      "y": 82.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "STEER2SRV_IMAX",
+      "aliases": [
+        "STEER2SRV_IMAX",
+        "ATC_STR_RAT_IMAX"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "label14",
+      "kind": "label",
+      "parent": "groupBox5",
+      "x": 6.0,
+      "y": 86.0,
+      "w": 54.0,
+      "h": 13.0,
+      "text": "IMAX"
+    },
+    {
+      "name": "STEER2SRV_D",
+      "kind": "mnum",
+      "parent": "groupBox5",
+      "x": 111.0,
+      "y": 59.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "STEER2SRV_D",
+      "aliases": [
+        "STEER2SRV_D",
+        "ATC_STR_RAT_D"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "label15",
+      "kind": "label",
+      "parent": "groupBox5",
+      "x": 6.0,
+      "y": 63.0,
+      "w": 15.0,
+      "h": 13.0,
+      "text": "D"
+    },
+    {
+      "name": "STEER2SRV_I",
+      "kind": "mnum",
+      "parent": "groupBox5",
+      "x": 111.0,
+      "y": 36.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "STEER2SRV_I",
+      "aliases": [
+        "STEER2SRV_I",
+        "ATC_STR_RAT_I"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "label16",
+      "kind": "label",
+      "parent": "groupBox5",
+      "x": 6.0,
+      "y": 40.0,
+      "w": 10.0,
+      "h": 13.0,
+      "text": "I"
+    },
+    {
+      "name": "STEER2SRV_P",
+      "kind": "mnum",
+      "parent": "groupBox5",
+      "x": 111.0,
+      "y": 13.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "STEER2SRV_P",
+      "aliases": [
+        "STEER2SRV_P",
+        "ATC_STR_RAT_P"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "label17",
+      "kind": "label",
+      "parent": "groupBox5",
+      "x": 6.0,
+      "y": 17.0,
+      "w": 14.0,
+      "h": 13.0,
+      "text": "P"
+    },
+    {
+      "name": "groupBox1",
+      "kind": "group",
+      "parent": "$this",
+      "x": 414.0,
+      "y": 167.0,
+      "w": 195.0,
+      "h": 108.0,
+      "text": "Avoidance"
+    },
+    {
+      "name": "SONAR_DEBOUNCE",
+      "kind": "mnum",
+      "parent": "groupBox1",
+      "x": 111.0,
+      "y": 82.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "SONAR_DEBOUNCE",
+      "aliases": [
+        "SONAR_DEBOUNCE",
+        "RNGFND_DEBOUNCE"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label4",
+      "kind": "label",
+      "parent": "groupBox1",
+      "x": 6.0,
+      "y": 86.0,
+      "w": 99.0,
+      "h": 16.0,
+      "text": "Sonar Debounce"
+    },
+    {
+      "name": "SONAR_TURN_TIME",
+      "kind": "mnum",
+      "parent": "groupBox1",
+      "x": 111.0,
+      "y": 59.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "SONAR_TURN_TIME",
+      "aliases": [
+        "SONAR_TURN_TIME",
+        "RNGFND_TURN_TIME"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label1",
+      "kind": "label",
+      "parent": "groupBox1",
+      "x": 6.0,
+      "y": 63.0,
+      "w": 99.0,
+      "h": 16.0,
+      "text": "Turn Time"
+    },
+    {
+      "name": "SONAR_TURN_ANGLE",
+      "kind": "mnum",
+      "parent": "groupBox1",
+      "x": 111.0,
+      "y": 36.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "SONAR_TURN_ANGLE",
+      "aliases": [
+        "SONAR_TURN_ANGLE",
+        "RNGFND_TURN_ANGL"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label2",
+      "kind": "label",
+      "parent": "groupBox1",
+      "x": 6.0,
+      "y": 40.0,
+      "w": 99.0,
+      "h": 16.0,
+      "text": "Turn Angle"
+    },
+    {
+      "name": "SONAR_TRIGGER_CM",
+      "kind": "mnum",
+      "parent": "groupBox1",
+      "x": 111.0,
+      "y": 13.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "SONAR_TRIGGER_CM",
+      "aliases": [
+        "SONAR_TRIGGER_CM",
+        "RNGFND_TRIGGR_CM"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "label3",
+      "kind": "label",
+      "parent": "groupBox1",
+      "x": 6.0,
+      "y": 17.0,
+      "w": 99.0,
+      "h": 16.0,
+      "text": "Trigger Dist (cm)"
+    },
+    {
+      "name": "groupBox2",
+      "kind": "group",
+      "parent": "$this",
+      "x": 12.0,
+      "y": 165.0,
+      "w": 195.0,
+      "h": 37.0,
+      "text": "Steering Mode"
+    },
+    {
+      "name": "TURN_RADIUS",
+      "kind": "mnum",
+      "parent": "groupBox2",
+      "x": 111.0,
+      "y": 12.0,
+      "w": 78.0,
+      "h": 20.0,
+      "param": "TURN_RADIUS",
+      "aliases": [
+        "TURN_RADIUS"
+      ],
+      "nums": [
+        0.0,
+        0.0,
+        1.0,
+        0.1
+      ]
+    },
+    {
+      "name": "label11",
+      "kind": "label",
+      "parent": "groupBox2",
+      "x": 6.0,
+      "y": 16.0,
+      "w": 99.0,
+      "h": 13.0,
+      "text": "Turn Radius"
+    },
+    {
+      "name": "BUT_refreshpart",
+      "kind": "button",
+      "parent": "$this",
+      "x": 431.0,
+      "y": 328.0,
+      "w": 103.0,
+      "h": 19.0,
+      "text": "Refresh Screen"
+    },
+    {
+      "name": "CH7_OPTION",
+      "kind": "mcombo",
+      "parent": "$this",
+      "x": 123.0,
+      "y": 209.0,
+      "w": 78.0,
+      "h": 21.0,
+      "param": "CH7_OPTION",
+      "aliases": [
+        "CH7_OPTION",
+        "RC7_OPTION"
+      ]
+    },
+    {
+      "name": "label21",
+      "kind": "label",
+      "parent": "$this",
+      "x": 18.0,
+      "y": 212.0,
+      "w": 62.0,
+      "h": 13.0,
+      "text": "RC7 Opt"
+    },
+    {
+      "name": "label25",
+      "kind": "label",
+      "parent": "$this",
+      "x": 18.0,
+      "y": 239.0,
+      "w": 62.0,
+      "h": 13.0,
+      "text": "RC8 Opt"
+    },
+    {
+      "name": "CH8_OPTION",
+      "kind": "mcombo",
+      "parent": "$this",
+      "x": 123.0,
+      "y": 236.0,
+      "w": 78.0,
+      "h": 21.0,
+      "param": "CH8_OPTION",
+      "aliases": [
+        "CH8_OPTION",
+        "RC8_OPTION"
+      ]
+    },
+    {
+      "name": "label26",
+      "kind": "label",
+      "parent": "$this",
+      "x": 18.0,
+      "y": 266.0,
+      "w": 62.0,
+      "h": 13.0,
+      "text": "RC9 Opt"
+    },
+    {
+      "name": "CH9_OPTION",
+      "kind": "mcombo",
+      "parent": "$this",
+      "x": 123.0,
+      "y": 263.0,
+      "w": 78.0,
+      "h": 21.0,
+      "param": "CH9_OPTION",
+      "aliases": [
+        "CH9_OPTION",
+        "RC9_OPTION"
+      ]
+    },
+    {
+      "name": "label27",
+      "kind": "label",
+      "parent": "$this",
+      "x": 18.0,
+      "y": 293.0,
+      "w": 62.0,
+      "h": 13.0,
+      "text": "RC10 Opt"
+    },
+    {
+      "name": "CH10_OPTION",
+      "kind": "mcombo",
+      "parent": "$this",
+      "x": 123.0,
+      "y": 290.0,
+      "w": 78.0,
+      "h": 21.0,
+      "param": "CH10_OPTION",
+      "aliases": [
+        "CH10_OPTION",
+        "RC10_OPTION"
+      ]
+    }
+  ]
+}

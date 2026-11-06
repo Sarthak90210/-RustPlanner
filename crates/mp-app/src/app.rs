@@ -388,7 +388,13 @@ impl MissionPlannerApp {
                         self.joystick.stop(self.link.as_ref());
                         self.link = None;
                         self.link = Some(Link::connect_with(ConnectionSpec::UdpListen { port }, Some(platform::data_dir().join("logs"))));
-                        match sim::spawn(port) {
+                        let kind = match std::env::var("MP_SIM_KIND").as_deref() {
+                            Ok("plane") => sim::SimKind::Plane,
+                            Ok("rover") => sim::SimKind::Rover,
+                            Ok("tracker") => sim::SimKind::Tracker,
+                            _ => sim::SimKind::Copter,
+                        };
+                        match sim::spawn_with(sim::SimOptions { gcs_port: port, sysid: 1, kind, offset: (0.0, 0.0) }) {
                             Ok(h) => {
                                 self.sim = Some(h);
                                 self.toasts.info("Simulator started");
@@ -520,6 +526,7 @@ impl MissionPlannerApp {
             }
             self.flight_plan.on_event(&e, &mut self.toasts);
             self.config.on_event(&e, &mut self.toasts);
+            self.setup.on_event(&e, link, &mut self.toasts);
             self.flight_data.on_event(&e);
             self.flight_data.on_log_event(&e);
         }
@@ -1171,6 +1178,7 @@ impl eframe::App for MissionPlannerApp {
                 } = self;
                 let view = settings.view;
                 if view != View::Setup { setup.close_terminal(); }
+                if view != View::Config { config.leave_vehicle_tuning(); }
                 let mut app = AppCtx {
                     link: link.as_ref(),
                     extra_links: extra_links.as_slice(),
@@ -1229,6 +1237,7 @@ impl eframe::App for MissionPlannerApp {
             let simulated = std::env::var_os("MP_AUTOSIM").is_some() || std::env::var_os("MP_SWARM").is_some();
             capture.tick(&ctx, !simulated || (connected && params_complete), serde_json::json!({
                 "view": format!("{:?}", self.settings.view), "connected": connected,
+                "firmware": self.link.as_ref().map(|l| format!("{:?}", l.shared.read().cs.firmware)),
                 "params_complete": params_complete, "parameters": parameters,
             }));
         }

@@ -18,3 +18,4 @@ pub mod setup_pages;
 pub mod simulation;
 pub mod survey_ui;
 pub mod tuning;
+pub mod vehicle_tuning;
