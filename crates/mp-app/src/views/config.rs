@@ -561,6 +561,136 @@ mod parameter_file_tests {
         assert!(editor.check_param_count_divergence);
         assert!(editor.pending.is_empty());
     }
+
+    #[test]
+    fn cell_values_follow_cellvaluechanged() {
+        // comma decimal separator, mXparser arithmetic
+        assert_eq!(cell_value("ATC_RAT_RLL_P", "1,25"), Some(1.25));
+        assert_eq!(cell_value("WPNAV_SPEED", "2*(100+50)"), Some(300.0));
+        assert_eq!(cell_value("X", "-2^3 + 10 / 4"), Some(-5.5));
+        assert_eq!(cell_value("X", " 7 "), Some(7.0));
+        // RC/HS reverse: 0 means reversed (-1)
+        assert_eq!(cell_value("RC1_REV", "0"), Some(-1.0));
+        assert_eq!(cell_value("HS3_REV", "0"), Some(-1.0));
+        assert_eq!(cell_value("SERVO1_REVERSED", "0"), Some(0.0));
+        // not a number, or NaN/infinity: the cell turns red
+        assert_eq!(cell_value("X", "not_a_number"), None);
+        assert_eq!(cell_value("X", "1/0"), None);
+        assert_eq!(cell_value("X", "(1+2"), None);
+        assert_eq!(cell_value("X", ""), None);
+    }
+
+    #[test]
+    fn disconnect_marks_in_flight_writes_failed() {
+        let mut editor = ParamEditor::default();
+        editor.pending.insert("ATC_RAT_RLL_P".to_string());
+        editor.pending.insert("ATC_RAT_PIT_P".to_string());
+        editor.fail_pending();
+        assert!(editor.pending.is_empty());
+        assert_eq!(editor.failed.len(), 2);
+    }
+}
+
+/// Params_CellValueChanged: RCn_REV/HSn_REV "0" becomes "-1", ',' is a decimal point, and the
+/// text is an mXparser expression; NaN and infinity are rejected (the cell turns red).
+pub fn cell_value(name: &str, raw: &str) -> Option<f64> {
+    let mut text = raw.trim().to_string();
+    if name.ends_with("_REV") && (name.starts_with("RC") || name.starts_with("HS")) && text == "0" {
+        text = "-1".into();
+    }
+    let text = text.replace(',', ".");
+    let mut p = Expr { s: text.as_bytes(), i: 0 };
+    let v = p.sum()?;
+    p.ws();
+    (p.i == p.s.len() && v.is_finite()).then_some(v)
+}
+
+/// The arithmetic subset of mXparser's Expression: + - * / % ^, unary signs, brackets, pi, e.
+struct Expr<'a> {
+    s: &'a [u8],
+    i: usize,
+}
+
+impl Expr<'_> {
+    fn ws(&mut self) {
+        while self.s.get(self.i).is_some_and(|c| c.is_ascii_whitespace()) {
+            self.i += 1;
+        }
+    }
+    fn eat(&mut self, c: u8) -> bool {
+        self.ws();
+        if self.s.get(self.i) == Some(&c) {
+            self.i += 1;
+            true
+        } else {
+            false
+        }
+    }
+    fn sum(&mut self) -> Option<f64> {
+        let mut v = self.product()?;
+        loop {
+            if self.eat(b'+') {
+                v += self.product()?;
+            } else if self.eat(b'-') {
+                v -= self.product()?;
+            } else {
+                return Some(v);
+            }
+        }
+    }
+    fn product(&mut self) -> Option<f64> {
+        let mut v = self.unary()?;
+        loop {
+            if self.eat(b'*') {
+                v *= self.unary()?;
+            } else if self.eat(b'/') {
+                v /= self.unary()?;
+            } else if self.eat(b'%') {
+                v %= self.unary()?;
+            } else {
+                return Some(v);
+            }
+        }
+    }
+    fn unary(&mut self) -> Option<f64> {
+        if self.eat(b'-') {
+            return Some(-self.unary()?);
+        }
+        if self.eat(b'+') {
+            return self.unary();
+        }
+        self.power()
+    }
+    fn power(&mut self) -> Option<f64> {
+        let base = self.atom()?;
+        if self.eat(b'^') {
+            // right associative, binds tighter than a leading minus (-2^2 = -4)
+            return Some(base.powf(self.unary()?));
+        }
+        Some(base)
+    }
+    fn atom(&mut self) -> Option<f64> {
+        if self.eat(b'(') {
+            let v = self.sum()?;
+            return self.eat(b')').then_some(v);
+        }
+        self.ws();
+        let start = self.i;
+        while self.s.get(self.i).is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'.') {
+            // exponent sign: 1e-3
+            self.i += 1;
+            if matches!(self.s.get(self.i - 1), Some(b'e' | b'E')) && self.s[start].is_ascii_digit() && matches!(self.s.get(self.i), Some(b'-' | b'+')) {
+                self.i += 1;
+            }
+        }
+        let tok = std::str::from_utf8(&self.s[start..self.i]).ok()?;
+        match tok {
+            "pi" => Some(std::f64::consts::PI),
+            "e" => Some(std::f64::consts::E),
+            _ if tok.starts_with(|c: char| c.is_ascii_digit() || c == '.') => tok.parse().ok(),
+            _ => None,
+        }
+    }
 }
 
 /// Matches search pattern against text, supporting `*` (any sequence) and `?` (any single char).
@@ -677,6 +807,8 @@ pub struct ParamEditor {
     pub show_reboot_prompt: bool,
     /// Whether to check if available parameter count diverged from vehicle reported count post-save
     pub check_param_count_divergence: bool,
+    /// "Out of range" Yes/No for an edited value (name, value)
+    range_confirm: Option<(String, f32)>,
 }
 
 impl ParamEditor {
@@ -766,6 +898,11 @@ impl ParamEditor {
             (self.offline_params.clone(), Firmware::ArduCopter2, (0, 0))
         };
 
+        if !is_connected && !self.pending.is_empty() {
+            // the link went away before PARAM_VALUE came back: the write never confirmed
+            self.fail_pending();
+        }
+
         if self.check_param_count_divergence {
             self.check_param_count_divergence = false;
             if let Some(link) = app.link {
@@ -845,6 +982,7 @@ impl ParamEditor {
             ui.add_enabled_ui(is_connected, |ui| {
                 if b(ui, r(91.0, 19.0), "Refresh Params") {
                     self.edits.clear();
+                    self.failed.clear();
                     if let Some(link) = app.link {
                         link.send(LinkCommand::RequestParams);
                     }
@@ -859,6 +997,8 @@ impl ParamEditor {
                     if b(ui, r(141.0, 22.0), "Commit Params") {
                         if let Some(link) = app.link {
                             link.send(LinkCommand::CommandLong { command: 245, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
+                            // BUT_commitToFlash_Click's message box
+                            app.toasts.error("Parameters committed to non-volatile memory");
                         }
                     }
                 });
@@ -1024,7 +1164,7 @@ impl ParamEditor {
             let mut rows = rows;
             let favs = app.settings.fav_params.clone();
             rows.sort_by_key(|(k, _)| !favs.contains(k));
-            self.grid(ui, app.link, fw, &rows, &mut app.settings.fav_params, defaults.as_ref());
+            self.grid(ui, &mut app.toasts, app.link, fw, &rows, &mut app.settings.fav_params, defaults.as_ref());
         });
         // presaved file arrived: show it in ParamCompare
         if let Some(r) = self.presaved.lock().unwrap().take() {
@@ -1073,7 +1213,41 @@ impl ParamEditor {
         self.compare_window(ui.ctx());
         self.missing_window(ui.ctx());
         self.write_confirm_window(ui.ctx(), app.link, fw);
+        self.range_confirm_window(ui.ctx(), &params);
         self.reboot_prompt_window(ui.ctx(), app.link, app.toasts);
+    }
+
+    fn fail_pending(&mut self) {
+        self.failed.extend(std::mem::take(&mut self.pending));
+    }
+
+    /// Params_CellValueChanged's "Out of range" box: No puts the old value back.
+    fn range_confirm_window(&mut self, ctx: &egui::Context, params: &BTreeMap<String, mp_core::link::Param>) {
+        let Some((name, value)) = self.range_confirm.clone() else { return };
+        let mut answer = None;
+        egui::Modal::new(egui::Id::new("param_out_of_range")).show(ctx, |ui| {
+            ui.set_width(300.0);
+            ui.label(RichText::new(crate::i18n::t("Out of range")).strong());
+            theme::label(ui, &format!("{name}{}", crate::i18n::t(" value is out of range. Do you want to continue?")));
+            ui.horizontal(|ui| {
+                if theme::button(ui, "Yes").clicked() {
+                    answer = Some(true);
+                }
+                if theme::button(ui, "No").clicked() {
+                    answer = Some(false);
+                }
+            });
+        });
+        let Some(yes) = answer else { return };
+        self.range_confirm = None;
+        if yes {
+            self.failed.remove(&name);
+            if params.get(&name).is_some_and(|p| p.value == value) {
+                self.edits.remove(&name);
+            } else {
+                self.edits.insert(name, value);
+            }
+        }
     }
 
     /// Confirmation dialog for parameter changes, matching C# ConfigRawParams BUT_writePIDS_Click
@@ -1245,7 +1419,7 @@ impl ParamEditor {
     }
 
     /// The Params DataGridView: Name 130 | Value 70 | Default 70 | Units 60 | Options 150 | Desc | Fav 30
-    fn grid(&mut self, ui: &mut egui::Ui, _link: Option<&Link>, fw: Firmware, rows: &[(String, f32)], favs: &mut Vec<String>, defaults: Option<&BTreeMap<String, f32>>) {
+    fn grid(&mut self, ui: &mut egui::Ui, toasts: &mut Toasts, _link: Option<&Link>, fw: Firmware, rows: &[(String, f32)], favs: &mut Vec<String>, defaults: Option<&BTreeMap<String, f32>>) {
         // Default_value.Visible = has_defaults
         let widths = [130.0f32, 70.0, if defaults.is_some() { 70.0 } else { -1.0 }, 60.0, 150.0, 0.0, 30.0];
         let headers = ["Name", "Value", "Default", "Units", "Options", "Desc", "Fav"];
@@ -1412,8 +1586,12 @@ impl ParamEditor {
                             .show_ui(ui, |ui| {
                                 for (k, s) in &m.values {
                                     if ui.selectable_label(*k as f32 == v, format!("{k}: {s}")).clicked() {
-                                        v = *k as f32;
-                                        changed = true;
+                                        if m.read_only {
+                                            toasts.error(format!("{name}{}", crate::i18n::t(" is marked as ReadOnly, and will not be changed")));
+                                        } else {
+                                            v = *k as f32;
+                                            changed = true;
+                                        }
                                     }
                                 }
                             })
@@ -1429,9 +1607,22 @@ impl ParamEditor {
                         r.request_focus();
                     }
                     if r.lost_focus() {
-                        if let Ok(nv) = buf.trim().parse::<f32>() {
-                            v = nv;
-                            changed = true;
+                        // Params_CellValueChanged: parse, ReadOnly, then range (Yes/No)
+                        match cell_value(name, buf) {
+                            None => {
+                                self.failed.insert(name.clone());
+                            }
+                            Some(_) if meta.is_some_and(|m| m.read_only) => {
+                                toasts.error(format!("{name}{}", crate::i18n::t(" is marked as ReadOnly, and will not be changed")));
+                            }
+                            Some(nv) if meta.and_then(|m| m.range).is_some_and(|(lo, hi)| nv < lo || nv > hi) => {
+                                self.range_confirm = Some((name.clone(), nv as f32));
+                            }
+                            Some(nv) => {
+                                v = nv as f32;
+                                changed = true;
+                                self.failed.remove(name);
+                            }
                         }
                         self.editing = None;
                     }
@@ -1444,6 +1635,7 @@ impl ParamEditor {
                     self.edits.remove(name);
                     self.failed.remove(name);
                 } else if changed {
+                    self.failed.remove(name);
                     if v == *value {
                         self.edits.remove(name);
                     } else {

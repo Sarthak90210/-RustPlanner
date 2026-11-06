@@ -293,7 +293,7 @@ impl Log {
                 min("CURR", "Vcc")
             }
         };
-        if vcc < f64::MAX && vcc >= 0.0 {
+        if (0.0..f64::MAX).contains(&vcc) {
             if vcc < 4.5 {
                 out.push(("Brownout / Power".into(), "FAIL".into(), format!("Severe brownout risk: VCC dropped to {vcc:.2} V (<4.5 V critical)")));
             } else if vcc < 4.8 {
@@ -307,7 +307,7 @@ impl Log {
 
         // 3. IMU Vibration
         let vibe = ["VibeX", "VibeY", "VibeZ"].iter().map(|c| max("VIBE", c)).fold(f64::MIN, f64::max);
-        if vibe > f64::MIN && vibe >= 0.0 {
+        if vibe.is_finite() && vibe >= 0.0 {
             if vibe > 60.0 {
                 out.push(("Vibration".into(), "FAIL".into(), format!("Max vibration {vibe:.1} m/s/s exceeds 60 m/s/s heuristic threshold")));
             } else if vibe > 30.0 {
@@ -326,7 +326,7 @@ impl Log {
             let s = self.series("VIBE", c);
             (s.len() >= 2).then(|| s.windows(2).map(|p| if p[1].1 >= p[0].1 { p[1].1 - p[0].1 } else { p[1].1.max(0.0) }).sum::<f64>())
         }).fold(f64::MIN, f64::max);
-        if clips > f64::MIN && clips >= 0.0 {
+        if clips.is_finite() && clips >= 0.0 {
             if clips > 100.0 {
                 out.push(("IMU Clipping".into(), "FAIL".into(), format!("Severe sensor clipping: max {clips:.0} clipping events recorded")));
             } else if clips > 0.0 {
@@ -396,7 +396,7 @@ impl Log {
 
         // No fixed cutoff without knowing pack configuration and chemistry.
         let v = min("BAT", "Volt");
-        if v < f64::MAX && v >= 0.0 {
+        if (0.0..f64::MAX).contains(&v) {
             out.push(("Battery".into(), "INFO".into(), format!("Minimum logged voltage {v:.2} V; pack configuration and failsafe thresholds not evaluated")));
         } else {
             out.push(("Battery".into(), "NA".into(), "No finite BAT voltage samples".into()));
@@ -427,7 +427,7 @@ impl Log {
             let mut unknown = 0;
             for r in self.records.iter().filter(|r| r.type_id == t) {
                 match code.and_then(|c| r.values.get(c)).and_then(Value::as_f64) {
-                    Some(v) if v == 0.0 => recoveries += 1,
+                    Some(0.0) => recoveries += 1,
                     Some(v) if v.is_finite() && v > 0.0 => faults += 1,
                     _ => unknown += 1,
                 }

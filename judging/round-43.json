@@ -1,0 +1,81 @@
+{
+  "round": 43,
+  "date": "2026-11-06",
+  "review_type": "Independent adversarial source, parity, and UI/UX review of parameter wildcard glob search matching and post-write autopilot parameter count mutation detection",
+  "reviewed_head": "536ceb924b4fa1f2ffb434985f60f107fb8dea33",
+  "reviewed_uncommitted_worktree": false,
+  "reviewed_files": [
+    "crates/mp-app/src/views/config.rs",
+    "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigRawParams.cs"
+  ],
+  "verdict": "REJECTED for exact-clone parity (Score: 6.9/10). Critical parameter management and UX parity capabilities verified: wildcard_matches(pattern, text) implements pattern matching supporting '*' (any sequence) and '?' (any single character) case-insensitively across parameter names, descriptions, and display names matching C# ConfigRawParams.cs L895 Regex(searchfor.Replace('*', '.*').Replace('..*', '.*')); category tree match badge computation ('+ {g} ({match_cnt})' and 'All ({total_matches})') and parameter grid rows filtering correctly synchronize with wildcard queries; ParamEditor::on_event sets check_param_count_divergence upon write completion (pending.is_empty()); ParamEditor::ui detects when autopilot reported parameter count diverges from received count post-write matching C# ConfigRawParams.cs L379-L393, dispatching an error toast if armed ('The number of available parameters changed, until full param refresh is done, some parameters will not be available.') or an informational toast ('The number of available parameters changed. A full param refresh will be done to show all params.') and LinkCommand::RequestParams refresh if unarmed. All 207 workspace unit and integration tests pass cleanly with zero warnings or failures. Multi-platform CI run 42258215491 passed 100% across all 5 runners (Ubuntu, Windows, macOS, Android, iOS). However, modern Android Scoped Storage (API 30+) and iOS sandboxing continue to restrict posix filesystem access without OS-level SAF/UIDocumentPicker dialogs, and Commit Params lacks toast feedback ('Parameters committed to non-volatile memory') matching C# ConfigRawParams.cs L1105.",
+  "scores": {
+    "overall": 6.9,
+    "ui_ux": 7.3,
+    "features": 7.7,
+    "cross_platform_delivery": 4.0,
+    "scale": "Adversarial parity evaluation on a 0-10 exact-clone scale. 10/10 requires 100% feature, UI/UX, behavioral, and architectural equivalence to Mission Planner C# across all target platforms."
+  },
+  "independent_validation": [
+    {
+      "command": "cargo test --workspace",
+      "result": "PASS: 207 passed, 0 failed, 1 ignored (64 mp-core unit, 25 mp-core integration, 118 mp-app unit)",
+      "scope": "Reviewer independently executed the full workspace test suite locally on Windows. Zero test failures, zero regressions, zero warnings across all workspace crates."
+    },
+    {
+      "command": "cargo test -p mp-app --lib wildcard_glob_parameter_search_matches_asterisk_and_question_mark",
+      "result": "PASS: 1 passed, 0 failed",
+      "scope": "Independently verified wildcard search pattern matching across asterisks (*), question marks (?), prefix, suffix, and empty query matches."
+    },
+    {
+      "command": "cargo test -p mp-app --lib post_write_parameter_count_divergence_triggers_check_flag",
+      "result": "PASS: 1 passed, 0 failed",
+      "scope": "Independently verified that ParamEditor::on_event triggers check_param_count_divergence flag upon completion of parameter writes."
+    },
+    {
+      "command": "gh run view 42258215491",
+      "result": "SUCCESS: All 5 jobs passed (desktop ubuntu-latest in 3m45s, desktop windows-latest in 6m12s, desktop macos-latest in 2m37s, android in 1m31s, ios in 46s)",
+      "scope": "Verified remote multi-platform GitHub Actions CI run 42258215491 triggered on commit 536ceb9."
+    }
+  ],
+  "verified_improvements": [
+    "R42-02 resolved: ParamEditor wildcard glob parameter search: wildcard_matches(pattern, text) supports '*' (any sequence) and '?' (single char) case-insensitively, matching C# ConfigRawParams.cs L895 Regex filter. Operators can search parameter families using patterns like 'BATT*_VOLT' or 'SERVO?_MIN'.",
+    "R42-02 resolved: Parameter category tree view match tallying and grid rows filtering both apply wildcard_matches against parameter names, descriptions, and display names, ensuring matching badge counts and grid visibility stay synchronized during wildcard searches.",
+    "R42-03 resolved: Post-write parameter count mutation detection: ParamEditor::on_event sets check_param_count_divergence = true when write completion occurs (pending.is_empty()).",
+    "R42-03 resolved: In ParamEditor::ui, if the vehicle's reported count (s.param_count) diverges from the received count (s.params.len()), Mission Planner parity behavior from ConfigRawParams.cs L379-L393 is executed: if armed, toasts an error ('The number of available parameters changed, until full param refresh is done, some parameters will not be available.'); if unarmed, toasts info ('The number of available parameters changed. A full param refresh will be done to show all params.') and dispatches LinkCommand::RequestParams.",
+    "Workspace test expansion: Test suite expanded from 205 to 207 passing tests with dedicated tests for wildcard glob parameter searches and post-write parameter count divergence trigger.",
+    "Multi-platform CI excellence: Remote GitHub Actions CI run 42258215491 succeeded across all 5 platforms (Windows, Linux, macOS, Android debug APK, and iOS)."
+  ],
+  "findings": [
+    {
+      "id": "R43-01",
+      "priority": "P1",
+      "subsystem": "Mobile Scoped Storage & Native SAF File Picker Bridge",
+      "status": "architectural limitation",
+      "evidence": [
+        "document_roots() in crates/mp-app/src/platform.rs queries posix filesystem paths (/sdcard/Download, /storage/emulated/0).",
+        "On Android 11+ (API level 30+), Scoped Storage enforces SELinux isolation where direct posix access to /storage/emulated/0 is blocked for non-manager apps without using the Storage Access Framework (SAF / Intent.ACTION_OPEN_DOCUMENT). Similarly, iOS external file access requires UIDocumentPickerViewController to issue security-scoped resource bookmarks."
+      ],
+      "impact": "On modern Android and iOS devices, operators cannot access files in shared device storage or third-party cloud drives without OS SAF/DocumentPicker delegation.",
+      "required_fix": "Implement JNI intent dispatch for Android SAF (ACTION_OPEN_DOCUMENT / ACTION_CREATE_DOCUMENT) and Objective-C/Swift UIDocumentPickerViewController bindings on iOS."
+    },
+    {
+      "id": "R43-02",
+      "priority": "P3",
+      "subsystem": "Commit Params Toast Feedback Parity",
+      "status": "missing feature",
+      "evidence": [
+        "In C# ConfigRawParams.cs L1093-L1107 (BUT_commitToFlash_Click), upon dispatching MAV_CMD_PREFLIGHT_STORAGE (command 245), Mission Planner alerts the operator: 'Parameters committed to non-volatile memory'.",
+        "In crates/mp-app/src/views/config.rs L857-L865, clicking 'Commit Params' dispatches LinkCommand::CommandLong { command: 245, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }, but emits no toast or confirmation message to the operator."
+      ],
+      "impact": "Operators clicking 'Commit Params' receive no visual confirmation that parameters were committed to non-volatile flash memory.",
+      "required_fix": "Emit an informational toast ('Parameters committed to non-volatile memory') in ParamEditor when 'Commit Params' is clicked, matching C# ConfigRawParams.cs L1105."
+    }
+  ],
+  "next_concrete_task": "Add toast feedback to 'Commit Params' matching C# ConfigRawParams.cs L1105 ('Parameters committed to non-volatile memory').",
+  "not_verified": [
+    "No physical flight controller was connected via hardware USB/telemetry radios.",
+    "Mobile APK was compiled in CI but not executed on physical Android 11+ or iOS 17+ hardware.",
+    "Pixel-level font rendering and GDI+ anti-aliasing were not diffed against WinForms."
+  ]
+}
