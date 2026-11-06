@@ -5,7 +5,6 @@
 use std::collections::VecDeque;
 
 use egui::Vec2;
-use mp_core::link::LinkCommand;
 use mp_core::mavcmd;
 use mp_core::mission::{self, Locationwp};
 
@@ -557,12 +556,8 @@ impl FlightPlanView {
             app.toasts.error("Please Connect First");
             return;
         };
-        if read {
-            l.send(LinkCommand::ReadMission { mission_type: mt as u8 });
-        } else {
-            let items = self.list_for(mt).clone();
-            l.send(LinkCommand::WriteMission { mission_type: mt as u8, items });
-        }
+        let items = if read { Vec::new() } else { self.list_for(mt).clone() };
+        self.mission_io(l, mt as u8, read, items);
     }
 
     fn save_list(&mut self, mt: usize, def: &str, app: &mut AppCtx) {

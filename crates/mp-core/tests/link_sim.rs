@@ -309,3 +309,23 @@ fn lua_repl_against_sim() {
     assert!(text.contains("Hello World!!"), "{text:?}");
     assert!(text.contains("> 7\n"), "{text:?}");
 }
+
+#[test]
+fn mission_over_mavftp() {
+    let port = 14760;
+    let link = Link::connect(ConnectionSpec::UdpListen { port });
+    let _sim = sim::spawn(port).unwrap();
+    wait_event(&link, Duration::from_secs(10), |e| matches!(e, LinkEvent::Connected));
+    let home = mp_core::mission::Locationwp::waypoint(-35.363, 149.165, 584.0, 0);
+    let wps = vec![home, mp_core::mission::Locationwp::waypoint(-35.36, 149.16, 40.0, 3), mp_core::mission::Locationwp::waypoint(-35.361, 149.161, 60.0, 3)];
+    mp_core::missionpck::ftp_write(&link, 0, &wps).unwrap();
+    // the vehicle now reports the same mission over the MAVLink protocol
+    link.send(LinkCommand::ReadMission { mission_type: 0 });
+    let got = wait_event(&link, Duration::from_secs(10), |e| matches!(e, LinkEvent::MissionDownloaded { mission_type: 0, .. }));
+    let LinkEvent::MissionDownloaded { items, .. } = got else { unreachable!() };
+    assert_eq!(items.len(), 3);
+    assert!((items[2].lat - -35.361).abs() < 1e-6 && items[2].alt == 60.0);
+    let back = mp_core::missionpck::ftp_read(&link, 0).unwrap();
+    assert_eq!(back.len(), 3);
+    assert_eq!(back[1].alt, 40.0);
+}

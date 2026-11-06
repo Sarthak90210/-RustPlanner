@@ -14,6 +14,7 @@ pub mod georef;
 pub mod signedfw;
 pub mod tracker;
 pub mod repl;
+pub mod missionpck;
 pub mod link;
 pub mod mavcmd;
 pub mod mission;

@@ -51,6 +51,8 @@ pub struct FlightPlanView {
     verify_height: bool,
     spline: bool,
     mavftp: bool,
+    /// a MAVFtp mission transfer in progress; reports like the MAVLink protocol does
+    ftp_job: Option<crossbeam_channel::Receiver<LinkEvent>>,
     grid: bool,
     alt_warn: f32,
     mission_type: usize,
@@ -103,6 +105,7 @@ impl Default for FlightPlanView {
             verify_height: false,
             spline: false,
             mavftp: false,
+            ftp_job: None,
             grid: false,
             alt_warn: 0.0,
             mission_type: 0,
@@ -173,7 +176,43 @@ impl FlightPlanView {
         Locationwp { id, lat, lng, alt, frame: app.settings.alt_frame, ..Default::default() }
     }
 
+    /// Read / Write a mission list: packed over MAVFtp when "MAVFTP" is ticked (falling back
+    /// to the mission protocol if that fails), else the MAVLink mission protocol.
+    pub(super) fn mission_io(&mut self, l: &mp_core::link::Link, mission_type: u8, read: bool, items: Vec<Locationwp>) {
+        if !self.mavftp {
+            l.send(if read { LinkCommand::ReadMission { mission_type } } else { LinkCommand::WriteMission { mission_type, items } });
+            return;
+        }
+        let (tx, rx) = crossbeam_channel::bounded(1);
+        let mut ftp = mp_core::ftp::Ftp::new(l);
+        let link = l.sender();
+        std::thread::spawn(move || {
+            let ev = if read {
+                mp_core::missionpck::read_with(&mut ftp, mission_type).map(|items| LinkEvent::MissionDownloaded { mission_type, items })
+            } else {
+                mp_core::missionpck::write_with(&mut ftp, mission_type, &items).map(|_| LinkEvent::MissionUploaded { mission_type, result: Ok(()) })
+            };
+            match ev {
+                Ok(e) => {
+                    let _ = tx.send(e);
+                }
+                Err(e) => {
+                    log::warn!("mission over MAVFtp failed: {e}; using the mission protocol");
+                    let _ = link.send(if read { LinkCommand::ReadMission { mission_type } } else { LinkCommand::WriteMission { mission_type, items } });
+                }
+            }
+        });
+        self.ftp_job = Some(rx);
+    }
+
     pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
+        if let Some(ev) = self.ftp_job.as_ref().and_then(|rx| rx.try_recv().ok()) {
+            self.ftp_job = None;
+            self.on_event(&ev, app.toasts);
+        }
+        if self.ftp_job.is_some() {
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
+        }
         // developer switch for screenshots: MP_SURVEY=1 opens Survey (Grid) on a sample polygon
         if self.polygon.is_empty() && std::env::var_os("MP_SURVEY").is_some() {
             let (lat, lng) = (-35.363261, 149.165230);
@@ -308,12 +347,12 @@ impl FlightPlanView {
         if read || write {
             match app.link.filter(|_| connected) {
                 None => app.toasts.error("Please Connect First"),
-                Some(l) if read => l.send(LinkCommand::ReadMission { mission_type: self.mission_type as u8 }),
+                Some(l) if read => self.mission_io(l, self.mission_type as u8, true, Vec::new()),
                 Some(l) => {
                     // home is item 0 of the mission only; fence and rally lists are sent as-is
                     let mut all = if self.mission_type == 0 { vec![self.home] } else { Vec::new() };
                     all.extend(self.items.iter().copied());
-                    l.send(LinkCommand::WriteMission { mission_type: self.mission_type as u8, items: all });
+                    self.mission_io(l, self.mission_type as u8, false, all);
                 }
             }
         }
@@ -396,7 +435,11 @@ impl FlightPlanView {
         p.text(o + Vec2::new(479.0, 4.0), egui::Align2::LEFT_TOP, "Alt Warn", f.clone(), white);
         ui.put(r(482.0, 20.0, 40.0, 20.0), egui::DragValue::new(&mut self.alt_warn));
         ui.put(r(528.0, 12.0, 60.0, 17.0), egui::Checkbox::new(&mut self.spline, "Spline"));
-        ui.put(r(589.0, 12.0, 70.0, 17.0), egui::Checkbox::new(&mut self.mavftp, "MAVFTP"));
+        // chk_usemavftp: Settings "UseMissionMAVFTP"
+        self.mavftp = app.settings.planner.get("UseMissionMAVFTP").map(|v| v == "True").unwrap_or(false);
+        if ui.put(r(589.0, 12.0, 70.0, 17.0), egui::Checkbox::new(&mut self.mavftp, "MAVFTP")).changed() {
+            app.settings.planner.insert("UseMissionMAVFTP".into(), if self.mavftp { "True" } else { "False" }.into());
+        }
         let min_r = Rect::from_min_size(Pos2::new(full.right() - 37.0, o.y), Vec2::new(37.0, 21.0));
         if put_button(ui, min_r, if self.waypoints_collapsed { "˄" } else { "˅" }) {
             self.waypoints_collapsed = !self.waypoints_collapsed;

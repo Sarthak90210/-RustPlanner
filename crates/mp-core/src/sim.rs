@@ -69,7 +69,7 @@ impl FtpFs {
         files.insert("@SYS/tasks.txt".to_string(), b"TasksV2\nfast_loop            MIN=  12 MAX=  55 AVG=  14 OVR=  0 SLP=  0, TOT= 3.2%\n".to_vec());
         files.insert("@SYS/dma.txt".to_string(), b"DMAV1\n".to_vec());
         files.insert("@SYS/timers.txt".to_string(), b"TimersV1\n".to_vec());
-        let dirs = ["/", "/APM", "/APM/LOGS", "/APM/scripts", "/APM/terrain", "@SYS", "@PARAM", "@ROMFS"].iter().map(|s| s.to_string()).collect();
+        let dirs = ["/", "/APM", "/APM/LOGS", "/APM/scripts", "/APM/terrain", "@SYS", "@PARAM", "@ROMFS", "@MISSION"].iter().map(|s| s.to_string()).collect();
         Self { files, dirs, sessions: Default::default(), repl_done: None }
     }
 
@@ -141,6 +141,10 @@ impl FtpFs {
         }
         self.files.entry("/repl/out".into()).or_default().extend_from_slice(out.as_bytes());
         self.repl_done = Some(end);
+    }
+
+    fn writing(&self, path: &str) -> bool {
+        self.sessions.values().any(|(p, w)| p == path && *w)
     }
 
     /// Handle one request payload; returns the reply payload.
@@ -291,6 +295,16 @@ fn repl_eval(expr: &str) -> String {
         Some(v) if v.fract() == 0.0 && v.abs() < 1e15 => format!("{}", v as i64),
         Some(v) => format!("{v}"),
         None => format!("[string \"{e}\"]:1: attempt to call a nil value"),
+    }
+}
+
+impl Vehicle {
+    fn list_ref(&self, t: u8) -> &Vec<Locationwp> {
+        match t {
+            1 => &self.fence,
+            2 => &self.rally,
+            _ => &self.mission,
+        }
     }
 }
 
@@ -749,8 +763,33 @@ impl Vehicle {
             }
             MavMessage::COMMAND_LONG(c) => self.command(c),
             MavMessage::FILE_TRANSFER_PROTOCOL(f) => {
+                // AP_Filesystem_Mission: the lists as packed files, read back once a write closes
+                for t in 0u8..3 {
+                    let p = crate::missionpck::path(t);
+                    if !self.ftp.writing(p) {
+                        let packed = crate::missionpck::pack(self.list_ref(t), t, 0);
+                        self.ftp.files.insert(p.to_string(), packed);
+                    }
+                }
                 let rep = self.ftp.handle(&f.payload, &self.params, &self.param_defaults);
                 self.ftp.repl_step();
+                for t in 0u8..3 {
+                    let p = crate::missionpck::path(t);
+                    if self.ftp.writing(p) {
+                        continue;
+                    }
+                    if let Some(b) = self.ftp.files.get(p) {
+                        if *b != crate::missionpck::pack(self.list_ref(t), t, 0) {
+                            if let Ok((items, _, _)) = crate::missionpck::unpack(b) {
+                                match t {
+                                    1 => self.fence = items,
+                                    2 => self.rally = items,
+                                    _ => self.mission = items,
+                                }
+                            }
+                        }
+                    }
+                }
                 self.send(MavMessage::FILE_TRANSFER_PROTOCOL(FILE_TRANSFER_PROTOCOL_DATA { target_network: 0, target_system: 255, target_component: 190, payload: rep }));
             }
             MavMessage::LOG_REQUEST_LIST(_) => {
