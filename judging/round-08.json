@@ -1,0 +1,26 @@
+{
+  "round": 8,
+  "commit": "6583e80",
+  "reviewer": "independent agent judge_round8",
+  "score": 6.6,
+  "ui_ux_score": 7.0,
+  "feature_score": 6.3,
+  "evidence": "Source review against C# plus 50 app-rendered captures in target/judging/round08; no build or run by the judge.",
+  "top_gaps": [
+    "Arm/Disarm: confirm only disarm, collect STATUSTEXT reasons and offer Force Arm",
+    "Resume Mission (WP prompt, trimmed upload, arm, takeoff), Restart Mission (WP 0 only), Set Home Alt (altoffsethome)",
+    "DroneCAN: parameters, update, GPS passthrough, filter/inspector/stats windows, SLCAN via MAVLink",
+    "Video: GStreamer/HereLink/gimbal video, capture device list",
+    "Sik radio through MAVLinkSerialPort while connected",
+    "Terminal: board combo, setup/tests/log buttons, SERIAL_CONTROL shell",
+    "Install Firmware disconnected: Bootloader Update / Force Bootloader",
+    "NumericUpDown spin arrows; GeoFence range label, FENCE_TYPE format",
+    "Plugins not executed",
+    "UI Language translations, Lang Edit",
+    "Lang Edit, OSDVideo, 3D Map, Custom GDAL, Support Proxy fall through",
+    "Camera Gimbal combos (Channelac/Channelap)",
+    "More map providers",
+    "Visual fit: Actions labels, Sik Antenna Mode, RTK sent wrap, embedded Flight Planner in DATA map",
+    "Scripts need external Python; no clr"
+  ]
+}
