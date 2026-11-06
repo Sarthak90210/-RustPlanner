@@ -52,7 +52,7 @@ macro_rules! forms {
 }
 
 const FORMS: &[(&str, &str)] = forms!(
-    "rangefinder", "airspeed", "optflow", "mount", "parachute", "tracker", "bluetooth", "esp8266", "cubeid", "dronecan", "repl", "initialparams", "compassmot", "serial", "sikradio", "osd", "adsb", "gpsorder", "hwosd", "georef", "fwdisabled", "paramloading", "secureap", "tradheli", "trackerui", "devops", "gmapcache"
+    "rangefinder", "airspeed", "optflow", "mount", "parachute", "tracker", "bluetooth", "esp8266", "cubeid", "dronecan", "repl", "initialparams", "compassmot", "serial", "sikradio", "osd", "adsb", "gpsorder", "hwosd", "georef", "fwdisabled", "paramloading", "secureap", "tradheli", "trackerui", "rtkinject", "devops", "gmapcache"
 );
 
 const IMAGES: &[(&str, &[u8])] = &[
@@ -121,6 +121,8 @@ pub struct FormState {
     pub disabled: std::collections::HashSet<String>,
     /// Track bar ranges (default 0..100).
     pub ranges: HashMap<String, (f64, f64)>,
+    /// Runtime Visible overrides (true shows a designer-hidden control, false hides one).
+    pub visible: HashMap<String, bool>,
 }
 
 impl FormState {
@@ -150,20 +152,28 @@ fn origin_of(f: &Form, ctl: &Ctl) -> Vec2 {
     off
 }
 
-fn hidden(f: &Form, ctl: &Ctl) -> bool {
+fn hidden(f: &Form, ctl: &Ctl, st: &FormState) -> bool {
+    let off = |c: &Ctl| st.visible.get(&c.name).map(|v| !*v).unwrap_or(c.hidden);
     // a 0x0 control (AESKEY) has no visible area in WinForms
-    if ctl.hidden || (ctl.w == 0.0 && ctl.h == 0.0 && ctl.kind != "label") {
+    if off(ctl) || (ctl.w == 0.0 && ctl.h == 0.0 && ctl.kind != "label") {
         return true;
     }
     let mut p = ctl.parent.as_str();
     while p != "$this" {
         match f.controls.iter().find(|c| c.name == p) {
-            Some(c) if c.hidden => return true,
+            Some(c) if off(c) => return true,
             Some(c) => p = c.parent.as_str(),
             None => break,
         }
     }
     false
+}
+
+/// Where `ctl` sits relative to the form origin (offset, size).
+pub fn ctl_rect(form_name: &str, ctl: &str) -> Option<(Vec2, Vec2)> {
+    let f = form(form_name);
+    let c = f.controls.iter().find(|c| c.name == ctl)?;
+    Some((origin_of(f, c) + Vec2::new(c.x, c.y), Vec2::new(c.w, c.h)))
 }
 
 fn font_for(c: &Ctl) -> egui::FontId {
@@ -197,7 +207,7 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
     let mut clicked = Vec::new();
     let mut maxy: f32 = 0.0;
     for c in &f.controls {
-        if hidden(f, c) {
+        if hidden(f, c, st) {
             continue;
         }
         let at = o + origin_of(f, c) + Vec2::new(c.x, c.y);
@@ -209,7 +219,9 @@ fn show_impl(ui: &mut egui::Ui, app: &mut AppCtx, name: &str, st: &mut FormState
         match c.kind.as_str() {
             "label" => {
                 let t = st.text.get(&c.name).cloned().unwrap_or(text);
-                let g = p.layout(t, font_for(c), Color32::WHITE, if c.w > 0.0 { c.w.max(20.0) + 40.0 } else { 400.0 });
+                // a one-line label is AutoSize: it grows instead of wrapping
+                let wrap = if c.h <= 16.0 || c.w <= 0.0 { f32::INFINITY } else { c.w.max(20.0) + 40.0 };
+                let g = p.layout(t, font_for(c), Color32::WHITE, wrap);
                 p.galley(at, g, Color32::WHITE);
             }
             "link" => {

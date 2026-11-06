@@ -121,10 +121,7 @@ pub struct SetupView {
     accel_user: String,
     level_label: String,
     simple_label: String,
-    inject: crate::rtcm::Injector,
-    inject_port: String,
-    inject_baud: u32,
-    inject_url: String,
+    rtk: crate::views::rtk_page::RtkPage,
     term: Option<Terminal>,
     term_port: String,
     term_baud: u32,
@@ -166,10 +163,7 @@ impl Default for SetupView {
             accel_user: String::new(),
             level_label: "Calibrate Level".into(),
             simple_label: "Simple Accel Cal".into(),
-            inject: Default::default(),
-            inject_port: "NTRIP".into(),
-            inject_baud: 115200,
-            inject_url: "ntrip://user:pass@host:2101/MOUNT".into(),
+            rtk: Default::default(),
             term: None,
             term_port: String::new(),
             term_baud: 115200,
@@ -222,7 +216,7 @@ impl SetupView {
                 "Secure" => return self.extra.secure(ui, app),
                 "Loading" => return self.extra.param_loading(ui, app),
                 "Antenna Tracker" => return self.extra.tracker(ui, app),
-                "RTK/GPS Inject" => return self.rtk_inject(ui, app),
+                "RTK/GPS Inject" => return self.rtk.ui(ui, app),
                 "Terminal" => return self.terminal(ui, app),
                 "Advanced" => return advanced(ui, app),
                 "Joystick" => {
@@ -278,71 +272,6 @@ impl SetupView {
         });
     }
 
-    /// ConfigSerialInjectGPS: CMB_serialport / CMB_baudrate / Connect, bps and counters.
-    fn rtk_inject(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
-        let o = ui.max_rect().min;
-        let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));
-        let st = self.inject.status.lock().clone();
-        crate::views::tuning::group_box(ui.painter(), r(3.0, 3.0, 330.0, 110.0), "");
-        let mut opts: Vec<String> = mp_core::comms::serial_ports();
-        opts.extend(["TCP Client".into(), "UDP Host".into(), "NTRIP".into()]);
-        ui.put(r(9.0, 12.0, 121.0, 21.0), |ui: &mut egui::Ui| {
-            egui::ComboBox::from_id_salt("CMB_serialport")
-                .width(113.0)
-                .selected_text(self.inject_port.clone())
-                .show_ui(ui, |ui| {
-                    for o in &opts {
-                        ui.selectable_value(&mut self.inject_port, o.clone(), o);
-                    }
-                })
-                .response
-        });
-        ui.put(r(9.0, 39.0, 121.0, 21.0), |ui: &mut egui::Ui| {
-            egui::ComboBox::from_id_salt("CMB_baudrate")
-                .width(113.0)
-                .selected_text(self.inject_baud.to_string())
-                .show_ui(ui, |ui| {
-                    for b in mp_core::comms::BAUD_RATES {
-                        ui.selectable_value(&mut self.inject_baud, *b, b.to_string());
-                    }
-                })
-                .response
-        });
-        if matches!(self.inject_port.as_str(), "NTRIP" | "TCP Client" | "UDP Host") {
-            ui.put(r(136.0, 39.0, 190.0, 21.0), egui::TextEdit::singleline(&mut self.inject_url));
-        }
-        let br = r(136.0, 10.0, 75.0, 23.0);
-        let label = if st.running { "Disconnect" } else { "Connect" };
-        if ui.put(br, |ui: &mut egui::Ui| theme::button_sized(ui, label, br.size())).clicked() {
-            if st.running {
-                self.inject.stop();
-            } else if let Some(link) = app.link {
-                let src = match self.inject_port.as_str() {
-                    "NTRIP" => crate::rtcm::Source::Ntrip(self.inject_url.clone()),
-                    "TCP Client" => {
-                        let (h, p) = self.inject_url.rsplit_once(':').unwrap_or((self.inject_url.as_str(), "2101"));
-                        crate::rtcm::Source::Spec(ConnectionSpec::Tcp { host: h.trim_start_matches("tcp://").into(), port: p.parse().unwrap_or(2101) })
-                    }
-                    "UDP Host" => crate::rtcm::Source::Spec(ConnectionSpec::UdpListen { port: self.inject_url.parse().unwrap_or(5000) }),
-                    p => crate::rtcm::Source::Spec(ConnectionSpec::Serial { port: p.into(), baud: self.inject_baud }),
-                };
-                self.inject.start(src, link.sender());
-            } else {
-                app.toasts.error("Please Connect First");
-            }
-        }
-        let f = crate::fonts::ui_id(crate::fonts::UI_SIZE);
-        let p = ui.painter();
-        p.text(o + Vec2::new(9.0, 70.0), egui::Align2::LEFT_TOP, format!("{} bps", st.bps), f.clone(), Color32::WHITE);
-        p.text(o + Vec2::new(9.0, 88.0), egui::Align2::LEFT_TOP, format!("Total {} bytes  Messages {}", st.total, st.msgs), f.clone(), Color32::WHITE);
-        if let Some(e) = &st.error {
-            p.text(o + Vec2::new(9.0, 120.0), egui::Align2::LEFT_TOP, e, f, Color32::RED);
-        }
-        if st.running {
-            ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
-        }
-        ui.allocate_rect(r(0.0, 0.0, 340.0, 140.0), Sense::hover());
-    }
 
     /// ConfigTerminal: raw serial terminal to the autopilot / a radio.
     fn terminal(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {

@@ -9,6 +9,7 @@ pub mod help;
 pub mod mavftp;
 pub mod mavlog;
 pub mod osd_editor;
+pub mod rtk_page;
 pub mod setup;
 pub mod setup_pages;
 pub mod simulation;

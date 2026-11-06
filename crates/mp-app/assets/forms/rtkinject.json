@@ -1,0 +1,682 @@
+{
+"name": "rtkinject",
+"w": 754,
+"h": 594,
+"controls": [
+{
+"name": "CMB_serialport",
+"kind": "combo",
+"parent": "$this",
+"x": 3,
+"y": 3,
+"w": 121,
+"h": 21
+},
+{
+"name": "BUT_connect",
+"kind": "button",
+"parent": "$this",
+"x": 130,
+"y": 3,
+"w": 75,
+"h": 23,
+"text": "Connect"
+},
+{
+"name": "CMB_baudrate",
+"kind": "combo",
+"parent": "$this",
+"x": 3,
+"y": 30,
+"w": 121,
+"h": 21
+},
+{
+"name": "chk_rtcmmsg",
+"kind": "check",
+"parent": "$this",
+"x": 3,
+"y": 57,
+"w": 106,
+"h": 17,
+"text": "Inject MSG Type",
+"hidden": true
+},
+{
+"name": "splitContainer1",
+"kind": "panel",
+"parent": "$this",
+"x": 3,
+"y": 182,
+"w": 748,
+"h": 409
+},
+{
+"name": "chk_autoconfig",
+"kind": "check",
+"parent": "$this",
+"x": 3,
+"y": 132,
+"w": 182,
+"h": 17,
+"text": "Automatically Configure Receiver"
+},
+{
+"name": "groupBox2",
+"kind": "group",
+"parent": "$this",
+"x": 212,
+"y": 73,
+"w": 348,
+"h": 60,
+"text": "RTCM"
+},
+{
+"name": "groupBox3",
+"kind": "group",
+"parent": "$this",
+"x": 212,
+"y": 3,
+"w": 539,
+"h": 64,
+"text": "Link Status"
+},
+{
+"name": "chk_sendgga",
+"kind": "check",
+"parent": "$this",
+"x": 3,
+"y": 80,
+"w": 182,
+"h": 17,
+"text": "Send NTRIP GGA? (VRS/Smart)"
+},
+{
+"name": "check_sendntripv1",
+"kind": "check",
+"parent": "$this",
+"x": 3,
+"y": 106,
+"w": 161,
+"h": 17,
+"text": "Send NTRIP protocol v1.0 ?"
+},
+{
+"name": "comboBoxConfigType",
+"kind": "combo",
+"parent": "$this",
+"x": 3,
+"y": 155,
+"w": 202,
+"h": 21,
+"hidden": true
+},
+{
+"name": "labelmsgseen",
+"kind": "label",
+"parent": "groupBox3",
+"x": 93,
+"y": 30,
+"w": 446,
+"h": 31,
+"text": "rtcm0000\nrtcm0000"
+},
+{
+"name": "lbl_status2",
+"kind": "label",
+"parent": "groupBox3",
+"x": 255,
+"y": 13,
+"w": 13,
+"h": 13,
+"text": "2"
+},
+{
+"name": "label6",
+"kind": "label",
+"parent": "groupBox3",
+"x": 6,
+"y": 31,
+"w": 83,
+"h": 13,
+"text": "Messages Seen"
+},
+{
+"name": "label4",
+"kind": "label",
+"parent": "groupBox3",
+"x": 165,
+"y": 13,
+"w": 84,
+"h": 13,
+"text": "Output data rate"
+},
+{
+"name": "lbl_status1",
+"kind": "label",
+"parent": "groupBox3",
+"x": 93,
+"y": 13,
+"w": 51,
+"h": 13,
+"text": "9999 bps"
+},
+{
+"name": "label3",
+"kind": "label",
+"parent": "groupBox3",
+"x": 6,
+"y": 13,
+"w": 76,
+"h": 13,
+"text": "Input data rate"
+},
+{
+"name": "lbl_status3",
+"kind": "label",
+"parent": "groupBox2",
+"x": 93,
+"y": 40,
+"w": 241,
+"h": 13,
+"text": "-00.000000000 000.000000000 0000.000000000"
+},
+{
+"name": "label11",
+"kind": "label",
+"parent": "groupBox2",
+"x": 6,
+"y": 20,
+"w": 31,
+"h": 13,
+"text": "Base"
+},
+{
+"name": "label5",
+"kind": "label",
+"parent": "groupBox2",
+"x": 6,
+"y": 40,
+"w": 68,
+"h": 13,
+"text": "RTCM Base "
+},
+{
+"name": "label12",
+"kind": "label",
+"parent": "groupBox2",
+"x": 69,
+"y": 20,
+"w": 26,
+"h": 13,
+"text": "Gps"
+},
+{
+"name": "label13",
+"kind": "label",
+"parent": "groupBox2",
+"x": 127,
+"y": 20,
+"w": 45,
+"h": 13,
+"text": "Glonass"
+},
+{
+"name": "labelbase",
+"kind": "label",
+"parent": "groupBox2",
+"x": 43,
+"y": 16,
+"w": 20,
+"h": 20
+},
+{
+"name": "labelgps",
+"kind": "label",
+"parent": "groupBox2",
+"x": 101,
+"y": 16,
+"w": 20,
+"h": 20
+},
+{
+"name": "labelglonass",
+"kind": "label",
+"parent": "groupBox2",
+"x": 178,
+"y": 16,
+"w": 20,
+"h": 20
+},
+{
+"name": "label15",
+"kind": "label",
+"parent": "groupBox2",
+"x": 204,
+"y": 20,
+"w": 40,
+"h": 13,
+"text": "Beidou"
+},
+{
+"name": "label14BDS",
+"kind": "label",
+"parent": "groupBox2",
+"x": 250,
+"y": 16,
+"w": 20,
+"h": 20
+},
+{
+"name": "label16",
+"kind": "label",
+"parent": "groupBox2",
+"x": 278,
+"y": 20,
+"w": 39,
+"h": 13,
+"text": "Galileo"
+},
+{
+"name": "labelGall",
+"kind": "label",
+"parent": "groupBox2",
+"x": 324,
+"y": 16,
+"w": 20,
+"h": 20
+},
+{
+"name": "panel1",
+"kind": "panel",
+"parent": "splitContainer1",
+"x": 3,
+"y": 4,
+"w": 740,
+"h": 186
+},
+{
+"name": "groupBox_autoconfig",
+"kind": "group",
+"parent": "splitContainer1",
+"x": 0,
+"y": 0,
+"w": 748,
+"h": 185,
+"text": "Automatic Config Options",
+"dock": "Fill"
+},
+{
+"name": "label8",
+"kind": "label",
+"parent": "groupBox1",
+"x": 6,
+"y": 42,
+"w": 184,
+"h": 13,
+"text": "Survey In",
+"hidden": true
+},
+{
+"name": "label9",
+"kind": "label",
+"parent": "groupBox1",
+"x": 6,
+"y": 55,
+"w": 184,
+"h": 13,
+"text": "Survey In",
+"hidden": true
+},
+{
+"name": "label7",
+"kind": "label",
+"parent": "groupBox1",
+"x": 6,
+"y": 29,
+"w": 184,
+"h": 13,
+"text": "Survey In",
+"hidden": true
+},
+{
+"name": "label10",
+"kind": "label",
+"parent": "groupBox1",
+"x": 6,
+"y": 68,
+"w": 184,
+"h": 13,
+"text": "Survey In",
+"hidden": true
+},
+{
+"name": "lbl_svin",
+"kind": "label",
+"parent": "groupBox1",
+"x": 6,
+"y": 16,
+"w": 184,
+"h": 13,
+"text": "Survey In",
+"hidden": true
+},
+{
+"name": "txt_surveyinDur",
+"kind": "text",
+"parent": "panel2",
+"x": 184,
+"y": 25,
+"w": 37,
+"h": 20,
+"text": "60"
+},
+{
+"name": "label1",
+"kind": "label",
+"parent": "panel2",
+"x": 3,
+"y": 29,
+"w": 85,
+"h": 13,
+"text": "SurveyIn Acc(m)"
+},
+{
+"name": "txt_surveyinAcc",
+"kind": "text",
+"parent": "panel2",
+"x": 94,
+"y": 25,
+"w": 37,
+"h": 20,
+"text": "2.00"
+},
+{
+"name": "label2",
+"kind": "label",
+"parent": "panel2",
+"x": 137,
+"y": 29,
+"w": 41,
+"h": 13,
+"text": "Time(s)"
+},
+{
+"name": "dg_basepos",
+"kind": "grid",
+"parent": "panel2",
+"x": 3,
+"y": 51,
+"w": 537,
+"h": 112
+},
+{
+"name": "but_save_basepos",
+"kind": "button",
+"parent": "panel2",
+"x": 429,
+"y": 22,
+"w": 75,
+"h": 23,
+"text": "Save Current Position"
+},
+{
+"name": "chk_m8p_130p",
+"kind": "check",
+"parent": "panel2",
+"x": 3,
+"y": 3,
+"w": 113,
+"h": 17,
+"text": "M8P fw 130+/F9P"
+},
+{
+"name": "but_restartsvin",
+"kind": "button",
+"parent": "panel2",
+"x": 227,
+"y": 22,
+"w": 75,
+"h": 23,
+"text": "Restart"
+},
+{
+"name": "groupBox1",
+"kind": "group",
+"parent": "panel_ubloxoptions",
+"x": 546,
+"y": 0,
+"w": 196,
+"h": 166,
+"text": "Survey In",
+"dock": "Right"
+},
+{
+"name": "panel2",
+"kind": "panel",
+"parent": "panel_ubloxoptions",
+"x": 0,
+"y": 0,
+"w": 543,
+"h": 166,
+"dock": "Left"
+},
+{
+"name": "input_septentriofixedaltitude",
+"kind": "text",
+"parent": "panel_septentrio",
+"x": 312,
+"y": 16,
+"w": 100,
+"h": 20
+},
+{
+"name": "button_septentriosetposition",
+"kind": "button",
+"parent": "panel_septentrio",
+"x": 418,
+"y": 16,
+"w": 75,
+"h": 20,
+"text": "Set Position"
+},
+{
+"name": "label18",
+"kind": "label",
+"parent": "panel_septentrio",
+"x": 309,
+"y": 0,
+"w": 59,
+"h": 13,
+"text": "Altitude (m)"
+},
+{
+"name": "label17",
+"kind": "label",
+"parent": "panel_septentrio",
+"x": 203,
+"y": 0,
+"w": 101,
+"h": 13,
+"text": "Longitude (WGS84)"
+},
+{
+"name": "input_septentriofixedatitude",
+"kind": "text",
+"parent": "panel_septentrio",
+"x": 100,
+"y": 16,
+"w": 100,
+"h": 20
+},
+{
+"name": "label14",
+"kind": "label",
+"parent": "panel_septentrio",
+"x": 97,
+"y": 0,
+"w": 87,
+"h": 13,
+"text": "Atitude (WGS84)"
+},
+{
+"name": "chk_septentriofixedposition",
+"kind": "check",
+"parent": "panel_septentrio",
+"x": 0,
+"y": 18,
+"w": 91,
+"h": 17,
+"text": "Fixed Position"
+},
+{
+"name": "input_septentriofixedlongitude",
+"kind": "text",
+"parent": "panel_septentrio",
+"x": 206,
+"y": 16,
+"w": 100,
+"h": 20
+},
+{
+"name": "cmb_septentriortcmamount",
+"kind": "combo",
+"parent": "panel_septentrio",
+"x": 140,
+"y": 51,
+"w": 166,
+"h": 21
+},
+{
+"name": "label19",
+"kind": "label",
+"parent": "panel_septentrio",
+"x": 0,
+"y": 54,
+"w": 123,
+"h": 13,
+"text": "RTCM Message Amount"
+},
+{
+"name": "label20",
+"kind": "label",
+"parent": "panel_septentrio",
+"x": 0,
+"y": 90,
+"w": 136,
+"h": 13,
+"text": "RTCM Message Interval (s)"
+},
+{
+"name": "button_septentriortcminterval",
+"kind": "button",
+"parent": "panel_septentrio",
+"x": 312,
+"y": 87,
+"w": 75,
+"h": 20,
+"text": "Set Interval"
+},
+{
+"name": "input_septentriortcminterval",
+"kind": "num",
+"parent": "panel_septentrio",
+"x": 140,
+"y": 87,
+"w": 166,
+"h": 20
+},
+{
+"name": "chk_septentriogps",
+"kind": "check",
+"parent": "panel_septentrio",
+"x": 141,
+"y": 123,
+"w": 48,
+"h": 17,
+"text": "GPS"
+},
+{
+"name": "chk_septentrioglonass",
+"kind": "check",
+"parent": "panel_septentrio",
+"x": 195,
+"y": 123,
+"w": 77,
+"h": 17,
+"text": "GLONASS"
+},
+{
+"name": "chk_septentriobeidou",
+"kind": "check",
+"parent": "panel_septentrio",
+"x": 279,
+"y": 123,
+"w": 61,
+"h": 17,
+"text": "BeiDou"
+},
+{
+"name": "chk_septentriogalileo",
+"kind": "check",
+"parent": "panel_septentrio",
+"x": 347,
+"y": 123,
+"w": 58,
+"h": 17,
+"text": "Galileo"
+},
+{
+"name": "label21",
+"kind": "label",
+"parent": "panel_septentrio",
+"x": 0,
+"y": 124,
+"w": 135,
+"h": 13,
+"text": "RTCM Constellation Usage"
+},
+{
+"name": "label22",
+"kind": "label",
+"parent": "panel_um982",
+"x": 28,
+"y": 22,
+"w": 415,
+"h": 65,
+"text": "At connect the receiver  will start a \u201csurvey-in\u201d to determine the GPS precision location.\nThe survey-in is finished when the RTCM Base location is no longer changing.\nBased on the location and signal it could take a couple minutes\n\nOnce the survey is completed, you are ready to go.\n"
+},
+{
+"name": "panel_ubloxoptions",
+"kind": "panel",
+"parent": "groupBox_autoconfig",
+"x": 3,
+"y": 16,
+"w": 742,
+"h": 166,
+"dock": "Fill"
+},
+{
+"name": "panel_septentrio",
+"kind": "panel",
+"parent": "groupBox_autoconfig",
+"x": 3,
+"y": 16,
+"w": 742,
+"h": 166,
+"hidden": true,
+"dock": "Fill"
+},
+{
+"name": "panel_um982",
+"kind": "panel",
+"parent": "groupBox_autoconfig",
+"x": 3,
+"y": 16,
+"w": 742,
+"h": 166,
+"hidden": true,
+"dock": "Fill"
+}
+]
+}
