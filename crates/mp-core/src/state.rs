@@ -135,6 +135,10 @@ pub struct CurrentState {
     pub extra: std::collections::BTreeMap<String, f64>,
 
     last_pos_update: Option<Instant>,
+    /// the alt setter's lastalt / oldalt and gotVFR
+    last_alt: Option<Instant>,
+    old_alt: f32,
+    got_vfr: bool,
     last_seq: Option<u8>,
     rangefinder_alt_index: i32,
 }
@@ -238,6 +242,9 @@ impl Default for CurrentState {
             track: Vec::new(),
             extra: default_extra(),
             last_pos_update: None,
+            last_alt: None,
+            old_alt: 0.0,
+            got_vfr: false,
             last_seq: None,
             rangefinder_alt_index: i32::MAX,
         }
@@ -475,6 +482,29 @@ impl CurrentState {
             .filter_map(|name| self.field(name).map(|value| (name, value))).collect()
     }
 
+    /// The alt setter: verticalspeed (and climbrate before any VFR_HUD) from altitude changes
+    /// sampled at least 0.2 s apart.
+    fn set_alt(&mut self, alt: f32, now: Instant) {
+        self.alt = alt;
+        let elapsed = self.last_alt.map(|t| now.saturating_duration_since(t).as_secs_f32());
+        if elapsed.is_none_or(|e| e >= 0.2) && self.old_alt != alt {
+            // the first sample divides by the time since DateTime.MinValue: zero
+            let mut vs = match elapsed {
+                Some(e) if e > 0.0 => (alt - self.old_alt) / e,
+                _ => 0.0,
+            };
+            if vs.is_infinite() {
+                vs = 0.0;
+            }
+            if !self.got_vfr {
+                self.extra.insert("climbrate".into(), vs as f64);
+            }
+            self.verticalspeed = vs;
+            self.last_alt = Some(now);
+            self.old_alt = alt;
+        }
+    }
+
     fn magnitude(&self, x: &str, y: &str, z: &str) -> f64 {
         [x, y, z].into_iter().map(|name| self.field(name).unwrap_or(0.0).powi(2)).sum::<f64>().sqrt()
     }
@@ -520,7 +550,7 @@ impl CurrentState {
                 self.lat = h.latitude as f64 / 1e7;
                 self.lng = h.longitude as f64 / 1e7;
                 self.altasl = h.altitude_amsl as f32;
-                self.alt = self.altasl - self.home.map(|p| p.alt as f32).unwrap_or(0.0);
+                self.set_alt(self.altasl - self.home.map(|p| p.alt as f32).unwrap_or(0.0), Instant::now());
                 self.alt_error = h.altitude_sp as f32 - self.alt;
                 let old = self.extra.get("targetalt").copied().unwrap_or(0.0);
                 self.extra.insert("targetalt".into(), old * 0.5 + ((self.alt + self.alt_error).round_ties_even() as f64) * 0.5);
@@ -544,7 +574,7 @@ impl CurrentState {
                 self.lat = h.latitude as f64 / 1e7;
                 self.lng = h.longitude as f64 / 1e7;
                 self.altasl = h.altitude as f32;
-                self.alt = self.altasl - self.home.map(|p| p.alt as f32).unwrap_or(0.0);
+                self.set_alt(self.altasl - self.home.map(|p| p.alt as f32).unwrap_or(0.0), Instant::now());
                 self.alt_error = h.target_altitude as f32 - self.alt;
                 self.extra.insert("targetalt".into(), h.target_altitude as f64);
                 self.wp_dist = h.target_distance as f32 * 10.0;
@@ -612,7 +642,7 @@ impl CurrentState {
                         }
                     }
                 }
-                self.alt = g.relative_alt as f32 / 1000.0 - self.altoffsethome;
+                self.set_alt(g.relative_alt as f32 / 1000.0 - self.altoffsethome, Instant::now());
                 self.altasl = g.alt as f32 / 1000.0;
                 self.vx = g.vx as f32 / 100.0;
                 self.vy = g.vy as f32 / 100.0;
@@ -646,9 +676,15 @@ impl CurrentState {
             MavMessage::VFR_HUD(v) => {
                 self.airspeed = v.airspeed;
                 self.groundspeed = v.groundspeed;
-                self.verticalspeed = v.climb;
-                self.extra.insert("climbrate".into(), v.climb as f64);
                 self.throttle = v.throttle as f32;
+                // ch3percent = vfr.throttle, negative with reverse thrust present/enabled/healthy
+                const REVERSE_MOTOR: u32 = 1 << 23;
+                let reverse = self.sensors_present & self.sensors_enabled & self.sensors_health & REVERSE_MOTOR != 0;
+                let ch3 = v.throttle as f64;
+                self.extra.insert("ch3percent".into(), if reverse && ch3 > 0.0 { -ch3 } else { ch3 });
+                // "This comes from the EKF": climbrate, while verticalspeed stays the alt setter's
+                self.extra.insert("climbrate".into(), v.climb as f64);
+                self.got_vfr = true;
             }
             MavMessage::NAV_CONTROLLER_OUTPUT(n) => {
                 self.nav_roll = n.nav_roll;
@@ -1086,5 +1122,30 @@ mod property_tests {
         assert_eq!(cs.field("current2"), Some(12.34));
         assert_eq!(cs.field("battery_temp2"), Some(25.0));
         assert_eq!(cs.field("capabilities"), Some(0.0));
+    }
+
+    #[test]
+    fn verticalspeed_comes_from_altitude_changes_and_vfr_only_sets_climbrate() {
+        let mut cs = CurrentState::default();
+        let t0 = Instant::now();
+        cs.set_alt(10.0, t0);
+        assert_eq!(cs.verticalspeed, 0.0, "first sample");
+        cs.set_alt(11.0, t0 + std::time::Duration::from_millis(100));
+        assert_eq!(cs.verticalspeed, 0.0, "under 0.2 s");
+        cs.set_alt(12.0, t0 + std::time::Duration::from_millis(500));
+        assert!((cs.verticalspeed - 4.0).abs() < 1e-3, "{}", cs.verticalspeed);
+        assert!((cs.field("climbrate").unwrap() - 4.0).abs() < 1e-3);
+        cs.update(&MavMessage::VFR_HUD(VFR_HUD_DATA { climb: -1.5, throttle: 40, ..Default::default() }));
+        assert_eq!(cs.field("climbrate"), Some(-1.5));
+        assert!((cs.verticalspeed - 4.0).abs() < 1e-3, "VFR climb does not set verticalspeed");
+        assert_eq!(cs.field("ch3percent"), Some(40.0));
+        cs.set_alt(14.0, t0 + std::time::Duration::from_millis(1500));
+        assert_eq!(cs.field("climbrate"), Some(-1.5), "gotVFR keeps climbrate");
+        assert!((cs.verticalspeed - 2.0).abs() < 1e-3);
+        cs.sensors_present = 1 << 23;
+        cs.sensors_enabled = 1 << 23;
+        cs.sensors_health = 1 << 23;
+        cs.update(&MavMessage::VFR_HUD(VFR_HUD_DATA { throttle: 30, ..Default::default() }));
+        assert_eq!(cs.field("ch3percent"), Some(-30.0), "reverse thrust");
     }
 }
