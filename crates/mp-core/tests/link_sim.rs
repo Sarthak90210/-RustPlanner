@@ -263,21 +263,30 @@ fn swarm_three_vehicles_one_link() {
         assert!(Instant::now() < end, "only {} vehicles seen", link.shared.read().mavs.len());
         std::thread::sleep(Duration::from_millis(100));
     }
-    // arm sysid 2 only (FormationControl "Arm")
-    link.send(LinkCommand::Send(Box::new(MavMessage::COMMAND_LONG(COMMAND_LONG_DATA {
-        param1: 1.0,
-        command: MavCmd::MAV_CMD_COMPONENT_ARM_DISARM,
-        target_system: 2,
-        target_component: 1,
-        ..Default::default()
-    }))));
+    // arm sysid 2 only (FormationControl "Arm"); resent each second like doCommand's retries,
+    // since a single UDP datagram can be dropped while the whole suite runs
+    let arm = || {
+        link.send(LinkCommand::Send(Box::new(MavMessage::COMMAND_LONG(COMMAND_LONG_DATA {
+            param1: 1.0,
+            command: MavCmd::MAV_CMD_COMPONENT_ARM_DISARM,
+            target_system: 2,
+            target_component: 1,
+            ..Default::default()
+        }))))
+    };
+    arm();
     let end = Instant::now() + Duration::from_secs(10);
+    let mut next = Instant::now() + Duration::from_secs(1);
     loop {
         let armed: Vec<bool> = link.shared.read().mavs.values().map(|m| m.armed).collect();
         if armed == vec![false, true, false] {
             break;
         }
         assert!(Instant::now() < end, "armed states {armed:?}");
+        if Instant::now() >= next {
+            arm();
+            next = Instant::now() + Duration::from_secs(1);
+        }
         std::thread::sleep(Duration::from_millis(100));
     }
 }
