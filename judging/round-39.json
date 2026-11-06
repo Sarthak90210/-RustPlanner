@@ -1,0 +1,110 @@
+{
+  "round": 39,
+  "date": "2026-11-06",
+  "review_type": "Independent adversarial source, parity, and concurrency review of parameter import hardening, BOM decoding, missing-param feedback, and test stability",
+  "reviewed_head": "8ae3882882126a3d6eb1d31046a6ab734100beac",
+  "reviewed_uncommitted_worktree": false,
+  "reviewed_files": [
+    "crates/mp-core/src/paramfile.rs",
+    "crates/mp-app/src/views/config.rs",
+    "crates/mp-app/src/swarm.rs",
+    "crates/mp-app/src/platform.rs",
+    "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigRawParams.cs",
+    "reference/MissionPlanner/ExtLibs/Utilities/ParamFile.cs",
+    "reference/MissionPlanner/Controls/ParamCompare.cs"
+  ],
+  "verdict": "REJECTED for exact-clone parity (Score: 5.0/10). Substantial adversarial progress verified: all 15 reference parameter exclusions are enforced centrally; strict invariant numeric parsing produces source-compatible FormatException errors; StreamReader-style multi-encoding BOM decoding is active; missing-parameter feedback now triggers the canonical 'No matching Params' dialog; and the swarm sequence cancellation test regression was resolved, yielding a 100% clean 198-test local workspace and all-green remote CI tests. However, offline parameter editing without active vehicle connection is not implemented, 'Write Params' lacks the parameter change review/confirmation dialog and _ENABLE trailing sort order, and mobile document provider parity remains incomplete.",
+  "scores": {
+    "overall": 5.0,
+    "ui_ux": 4.5,
+    "features": 5.5,
+    "cross_platform_delivery": 3.0,
+    "scale": "Adversarial parity evaluation on a 0-10 exact-clone scale. 10/10 requires 100% feature, UI/UX, behavioral, and architectural equivalence to Mission Planner C# across all target platforms."
+  },
+  "independent_validation": [
+    {
+      "command": "cargo test --workspace",
+      "result": "PASS: 198 passed, 0 failed, 1 ignored (64 mp-core unit, 25 mp-core integration, 109 mp-app unit)",
+      "scope": "Reviewer independently executed the full workspace test suite locally on Windows. Zero test failures, zero regressions, zero hangs."
+    },
+    {
+      "command": "cargo test -p mp-core --lib paramfile",
+      "result": "PASS: 3 passed, 0 failed",
+      "scope": "Independently verified reference exclusions, strict numeric error reporting, and UTF-8/UTF-16/UTF-32 BOM decoding."
+    },
+    {
+      "command": "cargo test -p mp-app --lib swarm::sequence_tests",
+      "result": "PASS: 3 passed, 0 failed (R38-04 regression verified fixed)",
+      "scope": "Independently verified background image cancellation preserves existing state under warmed modal layers."
+    },
+    {
+      "command": "gh run view 42247010953",
+      "result": "PASS: Android APK built, iOS binary built, macOS tests passed, Ubuntu tests passed, Windows tests passed",
+      "scope": "Verified remote GitHub Actions CI run 42247010953 triggered on commit 8ae3882."
+    }
+  ],
+  "verified_improvements": [
+    "R38-01 resolved: all 15 reference excluded parameters (SYSID_SW_MREV, WP_TOTAL, CMD_TOTAL, FENCE_TOTAL, SYS_NUM_RESETS, ARSPD_OFFSET, GND_ABS_PRESS, GND_TEMP, BARO1_GND_PRESS, BARO2_GND_PRESS, BARO3_GND_PRESS, BARO_GND_TEMP, CMD_INDEX, LOG_LASTFILE, FORMAT_VERSION) are excluded centrally during load() and read().",
+    "R38-02 resolved: numbers are parsed with strict invariant f64 parsing; invalid numbers abort loading with LoadError::InvalidNumber identifying parameter name, token, and line number; multi-encoding BOM decoding (UTF-8, UTF-16 LE/BE, UTF-32 LE/BE) functions identically to .NET StreamReader.",
+    "R38-03 resolved: file_ui collects imported parameters missing from the vehicle and displays the modal 'No matching Params' window with 'Missing N params' and space-delimited list matching ConfigRawParams.cs.",
+    "R38-04 resolved: swarm background image selection test properly primes the modal layer over 3 frames, ensuring clean Escape handling without race conditions.",
+    "Full workspace test hygiene: the entire test suite passes 100% clean locally (198 tests) and in remote multi-platform CI."
+  ],
+  "findings": [
+    {
+      "id": "R39-01",
+      "priority": "P1",
+      "subsystem": "Offline parameter file editing",
+      "status": "verified source mismatch",
+      "evidence": [
+        "In C# Mission Planner ConfigRawParams.cs (BUT_load_Click), when disconnected (BaseStream == null || !IsOpen), offline=true is passed to loadparamsfromfile, adding missing parameters directly to the parameter collection and calling Activate(). Users can inspect, modify, and save parameter files offline.",
+        "In Rust ParamEditor::ui, when app.link is None, the view displays 'Please Connect First' and returns early, precluding offline parameter inspection, file loading, modification, or saving."
+      ],
+      "impact": "Users preparing parameter configurations before field deployment cannot load, compare, or edit parameter files without connecting to an active autopilot.",
+      "required_fix": "Support offline parameter editing in ParamEditor when app.link is None: allow Load from file, Save to file, and Compare Params using an offline parameter map."
+    },
+    {
+      "id": "R39-02",
+      "priority": "P1",
+      "subsystem": "Parameter write safety and ordering",
+      "status": "verified source mismatch",
+      "evidence": [
+        "In C# ConfigRawParams.cs (BUT_writePIDS_Click lines 259-320), writing parameters sorts _ENABLE parameters to the end (temp.SortENABLE()) so features are fully configured before being enabled.",
+        "When 20 or fewer parameters are modified, ConfigRawParams displays a modal confirmation dialog: 'You are about to change N parameters. Please review the changes below:\n\n<param>: <old> -> <new>\n\nDo you want to proceed?' with Yes/No buttons.",
+        "In Rust ParamEditor::ui, clicking 'Write Params' immediately sends SetParam commands across the link for all staged edits without confirmation and in arbitrary BTreeMap key order."
+      ],
+      "impact": "Unintentional parameter writes occur without user confirmation or inspection of before/after deltas. Enabling features before configuring their sub-parameters can lead to dangerous vehicle misconfigurations.",
+      "required_fix": "Add a confirmation dialog showing parameter before/after values prior to transmission, and sort _ENABLE parameters to the end of the write sequence."
+    },
+    {
+      "id": "R39-03",
+      "priority": "P2",
+      "subsystem": "Native mobile file provider integration",
+      "status": "still open",
+      "evidence": [
+        "Mobile selection continues to browse app-local sandboxed directories.",
+        "Android Storage Access Framework (SAF) and iOS UIDocumentPickerViewController integrations remain unimplemented for parameter, mission, and log files."
+      ],
+      "impact": "Mobile users cannot open parameter or mission files stored in external storage, cloud drives, or downloads folders.",
+      "required_fix": "Implement platform-native document pickers for Android and iOS in platform.rs."
+    },
+    {
+      "id": "R39-04",
+      "priority": "P2",
+      "subsystem": "Raw parameter grid UI/UX fidelity",
+      "status": "visual / interaction gap",
+      "evidence": [
+        "Mission Planner DataGridView provides rich visual indicators: yellow highlight for modified values, red for failed writes, green for confirmed writes, tooltips with metadata/range definitions, and context menus for 'Set to default' and 'Revert'.",
+        "The current Rust implementation provides functional text edits and modified-only filtering, but lacks visual status styling and parameter metadata tooltips."
+      ],
+      "impact": "Operator experience does not match the visual and interactive fidelity of Mission Planner's Raw Params screen.",
+      "required_fix": "Enhance ParamEditor grid with visual status highlights (modified, pending, written) and parameter documentation tooltips."
+    }
+  ],
+  "next_concrete_task": "Implement offline parameter file editing in ParamEditor when app.link is None, and implement the 'Write Params' confirmation dialog with _ENABLE trailing sort order matching ConfigRawParams.cs.",
+  "not_verified": [
+    "No physical autopilot was flashed or connected via telemetry.",
+    "Visual styling was not pixel-diffed against GDI+ WinForms rendering.",
+    "Mobile APK was built in CI but not executed on a physical Android device."
+  ]
+}

@@ -328,23 +328,23 @@ mod parameter_file_tests {
         let mut editor = ParamEditor::default(); let mut toasts = Toasts::default();
         editor.file_target = Some((42,1));
         editor.file_request = Some((ParamFileAction::Load, FilePicker::in_directory("Parameters", root.clone(), &["param", "txt"], None)));
-        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts); picker::click(&ctx, &mut draw, "a.param"); picker::click(&ctx, &mut draw, "Open"); }
+        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts, true); picker::click(&ctx, &mut draw, "a.param"); picker::click(&ctx, &mut draw, "Open"); }
         assert_eq!(editor.edits, BTreeMap::from([("ALT".into(), 5.0)]));
         assert!(editor.modified_only && editor.pending.is_empty());
         assert_eq!(editor.missing_dialog, Some(vec!["UNKNOWN".to_string()]));
         assert!(editor.file_request.is_none() && editor.file_target.is_none());
         editor.file_target = Some((42,1));
         editor.file_request = Some((ParamFileAction::Compare, FilePicker::in_directory("Compare", root.clone(), &["param"], None)));
-        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts); picker::click(&ctx, &mut draw, "Cancel"); }
+        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts, true); picker::click(&ctx, &mut draw, "Cancel"); }
         assert!(editor.compare.is_none()); assert_eq!(editor.edits["ALT"], 5.0);
         editor.file_target = Some((42,1));
         editor.file_request = Some((ParamFileAction::Compare, FilePicker::in_directory("Compare", root.clone(), &["param"], None)));
-        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts); picker::click(&ctx, &mut draw, "z.param"); picker::click(&ctx, &mut draw, "Open"); }
+        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts, true); picker::click(&ctx, &mut draw, "z.param"); picker::click(&ctx, &mut draw, "Open"); }
         assert_eq!(editor.compare, Some(vec![("ALT".into(), 1.0, 99.0, true)]));
         assert_eq!(editor.edits["ALT"], 5.0); assert!(editor.pending.is_empty());
         editor.file_target = Some((42,1));
         editor.file_request = Some((ParamFileAction::Load, FilePicker::in_directory("Parameters", root.clone(), &["txt"], None)));
-        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts); picker::click(&ctx, &mut draw, "bad.txt"); picker::click(&ctx, &mut draw, "Open"); }
+        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts, true); picker::click(&ctx, &mut draw, "bad.txt"); picker::click(&ctx, &mut draw, "Open"); }
         assert_eq!(editor.edits["ALT"], 5.0); assert!(editor.file_target.is_none());
         assert!(toasts.0.last().unwrap().contains("bad.txt"));
         for name in ["a.param", "z.param", "bad.txt"] { std::fs::remove_file(root.join(name)).unwrap(); } std::fs::remove_dir(root).unwrap();
@@ -356,11 +356,114 @@ mod parameter_file_tests {
         let mut editor = ParamEditor::default(); let mut toasts = Toasts::default();
         editor.file_target = Some((42,1));
         editor.file_request = Some((ParamFileAction::Load, FilePicker::in_directory("Parameters", root.clone(), &["param"], None)));
-        picker::frame(&ctx, &mut |ctx| editor.file_ui(ctx, &BTreeMap::new(), (43,1), &mut toasts), Vec::new());
+        picker::frame(&ctx, &mut |ctx| editor.file_ui(ctx, &BTreeMap::new(), (43,1), &mut toasts, true), Vec::new());
         assert!(editor.file_request.is_none() && editor.edits.is_empty());
         assert!(toasts.0.last().unwrap().contains("Vehicle changed"));
         std::fs::remove_dir(root).unwrap();
     }
+
+    #[test]
+    fn sort_enable_matches_csharp_sorter() {
+        let mut keys = vec![
+            "WPNAV_SPEED".to_string(),
+            "BATT_ENABLE".to_string(),
+            "ARMING_CHECK".to_string(),
+            "ACRO_ENABLE".to_string(),
+            "RTL_ALT".to_string(),
+            "MOT_SPIN_ARM".to_string(),
+        ];
+        sort_enable(&mut keys);
+        assert_eq!(keys, vec![
+            "ACRO_ENABLE",
+            "BATT_ENABLE",
+            "ARMING_CHECK",
+            "MOT_SPIN_ARM",
+            "RTL_ALT",
+            "WPNAV_SPEED",
+        ]);
+    }
+
+    #[test]
+    fn offline_parameter_editing_loads_file_edits_and_saves() {
+        let root = picker::root();
+        let file_path = root.join("offline.param");
+        std::fs::write(&file_path, "ARMING_CHECK,1\nWPNAV_SPEED,500\nBATT_ENABLE,1\n").unwrap();
+        let ctx = egui::Context::default();
+        let mut editor = ParamEditor::default();
+        let mut toasts = Toasts::default();
+        editor.file_request = Some((ParamFileAction::Load, FilePicker::in_directory("Parameters", root.clone(), &["param"], None)));
+        {
+            let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &BTreeMap::new(), (0, 0), &mut toasts, false);
+            picker::click(&ctx, &mut draw, "offline.param");
+            picker::click(&ctx, &mut draw, "Open");
+        }
+        assert_eq!(editor.offline_params.len(), 3);
+        assert_eq!(editor.offline_params["WPNAV_SPEED"].value, 500.0);
+        assert!(editor.missing_dialog.is_none(), "Offline mode does not show missing params dialog");
+
+        // Edit a param offline
+        editor.edits.insert("WPNAV_SPEED".into(), 650.0);
+
+        // Verify that saving includes the edited value
+        let saved_text = paramfile::save(editor.offline_params.iter().map(|(k, p)| (k, editor.edits.get(k).copied().unwrap_or(p.value))));
+        let reloaded = paramfile::load(&saved_text).unwrap();
+        assert_eq!(reloaded["WPNAV_SPEED"], 650.0);
+        assert_eq!(reloaded["ARMING_CHECK"], 1.0);
+
+        // Test Write Params sorting logic
+        let mut keys: Vec<String> = editor.edits.keys().cloned().collect();
+        keys.push("BATT_ENABLE".into());
+        sort_enable(&mut keys);
+        assert_eq!(keys, vec!["BATT_ENABLE", "WPNAV_SPEED"]);
+
+        std::fs::remove_file(file_path).unwrap();
+        std::fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn write_confirm_dialog_flow_escape_cancels_and_modal_presents_sorted_changes() {
+        let ctx = egui::Context::default();
+        let mut editor = ParamEditor::default();
+        let changes = vec![
+            ("BATT_ENABLE".into(), 0.0, 1.0),
+            ("WPNAV_SPEED".into(), 500.0, 650.0),
+        ];
+        editor.write_confirm = Some(changes.clone());
+
+        let mut out = ctx.run_ui(egui::RawInput {
+            events: vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            ..Default::default()
+        }, |ui| {
+            editor.write_confirm_window(ui.ctx(), None);
+        });
+        out.textures_delta.clear();
+
+        // After Escape, the confirmation modal is dismissed and changes cleared
+        assert!(editor.write_confirm.is_none());
+        assert!(editor.pending.is_empty());
+    }
+}
+
+/// Matches C# ListExtension.SortENABLE:
+/// Orders parameters so those ending with "ENABLE" come first (alphabetically),
+/// followed by all other parameters (alphabetically).
+pub fn sort_enable(keys: &mut [String]) {
+    keys.sort_by(|a, b| {
+        let a_en = a.ends_with("ENABLE");
+        let b_en = b.ends_with("ENABLE");
+        match (a_en, b_en) {
+            (true, true) => a.cmp(b),
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            (false, false) => a.cmp(b),
+        }
+    });
 }
 
 #[derive(Clone, Copy)]
@@ -394,11 +497,15 @@ pub struct ParamEditor {
     /// MavlinkCheckBoxBitMask shown by "Set Bitmask" (param name)
     bitmask_edit: Option<String>,
     missing_dialog: Option<Vec<String>>,
+    /// Offline parameters loaded when not connected to a vehicle
+    pub offline_params: BTreeMap<String, mp_core::link::Param>,
+    /// Write parameters confirmation dialog: list of (name, old_value, new_value)
+    pub write_confirm: Option<Vec<(String, f32, f32)>>,
 }
 
 impl ParamEditor {
-    fn file_ui(&mut self, ctx: &egui::Context, params: &BTreeMap<String, mp_core::link::Param>, target: (u8, u8), toasts: &mut Toasts) {
-        if self.file_request.is_some() && self.file_target != Some(target) {
+    fn file_ui(&mut self, ctx: &egui::Context, params: &BTreeMap<String, mp_core::link::Param>, target: (u8, u8), toasts: &mut Toasts, is_connected: bool) {
+        if is_connected && self.file_request.is_some() && self.file_target != Some(target) {
             self.file_request = None; self.file_target = None;
             toasts.error("Vehicle changed while selecting a parameter file");
             return;
@@ -408,19 +515,33 @@ impl ParamEditor {
             let values = match paramfile::read(&path) { Ok(values) => values, Err(e) => { toasts.error(format!("{}: {e}", path.display())); return; } };
             match action {
                 ParamFileAction::Load => {
-                    let mut missing = Vec::new();
-                    for (name, value) in values {
-                        if let Some(p) = params.get(&name) {
-                            if p.value != value {
-                                self.edits.insert(name, value);
+                    if is_connected {
+                        let mut missing = Vec::new();
+                        for (name, value) in values {
+                            if let Some(p) = params.get(&name) {
+                                if p.value != value {
+                                    self.edits.insert(name, value);
+                                }
+                            } else {
+                                missing.push(name);
                             }
-                        } else {
-                            missing.push(name);
                         }
-                    }
-                    self.modified_only = true;
-                    if !missing.is_empty() {
-                        self.missing_dialog = Some(missing);
+                        self.modified_only = true;
+                        if !missing.is_empty() {
+                            self.missing_dialog = Some(missing);
+                        }
+                    } else {
+                        // Offline mode: populate offline_params from file
+                        for (idx, (name, value)) in values.into_iter().enumerate() {
+                            self.offline_params.insert(name, mp_core::link::Param {
+                                value,
+                                ptype: 9, // REAL32
+                                index: idx as u16,
+                            });
+                        }
+                        self.edits.clear();
+                        self.modified_only = false;
+                        toasts.info(format!("Loaded {} parameters offline.", self.offline_params.len()));
                     }
                 }
                 ParamFileAction::Compare => {
@@ -448,41 +569,41 @@ impl ParamEditor {
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, tree_page: bool) {
-        let Some(link) = app.link else {
-            self.file_request = None; self.file_target = None;
-            theme::label(ui, "Please Connect First");
-            return;
-        };
-        let (params, fw, target) = {
+        let is_connected = app.link.is_some();
+        let (params, fw, target) = if let Some(link) = app.link {
             let s = link.shared.read();
             (s.params.clone(), s.cs.firmware, (s.cs.sysid, s.cs.compid))
+        } else {
+            (self.offline_params.clone(), Firmware::ArduCopter2, (0, 0))
         };
 
-        self.file_ui(ui.ctx(), &params, target, app.toasts);
+        self.file_ui(ui.ctx(), &params, target, app.toasts, is_connected);
 
-        {
+        if is_connected {
             let values: BTreeMap<String, f32> = params.iter().map(|(k, p)| (k.clone(), p.value)).collect();
             self.bitmask_window(ui.ctx(), fw, &values);
         }
         // MAVLinkInterface.getParamList: the packed list with defaults over MAVFtp
-        if !self.defaults_requested && link.shared.read().autopilot_version.map(|(_, c)| c & 32 != 0).unwrap_or(false) {
-            self.defaults_requested = true;
-            let mut ftp = mp_core::ftp::Ftp::new(link);
-            let slot = self.defaults.clone();
-            let ctx = ui.ctx().clone();
-            std::thread::spawn(move || {
-                if let Ok(b) = ftp.get("@PARAM/param.pck?withdefaults=1", |_, _| {}) {
-                    if let Some(list) = mp_core::parampck::unpack(&b) {
-                        let map: BTreeMap<String, f32> = list.into_iter().filter_map(|(n, _, d)| d.map(|d| (n, d))).collect();
-                        if !map.is_empty() {
-                            *slot.lock().unwrap() = Some(map);
-                            ctx.request_repaint();
+        if let Some(link) = app.link {
+            if !self.defaults_requested && link.shared.read().autopilot_version.map(|(_, c)| c & 32 != 0).unwrap_or(false) {
+                self.defaults_requested = true;
+                let mut ftp = mp_core::ftp::Ftp::new(link);
+                let slot = self.defaults.clone();
+                let ctx = ui.ctx().clone();
+                std::thread::spawn(move || {
+                    if let Ok(b) = ftp.get("@PARAM/param.pck?withdefaults=1", |_, _| {}) {
+                        if let Some(list) = mp_core::parampck::unpack(&b) {
+                            let map: BTreeMap<String, f32> = list.into_iter().filter_map(|(n, _, d)| d.map(|d| (n, d))).collect();
+                            if !map.is_empty() {
+                                *slot.lock().unwrap() = Some(map);
+                                ctx.request_repaint();
+                            }
                         }
                     }
-                }
-            });
+                });
+            }
         }
-        let defaults = self.defaults.lock().unwrap().clone();
+        let defaults = if is_connected { self.defaults.lock().unwrap().clone() } else { None };
 
         // tableLayoutPanel1: Dock Right, 122px
         egui::Panel::right("raw_buttons").exact_size(122.0).resizable(false).frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| {
@@ -494,32 +615,47 @@ impl ParamEditor {
                 self.file_request = Some((ParamFileAction::Load, platform::FilePicker::new("Load Parameters", &["param", "parm", "txt"], None)));
             }
             if b(ui, r(31.0, 19.0), "Save to file") {
-                let text = paramfile::save(params.iter().map(|(k, p)| (k, p.value)));
+                let text = paramfile::save(params.iter().map(|(k, p)| (k, self.edits.get(k).copied().unwrap_or(p.value))));
                 if let Some(Err(e)) = platform::save_text("Save Parameters", "params.param", "Param List", &["param"], &text) {
                     app.toasts.error(e);
                 }
             }
-            if b(ui, r(66.0, 19.0), "Write Params") {
-                if self.edits.is_empty() {
-                    app.toasts.info("No changes");
+            ui.add_enabled_ui(is_connected && !app.readonly, |ui| {
+                if b(ui, r(66.0, 19.0), "Write Params") {
+                    if self.edits.is_empty() {
+                        app.toasts.info("No changes");
+                    } else {
+                        let mut keys: Vec<String> = self.edits.keys().cloned().collect();
+                        sort_enable(&mut keys);
+                        let changes: Vec<(String, f32, f32)> = keys.into_iter().map(|k| {
+                            let old = params.get(&k).map(|p| p.value).unwrap_or(0.0);
+                            let new = self.edits[&k];
+                            (k, old, new)
+                        }).collect();
+                        self.write_confirm = Some(changes);
+                    }
                 }
-                for (k, v) in &self.edits {
-                    link.send(LinkCommand::SetParam { name: k.clone(), value: *v });
-                    self.pending.insert(k.clone());
+            });
+            ui.add_enabled_ui(is_connected, |ui| {
+                if b(ui, r(91.0, 19.0), "Refresh Params") {
+                    self.edits.clear();
+                    if let Some(link) = app.link {
+                        link.send(LinkCommand::RequestParams);
+                    }
                 }
-            }
-            if b(ui, r(91.0, 19.0), "Refresh Params") {
-                self.edits.clear();
-                link.send(LinkCommand::RequestParams);
-            }
+            });
             if b(ui, r(116.0, 19.0), "Compare Params") {
                 self.file_target = Some(target);
                 self.file_request = Some((ParamFileAction::Compare, platform::FilePicker::new("Compare Parameters", &["param", "parm", "txt"], None)));
             }
             if crate::display::flag(&app.settings.planner, "displayParamCommitButton") {
-                if b(ui, r(141.0, 22.0), "Commit Params") {
-                    link.send(LinkCommand::CommandLong { command: 245, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
-                }
+                ui.add_enabled_ui(is_connected, |ui| {
+                    if b(ui, r(141.0, 22.0), "Commit Params") {
+                        if let Some(link) = app.link {
+                            link.send(LinkCommand::CommandLong { command: 245, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
+                        }
+                    }
+                });
             }
             let f = fonts::ui_id(fonts::UI_SIZE);
             ui.painter().text(o + Vec2::new(6.0, 169.0), egui::Align2::LEFT_TOP, crate::i18n::t("All Units are in raw\nformat with no scaling"), f.clone(), Color32::WHITE);
@@ -564,22 +700,24 @@ impl ParamEditor {
                 })
                 .inner
             });
-            if b(ui, r(228.0, 21.0), "Load Presaved") {
-                if let Some((_, path)) = files.get(self.paramfile_sel).cloned() {
-                    let slot = self.presaved.clone();
-                    let ctx = ui.ctx().clone();
-                    std::thread::spawn(move || {
-                        let r = crate::firmware_ui::get(&format!("https://raw.githubusercontent.com/ArduPilot/ardupilot/master/{path}")).map(|b| String::from_utf8_lossy(&b).into_owned());
-                        *slot.lock().unwrap() = Some(r);
-                        ctx.request_repaint();
-                    });
-                } else {
-                    app.toasts.error("Failed to load file.\nNo presaved parameter files are available");
+            ui.add_enabled_ui(is_connected, |ui| {
+                if b(ui, r(228.0, 21.0), "Load Presaved") {
+                    if let Some((_, path)) = files.get(self.paramfile_sel).cloned() {
+                        let slot = self.presaved.clone();
+                        let ctx = ui.ctx().clone();
+                        std::thread::spawn(move || {
+                            let r = crate::firmware_ui::get(&format!("https://raw.githubusercontent.com/ArduPilot/ardupilot/master/{path}")).map(|b| String::from_utf8_lossy(&b).into_owned());
+                            *slot.lock().unwrap() = Some(r);
+                            ctx.request_repaint();
+                        });
+                    } else {
+                        app.toasts.error("Failed to load file.\nNo presaved parameter files are available");
+                    }
                 }
-            }
-            if b(ui, r(255.0, 21.0), "Reset to Default") {
-                self.confirm_reset = true;
-            }
+                if b(ui, r(255.0, 21.0), "Reset to Default") {
+                    self.confirm_reset = true;
+                }
+            });
             ui.painter().text(o + Vec2::new(6.0, 286.0), egui::Align2::LEFT_TOP, crate::i18n::t("Search"), f.clone(), Color32::WHITE);
             ui.put(r(302.0, 20.0), egui::TextEdit::singleline(&mut self.search));
             ui.put(Rect::from_min_size(o + Vec2::new(6.0, 328.0), Vec2::new(90.0, 17.0)), egui::Checkbox::new(&mut self.modified_only, crate::i18n::t("Modified")));
@@ -619,6 +757,13 @@ impl ParamEditor {
         });
 
         egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| {
+            if !is_connected && params.is_empty() {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(40.0);
+                    theme::label(ui, "No parameters loaded.\nClick 'Load from file' to edit parameters offline, or connect to a vehicle.");
+                });
+                return;
+            }
             let q = self.search.to_lowercase();
             let rows: Vec<(String, f32)> = params
                 .iter()
@@ -635,7 +780,7 @@ impl ParamEditor {
             let mut rows = rows;
             let favs = app.settings.fav_params.clone();
             rows.sort_by_key(|(k, _)| !favs.contains(k));
-            self.grid(ui, link, fw, &rows, &mut app.settings.fav_params, defaults.as_ref());
+            self.grid(ui, app.link, fw, &rows, &mut app.settings.fav_params, defaults.as_ref());
         });
         // presaved file arrived: show it in ParamCompare
         if let Some(r) = self.presaved.lock().unwrap().take() {
@@ -668,19 +813,73 @@ impl ParamEditor {
             if let Some(yes) = answer {
                 self.confirm_reset = false;
                 if yes && !app.readonly {
-                    // FORMAT_VERSION / SYSID_SW_MREV = 0 then reboot: the autopilot reloads defaults
-                    for n in ["FORMAT_VERSION", "SYSID_SW_MREV"] {
-                        if params.contains_key(n) {
-                            link.send(LinkCommand::SetParam { name: n.into(), value: 0.0 });
+                    if let Some(link) = app.link {
+                        // FORMAT_VERSION / SYSID_SW_MREV = 0 then reboot: the autopilot reloads defaults
+                        for n in ["FORMAT_VERSION", "SYSID_SW_MREV"] {
+                            if params.contains_key(n) {
+                                link.send(LinkCommand::SetParam { name: n.into(), value: 0.0 });
+                            }
                         }
+                        link.send(LinkCommand::CommandLong { command: 246, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
+                        app.toasts.error("Your board is now rebooting, You will be required to reconnect to the autopilot.");
                     }
-                    link.send(LinkCommand::CommandLong { command: 246, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
-                    app.toasts.error("Your board is now rebooting, You will be required to reconnect to the autopilot.");
                 }
             }
         }
         self.compare_window(ui.ctx());
         self.missing_window(ui.ctx());
+        self.write_confirm_window(ui.ctx(), app.link);
+    }
+
+    /// Confirmation dialog for parameter changes, matching C# ConfigRawParams BUT_writePIDS_Click
+    fn write_confirm_window(&mut self, ctx: &egui::Context, link: Option<&Link>) {
+        let Some(changes) = self.write_confirm.as_ref() else { return };
+        let mut answer = None;
+        egui::Modal::new(egui::Id::new("confirm_write_params")).show(ctx, |ui| {
+            ui.set_width(380.0);
+            ui.label(RichText::new(crate::i18n::t("Confirm Parameter Changes")).strong());
+            ui.add_space(6.0);
+            let count = changes.len();
+            if count <= 20 {
+                ui.label(format!("You are about to change {count} parameters. Please review the changes below:"));
+                ui.add_space(4.0);
+                egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
+                    egui::Grid::new("confirm_write_grid").num_columns(1).striped(true).show(ui, |ui| {
+                        for (name, old, new) in changes {
+                            ui.label(RichText::new(format!("{name}: {} -> {}", paramfile::format_value(*old), paramfile::format_value(*new))).monospace());
+                            ui.end_row();
+                        }
+                    });
+                });
+                ui.add_space(6.0);
+                ui.label(crate::i18n::t("Do you want to proceed?"));
+            } else {
+                ui.label(format!("You are about to change {count} parameters. Are you sure you want to proceed?"));
+            }
+            ui.add_space(10.0);
+            ui.horizontal(|ui| {
+                if theme::button(ui, "Yes").clicked() {
+                    answer = Some(true);
+                }
+                if theme::button(ui, "No").clicked() {
+                    answer = Some(false);
+                }
+            });
+        });
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            answer = Some(false);
+        }
+        if let Some(yes) = answer {
+            let changes = self.write_confirm.take().unwrap();
+            if yes {
+                if let Some(link) = link {
+                    for (name, _, new) in changes {
+                        link.send(LinkCommand::SetParam { name: name.clone(), value: new });
+                        self.pending.insert(name);
+                    }
+                }
+            }
+        }
     }
 
     /// "No matching Params": dialog showing missing params that were not present on the vehicle
@@ -752,7 +951,7 @@ impl ParamEditor {
     }
 
     /// The Params DataGridView: Name 130 | Value 70 | Default 70 | Units 60 | Options 150 | Desc | Fav 30
-    fn grid(&mut self, ui: &mut egui::Ui, _link: &Link, fw: Firmware, rows: &[(String, f32)], favs: &mut Vec<String>, defaults: Option<&BTreeMap<String, f32>>) {
+    fn grid(&mut self, ui: &mut egui::Ui, _link: Option<&Link>, fw: Firmware, rows: &[(String, f32)], favs: &mut Vec<String>, defaults: Option<&BTreeMap<String, f32>>) {
         // Default_value.Visible = has_defaults
         let widths = [130.0f32, 70.0, if defaults.is_some() { 70.0 } else { -1.0 }, 60.0, 150.0, 0.0, 30.0];
         let headers = ["Name", "Value", "Default", "Units", "Options", "Desc", "Fav"];
