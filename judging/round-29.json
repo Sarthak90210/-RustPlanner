@@ -1,0 +1,172 @@
+{
+  "round": 29,
+  "review_type": "Adversarial Codebase-Wide Parity Audit and Reality Reset",
+  "reviewed_head": "3299c7a82649b3806e0de29c48b264e1c26b4855",
+  "reviewed_base": "29b74e932c2fb572d07756e0dd0c2b2f175711d7",
+  "date": "2026-11-06",
+  "verdict": "REJECTED AND RESET TO 5.0/10. The previous Round 28 certification of 10.0/10 was inaccurate, grossly inflated, and conflated a passing SITL flight script and multi-platform CI build with genuine functional and visual parity against the reference C# Mission Planner. Forensic inspection reveals that the Rust implementation spans 43,181 lines across 96 files—representing only 3.99% of Mission Planner's 1,080,585 lines of C# across 3,477 files (or ~28.0% of the 154,170 lines of non-library C# application code). Critical subsystems in Mission Planner (automated LogAnalyzer vehicle diagnostics, full ZedGraph dual-axis/FFT plotting, DFU and STK500 firmware flashers, DroneCAN node firmware updates, HIL/X-Plane simulation, DirectShow/LibVLC/ONVIF video backends, 360° obstacle radar, side-by-side parameter diff comparison, and over 30 dedicated configuration forms) are either completely missing (0%) or replaced with minimal 100-300 line skeleton stubs. Furthermore, running 'cargo test --workspace' in parallel revealed a real race condition where crates/mp-core/tests/link_sim.rs (tlog_logs_and_playback) timed out and failed. An honest, unvarnished rating places functional completeness at 5.0/10 and UI/UX parity at 4.9/10, yielding an overall score of 5.0/10.",
+  "scores": {
+    "overall": 5.0,
+    "ui_ux": 4.9,
+    "features": 5.0,
+    "scale": "Adversarial parity scale (0.0 - 10.0) measuring exact functional, architectural, and visual equivalence against the entire 1.08M line C# Mission Planner codebase. No scores above 6.0 are granted until missing subsystems are fully implemented, tested, and visually matched."
+  },
+  "codebase_scale_audit": {
+    "reference_csharp": {
+      "total_lines": 1080585,
+      "total_files": 3477,
+      "extlibs_lines": 926415,
+      "application_lines": 154170,
+      "configuration_views_lines": 41172,
+      "configuration_forms_count": 62,
+      "custom_controls_count": 112
+    },
+    "rust_implementation": {
+      "total_lines": 43181,
+      "total_files": 96,
+      "crates": {
+        "mp_app": { "lines": 30969, "files": 60 },
+        "mp_core": { "lines": 12078, "files": 34 },
+        "mp_plugin": { "lines": 61, "files": 1 },
+        "mp_plugin_example": { "lines": 73, "files": 1 }
+      },
+      "codebase_fraction_of_reference_total": 0.03996,
+      "codebase_fraction_of_reference_app": 0.2801
+    }
+  },
+  "subsystem_gap_analysis": [
+    {
+      "subsystem": "Log Analysis & DataFlash",
+      "reference_code": "reference/MissionPlanner/Log/LogBrowse.cs (3,267 lines), LogAnalyzer.cs, DFLog.cs, ULog.cs, LogDownload.cs, LogIndex.cs",
+      "rust_code": "crates/mp-app/src/log_browse.rs (379 lines), crates/mp-core/src/dataflash.rs (324 lines)",
+      "parity_score": 2.0,
+      "findings": "Mission Planner contains an automated diagnostic engine (LogAnalyzer) checking 15+ vehicle health indicators (vibration clipping, power rail brownouts, motor thrust imbalances, compass interference, pitch/roll divergence, GPS glitching) with plain-English pass/fail report cards. It supports MATLAB .mat export, KMZ 3D flight path export, CSV extraction, ULog format, and MAVLink/SCP remote log download wizards. The Rust implementation has only 6 hardcoded presets, basic 2D line plotting, no automated diagnosis, no KMZ/MATLAB export, and no ULog support."
+    },
+    {
+      "subsystem": "Graphing & Visualization (ZedGraph)",
+      "reference_code": "reference/MissionPlanner/ExtLibs/ZedGraph/ (47,358 lines), graphs/, fftui.cs, SpectrogramUI.cs",
+      "rust_code": "crates/mp-app/src/zedgraph.rs (169 lines)",
+      "parity_score": 2.0,
+      "findings": "ZedGraph in Mission Planner is an industrial 47k-line charting engine supporting dual independent Y-axes (Y1/Y2), mathematical expressions (e.g. sin(Roll)*10), FFT power spectral density waterfall, point downsampling, box zoom, interactive cursor inspection, image/clipboard export, and print preview. Rust's zedgraph.rs is a 169-line basic immediate-mode line painter with a single fixed Y-axis, 20-second rolling window, no expressions, no FFT waterfall, no box zoom, and no export capabilities."
+    },
+    {
+      "subsystem": "Firmware Flashing & Bootloaders",
+      "reference_code": "reference/MissionPlanner/ExtLibs/Flasher/, px4uploader/, NetDFULib/, UAVCANFlasher/ (5,905 lines, 20 files)",
+      "rust_code": "crates/mp-core/src/fwupload.rs (324 lines), crates/mp-app/src/firmware_ui.rs (459 lines)",
+      "parity_score": 3.0,
+      "findings": "Mission Planner supports AVR STK500v1/v2 flashing for legacy APM boards, direct USB DFU flashing via NetDFULib for unbootloaded STM32 targets, serial PX4 bootloader protocol, and in-flight UAVCAN/DroneCAN node firmware updates. Rust only implements the serial PX4 bootloader protocol. DFU flashing is 0% implemented, STK500 is 0% implemented, and DroneCAN peripheral node firmware flashing is 0% implemented."
+    },
+    {
+      "subsystem": "Antenna Tracker",
+      "reference_code": "reference/MissionPlanner/Antenna/TrackerGeneric.cs, TrackerUI.cs, ExtLibs/Antenna/ (ArduTracker, DegreeTracker, Maestro)",
+      "rust_code": "crates/mp-core/src/tracker.rs (198 lines), crates/mp-app/src/views/setup_pages.rs",
+      "parity_score": 2.5,
+      "findings": "Mission Planner provides closed-loop PID servo tracking, multi-receiver diversity switching, compass auto-calibration, and hardware-specific servo timing for dual-axis tracking mounts. Rust contains 198 lines of basic open-loop angle commands and partial Maestro packet formatting without closed-loop PID control, diversity switching, or physical gimbal validation."
+    },
+    {
+      "subsystem": "Georeferencing & Photo Tagging",
+      "reference_code": "reference/MissionPlanner/GeoRef/georefimage.cs (848 lines), ExtLibs/Utilities/GeoRefImageBase.cs",
+      "rust_code": "crates/mp-core/src/georef.rs (460 lines), crates/mp-app/src/georef_ui.rs (161 lines)",
+      "parity_score": 4.0,
+      "findings": "Mission Planner provides shutter lag calibration, linear interpolation between CAM trigger messages and attitude records, Trig message matching, GoPro MP4 telemetry extraction, camera FOV footprints on map, and DEM/SRTM elevation projection. Rust has basic EXIF timestamp reading and CAM offset lookup; it lacks shutter lag calibration, GoPro telemetry extraction, DEM elevation projection, and interactive map preview."
+    },
+    {
+      "subsystem": "Hardware Configuration / Setup Views",
+      "reference_code": "reference/MissionPlanner/GCSViews/ConfigurationView/ (62 forms, 41,172 lines)",
+      "rust_code": "crates/mp-app/src/forms.rs (31 forms registered), crates/mp-app/src/views/setup_pages.rs",
+      "parity_score": 5.0,
+      "findings": "Over 30 setup forms from Mission Planner are missing entirely (ConfigFFT dynamic notch filter, ConfigPX4Flow optical flow image feed, ConfigAteryx, ConfigUserDefined, ConfigSimplePids visual sliders, ConfigESCCalibration wizard). Forms that are present in Rust are mostly generic form controls mapped from XML/RESX without the interactive diagrams, 3D compass calibration sphere point clouds with live ellipsoidal fitting, and safety interlocks of the original."
+    },
+    {
+      "subsystem": "Custom Controls & Visual Instruments",
+      "reference_code": "reference/MissionPlanner/Controls/ (62 controls) and ExtLibs/Controls/ (50 controls)",
+      "rust_code": "crates/mp-app/src/hud.rs, crates/mp-app/src/forms.rs, crates/mp-app/src/map.rs",
+      "parity_score": 3.5,
+      "findings": "Mission Planner features over 110 custom WinForms controls including AGauge, HSI, ElevationProfile (mission elevation cross-section), ProximityControl (360° obstacle radar), paramcompare (side-by-side parameter file diffing with color-coded additions/modifications), SpectrogramUI, MovingBase, and DigitalSkyUI. In Rust, almost all of these are missing or rendered as plain numerical text labels."
+    },
+    {
+      "subsystem": "Video & Vision Handling",
+      "reference_code": "reference/MissionPlanner/ExtLibs/DirectShowLib/, LibVLC.NET/, Onvif/, Xamarin RTSP",
+      "rust_code": "crates/mp-app/src/mjpeg.rs, crates/mp-app/src/gstreamer.rs",
+      "parity_score": 3.0,
+      "findings": "Mission Planner natively supports Windows DirectShow capture devices (UVC webcams, HDMI capture cards, analog USB capture dongles), LibVLC playback backend, ONVIF camera discovery and PTZ motor control, and native RTSP streaming. Rust only supports HTTP MJPEG streams and an external GStreamer pipeline wrapper; DirectShow, LibVLC, ONVIF, and native RTSP are absent."
+    },
+    {
+      "subsystem": "Hardware-in-the-Loop (HIL) Simulation",
+      "reference_code": "reference/MissionPlanner/ExtLibs/HIL/ (Aircraft.cs, Hil.cs, QuadCopter.cs, Wind.cs, XPlane.cs - 1,262 lines)",
+      "rust_code": "None (0 lines)",
+      "parity_score": 0.0,
+      "findings": "Mission Planner supports full HIL simulation bridging MAVLink telemetry with X-Plane 10/11/12 flight dynamics, aerodynamic wind simulation, and simulated sensor packet injection. Rust has zero HIL integration code (0% complete)."
+    },
+    {
+      "subsystem": "Core Flight Planning, HUD & Telemetry",
+      "reference_code": "FlightData.cs (5,938 lines), FlightPlanner.cs (7,250 lines)",
+      "rust_code": "crates/mp-app/src/views/flight_data.rs, crates/mp-app/src/views/flight_plan/",
+      "parity_score": 7.5,
+      "findings": "This is the strongest area of the Rust implementation: waypoint mission upload/download, spline waypoints, polygon survey grid generation, UTM/MGRS coordinate display, Nominatim geocoding, GDAL raster map provider, primary HUD flight instruments, and telemetry stream decoding are well implemented."
+    },
+    {
+      "subsystem": "Networking & Transports",
+      "reference_code": "ExtLibs/Comms/ (Serial, TCP, UDP, WebSocket, BLE, WinUSB)",
+      "rust_code": "crates/mp-core/src/comms.rs, link.rs, link_sim.rs",
+      "parity_score": 8.0,
+      "findings": "Transports including Serial, TCP, UDP, RFC 6455 WebSocket, BLE, WinUSB, MAVFTP, and DroneCAN over MAVLink are implemented with comprehensive unit tests."
+    }
+  ],
+  "concurrency_and_test_findings": {
+    "test_suite_regression": "When running 'cargo test --workspace' with parallel execution enabled, crates/mp-core/tests/link_sim.rs failed in 'tlog_logs_and_playback' with 'timed out waiting for event'. The test only passes reliably when forced into sequential execution (--test-threads=1), proving that dynamic port allocation and event synchronization remain brittle under concurrent workspace execution.",
+    "concurrency_status": "Flaky under cargo test --workspace parallel load. Must be stabilized before claiming concurrency certification."
+  },
+  "ui_ux_fidelity_audit": {
+    "framework_limitations": "Immediate-mode egui does not replicate native Windows Forms desktop behavior: text selection and caret control across inputs, ClearType font rendering, native Windows scrollbars, and right-click context menus are missing or non-standard.",
+    "multi_window_support": "Mission Planner allows tearing off any panel (HUD, Map, Tuning Graph, Video) into independent Windows desktop windows across multiple physical monitors. egui is restricted to a single monolithic window frame.",
+    "visual_cues_and_interactivity": "Missing interactive 3D compass calibration ellipsoid visualization, visual motor test propeller ordering diagram, graphical geofence inclusion/exclusion zone editor, elevation cross-section profile under mission waypoints, and 360° obstacle avoidance radar display."
+  },
+  "actionable_roadmap": [
+    {
+      "priority": "P0",
+      "subsystem": "ZedGraph Engine",
+      "requirement": "Implement dual independent Y-axes (Y1/Y2), custom math expression parser (e.g. diffs, scale factors), box zoom/pan gestures, point cursor inspection, and PNG/CSV export."
+    },
+    {
+      "priority": "P0",
+      "subsystem": "Automated LogAnalyzer",
+      "requirement": "Port the ArduPilot log diagnostic suite: automated analysis for brownout, IMU vibration clipping, compass magnetic interference, motor thrust balance, and EKF pitch/roll divergence with summary health reports."
+    },
+    {
+      "priority": "P0",
+      "subsystem": "Test Concurrency Stability",
+      "requirement": "Fix event synchronization race conditions in crates/mp-core/tests/link_sim.rs (tlog_logs_and_playback) so that 'cargo test --workspace' passes 100% cleanly in parallel without requiring --test-threads=1."
+    },
+    {
+      "priority": "P1",
+      "subsystem": "Firmware Flashing",
+      "requirement": "Add STM32 direct USB DFU flashing protocol and DroneCAN peripheral node firmware update protocol."
+    },
+    {
+      "priority": "P1",
+      "subsystem": "Missing Configuration Views",
+      "requirement": "Implement ConfigFFT (dynamic notch filter setup form), 3D compass calibration live point cloud sphere visualization, and interactive motor test vehicle diagram."
+    },
+    {
+      "priority": "P1",
+      "subsystem": "Parameter Comparison Tool",
+      "requirement": "Implement side-by-side parameter file comparison dialog (paramcompare) showing differences, defaults, and batch write capability."
+    },
+    {
+      "priority": "P2",
+      "subsystem": "Elevation Profile",
+      "requirement": "Implement ElevationProfile dialog showing ground elevation terrain cross-section vs vehicle mission altitude."
+    },
+    {
+      "priority": "P2",
+      "subsystem": "Video & DirectShow",
+      "requirement": "Integrate Windows Media Foundation / DirectShow device enumeration for native USB webcam and HDMI capture card inputs, plus native RTSP negotiation."
+    },
+    {
+      "priority": "P2",
+      "subsystem": "HIL Simulation",
+      "requirement": "Implement X-Plane MAVLink HIL UDP bridge for fixed-wing and multirotor hardware-in-the-loop simulation."
+    }
+  ]
+}
