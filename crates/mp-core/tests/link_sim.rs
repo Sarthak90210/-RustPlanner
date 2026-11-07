@@ -395,12 +395,6 @@ fn guided_fly_to_switches_mode_and_moves_the_copter() {
     let ack = |link: &Link| {
         wait_event(link, Duration::from_secs(5), |e| matches!(e, LinkEvent::CommandAck { .. }));
     };
-    link.send(LinkCommand::SetMode(4));
-    ack(&link);
-    link.send(LinkCommand::Arm { arm: true, force: false });
-    ack(&link);
-    link.send(LinkCommand::CommandLong { command: 22, params: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0] });
-    ack(&link);
     let wait_for = |what: &str, secs: u64, f: &dyn Fn(&mp_core::state::CurrentState) -> bool| {
         let end = Instant::now() + Duration::from_secs(secs);
         while !f(&link.shared.read().cs) {
@@ -408,7 +402,16 @@ fn guided_fly_to_switches_mode_and_moves_the_copter() {
             std::thread::sleep(Duration::from_millis(50));
         }
     };
-    // generous: the whole workspace runs its simulators in parallel
+    // takeoff needs GUIDED and armed; wait for the vehicle to report both, since an ACK
+    // only says the command arrived (the simulators of the whole workspace run in parallel)
+    link.send(LinkCommand::SetMode(4));
+    ack(&link);
+    wait_for("Guided", 20, &|cs| cs.mode == "Guided");
+    link.send(LinkCommand::Arm { arm: true, force: false });
+    ack(&link);
+    wait_for("armed", 20, &|cs| cs.armed);
+    link.send(LinkCommand::CommandLong { command: 22, params: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0] });
+    ack(&link);
     wait_for("takeoff", 40, &|cs| cs.alt > 5.0);
     // LOITER, then a zero target changes nothing
     link.send(LinkCommand::SetMode(5));
