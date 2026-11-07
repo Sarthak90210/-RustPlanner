@@ -69,7 +69,7 @@ impl CameraSettingsForm {
     fn cancel(&mut self) { if let Some((_, cancel, _)) = self.job.take() { cancel.store(true, Ordering::Relaxed); } }
     fn reload(&mut self, link: &Link, readonly: bool) {
         self.cancel(); self.session = None; self.rows.clear();
-        if readonly { self.waiting = None; self.status = "Link is read-only; disable ReadOnly link mode to request or change camera settings".into(); return; }
+        if readonly { self.waiting = None; self.status = "Could not load custom settings: Link is read-only; disable ReadOnly link mode to request or change camera settings. Use Refresh to retry.".into(); return; }
         self.status = "Requesting camera information…".into();
         self.waiting = Some(Instant::now() + Duration::from_secs(5));
         link.send(LinkCommand::Send(Box::new(MavMessage::COMMAND_LONG(COMMAND_LONG_DATA {
@@ -109,16 +109,19 @@ impl CameraSettingsForm {
 
     fn poll(&mut self, link: &Link, readonly: bool) {
         let now = Instant::now();
-        if readonly && (self.waiting.is_some() || self.job.is_some()) { self.cancel(); self.waiting = None; self.status = "Link is read-only; changing camera settings is disabled".into(); }
+        let loading = self.waiting.is_some() || self.job.is_some();
+        if readonly && loading { self.cancel(); self.waiting = None; self.status = "Could not load custom settings: Link is read-only; disable ReadOnly link mode to request or change camera settings. Use Refresh to retry.".into(); }
         while let Ok(message) = self.incoming.try_recv() {
             match message {
                 MavMessage::CAMERA_INFORMATION(info) => {
                     let uri = String::from_utf8_lossy(&info.cam_definition_uri[..]).split('\0').next().unwrap_or("").trim().to_string();
                     let changed = self.advertised.as_ref().is_some_and(|v| *v != (uri, info.cam_definition_version));
                     self.information = Some(info);
-                    if !readonly && (self.waiting.is_some() || changed) { self.load_definition(link); }
+                    if !readonly && !loading && (self.waiting.is_some() || changed) { self.load_definition(link); }
                 }
-                message => if let Some(session) = &mut self.session { session.receive(&message, now); },
+                message => if !loading {
+                    if let Some(session) = &mut self.session { session.receive(&message, now); }
+                },
             }
         }
         if self.waiting.is_some_and(|deadline| now >= deadline) && !readonly { self.load_definition(link); }
@@ -137,8 +140,14 @@ impl CameraSettingsForm {
     }
 
     pub fn ui(&mut self, ctx: &egui::Context, link: Option<&Link>, readonly: bool) -> bool {
-        let Some(link) = link.filter(|l| Arc::ptr_eq(&l.shared, &self.shared) && l.status() == LinkStatus::Connected) else { self.cancel(); return false; };
-        self.poll(link, readonly);
+        let Some(link) = link.filter(|l| Arc::ptr_eq(&l.shared, &self.shared)) else {
+            self.cancel();
+            return false;
+        };
+        let is_connected = link.status() == LinkStatus::Connected;
+        if is_connected {
+            self.poll(link, readonly);
+        }
         let mut open = true; let mut refresh = false; let mut close = false;
         let title = self.session.as_ref().map(|s| format!("Custom Settings — {} ({}:{})", s.definition.model,self.target.0,self.target.1)).unwrap_or_else(|| "Custom Settings".into());
         egui::Window::new(title).id(egui::Id::new("camera_custom_settings")).open(&mut open).default_size([780.0,650.0]).min_size([600.0,350.0]).show(ctx, |ui| {
@@ -147,16 +156,20 @@ impl CameraSettingsForm {
                 if let Some(session) = &mut self.session { Self::rows_ui(ui, session, &mut self.rows, readonly); }
             });
             let status = if let Some((_,_,progress)) = &self.job { progress.lock().unwrap().clone() }
-                else if readonly { "Link is read-only; changing camera settings is disabled".into() }
                 else if let Some(s) = &self.session { format!("{} — {}/{} settings read", s.status, s.definition.parameters.iter().filter(|p| !p.write_only && s.values.contains_key(&p.name)).count(), s.definition.parameters.iter().filter(|p| !p.write_only).count()) }
                 else { self.status.clone() };
             ui.label(status);
-            ui.horizontal(|ui| { refresh = ui.add_enabled(!loading, egui::Button::new("Refresh")).clicked(); close = ui.button("Close").clicked(); });
+            ui.horizontal(|ui| { refresh = ui.add_enabled(!loading && is_connected, egui::Button::new("Refresh")).clicked(); close = ui.button("Close").clicked(); });
         });
-        if refresh { self.reload(link, readonly); }
+        if refresh && is_connected { self.reload(link, readonly); }
         if close || !open { self.cancel(); return false; }
-        if !readonly { if let Some(session) = &mut self.session { for message in session.outbox.drain(..) { link.send(LinkCommand::Send(Box::new(message))); } } }
-        ctx.request_repaint_after(Duration::from_millis(100)); true
+        if !readonly && is_connected {
+            if let Some(session) = &mut self.session {
+                for message in session.outbox.drain(..) { link.send(LinkCommand::Send(Box::new(message))); }
+            }
+        }
+        ctx.request_repaint_after(Duration::from_millis(100));
+        true
     }
 
     fn rows_ui(ui: &mut egui::Ui, session: &mut CameraSettingsSession, rows: &mut HashMap<String,Row>, readonly: bool) {
@@ -183,9 +196,34 @@ impl CameraSettingsForm {
                     if !enabled { editor_ui.disable(); }
                     let ui = &mut editor_ui;
                         if !options.is_empty() || !parameter.options.is_empty() {
-                            let label = options.iter().find(|o| Some(&o.value) == value).map(|o| o.label.clone()).unwrap_or_else(|| value.map(|v| format!("Current: {}", camdef::format(v))).unwrap_or_else(|| "Waiting for camera".into()));
+                            let selected = options.iter().position(|o| Some(&o.value) == value);
+                            let mut choices: Vec<(String, Option<&camdef::Value>)> = Vec::new();
+                            if selected.is_none() {
+                                let fallback = value.map(|v| format!("Current: {}", camdef::format(v))).unwrap_or_else(|| "Waiting for camera".into());
+                                choices.push((fallback, None));
+                            }
+                            for o in options {
+                                choices.push((o.label.clone(), Some(&o.value)));
+                            }
+                            let label = if let Some(idx) = selected {
+                                options[idx].label.clone()
+                            } else {
+                                choices[0].0.clone()
+                            };
                             let mut combo_ui = ui.new_child(egui::UiBuilder::new().max_rect(at(335.0,3.0,270.0,23.0)));
-                            egui::ComboBox::from_id_salt("choice").width(270.0).selected_text(label).show_ui(&mut combo_ui, |ui| { for o in options { if ui.selectable_label(Some(&o.value)==value, &o.label).clicked() { submit = Some(camdef::format(&o.value)); } } });
+                            egui::ComboBox::from_id_salt("choice").width(270.0).selected_text(label).show_ui(&mut combo_ui, |ui| {
+                                for (choice_label, opt_val) in choices {
+                                    let is_selected = match opt_val {
+                                        Some(v) => Some(v) == value,
+                                        None => selected.is_none(),
+                                    };
+                                    if ui.selectable_label(is_selected, &choice_label).clicked() {
+                                        if let Some(v) = opt_val {
+                                            submit = Some(camdef::format(v));
+                                        }
+                                    }
+                                }
+                            });
                         } else if let Some(steps) = parameter.slider_steps() {
                             if !row.sliding && !session.is_pending(&parameter.name) { if let Some(v) = value { row.slider=parameter.slider_position(v).unwrap_or(if v.to_f64()<0.0 { 0 } else { steps }); } }
                             ui.spacing_mut().slider_width = 200.0;
