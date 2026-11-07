@@ -2420,10 +2420,10 @@ mod compare_tests {
         let mut out = ctx.run_ui(egui::RawInput::default(), |ui| editor.compare_window(ui.ctx(), &mut toasts, Firmware::ArduCopter2));
         out.textures_delta.clear();
         assert!(editor.compare.is_some(), "waits for Continue");
-        editor.compare.as_ref().unwrap();
         // pressing Escape closes it as Cancel
         let esc = egui::RawInput { events: vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }], ..Default::default() };
-        let _ = ctx.run_ui(esc, |ui| editor.compare_window(ui.ctx(), &mut toasts, Firmware::ArduCopter2));
+        let mut out = ctx.run_ui(esc, |ui| editor.compare_window(ui.ctx(), &mut toasts, Firmware::ArduCopter2));
+        out.textures_delta.clear();
         assert!(editor.compare.is_none() && editor.edits.is_empty() && toasts.0.is_empty());
     }
 }
