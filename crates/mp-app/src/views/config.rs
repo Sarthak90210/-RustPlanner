@@ -914,23 +914,23 @@ fn numeric_updown(m: &param_meta::ParamMeta) -> (f64, f64, f64, usize) {
     (r(min), r(max), r(inc), dp)
 }
 
-/// The Options cell: the Range metadata, then the values one per line.
+/// The Options cell: the raw Range, a line break, then the raw Values one per line, trimmed.
 fn options_text(m: &param_meta::ParamMeta) -> String {
-    let range = m.range.map(|(lo, hi)| format!("{lo} {hi}")).unwrap_or_default();
-    let values = m.values.iter().map(|(k, s)| format!("{k}:{s}")).collect::<Vec<_>>().join("\n");
-    format!("{range}\n{values}").trim().to_string()
+    format!("{}\n{}", m.range_raw, m.values_raw.replace(',', "\n")).trim().to_string()
 }
 
-/// Options.ToolTipText: one value per line, or rows of `columns` past 50 values.
+/// Options.ToolTipText: the raw values one per line, or rows of `columns` past 50 commas
+/// (the last entry is left out there, as the original loop stops at the comma count).
 fn options_tooltip(m: &param_meta::ParamMeta) -> Option<String> {
-    if m.values.is_empty() {
+    let options = &m.values_raw;
+    if options.is_empty() {
         return None;
     }
-    let opts: Vec<String> = m.values.iter().map(|(k, s)| format!("{k}:{s}")).collect();
-    let n = opts.len() - 1; // the comma count
+    let n = options.matches(',').count();
     if n <= 50 {
-        return Some(opts.join("\n"));
+        return Some(options.replace(',', "\n"));
     }
+    let opts: Vec<&str> = options.split(',').collect();
     let columns = (n - 1) / 50 + 1;
     let mut ans = String::new();
     let mut i = 0;

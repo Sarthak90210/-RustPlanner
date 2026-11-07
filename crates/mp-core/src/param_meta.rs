@@ -19,15 +19,24 @@ pub struct ParamMeta {
     pub user: String,
     pub reboot_required: bool,
     pub read_only: bool,
+    /// the metadata's Values / Range text as written (the Options column shows these)
+    pub values_raw: String,
+    pub range_raw: String,
 }
 
 type Section = HashMap<String, ParamMeta>;
 
+/// GetParameterOptionsInt / GetParameterBitMaskInt: "key:label" entries whose key int.Parse
+/// accepts (others are skipped as bad entries); an entry without ':' is its own label.
 fn parse_values(s: &str) -> Vec<(i64, String)> {
     s.split(',')
+        .filter(|e| !e.is_empty())
         .filter_map(|kv| {
-            let (k, v) = kv.split_once(':')?;
-            Some((k.trim().parse::<f64>().ok()? as i64, v.trim().to_string()))
+            let mut parts = kv.split(':');
+            let key = parts.next()?.trim();
+            let label = parts.next().map(str::trim).unwrap_or(key);
+            let k: i32 = key.parse().ok()?;
+            Some((k as i64, label.to_string()))
         })
         .collect()
 }
@@ -56,13 +65,17 @@ fn all() -> &'static HashMap<String, Section> {
                         "Description" => m.description = t.to_string(),
                         "Units" => m.units = t.to_string(),
                         "Range" => {
+                            m.range_raw = t.to_string();
                             let mut it = t.split_whitespace().filter_map(|x| x.parse::<f64>().ok());
                             if let (Some(a), Some(b)) = (it.next(), it.next()) {
                                 m.range = Some((a, b));
                             }
                         }
                         "Increment" => m.increment = t.parse().ok(),
-                        "Values" => m.values = parse_values(t),
+                        "Values" => {
+                            m.values_raw = t.to_string();
+                            m.values = parse_values(t);
+                        }
                         "Bitmask" => {
                             m.bitmask = parse_values(t)
                                 .into_iter()
@@ -81,9 +94,10 @@ fn all() -> &'static HashMap<String, Section> {
                 section.insert(p.tag_name().name().to_string(), m);
             }
             for (dst, src) in copy_from {
-                if let Some(vals) = section.get(&src).map(|m| m.values.clone()) {
+                if let Some((vals, raw)) = section.get(&src).map(|m| (m.values.clone(), m.values_raw.clone())) {
                     if let Some(d) = section.get_mut(&dst) {
                         d.values = vals;
+                        d.values_raw = raw;
                     }
                 }
             }
@@ -135,4 +149,20 @@ pub fn all_defaults(fw: Firmware) -> Vec<(String, f32)> {
             (k.clone(), v)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod option_tests {
+    use super::*;
+
+    #[test]
+    fn options_int_drops_fractional_keys_like_getparameteroptionsint() {
+        assert_eq!(parse_values("0:Disabled,1:Enabled"), [(0, "Disabled".to_string()), (1, "Enabled".to_string())]);
+        // ACRO_RP_EXPO style keys are not integers: skipped, never written as 0
+        assert_eq!(parse_values("0:Disabled,0.1:Very Low,0.2:Low"), [(0, "Disabled".to_string())]);
+        assert_eq!(parse_values(" 3 : Three ,7"), [(3, "Three".to_string()), (7, "7".to_string())]);
+        let expo = get(Firmware::ArduCopter2, "ACRO_RP_EXPO").expect("metadata");
+        assert!(expo.values.iter().all(|(k, _)| *k == 0 || *k == 1 || *k == -1 || *k > 1), "only integer keys");
+        assert!(expo.values_raw.contains("0.1"));
+    }
 }
