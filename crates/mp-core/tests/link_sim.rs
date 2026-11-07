@@ -390,7 +390,8 @@ fn guided_fly_to_switches_mode_and_moves_the_copter() {
     let port = std::net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
     let link = Link::connect_with_params(ConnectionSpec::UdpListen { port }, None, false);
     let _sim = sim::spawn(port).unwrap();
-    wait_event(&link, Duration::from_secs(10), |e| matches!(e, LinkEvent::Connected));
+    // the workspace runs many simulators at once; the first heartbeat can be slow
+    wait_event(&link, Duration::from_secs(30), |e| matches!(e, LinkEvent::Connected));
     let ack = |link: &Link| {
         wait_event(link, Duration::from_secs(5), |e| matches!(e, LinkEvent::CommandAck { .. }));
     };
