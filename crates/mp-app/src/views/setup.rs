@@ -192,8 +192,7 @@ pub struct SetupView {
     /// Sikradio background job result and the settings last read from the radio
     sik_done: std::sync::Arc<std::sync::Mutex<Option<SikDone>>>,
     sik_loaded: Option<mp_core::sik::SikSettings>,
-    radio_cal: Option<RadioCal>,
-    radio_done: bool,
+    radio_cal: RadioCal,
     motor_pct: f32,
     accel_running: bool,
     accel_label: String,
@@ -343,8 +342,7 @@ impl Default for SetupView {
             serial_bitmask: None,
             sik_done: Default::default(),
             sik_loaded: None,
-            radio_cal: None,
-            radio_done: false,
+            radio_cal: RadioCal::default(),
             motor_pct: 0.0,
             accel_running: false,
             accel_label: "Calibrate Accel".into(),
@@ -371,10 +369,72 @@ impl Default for SetupView {
     }
 }
 
+/// ConfigRadioInput's rcmin / rcmax (3000 / 0 when the control is made) and the calibration
+/// steps between its message boxes.
 struct RadioCal {
-    min: [u16; 16],
-    max: [u16; 16],
+    min: [f32; 16],
+    max: [f32; 16],
+    /// the while(run) loop is sampling
+    running: bool,
+    /// the message box on screen and what OK does next
+    message: Option<(String, &'static str, RadioNext)>,
+    /// BUT_Calibrateradio.Text
+    label: &'static str,
+    /// cs.raterc before calibration
+    old_rc: u16,
 }
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum RadioNext {
+    /// RC_CHANNELS at 10 Hz, then the "move all sticks" box
+    Stream,
+    Run,
+    /// "sticks centered": take the trims and save
+    Save,
+    Done,
+}
+
+impl Default for RadioCal {
+    fn default() -> Self {
+        Self { min: [3000.0; 16], max: [0.0; 16], running: false, message: None, label: "Calibrate Radio", old_rc: 2 }
+    }
+}
+
+impl RadioCal {
+    /// the loop body: every channel while channel 1 reads 800..2200
+    fn sample(&mut self, ch: &[u16; 16]) {
+        if !self.running {
+            return;
+        }
+        let c1 = ch[0] as f32;
+        if c1 > 800.0 && c1 < 2200.0 {
+            for i in 0..16 {
+                self.min[i] = self.min[i].min(ch[i] as f32);
+                self.max[i] = self.max[i].max(ch[i] as f32);
+            }
+        }
+    }
+
+    /// The saving loop: (RCn_MIN/MAX/TRIM writes, the summary data) for the given stick
+    /// positions, constrained to the recorded range.
+    fn save(&self, ch: &[u16; 16]) -> (Vec<(String, f32)>, String) {
+        let mut writes = Vec::new();
+        let mut data = String::from("---------------\n");
+        for a in 0..16 {
+            let (min, max) = (self.min[a], self.max[a]);
+            let trim = (ch[a] as f32).max(min).min(max);
+            if min < max && min != 0.0 && max != 0.0 && trim <= max && trim >= min && trim != 0.0 && min != max {
+                let n = a + 1;
+                writes.push((format!("RC{n}_MIN"), min));
+                writes.push((format!("RC{n}_MAX"), max));
+                writes.push((format!("RC{n}_TRIM"), trim));
+                data += &format!("CH{n} {min} | {max}\n");
+            }
+        }
+        (writes, data)
+    }
+}
+
 
 impl SetupView {
     pub fn close_terminal(&mut self) {
@@ -615,22 +675,16 @@ impl SetupView {
             let s = link.shared.read();
             (s.cs.clone(), s.params.clone())
         };
-        if let Some(cal) = self.radio_cal.as_mut() {
-            for i in 0..16 {
-                let v = cs.ch_in[i];
-                if v > 800 && v < 2200 {
-                    cal.min[i] = cal.min[i].min(v);
-                    cal.max[i] = cal.max[i].max(v);
-                }
-            }
-        }
+        let ch: [u16; 16] = std::array::from_fn(|i| cs.ch_in[i]);
+        self.radio_cal.sample(&ch);
         let o = ui.max_rect().min;
         let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));
         let p = ui.painter().clone();
         // RCMAP: roll/pitch/throttle/yaw channel numbers
         let map = |n: &str, d: usize| params.get(n).map(|p| p.value as usize).filter(|v| (1..=16).contains(v)).unwrap_or(d);
         let (ch_r, ch_p, ch_t, ch_y) = (map("RCMAP_ROLL", 1), map("RCMAP_PITCH", 2), map("RCMAP_THROTTLE", 3), map("RCMAP_YAW", 4));
-        let mm = |ch: usize| self.radio_cal.as_ref().map(|c| (c.min[ch - 1], c.max[ch - 1]));
+        // the red min/max lines once a calibration has seen the channel
+        let mm = |ch: usize| Some((self.radio_cal.min[ch - 1], self.radio_cal.max[ch - 1])).filter(|(_, mx)| *mx > 0.0).map(|(a, b)| (a as u16, b as u16));
         rc_bar(&p, r(12.0, 13.0, 288.0, 23.0), "Roll", cs.ch_in[ch_r - 1], mm(ch_r), false);
         rc_bar(&p, r(12.0, 64.0, 47.0, 211.0), "Pitch", cs.ch_in[ch_p - 1], mm(ch_p), true);
         rc_bar(&p, r(251.0, 64.0, 47.0, 211.0), "Throttle", cs.ch_in[ch_t - 1], mm(ch_t), true);
@@ -645,28 +699,61 @@ impl SetupView {
             mavlink_checkbox(ui, r(x, y, 70.0, 17.0), "Reverse", &params, &names, link, app.readonly, &mut self.check_awaiting);
         }
         let cal_r = r(491.0, 327.0, 134.0, 23.0);
-        let label = if self.radio_cal.is_some() { "Click when Done" } else if self.radio_done { "Completed" } else { "Calibrate Radio" };
-        if ui.put(cal_r, |ui: &mut egui::Ui| theme::button_sized(ui, label, cal_r.size())).clicked() {
-            if self.radio_cal.is_none() {
-                app.toasts.error("Ensure your transmitter is on and receiver is powered and connected\nEnsure your motor does not have power/no props!!!");
-                app.toasts.error("Click OK and move all RC sticks and switches to their\nextreme positions so the red bars hit the limits.");
-                self.radio_cal = Some(RadioCal { min: [u16::MAX; 16], max: [0; 16] });
-            } else if let Some(cal) = self.radio_cal.take() {
-                let mut summary = String::from("Here are the detected radio options\nNOTE Channels not connected are displayed as 1500 +-2\nNormal values are around 1100 | 1900\nChannel:Min | Max \n");
-                for i in 0..16 {
-                    if cal.max[i] > cal.min[i] && cal.max[i] - cal.min[i] > 200 {
-                        let n = i + 1;
-                        let trim = if n == ch_t { cal.min[i] } else { cs.ch_in[i].clamp(cal.min[i], cal.max[i]) };
-                        if !app.readonly {
-                            link.send(LinkCommand::SetParam { name: format!("RC{n}_MIN"), value: cal.min[i] as f32 });
-                            link.send(LinkCommand::SetParam { name: format!("RC{n}_MAX"), value: cal.max[i] as f32 });
-                            link.send(LinkCommand::SetParam { name: format!("RC{n}_TRIM"), value: trim as f32 });
-                        }
-                        summary.push_str(&format!("CH{n} {} | {}\n", cal.min[i], cal.max[i]));
-                    }
+        let label = self.radio_cal.label;
+        if ui.put(cal_r, |ui: &mut egui::Ui| theme::button_sized(ui, label, cal_r.size())).clicked() && self.radio_cal.message.is_none() {
+            let cal = &mut self.radio_cal;
+            if cal.running {
+                // "Click when Done": the loop ends
+                cal.label = "Completed";
+                cal.running = false;
+                if !(cal.min[0] > 800.0 && cal.min[0] < 2200.0) {
+                    cal.message = Some(("Bad channel 1 input, canceling".into(), "", RadioNext::Done));
+                } else {
+                    cal.message = Some(("Ensure all your sticks are centered and throttle is down, and click ok to continue".into(), "", RadioNext::Save));
                 }
-                app.toasts.error(summary);
-                self.radio_done = true;
+            } else {
+                cal.message = Some(("Ensure your transmitter is on and receiver is powered and connected\nEnsure your motor does not have power/no props!!!".into(), "", RadioNext::Stream));
+            }
+        }
+        // the message boxes of BUT_Calibrateradio_Click
+        if let Some((text, caption, next)) = self.radio_cal.message.clone() {
+            let mut ok = false;
+            egui::Modal::new(egui::Id::new("radio_cal_msg")).show(ui.ctx(), |ui| {
+                ui.set_min_width(300.0);
+                ui.label(egui::RichText::new(crate::i18n::t(caption)).strong());
+                theme::label(ui, &text);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                    ok = theme::button(ui, "OK").clicked();
+                });
+            });
+            if ok || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                self.radio_cal.message = None;
+                let rc_stream = |rate: u16| {
+                    use mp_core::mavlink::dialects::ardupilotmega::{MavDataStream, MavMessage, REQUEST_DATA_STREAM_DATA};
+                    LinkCommand::Send(Box::new(MavMessage::REQUEST_DATA_STREAM(REQUEST_DATA_STREAM_DATA { req_message_rate: rate, target_system: cs.sysid, target_component: cs.compid, req_stream_id: MavDataStream::MAV_DATA_STREAM_RC_CHANNELS, start_stop: 1 })))
+                };
+                match next {
+                    RadioNext::Stream => {
+                        self.radio_cal.old_rc = app.settings.planner.get("raterc").and_then(|v| v.parse().ok()).unwrap_or(2);
+                        link.send(rc_stream(10));
+                        self.radio_cal.label = "Click when Done";
+                        self.radio_cal.message = Some(("Click OK and move all RC sticks and switches to their\nextreme positions so the red bars hit the limits.".into(), "", RadioNext::Run));
+                    }
+                    RadioNext::Run => self.radio_cal.running = true,
+                    RadioNext::Save => {
+                        self.radio_cal.label = "Saving";
+                        let (writes, data) = self.radio_cal.save(&ch);
+                        if !app.readonly {
+                            for (name, value) in writes {
+                                link.send(LinkCommand::SetParam { name, value });
+                            }
+                        }
+                        link.send(rc_stream(self.radio_cal.old_rc));
+                        self.radio_cal.message = Some((format!("Here are the detected radio options\nNOTE Channels not connected are displayed as 1500 +-2\nNormal values are around 1100 | 1900\nChannel:Min | Max \n{data}"), "Radio", RadioNext::Done));
+                        self.radio_cal.label = "Completed";
+                    }
+                    RadioNext::Done => {}
+                }
             }
         }
         // groupBoxElevons (plane only) and Spektrum Bind
@@ -2238,5 +2325,37 @@ fn mavlink_checkbox(ui: &mut egui::Ui, rect: Rect, label: &str, params: &std::co
     if ui.put(rect, egui::Checkbox::new(&mut b, crate::i18n::t(label)).indeterminate(indeterminate)).changed() && !readonly {
         link.send(LinkCommand::SetParam { name: name.clone(), value: if b { *on as f32 } else { *off as f32 } });
         awaiting.insert(name.clone());
+    }
+}
+
+#[cfg(test)]
+mod radio_cal_tests {
+    use super::*;
+
+    #[test]
+    fn calibration_samples_only_with_channel_one_valid_and_saves_like_the_original() {
+        let mut cal = RadioCal::default();
+        let mut ch = [0u16; 16];
+        ch[0] = 1500;
+        ch[1] = 1500;
+        cal.sample(&ch);
+        assert_eq!(cal.max[0], 0.0, "nothing until the loop runs");
+        cal.running = true;
+        for (a, b) in [(1100, 1000), (1900, 2000), (1500, 1500)] {
+            ch[0] = a;
+            ch[1] = b;
+            cal.sample(&ch);
+        }
+        // channel 1 out of range: nothing recorded for any channel
+        ch[0] = 500;
+        ch[1] = 900;
+        cal.sample(&ch);
+        assert_eq!((cal.min[0], cal.max[0], cal.min[1], cal.max[1]), (1100.0, 1900.0, 1000.0, 2000.0));
+        assert_eq!(cal.min[2], 0.0, "an unused channel reads 0");
+        ch[0] = 1500;
+        ch[1] = 2100;
+        let (writes, data) = cal.save(&ch);
+        assert_eq!(writes, vec![("RC1_MIN".to_string(), 1100.0), ("RC1_MAX".into(), 1900.0), ("RC1_TRIM".into(), 1500.0), ("RC2_MIN".into(), 1000.0), ("RC2_MAX".into(), 2000.0), ("RC2_TRIM".into(), 2000.0)]);
+        assert_eq!(data, "---------------\nCH1 1100 | 1900\nCH2 1000 | 2000\n");
     }
 }
