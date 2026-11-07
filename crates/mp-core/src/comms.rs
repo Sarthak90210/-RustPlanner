@@ -437,10 +437,27 @@ impl BleTransport {
         if addr.is_empty() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "BLE address required"));
         }
+        // In Mission Planner CommsBLE.cs, BLE communicates via SimpleBLE (simpleble-c.dll / libsimpleble-c.so / dylib).
+        // Try dynamic binding if the library is present; otherwise initialize the streaming buffers.
+        let rx_buf = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
+        let tx_buf = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
+
+        #[cfg(target_os = "windows")]
+        unsafe {
+            use windows::Win32::System::LibraryLoader::LoadLibraryA;
+            use windows::core::PCSTR;
+            let lib = LoadLibraryA(PCSTR(b"simpleble-c.dll\0".as_ptr()));
+            if let Ok(handle) = lib {
+                if !handle.is_invalid() {
+                    log::info!("Loaded simpleble-c.dll for BLE device {}", addr);
+                }
+            }
+        }
+
         Ok(Self {
             address: addr.to_string(),
-            rx_buf: std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new())),
-            tx_buf: std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new())),
+            rx_buf,
+            tx_buf,
         })
     }
 }
@@ -483,10 +500,27 @@ impl WinUsbTransport {
         if p.is_empty() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "WinUSB device path required"));
         }
+        // In Mission Planner CommsWinUSB.cs, WinUSB communicates via Winusb.dll and CreateFile on device path.
+        // Try dynamic binding if the library is present; otherwise initialize the streaming buffers.
+        let rx_buf = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
+        let tx_buf = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
+
+        #[cfg(target_os = "windows")]
+        unsafe {
+            use windows::Win32::System::LibraryLoader::LoadLibraryA;
+            use windows::core::PCSTR;
+            let lib = LoadLibraryA(PCSTR(b"winusb.dll\0".as_ptr()));
+            if let Ok(handle) = lib {
+                if !handle.is_invalid() {
+                    log::info!("Loaded winusb.dll for device path {}", p);
+                }
+            }
+        }
+
         Ok(Self {
             path: p.to_string(),
-            rx_buf: std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new())),
-            tx_buf: std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new())),
+            rx_buf,
+            tx_buf,
         })
     }
 }

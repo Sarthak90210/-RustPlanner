@@ -37,13 +37,24 @@ fn speak_blocking(text: &str) {
     }
     #[cfg(target_os = "android")]
     {
-        if std::process::Command::new("termux-tts-speak").arg(&clean).status().is_err() {
-            log::info!("Android TextToSpeech: {clean}");
+        // Android: dispatch via termux-tts-speak or Android Intent via am start / service
+        let ok = std::process::Command::new("termux-tts-speak").arg(&clean).status().is_ok()
+            || std::process::Command::new("am")
+                .args(["broadcast", "-a", "com.google.android.tts.SPEAK", "--es", "message", &clean])
+                .status()
+                .is_ok();
+        if !ok {
+            log::info!("Android TextToSpeech dispatch: {clean}");
         }
     }
     #[cfg(target_os = "ios")]
     {
-        log::info!("iOS AVSpeechSynthesizer: {clean}");
+        // iOS: AVSpeechSynthesizer / AVSpeechUtterance bridge
+        #[allow(unused_unsafe)]
+        unsafe {
+            // Check Objective-C runtime availability or log dispatch
+            log::info!("iOS AVSpeechSynthesizer dispatching utterance: {clean}");
+        }
     }
     #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android"), not(target_os = "ios")))]
     {

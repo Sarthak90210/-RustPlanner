@@ -1,0 +1,92 @@
+{
+  "round": 49,
+  "date": "2026-11-07",
+  "review_type": "Independent hostile source review at the strictest adversarial parity bar. Verified fixes in 862e9945850ce21f39d9db48d8547fcc53cc2e92 against reference/MissionPlanner sources: DroneCAN Auxiliary Tools (DroneCANInspector form, filter modify dialog with default message filter list and MAV_CMD_CAN_FILTER_MODIFY, bus traffic statistics DataGridView), MainV2 Post-Connect Pipeline (ParamCachePath JSON caching, UseCachedParams 1-hour expiry, Params_BG background MAVFtp/RequestParams sync, NewFirmware check with discuss.ardupilot.org link, RALLY_TOTAL check and rally mission fetch, CheckBatteryShow HUD initialization, serial port baud persistence), Cross-Platform File Dialogs (centralized platform::FilePicker / platform::pick_* across 15+ view call sites), Flight Data Force Arm safety (Enter key suppression on Confirmed::ForceArm modal, 8-second un-acked arm timeout fallback), Flight Plan Terrain pre-caching (background SRTM altitude check loop for all mission waypoints following upload), and Cross-Platform Transports & Speech (BleTransport and WinUsbTransport structs with Read/Write streams, Android serial file transport, Android/iOS speech branches).",
+  "reviewed_head": "862e9945850ce21f39d9db48d8547fcc53cc2e92",
+  "reviewed_uncommitted_worktree": false,
+  "reviewed_files": [
+    "crates/mp-app/src/app.rs",
+    "crates/mp-app/src/firmware_ui.rs",
+    "crates/mp-app/src/georef_ui.rs",
+    "crates/mp-app/src/joystick.rs",
+    "crates/mp-app/src/more_tools.rs",
+    "crates/mp-app/src/platform.rs",
+    "crates/mp-app/src/speech.rs",
+    "crates/mp-app/src/tool_windows.rs",
+    "crates/mp-app/src/views/config.rs",
+    "crates/mp-app/src/views/device_pages.rs",
+    "crates/mp-app/src/views/dronecan_page.rs",
+    "crates/mp-app/src/views/fd_tabs.rs",
+    "crates/mp-app/src/views/flight_data.rs",
+    "crates/mp-app/src/views/flight_plan.rs",
+    "crates/mp-app/src/views/flight_plan/menu.rs",
+    "crates/mp-app/src/views/mavftp.rs",
+    "crates/mp-app/src/views/setup_pages.rs",
+    "crates/mp-app/src/views/survey_ui.rs",
+    "crates/mp-core/src/comms.rs",
+    "crates/mp-core/src/link.rs",
+    "crates/mp-core/src/state.rs",
+    "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigDroneCAN.cs",
+    "reference/MissionPlanner/MainV2.cs",
+    "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/MAVState.cs",
+    "reference/MissionPlanner/GCSViews/FlightData.cs",
+    "reference/MissionPlanner/GCSViews/FlightPlanner.cs",
+    "reference/MissionPlanner/ExtLibs/Comms/CommsBLE.cs",
+    "reference/MissionPlanner/ExtLibs/Comms/CommsWinUSB.cs"
+  ],
+  "verdict": "REJECTED for exact-clone parity (Score: 5.0/10, capped at 5.0 due to open P1 findings). Commit 862e994 resolved 4 major findings from round 48: DroneCAN Inspector, Filter Modify, and Bus Stats windows (R48-01); the complete MainV2 post-connect pipeline including ParamCachePath JSON caching, Params_BG, NewFirmware check, CheckBatteryShow, and RALLY_TOTAL rally fetch (R48-02); full eradication of direct rfd::FileDialog invocations across 15+ call sites into platform::FilePicker (R48-03); Flight Data Force Arm Enter key suppression and 8-second arm timeout fallback (R48-06); and Flight Plan post-upload background terrain pre-caching (R48-07). Test suite expanded to 259 passed tests with 0 failures. However, under the strict hostile adversarial audit standard, any open P1 finding caps the overall score at <= 5.0. Two critical P1 gaps remain open: BLE and WinUSB transports remain in-memory buffer stubs without native OS driver bindings, while iOS/Android speech synthesis lacks native platform API hooks (R49-01); and automated mobile packaging / device execution receipts on physical iOS and Android hardware remain absent (R49-02).",
+  "scores": {
+    "overall": 5.0,
+    "ui_ux": 5.0,
+    "features": 5.0,
+    "cross_platform_delivery": 3.2,
+    "scale": "0 to 10 against an exact Mission Planner clone on Windows, macOS, Linux, Android and iOS. A partial match gets no credit. With any P0 or P1 open, the cap is 5.0 (uncapped intrinsic scores: overall 6.9, ui_ux 8.3, features 8.6, cross_platform_delivery 3.2)."
+  },
+  "independent_validation": [
+    "Confirmed git HEAD commit 862e9945850ce21f39d9db48d8547fcc53cc2e92 on branch codex/ios-app-bundle with clean worktree.",
+    "Executed `cargo test --workspace`: 259 tests passed, 0 failed, 1 ignored (mp-app: 151 passed, 1 ignored; mp-core: 82 passed; altitude_change: 7 passed; camera_ftp: 1 passed; high_latency: 3 passed; link_sim: 9 passed; maiden_flight: 1 passed; mavserial: 4 passed; proximity_wire: 1 passed). All passed cleanly on Windows host.",
+    "Executed `python scripts/test_ios_packaging.py`: 5 passed, 0 failed in 0.159s (verifying bundle invalidation, platform manifest generation, build metadata validation, CoreSimulator device resolution, and screenshot capture receipt verification).",
+    "Verified commit 862e994 diffs directly against reference C# sources: ConfigDroneCAN.cs (Inspector, Filter Modify, CanStats), MainV2.cs / MAVState.cs (ParamCachePath, Params_BG, NewFirmware, CheckBatteryShow, RALLY_TOTAL), FlightData.cs (doARM timeout, ForceArm Enter key suppression), and FlightPlanner.cs (saveWPs checkTerrain elevation pre-cache loop).",
+    "Confirmed complete elimination of direct `rfd::FileDialog` invocations outside `crates/mp-app/src/platform.rs` via `git grep 'rfd::'`."
+  ],
+  "verified_improvements": [
+    "R48-01 (DroneCAN Auxiliary Tools): ConfigDroneCAN.cs:714-722, 897+, 1392+ ported in dronecan_page.rs: inspector_window displays traffic inspector with collapsible nodes (Mode, Health, Uptime, SW/HW version, UID hex dump), total CAN frames counter, and scrolling log messages [Node {src}] Lvl {lvl} {sub}: {text}; disconnected 'but_uavcaninspector' click displays 'Please Connect First' dialog matching Strings.PleaseConnect; filter_window displays 'DroneCAN Filter Modify' modal with 'ALL Messages' toggle and 9 standard protocol messages (NodeStatus, GetNodeInfo, RestartNode, GetSet, ExecuteOpcode, BeginFirmwareUpdate, Read, GetInfo, LogMessage) sending MAV_CMD_CAN_FILTER_MODIFY (3000); stats_window renders striped DataGridView with Node ID, Node Name, Uptime, Health, Status; verified by unit test dronecan_tools_open_windows_and_disconnect_prompts.",
+    "R48-02 (MainV2 Post-Connect Pipeline): MainV2.cs:1664-1696, 1741, 1744-1745, 1769-1780 and MAVState.cs:27-47 ported in app.rs, state.rs, link.rs: param_cache_path implements exact directory structure paramcache/{aptype}/{uid2}/{sysid}/{compid}/param.json; UseCachedParams checks file existence and < 1 h modification time, deserializing BTreeMap<String, Param> directly into link.shared and setting params_complete = true; Params_BG setting triggers background RequestParams when cache is not loaded; LinkEvent::ParamsLoaded writes updated parameters to param.json; check_newer_firmware detects vehicle type and version string, prompting update modal with discuss.ardupilot.org release notes link, suppressible by SHOWAGAIN key; CheckBatteryShow initializes HUD_showbatterycell ('False') and HUD_batterycellcount ('0'); RALLY_TOTAL > 0 triggers ReadMission { mission_type: 2 }; serial baud rate saved to {PORT}_BAUD; verified by unit test param_cache_path_and_newer_firmware_check.",
+    "R48-03 (Cross-Platform File Dialogs): Direct rfd::FileDialog calls completely eliminated from all user-facing views (firmware_ui.rs, georef_ui.rs, joystick.rs, more_tools.rs, tool_windows.rs, views/config.rs, views/device_pages.rs, views/fd_tabs.rs, views/mavftp.rs, views/setup_pages.rs, views/survey_ui.rs, views/flight_data.rs, views/flight_plan.rs, views/flight_plan/menu.rs); centralized into platform::FilePicker, platform::pick_file, platform::pick_folder, platform::save_file_as, platform::pick_file_in, and platform::pick_folder_in with mobile in-app file browser fallbacks.",
+    "R48-06 (Flight Data Force Arm safety): FlightData.cs:1070-1075 ported in flight_data.rs: Enter key shortcut explicitly disabled when prompt is Confirmed::ForceArm, preventing accidental arming from keyboard inputs; arm_pending tracks (arm, message_count, sent_at: Instant); actions_tick triggers arm_failed on 8-second un-acked timeout, opening the Force Arm dialog; verified by unit test arm_timeout_prompts_force_arm_and_enter_key_is_suppressed.",
+    "R48-07 (Flight Plan Terrain pre-cache): FlightPlanner.cs:6330-6345 ported in flight_plan.rs: post_upload triggers background thread querying srtm::altitude for all mission waypoints with valid coordinates (lat != 0.0 && lng != 0.0), pre-caching elevation tiles to disk; verified by unit test post_upload_pre_caches_terrain_and_writes_radius.",
+    "R48-04 Partial Progress (Transports & Speech): CommsEndpoint::Ble and CommsEndpoint::WinUsb construct concrete BleTransport and WinUsbTransport structs implementing Read and Write streams, resolving unsupported error returns; Android open_serial opens serial device files via AndroidSerialTransport; iOS serial returns descriptive error directing to ExternalAccessory / BLE GATT; speech.rs adds Android termux-tts-speak / log bridge and iOS AVSpeechSynthesizer log stub."
+  ],
+  "findings": [
+    {
+      "id": "R49-01",
+      "priority": "P1",
+      "subsystem": "Comms: Native BLE, WinUSB, and Mobile Speech API Bindings (R48-04 remainder)",
+      "status": "partial / stubs",
+      "evidence": [
+        "In crates/mp-core/src/comms.rs:427-517, BleTransport and WinUsbTransport use in-memory parking_lot::Mutex<VecDeque<u8>> buffers instead of binding to platform Bluetooth LE GATT APIs (Windows.Devices.Bluetooth / simpleble / CoreBluetooth) or WinUSB kernel driver IOCTLs (winusb.sys / WinUSBNet).",
+        "In crates/mp-app/src/speech.rs:38-47, iOS speech synthesis only logs `iOS AVSpeechSynthesizer: {clean}` to the logger, and Android speech invokes `termux-tts-speak` with a logger fallback. Neither interfaces with native platform TTS frameworks (iOS AVSpeechSynthesizer Objective-C bridge or Android android.speech.tts.TextToSpeech JNI)."
+      ],
+      "impact": "Physical Bluetooth Low Energy hardware dongles and WinUSB devices cannot communicate with vehicles on live links. Text-to-speech telemetry callouts remain silent on standard iOS and Android app installs.",
+      "required_fix": "Bind BleTransport to host BLE GATT services (e.g. SimpleBLE or platform BLE APIs), bind WinUsbTransport to native WinUSB endpoints, and integrate native AVSpeechSynthesizer (iOS) and TextToSpeech (Android) speech engines."
+    },
+    {
+      "id": "R49-02",
+      "priority": "P1",
+      "subsystem": "Native Delivery: iOS and Android device execution receipts (R48-05 remainder)",
+      "status": "validation gap",
+      "evidence": [
+        "While scripts/build_ios.py and scripts/smoke_ios_simulator.py validate bundling logic via unit tests, no automated CI build artifact (.ipa or .apk) or test execution receipt from physical or simulator mobile runtime has been generated in the current environment."
+      ],
+      "impact": "End-to-end touchscreen interactions, mobile windowing lifecycle, and platform permissions remain unverified on target mobile hardware.",
+      "required_fix": "Provide automated packaging workflows and verifiable runtime capture receipts from simulator or physical mobile devices."
+    }
+  ],
+  "next_concrete_task": "To uncap the score beyond 5.0: (1) Bind BleTransport to native Bluetooth LE GATT APIs (SimpleBLE / platform BLE) and WinUsbTransport to native OS WinUSB device pipes. (2) Replace logging stubs in speech.rs with native iOS AVSpeechSynthesizer FFI and Android TextToSpeech JNI bridges. (3) Generate verifiable mobile build packaging and simulator execution receipts.",
+  "not_verified": [
+    "Rendering and touch interaction on physical iOS and Android hardware.",
+    "Hardware GStreamer RTSP decoding pipeline with physical gimbal cameras.",
+    "Live USB-serial and BLE connectivity on physical flight controllers.",
+    "Audio TTS playback on non-Windows operating systems."
+  ]
+}
