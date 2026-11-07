@@ -191,7 +191,10 @@ impl Loader {
 
     /// The plugin thread's pass: Loop for each plugin due at its loopratehz.
     pub fn run_loops(&mut self) -> Instant {
-        let now = Instant::now();
+        self.run_loops_at(Instant::now())
+    }
+
+    fn run_loops_at(&mut self, now: Instant) -> Instant {
         let mut next = now + Duration::from_millis(100);
         for p in &mut self.plugins {
             let hz = (p.api.loop_rate_hz)(p.api.instance);
@@ -323,12 +326,13 @@ mod tests {
         // Loop runs at 10 Hz with the host's CurrentState
         l.state.lock().unwrap().fields.insert("alt".into(), 42.5);
         let start = Instant::now();
-        while start.elapsed() < Duration::from_millis(550) {
-            let next = l.run_loops();
-            std::thread::sleep(next.saturating_duration_since(Instant::now()));
+        // Exercise real plugin callbacks at explicit clock instants. Runner CPU
+        // contention must not turn this into a test of the host's sleep scheduler.
+        for (elapsed, expected) in [(0,1), (99,1), (101,2), (150,2), (202,3), (303,4), (404,5), (505,6)] {
+            l.run_loops_at(start + Duration::from_millis(elapsed));
+            let loops: u32 = l.state.lock().unwrap().config["example_loops"].parse().unwrap();
+            assert_eq!(loops, expected, "plugin invocation count at {elapsed} ms");
         }
-        let loops: u32 = l.state.lock().unwrap().config["example_loops"].parse().unwrap();
-        assert!((4..=8).contains(&loops), "{loops} loops in 550 ms at 10 Hz");
         assert_eq!(l.state.lock().unwrap().config["example_alt"], "42.5");
         // the menu click adds a waypoint and sends a command
         l.click(0, 7, -35.1, 149.2);

@@ -140,10 +140,10 @@ impl CameraSettingsForm {
         let Some(link) = link.filter(|l| Arc::ptr_eq(&l.shared, &self.shared) && l.status() == LinkStatus::Connected) else { self.cancel(); return false; };
         self.poll(link, readonly);
         let mut open = true; let mut refresh = false; let mut close = false;
-        let title = self.session.as_ref().map(|s| format!("Custom Settings - {} ({}:{})", s.definition.model,self.target.0,self.target.1)).unwrap_or_else(|| "Custom Settings".into());
+        let title = self.session.as_ref().map(|s| format!("Custom Settings — {} ({}:{})", s.definition.model,self.target.0,self.target.1)).unwrap_or_else(|| "Custom Settings".into());
         egui::Window::new(title).id(egui::Id::new("camera_custom_settings")).open(&mut open).default_size([780.0,650.0]).min_size([600.0,350.0]).show(ctx, |ui| {
             let loading = self.waiting.is_some() || self.job.is_some();
-            egui::ScrollArea::vertical().max_height((ui.available_height()-85.0).max(100.0)).show(ui, |ui| {
+            egui::ScrollArea::both().max_height((ui.available_height()-85.0).max(100.0)).show(ui, |ui| {
                 if let Some(session) = &mut self.session { Self::rows_ui(ui, session, &mut self.rows, readonly); }
             });
             let status = if let Some((_,_,progress)) = &self.job { progress.lock().unwrap().clone() }
@@ -170,15 +170,26 @@ impl CameraSettingsForm {
             if !enabled { row.sliding = false; }
             let mut submit = None;
             ui.push_id(&parameter.name, |ui| {
-                ui.horizontal(|ui| {
-                    ui.add_sized([ui.available_width().mul_add(0.45,0.0).min(325.0),23.0], egui::Label::new(&parameter.description));
-                    ui.add_enabled_ui(enabled, |ui| {
+                // CameraCustomSettingsForm.BuildRows/ResizeRows: a 63px panel,
+                // 8/4px margins, fixed description/editor/detail coordinates.
+                let panel_width = (ui.available_width() - 38.0).max(610.0);
+                let (outer, _) = ui.allocate_exact_size(egui::vec2(panel_width + 16.0, 71.0), egui::Sense::hover());
+                let panel = egui::Rect::from_min_size(outer.min + egui::vec2(8.0,4.0), egui::vec2(panel_width,63.0));
+                let at = |x,y,w,h| egui::Rect::from_min_size(panel.min + egui::vec2(x,y),egui::vec2(w,h));
+                let mut row_ui = ui.new_child(egui::UiBuilder::new().id_salt("panel").max_rect(panel));
+                row_ui.put(at(4.0,6.0,325.0,23.0), egui::Label::new(&parameter.description).truncate().halign(egui::Align::Min));
+                {
+                    let mut editor_ui = row_ui.new_child(egui::UiBuilder::new().id_salt("editor").max_rect(panel));
+                    if !enabled { editor_ui.disable(); }
+                    let ui = &mut editor_ui;
                         if !options.is_empty() || !parameter.options.is_empty() {
                             let label = options.iter().find(|o| Some(&o.value) == value).map(|o| o.label.clone()).unwrap_or_else(|| value.map(|v| format!("Current: {}", camdef::format(v))).unwrap_or_else(|| "Waiting for camera".into()));
-                            egui::ComboBox::from_id_salt("choice").width(195.0).selected_text(label).show_ui(ui, |ui| { for o in options { if ui.selectable_label(Some(&o.value)==value, &o.label).clicked() { submit = Some(camdef::format(&o.value)); } } });
+                            let mut combo_ui = ui.new_child(egui::UiBuilder::new().max_rect(at(335.0,3.0,270.0,23.0)));
+                            egui::ComboBox::from_id_salt("choice").width(270.0).selected_text(label).show_ui(&mut combo_ui, |ui| { for o in options { if ui.selectable_label(Some(&o.value)==value, &o.label).clicked() { submit = Some(camdef::format(&o.value)); } } });
                         } else if let Some(steps) = parameter.slider_steps() {
                             if !row.sliding && !session.is_pending(&parameter.name) { if let Some(v) = value { row.slider=parameter.slider_position(v).unwrap_or(if v.to_f64()<0.0 { 0 } else { steps }); } }
-                            let response = ui.add(egui::Slider::new(&mut row.slider,0..=steps).show_value(false));
+                            ui.spacing_mut().slider_width = 200.0;
+                            let response = ui.put(at(335.0,3.0,200.0,27.0), egui::Slider::new(&mut row.slider,0..=steps).show_value(false));
                             if response.changed() { row.sliding = true; }
                             let held = ui.input(|i| [egui::Key::ArrowLeft,egui::Key::ArrowRight,egui::Key::ArrowUp,egui::Key::ArrowDown,egui::Key::Home,egui::Key::End,egui::Key::PageUp,egui::Key::PageDown].iter().any(|k| i.key_down(*k)));
                             if row.sliding && ((!response.is_pointer_button_down_on() && !held) || response.lost_focus()) {
@@ -186,17 +197,18 @@ impl CameraSettingsForm {
                                 if candidate.as_deref().and_then(|s| parameter.convert(Some(s)).ok()).as_ref() != value { submit=candidate; }
                                 row.sliding=false;
                             }
-                            ui.label(if row.sliding || session.is_pending(&parameter.name) { parameter.slider_text(row.slider).unwrap_or_default() } else { row.text.clone() });
+                            let text = if row.sliding || session.is_pending(&parameter.name) { parameter.slider_text(row.slider).unwrap_or_default() } else { row.text.clone() };
+                            ui.put(at(540.0,6.0,120.0,23.0), egui::Label::new(text).truncate().halign(egui::Align::Min));
                         } else {
-                            let response = ui.add(egui::TextEdit::singleline(&mut row.text).desired_width(195.0));
+                            let response = ui.put(at(335.0,3.0,195.0,23.0), egui::TextEdit::singleline(&mut row.text).desired_width(195.0));
                             row.dirty |= response.changed();
-                            if (response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))) || (!parameter.read_only && ui.button("Apply").clicked()) { submit=Some(row.text.clone()); }
+                            let apply = !parameter.read_only && ui.put(at(535.0,2.0,68.0,27.0),egui::Button::new("Apply")).clicked();
+                            if (response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))) || apply { submit=Some(row.text.clone()); }
                         }
-                    });
-                });
+                }
                 let detail = session.errors.get(&parameter.name).cloned().unwrap_or_else(|| if session.is_pending(&parameter.name) { "Applying…".into() } else if value.is_none() && !parameter.write_only { "Waiting for camera".into() } else { format!("{}{}{}{}",parameter.name,parameter.minimum.as_ref().map(|v| format!(" Min: {}",camdef::format(v))).unwrap_or_default(),parameter.maximum.as_ref().map(|v| format!(" Max: {}",camdef::format(v))).unwrap_or_default(),parameter.step.as_ref().map(|v|format!(" Step: {v}")).unwrap_or_default()) });
-                ui.colored_label(if session.errors.contains_key(&parameter.name) { egui::Color32::RED } else { crate::theme::palette().text },detail);
-                ui.add_space(8.0);
+                let color = if session.errors.contains_key(&parameter.name) { egui::Color32::RED } else { crate::theme::palette().text };
+                row_ui.put(at(4.0,33.0,690.0,23.0),egui::Label::new(egui::RichText::new(detail).color(color)).truncate().halign(egui::Align::Min));
             });
             if let Some(text) = submit.filter(|_| enabled && !readonly) {
                 match session.set_value(&parameter.name, &text, Instant::now()) { Ok(()) => row.dirty=false, Err(e) => { session.errors.insert(parameter.name.clone(),e); } }
@@ -222,10 +234,11 @@ mod tests {
         {
             let mut draw=|ctx: &egui::Context| { egui::Window::new("Editor").default_size([780.0,650.0]).show(ctx,|ui| CameraSettingsForm::rows_ui(ui,&mut session,&mut rows,false)); };
             input::click(&ctx,&mut draw,"0");
-            input::frame(&ctx,&mut draw,vec![egui::Event::Key { key:egui::Key::A,physical_key:None,pressed:true,repeat:false,modifiers:egui::Modifiers::CTRL }]);
+            input::frame(&ctx,&mut draw,vec![egui::Event::Key { key:egui::Key::A,physical_key:None,pressed:true,repeat:false,modifiers:egui::Modifiers::COMMAND }]);
             input::frame(&ctx,&mut draw,vec![egui::Event::Text("7".into())]);
             input::click(&ctx,&mut draw,"Apply");
         }
+        assert_eq!(rows["TEXT"].text,"7", "select-all must replace the old value on every platform");
         assert!(matches!(session.outbox.last(),Some(MavMessage::PARAM_EXT_SET(m)) if &m.param_id[..4]==b"TEXT" && m.param_value[0]==7));
         session.outbox.clear();
         // Active gesture is cancelled if editability changes before release.

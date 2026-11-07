@@ -1,0 +1,153 @@
+{
+  "round": 46,
+  "date": "2026-11-07",
+  "review_type": "Independent adversarial review of iOS application packaging, simulator evidence and mobile storage, with provisional whole-product parity judgment",
+  "reviewer": "ios_delivery_review_46, a separate agent from the implementer",
+  "reviewed_head": "620455a89882db0d1860d9c3ba0bc7d5a6afcee1",
+  "reviewed_uncommitted_app_changes": false,
+  "verdict": "Exact-clone parity is not achieved. The new code replaces library-only iOS delivery with an application bundle builder and a real simulator startup/rendering gate. Host regression tests and failure-path probes pass after review corrections. Native iOS compile, installation and rendering were still pending CI when this independent review was written. An unsigned device bundle, even if built, cannot establish an installable or working physical-device application.",
+  "scores": {
+    "overall": 4.0,
+    "ui_ux": 3.0,
+    "features": 4.0,
+    "cross_platform_delivery": 2.0,
+    "scale": "0 to 10 against the full requested exact Mission Planner clone on Windows, macOS, Linux, Android and iOS. Coarse provisional judgments, not measured completion percentages. Scores were assessed from the reviewed evidence, not inherited from an earlier rating. A 10 requires complete behavior and UI coverage with native runtime evidence."
+  },
+  "confidence": {
+    "new_host_packaging_logic": "moderate, based on code inspection and independent tests/probes",
+    "native_ios_delivery": "unverified pending actual Mac CI",
+    "whole_product_rating": "low; this review does not supply a complete upstream feature inventory",
+    "physical_hardware": "unverified"
+  },
+  "reviewed_files": [
+    "scripts/build_ios.py",
+    "scripts/smoke_ios_simulator.py",
+    "scripts/test_ios_packaging.py",
+    ".github/workflows/build.yml",
+    "crates/mp-app/src/capture.rs",
+    "crates/mp-app/src/lib.rs",
+    "crates/mp-app/src/platform.rs",
+    "README.md",
+    "crates/mp-core/src/comms.rs",
+    "crates/mp-app/src/speech.rs",
+    "crates/mp-app/src/joystick.rs",
+    "crates/mp-app/src/camera_settings.rs",
+    "reference/MissionPlanner/Controls/CameraCustomSettingsForm.cs",
+    "local registry: eframe 0.37.0 native file_storage.rs and run.rs",
+    "local registry: winit 0.30.13 iOS event_loop.rs"
+  ],
+  "reviewed_source_sha256": {
+    "scripts/build_ios.py": "8a000caea7388a738390d8d4c2da59b6dbc9535c490da018a1134c6d545de197",
+    "scripts/smoke_ios_simulator.py": "3b8b8e970b560c07ebc2e4842c4b83c9d09da5268fecf7fa3df7b03144d060da",
+    "scripts/test_ios_packaging.py": "6ba66a7e858709e9f2d4b9cadfb4b4cb0bb536c7f370003da9bc901ace41dfdc",
+    ".github/workflows/build.yml": "ceb13863b01d31ee775c57656df2ce349adeb6963beab9b97e735386f9e4f87b",
+    "crates/mp-app/src/capture.rs": "5e7182ce47d79f3ebffccb6f47124b5c096c1932b7218211b044ab6003073bbd",
+    "crates/mp-app/src/lib.rs": "d751f10e59f45a9e2ec2cdf69f5371d5024fafadb4ac621b841e1532e075a61a",
+    "crates/mp-app/src/platform.rs": "99d1a6ff9aa5e1968f5108220226c568dd85ada6bb802fa06ae805d5e964968b",
+    "README.md": "4913196d641908434f7673eeebad841dec9be60cb7183a92fa597ac3361d1105"
+  },
+  "independent_validation": [
+    {
+      "command": "python -m unittest discover -s scripts -p test_ios_packaging.py -v",
+      "result": "5 passed after corrections; independently executed on Windows. These are host structure/failure-path checks, not iOS builds."
+    },
+    {
+      "probe": "24-byte PNG signature/IHDR fragment plus otherwise successful receipt",
+      "before": "incorrectly accepted",
+      "final": "rejected by complete chunk, CRC, deflate, row-filter and dimension checks"
+    },
+    {
+      "probe": "mock a cargo failure with old app, ZIP and build success receipt already present",
+      "before": "old artifacts retained",
+      "final": "old app and success artifacts removed before failed build"
+    },
+    {
+      "probe": "mock simulator enumeration failure with old smoke success and image already present",
+      "final": "previous smoke.json and startup.png removed"
+    },
+    {
+      "evidence": "target/judging/round46/reviewer-probes.json",
+      "result": "3 independent final probes true"
+    },
+    {
+      "scope": "iOS lifecycle source inspection",
+      "result": "winit calls UIApplicationMain itself; a Rust executable can own the entry point. eframe run_and_exit may call process::exit on root close, so keeping capture mode open is required for a meaningful later display/process check."
+    }
+  ],
+  "implementer_reported_validation": {
+    "rust_workspace": "Final locked workspace run: 242 passed, 1 ignored. Reported by implementer, not independently rerun by reviewer.",
+    "native_ci_url": "https://github.com/Sarthak90210/-RustPlanner/actions/runs/42349992341",
+    "native_ci_state_at_review": "Six jobs in progress, iOS device and simulator building, reported by implementer; no completed native CI result independently reviewed by this agent.",
+    "windows_build": "Windows development build passed, reported by implementer.",
+    "windows_capture_harness": {
+      "scope": "Windows only; not iOS execution",
+      "result": "1280x800 renderer capture with MP_CAPTURE_KEEP_OPEN=1, process alive 2 seconds after receipt; implementer then terminated only spawned PID48500 and visually inspected Flight Data.",
+      "evidence": "target/judging/round46/windows/{startup.png,startup.capture.json,smoke.json}",
+      "binary_sha256": "CFCB67749E8BABB01E22D5D45EA11FDB8292E97FF35A45C27EEEC219236E063B"
+    }
+  },
+  "review_findings_corrected": [
+    "Desktop jobs now pin Python 3.12 instead of relying on a default interpreter for tomllib.",
+    "The smoke check now requires a complete bounded RGBA8 PNG rather than accepting its first 24 bytes.",
+    "Capture mode can retain the app after receipt creation, and smoke requires the launched PID and bundle label to remain present after the independent display screenshot.",
+    "Build and smoke outputs invalidate prior success artifacts. Build receipts identify the commit, dirty-source flag and executable hash; smoke records its executable hash.",
+    "Captured simctl/build subprocess stdout and stderr are now surfaced on failure."
+  ],
+  "findings": [
+    {
+      "id": "R46-01",
+      "priority": "P1",
+      "subsystem": "Native application delivery",
+      "status": "open validation and implementation gap",
+      "evidence": [
+        "The new iOS device output is explicitly unsigned and requires provisioning/signing before physical installation.",
+        "At this review cutoff, no successful current-head Mac iOS bundle/install/render receipt had been reviewed.",
+        "No current-head Android physical-device run, macOS/Linux GUI workflow run, or iOS physical-device run was supplied to this reviewer."
+      ],
+      "impact": "The full native application requirement on every requested platform remains unproven and physical iOS delivery remains incomplete.",
+      "required_fix": "Complete signing/provisioning or a concrete Xcode installation path, verify actual artifacts, and retain representative native connection, planning, configuration and file-workflow evidence on every requested platform. Append CI results as a separate dated observation; do not treat Windows host tests as iOS execution."
+    },
+    {
+      "id": "R46-02",
+      "priority": "P1",
+      "subsystem": "Mobile and device feature backends",
+      "status": "open",
+      "evidence": [
+        "crates/mp-core/src/comms.rs returns Unsupported for BLE, WinUSB and mobile serial ports.",
+        "crates/mp-app/src/speech.rs has desktop speech commands but no Android/iOS speak_blocking implementation.",
+        "crates/mp-app/src/joystick.rs explicitly provides the page without mobile devices.",
+        "crates/mp-app/src/platform.rs mobile open_text returns None; the in-app file browser does not implement native document-provider access."
+      ],
+      "impact": "Packaging the same Rust code does not make the missing native features work.",
+      "required_fix": "Implement the native transport, controller, speech and document-provider adapters or explicitly track the still-missing workflows. Validate the real adapter paths on their platforms."
+    },
+    {
+      "id": "R46-03",
+      "priority": "P1",
+      "subsystem": "Exact UI/UX and feature coverage",
+      "status": "open",
+      "evidence": [
+        "This run adds packaging and storage logic, not a complete source-by-source Mission Planner feature inventory.",
+        "A current concrete UI mismatch remains: CameraCustomSettingsForm.cs creates 63-pixel panels and a 270-pixel option ComboBox; camera_settings.rs uses general egui rows and a 195-pixel ComboBox.",
+        "No matched native camera form comparison, full screen-state comparison or mobile touch/keyboard workflow evidence was supplied in this run.",
+        "README still lists GDAL raster, place-name geocoding, existing .NET plugin execution and other parity gaps."
+      ],
+      "impact": "Neither feature equivalence nor exact rendered/workflow equivalence has been demonstrated. A 10/10 would contradict the known gaps.",
+      "required_fix": "Keep a complete upstream behavior inventory with source and validation links; implement missing behaviors and geometry; compare representative native states at matched dimensions and exercise their keyboard, pointer and touch flows."
+    },
+    {
+      "id": "R46-04",
+      "priority": "P2",
+      "subsystem": "Mobile persistence and lifecycle evidence",
+      "status": "open validation gap",
+      "evidence": [
+        "The source now places iOS settings/caches in Library/Application Support and documents in Documents, and supplies explicit Android/iOS state.ron paths.",
+        "The simulator smoke only covers startup, one renderer capture and short process liveness. It does not change settings, suspend/kill/relaunch, or read back saved mission and configuration files."
+      ],
+      "impact": "The new storage locations are appropriate in source, but durable user data and mobile lifecycle behavior have not been proven.",
+      "required_fix": "Run native save/readback and suspend/termination/relaunch scenarios, verifying actual sandbox paths and retained contents. Exercise the mobile file browser and Finder/document-provider paths separately."
+    }
+  ],
+  "goal_complete": false,
+  "next_priority": "Resolve actual Mac CI failures and inspect the produced app and simulator images, then continue native mobile adapters and the upstream feature/visual parity inventory. Do not reinterpret a successful simulator startup smoke as complete iOS or whole-product parity."
+}
