@@ -194,11 +194,21 @@ pub struct SetupView {
     sik_loaded: Option<mp_core::sik::SikSettings>,
     radio_cal: RadioCal,
     motor_pct: f32,
+    /// ConfigAccelerometerCalibration._incalibrate
     accel_running: bool,
     accel_label: String,
+    /// BUT_calib_accell.Enabled (off after "calibration successful/failed")
+    accel_enabled: bool,
     accel_user: String,
     level_label: String,
     simple_label: String,
+    /// the PREFLIGHT_CALIBRATION waiting for its ACK: 1 accel, 2 level, 4 simple
+    accel_ack: Option<u8>,
+    /// STATUSTEXTs already read, and the last ACCELCAL_VEHICLE_POS shown
+    accel_seen: usize,
+    accel_pos: Option<u32>,
+    /// the frame the page last drew (a gap is Activate)
+    accel_frame: u64,
     rtk: crate::views::rtk_page::RtkPage,
     dronecan: crate::views::dronecan_page::DroneCanPage,
     term: Option<Terminal>,
@@ -346,9 +356,14 @@ impl Default for SetupView {
             motor_pct: 0.0,
             accel_running: false,
             accel_label: "Calibrate Accel".into(),
+            accel_enabled: true,
             accel_user: String::new(),
             level_label: "Calibrate Level".into(),
             simple_label: "Simple Accel Cal".into(),
+            accel_ack: None,
+            accel_seen: 0,
+            accel_pos: None,
+            accel_frame: 0,
             rtk: Default::default(),
             dronecan: Default::default(),
             term: None,
@@ -445,6 +460,25 @@ impl SetupView {
 
     /// Select a page by its BackstageView label.
     pub fn dialogs(&mut self, ctx: &egui::Context, app: &mut AppCtx) { self.compass.dialogs(ctx, app); }
+    /// The ACK of an accelerometer page command (the doCommand results); true when it was one.
+    pub fn on_accel_ack(&mut self, event: &mp_core::link::LinkEvent, toasts: &mut crate::app::Toasts) -> bool {
+        let mp_core::link::LinkEvent::CommandAck { command: 241, ok, .. } = event else { return false };
+        let Some(kind) = self.accel_ack.take() else { return false };
+        if !ok {
+            toasts.message("The Command failed to execute\n", "Error");
+            return true;
+        }
+        match kind {
+            1 => {
+                self.accel_running = true;
+                self.accel_label = "Click when Done".into();
+            }
+            2 => self.level_label = "Completed".into(),
+            _ => self.simple_label = "Completed".into(),
+        }
+        true
+    }
+
     pub fn on_event(&mut self, event: &mp_core::link::LinkEvent, link: &Link, toasts: &mut crate::app::Toasts) {
         // MavlinkCheckBox: String.Format(Strings.ErrorSetValueFailed, name), Strings.ERROR
         if let mp_core::link::LinkEvent::ParamSet { name, ok } = event {
@@ -839,12 +873,63 @@ fn rc_bar(p: &egui::Painter, r: Rect, label: &str, value: u16, minmax: Option<(u
     }
 }
 
-/// ConfigAccelerometerCalibration: one button that walks the vehicle's ACCELCAL_VEHICLE_POS prompts.
+/// ACCELCAL_VEHICLE_POS.ToString()
+fn accel_pos_name(p: u32) -> String {
+    match p {
+        1 => "LEVEL".into(),
+        2 => "LEFT".into(),
+        3 => "RIGHT".into(),
+        4 => "NOSEDOWN".into(),
+        5 => "NOSEUP".into(),
+        6 => "BACK".into(),
+        16777215 => "SUCCESS".into(),
+        16777216 => "FAILED".into(),
+        n => n.to_string(),
+    }
+}
+
+impl SetupView {
+    /// receivedPacket for one STATUSTEXT: UpdateUserMessage, and the end of calibration.
+    fn accel_statustext(&mut self, text: &str) {
+        let lower = text.to_lowercase();
+        if lower.contains("place vehicle") || lower.contains("calibration") {
+            self.accel_user = text.to_string();
+        }
+        if lower.contains("calibration successful") || lower.contains("calibration failed") {
+            self.accel_label = "Done".into();
+            self.accel_enabled = false;
+            self.accel_running = false;
+        }
+    }
+}
+
+/// ConfigAccelerometerCalibration: Calibrate Accel walks the vehicle's ACCELCAL_VEHICLE_POS
+/// prompts; Calibrate Level and Simple Accel Cal are single commands.
 fn accel(ui: &mut egui::Ui, view: &mut SetupView, link: &Link) {
-    let (pos, msgs) = {
-        let s = link.shared.read();
-        (s.accelcal_pos, s.messages.iter().rev().take(5).map(|m| m.text.clone()).collect::<Vec<_>>())
-    };
+    // Activate: the button enabled again, not calibrating
+    let frame = ui.ctx().cumulative_frame_nr();
+    if view.accel_frame == 0 || frame > view.accel_frame + 1 {
+        view.accel_enabled = true;
+        view.accel_running = false;
+        view.accel_seen = link.shared.read().messages.len();
+    }
+    view.accel_frame = frame.max(1);
+    // receivedPacket while subscribed: STATUSTEXT and the vehicle's COMMAND_LONG prompts
+    if view.accel_running {
+        let (pos, new): (Option<u32>, Vec<String>) = {
+            let s = link.shared.read();
+            (s.accelcal_pos, s.messages.iter().skip(view.accel_seen).map(|m| m.text.clone()).collect())
+        };
+        view.accel_seen += new.len();
+        for t in new {
+            view.accel_statustext(&t);
+        }
+        if view.accel_running && pos.is_some() && pos != view.accel_pos {
+            view.accel_pos = pos;
+            // UpdateUserMessage("Please place vehicle " + pos)
+            view.accel_user = format!("Please place vehicle {}", accel_pos_name(pos.unwrap()));
+        }
+    }
     let o = ui.max_rect().min;
     let r = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(o + Vec2::new(x, y), Vec2::new(w, h));
     let p = ui.painter().clone();
@@ -852,61 +937,62 @@ fn accel(ui: &mut egui::Ui, view: &mut SetupView, link: &Link) {
     p.text(o + Vec2::new(3.0, 8.0), egui::Align2::LEFT_TOP, crate::i18n::t("Accelerometer Calibration"), crate::fonts::bold_id(16.0), Color32::WHITE);
     p.line_segment([o + Vec2::new(7.0, 30.0), o + Vec2::new(467.0, 30.0)], egui::Stroke::new(1.0, Color32::GRAY));
     p.text(o + Vec2::new(83.0, 45.0), egui::Align2::LEFT_TOP, crate::i18n::t("Level your Autopilot to set default accelerometer Min/Max (3 axis).\nThis will ask you to place your autopilot on each edge."), f.clone(), Color32::WHITE);
-    // vehicle prompts: COMMAND_LONG ACCELCAL_VEHICLE_POS and STATUSTEXT
-    let names = |p: u32| match p {
-        1 => "LEVEL",
-        2 => "LEFT",
-        3 => "RIGHT",
-        4 => "NOSEDOWN",
-        5 => "NOSEUP",
-        6 => "BACK",
-        16777215 => "SUCCESS",
-        16777216 => "FAILED",
-        _ => "",
-    };
-    if view.accel_running {
-        let user = msgs.iter().find(|m| m.to_lowercase().contains("place vehicle") || m.to_lowercase().contains("calibration")).cloned();
-        let text = match pos {
-            Some(16777215) => {
-                view.accel_running = false;
-                view.accel_label = "Done".into();
-                "Calibration successful".to_string()
-            }
-            Some(16777216) => {
-                view.accel_running = false;
-                view.accel_label = "Calibrate Accel".into();
-                "Calibration FAILED".to_string()
-            }
-            Some(p) => format!("Please place vehicle {}", names(p)),
-            None => user.unwrap_or_default(),
-        };
-        view.accel_user = text;
-    }
     p.text(o + Vec2::new(7.0, 96.0), egui::Align2::LEFT_TOP, &view.accel_user, crate::fonts::bold_id(14.0), Color32::WHITE);
     let br = r(188.0, 72.0, 102.0, 21.0);
-    if ui.put(br, |ui: &mut egui::Ui| theme::button_sized(ui, &view.accel_label, br.size())).clicked() {
-        if !view.accel_running {
+    let clicked = ui.put(br, |ui: &mut egui::Ui| ui.add_enabled_ui(view.accel_enabled, |ui| theme::button_sized(ui, &view.accel_label, br.size())).inner).clicked();
+    if clicked && view.accel_enabled {
+        if view.accel_running {
+            // sendPacket COMMAND_LONG ACCELCAL_VEHICLE_POS with the last position (no ACK wait)
+            let pos = view.accel_pos.unwrap_or(0);
+            link.send(LinkCommand::CommandNoAck { command: 42429, params: [pos as f32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
+        } else if view.accel_ack.is_none() {
             link.shared.write().accelcal_pos = None;
+            view.accel_pos = None;
+            view.accel_seen = link.shared.read().messages.len();
+            view.accel_ack = Some(1);
             link.send(LinkCommand::CommandLong { command: 241, params: [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0] });
-            view.accel_running = true;
-            view.accel_label = "Click when Done".into();
-        } else if let Some(p) = pos {
-            link.send(LinkCommand::CommandLong { command: 42429, params: [p as f32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
         }
     }
     p.text(o + Vec2::new(60.0, 133.0), egui::Align2::LEFT_TOP, crate::i18n::t("Level your Autopilot to set default accelerometer offsets (1 axis/AHRS trims).\nThis requires you to place your autopilot flat and level."), f.clone(), Color32::WHITE);
     let lr = r(188.0, 168.0, 102.0, 21.0);
-    if ui.put(lr, |ui: &mut egui::Ui| theme::button_sized(ui, &view.level_label, lr.size())).clicked() {
+    if ui.put(lr, |ui: &mut egui::Ui| theme::button_sized(ui, &view.level_label, lr.size())).clicked() && view.accel_ack.is_none() {
+        view.accel_ack = Some(2);
         link.send(LinkCommand::CommandLong { command: 241, params: [0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0] });
-        view.level_label = "Completed".into();
     }
     p.text(o + Vec2::new(60.0, 220.0), egui::Align2::LEFT_TOP, crate::i18n::t("Level your Autopilot to set default accelerometer scale factors for level flight (1 axis).\nThis requires you to place your autopilot flat and level."), f, Color32::WHITE);
     let sr = r(188.0, 249.0, 102.0, 21.0);
-    if ui.put(sr, |ui: &mut egui::Ui| theme::button_sized(ui, &view.simple_label, sr.size())).clicked() {
+    if ui.put(sr, |ui: &mut egui::Ui| theme::button_sized(ui, &view.simple_label, sr.size())).clicked() && view.accel_ack.is_none() {
+        view.accel_ack = Some(4);
         link.send(LinkCommand::CommandLong { command: 241, params: [0.0, 0.0, 0.0, 0.0, 4.0, 0.0, 0.0] });
-        view.simple_label = "Completed".into();
     }
     ui.allocate_rect(r(0.0, 0.0, 880.0, 280.0), Sense::hover());
+}
+
+#[cfg(test)]
+mod accel_tests {
+    use super::*;
+
+    #[test]
+    fn accel_calibration_follows_its_acks_and_statustexts() {
+        let mut v = SetupView::default();
+        let mut toasts = crate::app::Toasts::default();
+        let ack = |ok| mp_core::link::LinkEvent::CommandAck { command: 241, result: String::new(), ok };
+        v.accel_ack = Some(1);
+        assert!(v.on_accel_ack(&ack(false), &mut toasts));
+        assert_eq!(toasts.0, ["The Command failed to execute\n"]);
+        assert!(!v.accel_running, "a refused command does not start calibrating");
+        v.accel_ack = Some(1);
+        v.on_accel_ack(&ack(true), &mut toasts);
+        assert!(v.accel_running && v.accel_label == "Click when Done");
+        v.accel_statustext("PreArm: something");
+        assert_eq!(v.accel_user, "", "only place-vehicle / calibration texts are shown");
+        v.accel_statustext("Place vehicle level and press any key");
+        assert_eq!(v.accel_user, "Place vehicle level and press any key");
+        v.accel_statustext("Calibration FAILED");
+        assert!(!v.accel_running && !v.accel_enabled && v.accel_label == "Done");
+        assert_eq!(accel_pos_name(16777215), "SUCCESS");
+        assert!(!v.on_accel_ack(&ack(true), &mut toasts), "nothing awaited");
+    }
 }
 
 const ADVANCED: &[(&str, f32, &str)] = &[

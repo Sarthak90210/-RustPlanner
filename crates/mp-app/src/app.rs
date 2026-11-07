@@ -558,6 +558,8 @@ impl MissionPlannerApp {
                 LinkEvent::OperationError(e) => self.toasts.error(e),
                 // BUT_commitToFlash_Click reports its own result
                 LinkEvent::CommandAck { command: 245, .. } if self.config.params.commit_pending => {}
+                // so do the accelerometer page's calibration commands
+                LinkEvent::CommandAck { .. } if self.setup.on_accel_ack(&e, &mut self.toasts) => {}
                 // so do the FlightData Do Action commands
                 LinkEvent::CommandAck { .. } if self.flight_data.on_action_ack(&e, self.link.as_ref(), &mut self.toasts) => {}
                 LinkEvent::CommandAck {
