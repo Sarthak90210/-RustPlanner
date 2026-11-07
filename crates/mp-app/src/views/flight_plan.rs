@@ -123,6 +123,8 @@ pub struct FlightPlanView {
     mission_type: usize,
     waypoints_collapsed: bool,
     wpfile: String,
+    /// FlightPlanner.wpfilename: the last waypoint file loaded (the save dialog's name)
+    wpfilename: String,
     /// lists for the mission types not currently shown (index = MAV_MISSION_TYPE)
     stash: [Vec<Locationwp>; 3],
     polygon: Vec<(f64, f64)>,
@@ -195,6 +197,7 @@ impl Default for FlightPlanView {
             mission_type: 0,
             waypoints_collapsed: false,
             wpfile: "...".into(),
+            wpfilename: String::new(),
             stash: Default::default(),
             polygon: Vec::new(),
             drawing_polygon: false,
@@ -542,14 +545,37 @@ impl FlightPlanView {
             }
         }
         if key(egui::Modifiers::COMMAND, egui::Key::S) {
-            let text = mission::write_waypoint_file(&self.home, &self.items);
-            match platform::save_text("Save Waypoint File", "mission.waypoints", "Waypoints", &["waypoints"], &text) {
-                Some(Ok(path)) => {
-                    self.wpfile = std::path::Path::new(&path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or(path);
+            self.savewaypoints(app);
+        }
+    }
+
+    /// savewaypoints: Mission (.waypoints/.txt) or Mission JSON (.mission), remembering the
+    /// directory in "WPFileDirectory".
+    fn savewaypoints(&mut self, app: &mut AppCtx) {
+        let dir = app.settings.planner.get("WPFileDirectory").cloned();
+        let name = std::path::Path::new(&self.wpfilename).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let Some(path) = platform::save_path("Save As", &name, &[("Mission", &["waypoints", "txt"]), ("Mission JSON", &["mission"])], dir.as_deref()) else { return };
+        let mut path = path;
+        if path.extension().is_none() {
+            path.set_extension("waypoints");
+        }
+        if let Some(d) = path.parent() {
+            app.settings.planner.insert("WPFileDirectory".into(), d.display().to_string());
+        }
+        let file = path.display().to_string();
+        let text = if file.ends_with(".mission") {
+            mission::write_mission_json(&self.home, &self.items, app.settings.alt_frame)
+        } else {
+            mission::write_waypoint_file(&self.home, &self.items)
+        };
+        match std::fs::write(&path, text) {
+            Ok(()) => {
+                // the label only changes for the waypoint format (the JSON branch returns first)
+                if !file.ends_with(".mission") {
+                    self.wpfile = format!("Saved {}", path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default());
                 }
-                Some(Err(e)) => app.toasts.error(e),
-                None => {}
             }
+            Err(_) => app.toasts.error("Error"),
         }
     }
 
@@ -784,14 +810,7 @@ impl FlightPlanView {
             }
         }
         if put_button(ui, r(px + 3.0, py + 32.0, 115.0, 23.0), "Save File") {
-            let text = mission::write_waypoint_file(&self.home, &self.items);
-            match platform::save_text("Save Waypoint File", "mission.waypoints", "Waypoints", &["waypoints"], &text) {
-                Some(Ok(path)) => {
-                    self.wpfile = std::path::Path::new(&path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or(path);
-                }
-                Some(Err(e)) => app.toasts.error(e),
-                None => {}
-            }
+            self.savewaypoints(app);
         }
         p.text(at(px + 3.0, py + 59.0), egui::Align2::LEFT_TOP, &self.wpfile, f.clone(), white);
 
@@ -1458,6 +1477,7 @@ impl FlightPlanView {
                 self.items = list[1..].to_vec();
                 self.selected = None;
                 self.wpfile = name.to_string();
+                self.wpfilename = name.to_string();
             }
             Ok(_) => toasts.error("Invalid Waypoint file"),
             Err(e) => toasts.error(e.to_string()),

@@ -395,6 +395,24 @@ pub fn open_text(_title: &str, _filter: &str, _exts: &[&str]) -> Option<(String,
     None
 }
 
+/// SaveFileDialog with several filters and an initial directory: the chosen path.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn save_path(title: &str, default_name: &str, filters: &[(&str, &[&str])], dir: Option<&str>) -> Option<PathBuf> {
+    let mut d = rfd::FileDialog::new().set_title(title).set_file_name(default_name);
+    for (name, exts) in filters {
+        d = d.add_filter(*name, exts);
+    }
+    if let Some(dir) = dir.filter(|d| !d.is_empty()) {
+        d = d.set_directory(dir);
+    }
+    d.save_file()
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn save_path(_title: &str, default_name: &str, _filters: &[(&str, &[&str])], _dir: Option<&str>) -> Option<PathBuf> {
+    Some(files_dir().join(default_name))
+}
+
 /// Returns the saved path on success.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn save_text(

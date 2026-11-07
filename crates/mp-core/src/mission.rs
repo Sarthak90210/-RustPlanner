@@ -247,9 +247,107 @@ pub fn write_waypoint_file(home: &Locationwp, items: &[Locationwp]) -> String {
     s
 }
 
+/// MissionFile.Item as Json.NET writes it (every property, nulls included).
+#[derive(serde::Serialize)]
+#[allow(non_snake_case)]
+struct MissionFileItem {
+    autoContinue: bool,
+    command: u16,
+    doJumpId: u16,
+    frame: u8,
+    params: [f64; 7],
+    r#type: Option<String>,
+    TransectStyleComplexItem: Option<()>,
+    angle: Option<i32>,
+    complexItemType: Option<String>,
+    entryLocation: Option<i32>,
+    flyAlternateTransects: Option<bool>,
+    polygon: Option<()>,
+    splitConcavePolygons: Option<bool>,
+    version: Option<i32>,
+}
+
+#[derive(serde::Serialize)]
+#[allow(non_snake_case)]
+struct MissionFileMission {
+    cruiseSpeed: i32,
+    firmwareType: i32,
+    hoverSpeed: i32,
+    items: Vec<MissionFileItem>,
+    plannedHomePosition: Option<Vec<f64>>,
+    vehicleType: i32,
+    version: i32,
+}
+
+#[derive(serde::Serialize)]
+#[allow(non_snake_case)]
+struct MissionFileRoot {
+    fileType: Option<String>,
+    geoFence: Option<()>,
+    groundStation: String,
+    mission: MissionFileMission,
+    rallyPoints: Option<()>,
+    version: i32,
+}
+
+/// MissionFile.ConvertFromLocationwps(list with home first, frame) written with
+/// Formatting.Indented: the home's lat/lng/alt as plannedHomePosition, every other item with
+/// the chosen frame.
+pub fn write_mission_json(home: &Locationwp, items: &[Locationwp], frame: u8) -> String {
+    let item = |w: &Locationwp, frame: u8| MissionFileItem {
+        autoContinue: false,
+        command: w.id,
+        doJumpId: w.seq,
+        frame,
+        params: [w.p1 as f64, w.p2 as f64, w.p3 as f64, w.p4 as f64, w.lat, w.lng, w.alt as f64],
+        r#type: None,
+        TransectStyleComplexItem: None,
+        angle: None,
+        complexItemType: None,
+        entryLocation: None,
+        flyAlternateTransects: None,
+        polygon: None,
+        splitConcavePolygons: None,
+        version: None,
+    };
+    let root = MissionFileRoot {
+        fileType: None,
+        geoFence: None,
+        groundStation: "MissionPlanner".into(),
+        mission: MissionFileMission {
+            cruiseSpeed: 0,
+            firmwareType: 0,
+            hoverSpeed: 0,
+            items: items.iter().map(|w| item(w, frame)).collect(),
+            plannedHomePosition: Some(vec![home.lat, home.lng, home.alt as f64]),
+            vehicleType: 0,
+            version: 0,
+        },
+        rallyPoints: None,
+        version: 1,
+    };
+    serde_json::to_string_pretty(&root).unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mission_json_matches_missionfile_writefile() {
+        let home = Locationwp { lat: -35.0, lng: 149.0, alt: 584.5, ..Default::default() };
+        let wp = Locationwp { id: 16, lat: -35.1, lng: 149.1, alt: 50.0, frame: 0, seq: 0, ..Default::default() };
+        let j = write_mission_json(&home, &[wp], 3);
+        let v: serde_json::Value = serde_json::from_str(&j).unwrap();
+        assert_eq!(v["groundStation"], "MissionPlanner");
+        assert_eq!(v["version"], 1);
+        assert!(v["fileType"].is_null() && v["geoFence"].is_null() && v["rallyPoints"].is_null());
+        assert_eq!(v["mission"]["plannedHomePosition"], serde_json::json!([-35.0, 149.0, 584.5]));
+        let item = &v["mission"]["items"][0];
+        assert_eq!((item["command"].as_u64(), item["frame"].as_u64(), item["autoContinue"].as_bool()), (Some(16), Some(3), Some(false)));
+        assert!(item["type"].is_null());
+        assert!(j.starts_with("{\n  \"fileType\": null,"));
+    }
 
     #[test]
     fn wpl_roundtrip() {
