@@ -579,3 +579,129 @@ pub(crate) mod picker_test_support {
         std::fs::create_dir(&root).unwrap(); root
     }
 }
+
+/// Screen safe area insets for notches, camera punch-holes, status bars and home indicator bars.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SafeAreaInsets {
+    pub top: f32,
+    pub bottom: f32,
+    pub left: f32,
+    pub right: f32,
+}
+
+impl SafeAreaInsets {
+    pub const ZERO: Self = Self {
+        top: 0.0,
+        bottom: 0.0,
+        left: 0.0,
+        right: 0.0,
+    };
+
+    pub fn is_empty(&self) -> bool {
+        self.top == 0.0 && self.bottom == 0.0 && self.left == 0.0 && self.right == 0.0
+    }
+
+    pub fn margin(&self) -> egui::Margin {
+        egui::Margin {
+            left: self.left as i8,
+            right: self.right as i8,
+            top: self.top as i8,
+            bottom: self.bottom as i8,
+        }
+    }
+}
+
+/// Minimum touch target size (44x44 pt) mandated by iOS Human Interface Guidelines
+/// and Android Material Design accessibility standards.
+pub const MIN_TOUCH_TARGET: f32 = 44.0;
+
+/// Returns true if running on a touch-first mobile operating system or running under simulated touch mode.
+pub fn is_touch_platform() -> bool {
+    cfg!(any(target_os = "android", target_os = "ios")) || std::env::var_os("MP_TOUCH_MODE").is_some()
+}
+
+/// Computes or retrieves the safe area insets for the current platform and viewport.
+pub fn safe_area_insets(_ctx: &egui::Context) -> SafeAreaInsets {
+    let env_insets = (
+        std::env::var("MP_SAFE_AREA_TOP").ok().and_then(|v| v.parse::<f32>().ok()),
+        std::env::var("MP_SAFE_AREA_BOTTOM").ok().and_then(|v| v.parse::<f32>().ok()),
+        std::env::var("MP_SAFE_AREA_LEFT").ok().and_then(|v| v.parse::<f32>().ok()),
+        std::env::var("MP_SAFE_AREA_RIGHT").ok().and_then(|v| v.parse::<f32>().ok()),
+    );
+    if let (Some(top), Some(bottom), Some(left), Some(right)) = env_insets {
+        return SafeAreaInsets { top, bottom, left, right };
+    }
+
+    #[cfg(target_os = "ios")]
+    {
+        return SafeAreaInsets {
+            top: 47.0,
+            bottom: 34.0,
+            left: 0.0,
+            right: 0.0,
+        };
+    }
+    #[cfg(target_os = "android")]
+    {
+        return SafeAreaInsets {
+            top: 32.0,
+            bottom: 24.0,
+            left: 0.0,
+            right: 0.0,
+        };
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        if let Some(top) = env_insets.0 {
+            return SafeAreaInsets {
+                top,
+                bottom: env_insets.1.unwrap_or(0.0),
+                left: env_insets.2.unwrap_or(0.0),
+                right: env_insets.3.unwrap_or(0.0),
+            };
+        }
+        SafeAreaInsets::ZERO
+    }
+}
+
+#[cfg(test)]
+mod safe_area_tests {
+    use super::*;
+
+    #[test]
+    fn safe_area_insets_defaults_and_env_overrides() {
+        assert_eq!(SafeAreaInsets::ZERO.is_empty(), true);
+        assert_eq!(SafeAreaInsets::ZERO.margin(), egui::Margin::ZERO);
+
+        let insets = SafeAreaInsets { top: 47.0, bottom: 34.0, left: 10.0, right: 10.0 };
+        assert_eq!(insets.is_empty(), false);
+        assert_eq!(insets.margin(), egui::Margin { left: 10, right: 10, top: 47, bottom: 34 });
+
+        std::env::set_var("MP_SAFE_AREA_TOP", "50.0");
+        std::env::set_var("MP_SAFE_AREA_BOTTOM", "35.0");
+        std::env::set_var("MP_SAFE_AREA_LEFT", "12.0");
+        std::env::set_var("MP_SAFE_AREA_RIGHT", "12.0");
+
+        let ctx = egui::Context::default();
+        let detected = safe_area_insets(&ctx);
+        assert_eq!(detected.top, 50.0);
+        assert_eq!(detected.bottom, 35.0);
+        assert_eq!(detected.left, 12.0);
+        assert_eq!(detected.right, 12.0);
+
+        std::env::remove_var("MP_SAFE_AREA_TOP");
+        std::env::remove_var("MP_SAFE_AREA_BOTTOM");
+        std::env::remove_var("MP_SAFE_AREA_LEFT");
+        std::env::remove_var("MP_SAFE_AREA_RIGHT");
+    }
+
+    #[test]
+    fn touch_platform_and_target_size() {
+        assert_eq!(MIN_TOUCH_TARGET, 44.0);
+        std::env::set_var("MP_TOUCH_MODE", "1");
+        assert!(is_touch_platform());
+        std::env::remove_var("MP_TOUCH_MODE");
+    }
+}
+

@@ -603,6 +603,39 @@ impl BleTransport {
             tx_buf,
         })
     }
+
+    /// Injects simulated inbound BLE notification packets (Nordic UART TX characteristic) into the receive buffer.
+    pub fn inject_rx(&self, data: &[u8]) {
+        let mut q = self.rx_buf.lock();
+        q.extend(data.iter().copied());
+    }
+
+    /// Takes all outbound bytes written to the transport (Nordic UART RX characteristic).
+    pub fn take_tx(&self) -> Vec<u8> {
+        let mut q = self.tx_buf.lock();
+        q.drain(..).collect()
+    }
+
+    /// Creates an in-memory loopback pair for simulated hardware-in-the-loop (HIL) testing.
+    pub fn loopback_pair() -> (Self, Self) {
+        let a_rx = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
+        let b_rx = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
+        let a = Self {
+            address: "SIMULATED_BLE_A".into(),
+            api: None,
+            peripheral_handle: None,
+            rx_buf: a_rx.clone(),
+            tx_buf: b_rx.clone(),
+        };
+        let b = Self {
+            address: "SIMULATED_BLE_B".into(),
+            api: None,
+            peripheral_handle: None,
+            rx_buf: b_rx,
+            tx_buf: a_rx,
+        };
+        (a, b)
+    }
 }
 
 impl Drop for BleTransport {
@@ -763,6 +796,41 @@ impl WinUsbTransport {
             rx_buf,
             tx_buf,
         })
+    }
+
+    /// Injects simulated inbound WinUSB bulk-in packets (endpoint 0x81) into the receive buffer.
+    pub fn inject_rx(&self, data: &[u8]) {
+        let mut q = self.rx_buf.lock();
+        q.extend(data.iter().copied());
+    }
+
+    /// Takes all outbound bytes written to the transport (bulk-out endpoint 0x01).
+    pub fn take_tx(&self) -> Vec<u8> {
+        let mut q = self.tx_buf.lock();
+        q.drain(..).collect()
+    }
+
+    /// Creates an in-memory loopback pair for simulated hardware-in-the-loop (HIL) testing.
+    pub fn loopback_pair() -> (Self, Self) {
+        let a_rx = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
+        let b_rx = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
+        let a = Self {
+            path: "SIMULATED_WINUSB_A".into(),
+            api: None,
+            file_handle: None,
+            usb_handle: None,
+            rx_buf: a_rx.clone(),
+            tx_buf: b_rx.clone(),
+        };
+        let b = Self {
+            path: "SIMULATED_WINUSB_B".into(),
+            api: None,
+            file_handle: None,
+            usb_handle: None,
+            rx_buf: b_rx,
+            tx_buf: a_rx,
+        };
+        (a, b)
     }
 }
 

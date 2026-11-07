@@ -659,8 +659,9 @@ impl MissionPlannerApp {
     }
 
     fn top_bar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<AppAction>) {
+        let insets = platform::safe_area_insets(ui.ctx());
         // MainV2.MainMenu: MenuStrip on bgdark.jpg, 45x39 icons above Microsoft Sans Serif 8.25pt.
-        let bar_h = 60.0;
+        let bar_h = 60.0 + insets.top;
         let (bar, bar_resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), bar_h), egui::Sense::click());
         let p = ui.painter().clone();
         let uv = egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(bar.width() / 150.0, bar.height() / 150.0));
@@ -686,12 +687,12 @@ impl MissionPlannerApp {
             _ => true,
         })
         .collect();
-        let top = bar.top() + 2.0;
+        let top = bar.top() + insets.top + 2.0;
         let item = |ui: &mut egui::Ui, x: f32, w: f32, tex: egui::TextureId, label: &str, selected: bool, id: &str| -> (bool, f32) {
             // ToolStripButton AutoSize with ImageAboveText: 39px image + 13px text + padding
             let label = &*crate::i18n::tr(label);
             let tw = ui.painter().layout_no_wrap(label.to_string(), font.clone(), theme::MENU_TEXT).size().x;
-            let w = w.max(tw + 6.0);
+            let w = w.max(tw + 6.0).max(platform::MIN_TOUCH_TARGET);
             let r = egui::Rect::from_min_size(egui::pos2(x, top), Vec2::new(w, 56.0));
             let resp = ui.interact(r, ui.scope_id().with(id), egui::Sense::click());
             let p = ui.painter();
@@ -705,7 +706,7 @@ impl MissionPlannerApp {
             p.text(egui::pos2(r.center().x, r.bottom() - 2.0), egui::Align2::CENTER_BOTTOM, label, font.clone(), theme::MENU_TEXT);
             (resp.clicked(), w)
         };
-        let mut x = bar.left() + 6.0;
+        let mut x = bar.left() + insets.left + 6.0;
         for (v, label, tex, w) in items {
             let (clicked, w) = item(ui, x, w, tex, label, self.settings.view == v, label);
             if clicked {
@@ -723,7 +724,7 @@ impl MissionPlannerApp {
             ("DISCONNECT", self.assets.disconnect.id())
         };
         let cw = ui.painter().layout_no_wrap(clabel.to_string(), font.clone(), theme::MENU_TEXT).size().x.max(57.0) + 6.0;
-        let mut rx = bar.right() - cw;
+        let mut rx = bar.right() - insets.right - cw;
         if item(ui, rx, cw, ctex, clabel, false, "connect").0 {
             if status == LinkStatus::Disconnected {
                 match self.settings.port.as_str() {
@@ -1347,8 +1348,14 @@ impl eframe::App for MissionPlannerApp {
             }
         }
 
+        let insets = platform::safe_area_insets(ui.ctx());
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(theme::bg()))
+            .frame(egui::Frame::new().fill(theme::bg()).inner_margin(egui::Margin {
+                left: insets.left as i8,
+                right: insets.right as i8,
+                top: 0,
+                bottom: insets.bottom as i8,
+            }))
             .show(ui, |ui| {
                 let Self {
                     settings,
