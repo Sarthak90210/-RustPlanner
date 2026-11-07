@@ -182,6 +182,8 @@ mod page_tests {
 
 pub struct SetupView {
     page: usize,
+    /// MavlinkCheckBox writes waiting for their PARAM_VALUE
+    check_awaiting: std::collections::BTreeSet<String>,
     forms: std::collections::HashMap<&'static str, crate::forms::FormState>,
     param_compare: Option<Vec<(String, Option<f64>, f64, bool)>>,
     uarts: std::sync::Arc<std::sync::Mutex<Option<std::collections::BTreeMap<u32, String>>>>,
@@ -332,6 +334,7 @@ mod terminal_tests {
 impl Default for SetupView {
     fn default() -> Self {
         Self {
+            check_awaiting: Default::default(),
             page: std::env::var("MP_PAGE").ok().and_then(|v| v.parse().ok()).unwrap_or(0),
             forms: Default::default(),
             param_compare: None,
@@ -383,6 +386,12 @@ impl SetupView {
     /// Select a page by its BackstageView label.
     pub fn dialogs(&mut self, ctx: &egui::Context, app: &mut AppCtx) { self.compass.dialogs(ctx, app); }
     pub fn on_event(&mut self, event: &mp_core::link::LinkEvent, link: &Link, toasts: &mut crate::app::Toasts) {
+        // MavlinkCheckBox: String.Format(Strings.ErrorSetValueFailed, name), Strings.ERROR
+        if let mp_core::link::LinkEvent::ParamSet { name, ok } = event {
+            if self.check_awaiting.remove(name) && !ok {
+                toasts.message(format!("Set {name} Failed"), "Error");
+            }
+        }
         self.compass.on_event(event, link, toasts);
         for st in self.forms.values_mut() { st.on_event(event, toasts); }
     }
@@ -630,15 +639,10 @@ impl SetupView {
         for (ch, x, y) in others {
             rc_bar(&p, r(x, y, 118.0, 25.0), &format!("Radio {ch}"), cs.ch_in[ch - 1], mm(ch), false);
         }
-        // CHK_revch1..4 bound to RCn_REVERSED
+        // CHK_revroll/pitch/thr/yaw: RCn_REV (-1 / 1) or RCn_REVERSED (1 / 0)
         for (ch, x, y) in [(ch_r, 306.0, 19.0), (ch_p, 65.0, 161.0), (ch_t, 304.0, 161.0), (ch_y, 306.0, 313.0)] {
-            let name = format!("RC{ch}_REVERSED");
-            if let Some(pv) = params.get(&name) {
-                let mut b = pv.value != 0.0;
-                if ui.put(r(x, y, 70.0, 17.0), egui::Checkbox::new(&mut b, crate::i18n::t("Reverse"))).changed() && !app.readonly {
-                    link.send(LinkCommand::SetParam { name, value: if b { 1.0 } else { 0.0 } });
-                }
-            }
+            let names = [(format!("RC{ch}_REV"), -1.0, 1.0), (format!("RC{ch}_REVERSED"), 1.0, 0.0)];
+            mavlink_checkbox(ui, r(x, y, 70.0, 17.0), "Reverse", &params, &names, link, app.readonly, &mut self.check_awaiting);
         }
         let cal_r = r(491.0, 327.0, 134.0, 23.0);
         let label = if self.radio_cal.is_some() { "Click when Done" } else if self.radio_done { "Completed" } else { "Calibrate Radio" };
@@ -669,9 +673,10 @@ impl SetupView {
         if cs.firmware == mp_core::firmware::Firmware::ArduPlane {
             let g = r(3.0, 356.0, 409.0, 42.0);
             crate::views::tuning::group_box(&p, g, "Elevon Config");
-            for (x, w, t) in [(13.0, 64.0, "Elevons"), (83.0, 87.0, "Elevons Rev"), (176.0, 111.0, "Elevons CH1 Rev"), (293.0, 111.0, "Elevons CH2 Rev")] {
-                let mut b = false;
-                ui.put(Rect::from_min_size(g.min + Vec2::new(x, 19.0), Vec2::new(w, 17.0)), egui::Checkbox::new(&mut b, t));
+            // CHK_mixmode / CHK_elevonrev / CHK_elevonch1rev / CHK_elevonch2rev: setup(1, 0, ...)
+            for (x, w, t, n) in [(13.0, 64.0, "Elevons", "ELEVON_MIXING"), (83.0, 87.0, "Elevons Rev", "ELEVON_REVERSE"), (176.0, 111.0, "Elevons CH1 Rev", "ELEVON_CH1_REV"), (293.0, 111.0, "Elevons CH2 Rev", "ELEVON_CH2_REV")] {
+                let rect = Rect::from_min_size(g.min + Vec2::new(x, 19.0), Vec2::new(w, 17.0));
+                mavlink_checkbox(ui, rect, t, &params, &[(n.to_string(), 1.0, 0.0)], link, app.readonly, &mut self.check_awaiting);
             }
         }
         let g = r(418.0, 356.0, 207.0, 42.0);
@@ -2213,5 +2218,25 @@ mod initial_parameter_tests {
             assert_eq!(new[&format!("{atc}_RAT_YAW_FLTE")], 2.0);
             assert_eq!(old[&format!("{atc}_RAT_RLL_FILT")], new[&format!("{atc}_RAT_RLL_FLTD")]);
         }
+    }
+}
+
+/// MavlinkCheckBox.setup(OnValue[], OffValue[], paramname[]): the first name the vehicle has,
+/// ticked at its on value, clear at its off value, indeterminate otherwise; disabled when none
+/// exists. A change writes the on or off value at once.
+#[allow(clippy::too_many_arguments)]
+fn mavlink_checkbox(ui: &mut egui::Ui, rect: Rect, label: &str, params: &std::collections::BTreeMap<String, mp_core::link::Param>, names: &[(String, f64, f64)], link: &Link, readonly: bool, awaiting: &mut std::collections::BTreeSet<String>) {
+    let found = names.iter().find(|(n, _, _)| params.contains_key(n));
+    let Some((name, on, off)) = found else {
+        let mut b = false;
+        ui.put(rect, |ui: &mut egui::Ui| ui.add_enabled(false, egui::Checkbox::new(&mut b, crate::i18n::t(label))));
+        return;
+    };
+    let v = params[name].value as f64;
+    let mut b = v == *on;
+    let indeterminate = v != *on && v != *off;
+    if ui.put(rect, egui::Checkbox::new(&mut b, crate::i18n::t(label)).indeterminate(indeterminate)).changed() && !readonly {
+        link.send(LinkCommand::SetParam { name: name.clone(), value: if b { *on as f32 } else { *off as f32 } });
+        awaiting.insert(name.clone());
     }
 }
