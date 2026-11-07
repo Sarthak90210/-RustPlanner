@@ -326,42 +326,25 @@ mod parameter_file_tests {
         ]);
         let ctx = egui::Context::default();
         let mut editor = ParamEditor::default(); let mut toasts = Toasts::default();
-        editor.file_target = Some((42,1));
         editor.file_request = Some((ParamFileAction::Load, FilePicker::in_directory("Parameters", root.clone(), &["param", "txt"], None)));
-        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts, true, Firmware::ArduCopter2); picker::click(&ctx, &mut draw, "a.param"); picker::click(&ctx, &mut draw, "Open"); }
+        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, &mut toasts, true, Firmware::ArduCopter2); picker::click(&ctx, &mut draw, "a.param"); picker::click(&ctx, &mut draw, "Open"); }
         assert_eq!(editor.edits, BTreeMap::from([("ALT".into(), 5.0)]));
         assert!(!editor.modified_only && editor.pending.is_empty(), "loading does not tick Modified");
-        assert_eq!(toasts.0.last().map(String::as_str), Some("Missing 1 params
-UNKNOWN "));
+        assert_eq!(toasts.0.last().map(String::as_str), Some("Missing 1 params\nUNKNOWN "));
         assert_eq!(toasts.1.last().map(String::as_str), Some("No matching Params"));
-        assert!(editor.file_request.is_none() && editor.file_target.is_none());
-        editor.file_target = Some((42,1));
+        assert!(editor.file_request.is_none());
         editor.file_request = Some((ParamFileAction::Compare, FilePicker::in_directory("Compare", root.clone(), &["param"], None)));
-        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts, true, Firmware::ArduCopter2); picker::click(&ctx, &mut draw, "Cancel"); }
+        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, &mut toasts, true, Firmware::ArduCopter2); picker::click(&ctx, &mut draw, "Cancel"); }
         assert!(editor.compare.is_none()); assert_eq!(editor.edits["ALT"], 5.0);
-        editor.file_target = Some((42,1));
         editor.file_request = Some((ParamFileAction::Compare, FilePicker::in_directory("Compare", root.clone(), &["param"], None)));
-        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts, true, Firmware::ArduCopter2); picker::click(&ctx, &mut draw, "z.param"); picker::click(&ctx, &mut draw, "Open"); }
+        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, &mut toasts, true, Firmware::ArduCopter2); picker::click(&ctx, &mut draw, "z.param"); picker::click(&ctx, &mut draw, "Open"); }
         assert_eq!(editor.compare, Some(vec![("ALT".into(), 1.0, 99.0, true)]));
         assert_eq!(editor.edits["ALT"], 5.0); assert!(editor.pending.is_empty());
-        editor.file_target = Some((42,1));
         editor.file_request = Some((ParamFileAction::Load, FilePicker::in_directory("Parameters", root.clone(), &["txt"], None)));
-        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts, true, Firmware::ArduCopter2); picker::click(&ctx, &mut draw, "bad.txt"); picker::click(&ctx, &mut draw, "Open"); }
-        assert_eq!(editor.edits["ALT"], 5.0); assert!(editor.file_target.is_none());
+        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, &mut toasts, true, Firmware::ArduCopter2); picker::click(&ctx, &mut draw, "bad.txt"); picker::click(&ctx, &mut draw, "Open"); }
+        assert_eq!(editor.edits["ALT"], 5.0);
         assert!(toasts.0.last().unwrap().contains("bad.txt"));
         for name in ["a.param", "z.param", "bad.txt"] { std::fs::remove_file(root.join(name)).unwrap(); } std::fs::remove_dir(root).unwrap();
-    }
-
-    #[test]
-    fn changing_vehicle_cancels_a_pending_parameter_file() {
-        let root = picker::root(); let ctx = egui::Context::default();
-        let mut editor = ParamEditor::default(); let mut toasts = Toasts::default();
-        editor.file_target = Some((42,1));
-        editor.file_request = Some((ParamFileAction::Load, FilePicker::in_directory("Parameters", root.clone(), &["param"], None)));
-        picker::frame(&ctx, &mut |ctx| editor.file_ui(ctx, &BTreeMap::new(), (43,1), &mut toasts, true, Firmware::ArduCopter2), Vec::new());
-        assert!(editor.file_request.is_none() && editor.edits.is_empty());
-        assert!(toasts.0.last().unwrap().contains("Vehicle changed"));
-        std::fs::remove_dir(root).unwrap();
     }
 
     #[test]
@@ -395,7 +378,7 @@ UNKNOWN "));
         let mut toasts = Toasts::default();
         editor.file_request = Some((ParamFileAction::Load, FilePicker::in_directory("Parameters", root.clone(), &["param"], None)));
         {
-            let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &BTreeMap::new(), (0, 0), &mut toasts, false, Firmware::ArduCopter2);
+            let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &BTreeMap::new(), &mut toasts, false, Firmware::ArduCopter2);
             picker::click(&ctx, &mut draw, "offline.param");
             picker::click(&ctx, &mut draw, "Open");
         }
@@ -1039,7 +1022,6 @@ enum ParamFileAction { Load, Compare }
 pub struct ParamEditor {
     search: String,
     file_request: Option<(ParamFileAction, platform::FilePicker)>,
-    file_target: Option<(u8, u8)>,
     edits: BTreeMap<String, f32>,
     pending: BTreeSet<String>,
     selected_group: Option<String>,
@@ -1102,14 +1084,8 @@ pub struct ParamEditor {
 }
 
 impl ParamEditor {
-    fn file_ui(&mut self, ctx: &egui::Context, params: &BTreeMap<String, mp_core::link::Param>, target: (u8, u8), toasts: &mut Toasts, is_connected: bool, fw: Firmware) {
-        if is_connected && self.file_request.is_some() && self.file_target != Some(target) {
-            self.file_request = None; self.file_target = None;
-            toasts.error("Vehicle changed while selecting a parameter file");
-            return;
-        }
+    fn file_ui(&mut self, ctx: &egui::Context, params: &BTreeMap<String, mp_core::link::Param>, toasts: &mut Toasts, is_connected: bool, fw: Firmware) {
         if let Some((action, path)) = platform::poll_file_action(&mut self.file_request, ctx) {
-            self.file_target = None;
             let values = match paramfile::read(&path) { Ok(values) => values, Err(e) => { toasts.error(format!("{}: {e}", path.display())); return; } };
             match action {
                 ParamFileAction::Load => {
@@ -1160,7 +1136,6 @@ impl ParamEditor {
                 }
             }
         }
-        if self.file_request.is_none() { self.file_target = None; }
     }
 
     pub fn on_event(&mut self, e: &LinkEvent, toasts: &mut Toasts) {
@@ -1206,11 +1181,11 @@ impl ParamEditor {
 
     pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, tree_page: bool) {
         let is_connected = app.link.is_some();
-        let (params, fw, target) = if let Some(link) = app.link {
+        let (params, fw) = if let Some(link) = app.link {
             let s = link.shared.read();
-            (s.params.clone(), s.cs.firmware, (s.cs.sysid, s.cs.compid))
+            (s.params.clone(), s.cs.firmware)
         } else {
-            (self.offline_params.clone(), Firmware::ArduCopter2, (0, 0))
+            (self.offline_params.clone(), Firmware::ArduCopter2)
         };
 
         if !is_connected && !self.pending.is_empty() {
@@ -1235,7 +1210,7 @@ impl ParamEditor {
             }
         }
 
-        self.file_ui(ui.ctx(), &params, target, app.toasts, is_connected, fw);
+        self.file_ui(ui.ctx(), &params, app.toasts, is_connected, fw);
         self.activate_and_keys(ui.ctx(), app, &params);
 
         if is_connected {
@@ -1270,7 +1245,6 @@ impl ParamEditor {
             let r = |y: f32, h: f32| Rect::from_min_size(o + Vec2::new(6.0, y), Vec2::new(110.0, h));
             let b = |ui: &mut egui::Ui, rr: Rect, t: &str| ui.put(rr, |ui: &mut egui::Ui| theme::button_sized(ui, t, rr.size())).clicked();
             if b(ui, r(6.0, 19.0), "Load from file") {
-                self.file_target = Some(target);
                 self.file_request = Some((ParamFileAction::Load, platform::FilePicker::new("Load Parameters", &["param", "parm", "txt"], None)));
             }
             if b(ui, r(31.0, 19.0), "Save to file") {
@@ -1296,7 +1270,6 @@ impl ParamEditor {
                 }
             });
             if b(ui, r(116.0, 19.0), "Compare Params") {
-                self.file_target = Some(target);
                 self.file_request = Some((ParamFileAction::Compare, platform::FilePicker::new("Compare Parameters", &["param", "parm", "txt"], None)));
             }
             if crate::display::flag(&app.settings.planner, "displayParamCommitButton") {
@@ -1311,7 +1284,8 @@ impl ParamEditor {
                 });
             }
             let f = fonts::ui_id(fonts::UI_SIZE);
-            ui.painter().text(o + Vec2::new(6.0, 169.0), egui::Align2::LEFT_TOP, crate::i18n::t("All Units are in raw\nformat with no scaling"), f.clone(), Color32::WHITE);
+            let lbl1_rect = Rect::from_min_size(o + Vec2::new(6.0, 169.0), Vec2::new(110.0, 26.0));
+            ui.painter().text(lbl1_rect.center(), egui::Align2::CENTER_CENTER, crate::i18n::t("All Units are in raw \nformat with no scaling"), f.clone(), Color32::WHITE);
             // GitHubContent.GetDirContent("ardupilot", "ardupilot", "/Tools/Frame_params/")
             if !self.paramfiles_requested {
                 self.paramfiles_requested = true;
@@ -1386,7 +1360,13 @@ impl ParamEditor {
             if defaults.is_some() {
                 ui.put(Rect::from_min_size(o + Vec2::new(6.0, 351.0), Vec2::new(100.0, 17.0)), egui::Checkbox::new(&mut self.none_default, crate::i18n::t("None Default")));
             }
-            b(ui, r(384.0, 22.0), "Refresh Table");
+            if app.settings.planner.get("SlowMachine").is_some_and(|v| v.eq_ignore_ascii_case("true")) {
+                if b(ui, r(384.0, 22.0), "Refresh Table") {
+                    self.tree = None;
+                    self.search_changed = None;
+                    self.search_applied = self.search.clone();
+                }
+            }
         });
 
         // splitContainer1.Panel1: treeView1 (180px) with the "<" collapse button
@@ -1440,13 +1420,6 @@ impl ParamEditor {
         });
 
         egui::CentralPanel::default().frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| {
-            if !is_connected && params.is_empty() {
-                ui.vertical_centered(|ui| {
-                    ui.add_space(40.0);
-                    theme::label(ui, "No parameters loaded.\nClick 'Load from file' to edit parameters offline, or connect to a vehicle.");
-                });
-                return;
-            }
             // filterList: the tree prefix and the search over every cell, then the Modified and
             // None Default boxes decide on their own
             let prefix = self.selected_group.as_ref().map(|t| format!("{t}_")).unwrap_or_default();
@@ -1756,7 +1729,7 @@ impl ParamEditor {
         let fixed: f32 = widths.iter().map(|w| w.max(0.0)).sum();
         let desc_w = (avail - fixed - 14.0).max(150.0);
         let col_w: Vec<f32> = widths.iter().map(|w| if *w == 0.0 { desc_w } else { w.max(0.0) }).collect();
-        let (hdr_h, row_h) = (21.0, 22.0);
+        let (hdr_h, row_h) = (21.0, 36.0);
         let f = fonts::ui_id(fonts::UI_SIZE);
         let line = Color32::from_rgb(0xa0, 0xa0, 0xa0);
 
@@ -1779,6 +1752,10 @@ impl ParamEditor {
                 let (name, value) = &rows[i];
                 let meta = param_meta::get(fw, name);
                 let (rr, _) = ui.allocate_exact_size(Vec2::new(col_w.iter().sum(), row_h), Sense::hover());
+                let row_resp = ui.interact(rr, ui.scope_id().with(("row", name)), Sense::click());
+                if row_resp.clicked() {
+                    self.current = Some(name.clone());
+                }
                 let bg = if i % 2 == 1 { theme::bg() } else { theme::control_bg() };
                 let mut cells = Vec::new();
                 let mut x = rr.left();
@@ -1863,9 +1840,16 @@ impl ParamEditor {
                 }
                 // Default_value: the vehicle's default, else "NaN"
                 if let Some(d) = defaults {
-                    txt(ui, cells[2], &d.get(name).map(|v| paramfile::format_value(*v)).unwrap_or_else(|| "NaN".into()));
+                    let d_str = d.get(name).map(|v| paramfile::format_value(*v)).unwrap_or_else(|| "NaN".into());
+                    txt(ui, cells[2], &d_str);
+                    if ui.interact(cells[2], ui.scope_id().with(("pdflt", name)), Sense::click()).clicked() {
+                        self.current = Some(name.clone());
+                    }
                 }
                 txt(ui, cells[3], meta.map(|m| m.units.as_str()).unwrap_or(""));
+                if ui.interact(cells[3], ui.scope_id().with(("punit", name)), Sense::click()).clicked() {
+                    self.current = Some(name.clone());
+                }
                 if let Some(m) = meta {
                     let opts = options_text(m);
                     let current = self.current.as_deref() == Some(name.as_str());
@@ -1897,22 +1881,35 @@ impl ParamEditor {
                         let (min, max, inc, dp) = numeric_updown(m);
                         let mut val = (v as f64).clamp(min, max);
                         val = (val * 10f64.powi(dp as i32)).round_ties_even() / 10f64.powi(dp as i32);
-                        let before = val;
-                        ui.put(cells[4].shrink(1.0), egui::DragValue::new(&mut val).range(min..=max).speed(inc).fixed_decimals(dp));
-                        if val != before {
+                        if theme::numeric_updown(ui, cells[4].shrink(1.0), &mut val, min, max, inc, dp).changed() {
                             // num.TextChanged writes the Value cell
                             self.queue_value(name, val, *value, meta, toasts);
                         }
                     } else {
                         txt(ui, cells[4], &opts);
                         // Options.ToolTipText: the values one per line (in columns past 50)
+                        let mut opt_resp = ui.interact(cells[4], ui.scope_id().with(("po", name)), Sense::click().union(Sense::hover()));
                         if let Some(t) = options_tooltip(m) {
-                            ui.interact(cells[4], ui.scope_id().with(("po", name)), Sense::hover()).on_hover_text(t);
+                            opt_resp = opt_resp.on_hover_text(t);
+                        }
+                        if opt_resp.clicked() {
+                            self.current = Some(name.clone());
                         }
                     }
                     txt(ui, cells[5], &m.description);
+                    let mut desc_resp = ui.interact(cells[5], ui.scope_id().with(("pd", name)), Sense::click().union(Sense::hover()));
                     if let Some(t) = &tip {
-                        ui.interact(cells[5], ui.scope_id().with(("pd", name)), Sense::hover()).on_hover_text(t);
+                        desc_resp = desc_resp.on_hover_text(t);
+                    }
+                    if desc_resp.clicked() {
+                        self.current = Some(name.clone());
+                    }
+                } else {
+                    if ui.interact(cells[4], ui.scope_id().with(("po", name)), Sense::click()).clicked() {
+                        self.current = Some(name.clone());
+                    }
+                    if ui.interact(cells[5], ui.scope_id().with(("pd", name)), Sense::click()).clicked() {
+                        self.current = Some(name.clone());
                     }
                 }
                 let mut fav = favs.contains(name);
