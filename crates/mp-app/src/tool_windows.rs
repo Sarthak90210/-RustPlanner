@@ -406,7 +406,7 @@ impl Tools {
             }
             "DFU Mode" => {
                 if need_link(toasts) {
-                    link.unwrap().send(LinkCommand::CommandLong { command: 246, params: [99.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
+                    link.unwrap().send(LinkCommand::CommandLong { command: 246, params: [42.0, 24.0, 71.0, 99.0, 0.0, 0.0, 0.0] });
                 }
             }
             "Bootloader Upgrade" => {
