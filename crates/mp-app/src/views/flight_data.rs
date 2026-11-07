@@ -1281,7 +1281,7 @@ impl FlightDataView {
                 }
             }
             "Joystick" => app.joystick.window_open = true,
-            other => not_ported(app, other),
+            _ => {}
         }
     }
 
@@ -2503,10 +2503,6 @@ enum HudPrompt {
     Cells(String),
     Ground([u8; 3], [u8; 3]),
     UserItems,
-}
-
-fn not_ported(app: &mut AppCtx, what: &str) {
-    app.toasts.error(format!("{what}: not available in this port yet"));
 }
 
 fn fmt_val(v: f64) -> String {

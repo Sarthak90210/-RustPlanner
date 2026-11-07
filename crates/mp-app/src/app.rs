@@ -165,10 +165,9 @@ impl Toasts {
     pub fn message(&mut self, s: impl Into<String>, caption: &str) {
         let s = crate::i18n::t(&s.into());
         log::warn!("{s}");
-        if !self.0.contains(&s) {
-            self.0.push(s);
-            self.1.push(crate::i18n::t(caption));
-        }
+        // every CustomMessageBox.Show is its own box, one after another
+        self.0.push(s);
+        self.1.push(crate::i18n::t(caption));
     }
 }
 

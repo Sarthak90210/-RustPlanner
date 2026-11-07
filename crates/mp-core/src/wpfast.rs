@@ -92,7 +92,8 @@ pub fn item(loc: &Locationwp, seq: u16, frame: &mut u8, altmode: u8, sys: u8, co
         y,
         z: loc.alt,
         seq,
-        command: MavCmd::from_u16(loc.id)?,
+        // an id the dialect lacks goes out raw (see raw_item)
+        command: MavCmd::from_u16(loc.id).unwrap_or(MavCmd::MAV_CMD_NAV_WAYPOINT),
         target_system: sys,
         target_component: comp,
         frame: MavFrame::from_u8(*frame).unwrap_or(MavFrame::MAV_FRAME_GLOBAL_RELATIVE_ALT),
@@ -100,6 +101,35 @@ pub fn item(loc: &Locationwp, seq: u16, frame: &mut u8, altmode: u8, sys: u8, co
         autocontinue: 1,
         mission_type: MavMissionType::MAV_MISSION_TYPE_MISSION,
     })
+}
+
+/// MAVLink's X.25 checksum (crc_accumulate).
+fn crc_x25(bytes: &[u8]) -> u16 {
+    let mut crc: u16 = 0xFFFF;
+    for b in bytes {
+        let mut tmp = *b ^ (crc & 0xFF) as u8;
+        tmp ^= tmp << 4;
+        crc = (crc >> 8) ^ ((tmp as u16) << 8) ^ ((tmp as u16) << 3) ^ ((tmp as u16) >> 4);
+    }
+    crc
+}
+
+/// A MISSION_ITEM_INT frame carrying `command` as written, for ids the dialect has no name for
+/// (MAVLink.mavlink_mission_item_int_t.command is a plain ushort).
+pub fn raw_item(item: &MISSION_ITEM_INT_DATA, command: u16) -> Vec<u8> {
+    let mut buf = Vec::new();
+    let hdr = mavlink::MavHeader { system_id: crate::link::GCS_SYSID as u32, component_id: crate::link::GCS_COMPID, sequence: 0 };
+    let _ = mavlink::write_versioned_msg(&mut buf, mavlink::MavlinkVersion::V2, hdr, &MavMessage::MISSION_ITEM_INT(item.clone()));
+    // payload at 10; command is the u16 after param1-4, x, y, z and seq
+    let len = buf[1] as usize;
+    if len >= 32 {
+        buf[10 + 30..10 + 32].copy_from_slice(&command.to_le_bytes());
+        let mut crc_in = buf[1..10 + len].to_vec();
+        crc_in.push(38); // MISSION_ITEM_INT CRC_EXTRA
+        let crc = crc_x25(&crc_in);
+        buf[10 + len..10 + len + 2].copy_from_slice(&crc.to_le_bytes());
+    }
+    buf
 }
 
 fn count(total: u16, sys: u8, comp: u8) -> LinkCommand {
@@ -210,7 +240,11 @@ pub fn write_fast(tx: Sender<LinkCommand>, shared: Arc<RwLock<LinkShared>>, comm
             if rows > 0 && link.shared.read().progress.is_some() {
                 progress(a * 100 / rows, format!("Setting WP {a}"));
             }
-            link.send(LinkCommand::Send(Box::new(MavMessage::MISSION_ITEM_INT(req))));
+            if MavCmd::from_u16(commandlist[a].id).is_some() {
+                link.send(LinkCommand::Send(Box::new(MavMessage::MISSION_ITEM_INT(req))));
+            } else {
+                link.send(LinkCommand::SendRaw(raw_item(&req, commandlist[a].id)));
+            }
         }
         a += 1;
     }
@@ -230,6 +264,22 @@ pub fn write_fast(tx: Sender<LinkCommand>, shared: Arc<RwLock<LinkShared>>, comm
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unknown_command_ids_go_out_raw_with_a_valid_checksum() {
+        let mut frame = 3;
+        let wp = Locationwp { id: 65001, p1: 1.0, lat: -35.0, lng: 149.0, alt: 10.0, ..Default::default() };
+        assert!(MavCmd::from_u16(65001).is_none(), "an id the dialect lacks");
+        let item = item(&wp, 4, &mut frame, 3, 1, 1).unwrap();
+        let bytes = raw_item(&item, 65001);
+        assert_eq!(u16::from_le_bytes([bytes[40], bytes[41]]), 65001);
+        // re-encoding a known command reproduces the crate's own frame, checksum included
+        let mut own = Vec::new();
+        let hdr = mavlink::MavHeader { system_id: 255, component_id: 190, sequence: 0 };
+        mavlink::write_versioned_msg(&mut own, mavlink::MavlinkVersion::V2, hdr, &MavMessage::MISSION_ITEM_INT(item.clone())).unwrap();
+        assert_eq!(raw_item(&item, 16), own);
+        assert_ne!(bytes, own);
+    }
 
     #[test]
     fn frames_follow_the_alt_mode_for_nav_commands_only() {

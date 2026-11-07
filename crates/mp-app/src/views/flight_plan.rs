@@ -110,6 +110,8 @@ pub struct FlightPlanView {
     read_confirm: bool,
     /// saveWPsFast running on its own thread
     fast_job: Option<crossbeam_channel::Receiver<Result<bool, String>>>,
+    /// MAV.cs.HomeLocation, refreshed every frame for updateUndoBuffer
+    vehicle_home: Option<Locationwp>,
     /// a protocol upload finished: saveWPs' home request and radius parameters are due
     post_upload: Option<std::time::Instant>,
     /// FlightPlanner.history: home and list before each undoable change
@@ -180,6 +182,7 @@ impl Default for FlightPlanView {
             fast_job: None,
             history: Vec::new(),
             post_upload: None,
+            vehicle_home: None,
             drag_undo: false,
             grid: false,
             alt_warn: 0.0,
@@ -476,8 +479,10 @@ impl FlightPlanView {
     }
 
     /// updateUndoBuffer
+    /// updateUndoBuffer: the vehicle's home when it has one, else the planned home
     pub(super) fn update_undo_buffer(&mut self) {
-        self.history.push((self.home, self.items.clone()));
+        let home = self.vehicle_home.filter(|h| h.lat != 0.0 && h.lng != 0.0).unwrap_or(self.home);
+        self.history.push((home, self.items.clone()));
     }
 
     /// FlightPlanner.ProcessCmdKey: Ctrl+Z undo, Ctrl+O / Ctrl+S waypoint files, and
@@ -503,6 +508,20 @@ impl FlightPlanView {
         }
         if key(egui::Modifiers::COMMAND, egui::Key::Z) {
             self.undo();
+        }
+        // Ctrl+M: the grid becomes MAV.wps (planned home first)
+        if key(egui::Modifiers::COMMAND, egui::Key::M) {
+            if let Some(l) = app.link {
+                let (sys, comp) = {
+                    let s = l.shared.read();
+                    (s.cs.sysid, s.cs.compid)
+                };
+                let mut wps = vec![Locationwp { id: mavcmd::WAYPOINT, frame: 0, ..self.home }];
+                for (a, w) in self.items.iter().enumerate() {
+                    wps.push(Locationwp { seq: a as u16 + 1, ..*w });
+                }
+                l.set_mission(sys, comp, wps);
+            }
         }
         if key(egui::Modifiers::COMMAND, egui::Key::O) {
             if platform::HAS_NATIVE_DIALOGS {
@@ -570,6 +589,7 @@ impl FlightPlanView {
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui, app: &mut AppCtx) {
+        self.vehicle_home = app.link.and_then(|l| l.shared.read().cs.home).map(|h| Locationwp { id: mavcmd::WAYPOINT, lat: h.lat, lng: h.lng, alt: h.alt as f32, ..Default::default() });
         self.hotkeys(ui.ctx(), app);
         if let Some(ev) = self.ftp_job.as_ref().and_then(|rx| rx.try_recv().ok()) {
             self.ftp_job = None;
@@ -1308,8 +1328,10 @@ impl FlightPlanView {
                 self.update_undo_buffer();
             }
             if idx == HOME_IDX {
+                // callMeDrag("H"): the home altitude follows SRTM (0 without data)
                 self.home.lat = lat;
                 self.home.lng = lng;
+                self.home.alt = crate::srtm::altitude(lat, lng).unwrap_or(0.0) as f32;
             } else if let Some(w) = self.items.get_mut(idx) {
                 w.lat = lat;
                 w.lng = lng;
