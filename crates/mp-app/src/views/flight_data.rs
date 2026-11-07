@@ -128,6 +128,9 @@ fn mount_modes(fw: mp_core::firmware::Firmware) -> Vec<(i64, String)> {
         .unwrap_or_default()
 }
 
+/// Strings.CommandFailed (the resource ends with a line break)
+const COMMAND_FAILED: &str = "The Command failed to execute\n";
+
 /// BUTactiondo_Click's command for a built-in action after its confirmation, or None where
 /// Enum.Parse finds no MAV_CMD (the action then fails with "Command Failed").
 fn action_command(name: &str, fw: mp_core::firmware::Firmware) -> Option<(u16, [f32; 7])> {
@@ -175,6 +178,10 @@ pub struct FlightDataView {
     last_armed: bool,
     /// doARM in flight: (arm, message count when sent)
     arm_pending: Option<(bool, usize)>,
+    /// a Force Arm / Force Disarm waiting for its ACK
+    force_pending: bool,
+    /// Strings.ErrorRejectedByMAV after a refused forced arm
+    arm_error: Option<String>,
     /// the vehicle refused: (arm, collected STATUSTEXT)
     arm_failed: Option<(bool, String)>,
     /// CurrentState.lastautowp: the last waypoint reached in AUTO
@@ -231,6 +238,8 @@ impl Default for FlightDataView {
             mode_changed: Instant::now(),
             last_armed: false,
             arm_pending: None,
+            force_pending: false,
+            arm_error: None,
             arm_failed: None,
             last_auto_wp: -1,
             resume: None,
@@ -275,6 +284,9 @@ impl FlightDataView {
     /// report "Command Failed <CMD>".
     pub fn on_action_ack(&mut self, e: &LinkEvent, link: Option<&mp_core::link::Link>, toasts: &mut crate::app::Toasts) -> bool {
         let LinkEvent::CommandAck { command, ok, .. } = e else { return false };
+        if *command == 400 && (self.arm_pending.is_some() || self.force_pending) {
+            return true;
+        }
         let Some((cmd, name)) = self.action_ack.clone().filter(|(c, _)| c == command) else { return false };
         self.action_ack = None;
         if !*ok {
@@ -288,7 +300,7 @@ impl FlightDataView {
                     l.send(LinkCommand::Send(Box::new(MavMessage::DIGICAM_CONTROL(DIGICAM_CONTROL_DATA { target_system: sys, target_component: comp, shot: 1, ..Default::default() }))));
                 }
             } else if !name.is_empty() {
-                toasts.message(format!("Command Failed {name}"), "Error");
+                toasts.message(format!("{COMMAND_FAILED} {name}"), "Error");
             }
         }
         true
@@ -318,6 +330,9 @@ impl FlightDataView {
             }
         }
         if let LinkEvent::CommandAck { command: 400, ok, .. } = e {
+            if std::mem::take(&mut self.force_pending) && !ok {
+                self.arm_error = Some("Error: command rejected by MAV".into());
+            }
             if let Some((arm, _)) = self.arm_pending {
                 if !ok {
                     self.arm_failed = Some((arm, String::new()));
@@ -333,6 +348,9 @@ impl FlightDataView {
         if cs.mode.eq_ignore_ascii_case("auto") && cs.wpno > 0 {
             self.last_auto_wp = cs.wpno as i32;
         }
+        if let Some(e) = self.arm_error.take() {
+            app.toasts.message(e, "Error");
+        }
         let Some(l) = app.link else {
             self.resume = None;
             return;
@@ -340,12 +358,13 @@ impl FlightDataView {
         if let (Some((arm, _)), Some((arm2, reasons))) = (self.arm_pending, self.arm_failed.as_mut()) {
             if arm == *arm2 && reasons.is_empty() {
                 let start = self.arm_pending.map(|p| p.1).unwrap_or(0);
-                let msgs = l.shared.read().messages.iter().skip(start).map(|m| m.text.clone()).collect::<Vec<_>>().join("\n");
-                *reasons = if msgs.is_empty() { " ".into() } else { msgs };
+                // the STATUSTEXTs heard while arming, each with AppendLine's line break
+                let msgs: String = l.shared.read().messages.iter().skip(start).map(|m| format!("{}\n", m.text)).collect();
+                *reasons = " ".into();
                 let action = if arm { "Arm" } else { "Disarm" };
                 self.prompt = Some(Prompt::Confirm {
                     title: "Error".into(),
-                    text: format!("{action} failed.\n{}\nForce {action} can bypass safety checks,\nwhich can lead to the vehicle crashing\nand causing serious injuries.\n\nDo you wish to Force {action}?", reasons.trim()),
+                    text: format!("{action} failed.\n{msgs}\nForce {action} can bypass safety checks,\nwhich can lead to the vehicle crashing\nand causing serious injuries.\n\nDo you wish to Force {action}?"),
                     then: Confirmed::ForceArm(arm),
                 });
                 self.arm_pending = None;
@@ -902,15 +921,19 @@ impl FlightDataView {
         for (y, text, mode) in [(20.0, "Auto", "Auto"), (49.0, "Loiter", "Loiter"), (78.0, "RTL", "RTL")] {
             let r = Rect::from_min_size(o + Vec2::new(150.0, y), Vec2::new(47.0, 23.0));
             if ui.put(r, |ui: &mut egui::Ui| theme::button_sized(ui, text, r.size())).clicked() {
+                // BUT_quickauto / quickmanual / quickrtl: setMode, "Command Failed" when it throws
                 match app.link {
                     Some(l) => {
                         let fw = l.shared.read().cs.firmware;
+                        if mode == "Loiter" && !matches!(fw, Firmware::ArduPlane | Firmware::ArduRover | Firmware::ArduCopter2) {
+                            continue;
+                        }
                         match fw.modes().into_iter().find(|(_, n)| n.eq_ignore_ascii_case(mode)) {
                             Some((k, _)) => l.send(LinkCommand::SetMode(k)),
-                            None => app.toasts.error("Command Failed"),
+                            None => app.toasts.message(COMMAND_FAILED, "Error"),
                         }
                     }
-                    None => app.toasts.error("Command Failed"),
+                    None => app.toasts.message(COMMAND_FAILED, "Error"),
                 }
             }
         }
@@ -1668,7 +1691,16 @@ impl FlightDataView {
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                let (yes, no) = if confirm { ("Yes", "No") } else { ("OK", "Cancel") };
+                let force = match prompt {
+                    Prompt::Confirm { then: Confirmed::ForceArm(arm), .. } => Some(if *arm { "Force Arm" } else { "Force Disarm" }),
+                    _ => None,
+                };
+                let (yes, no) = match force {
+                    // CustomMessageBox YesText / NoText
+                    Some(f) => (f, "Cancel"),
+                    None if confirm => ("Yes", "No"),
+                    None => ("OK", "Cancel"),
+                };
                 if theme::button(ui, yes).clicked() {
                     result = Some(true);
                 }
@@ -1718,7 +1750,7 @@ impl FlightDataView {
                             l.send(LinkCommand::CommandLong { command: cmd, params: p });
                         } else {
                             // Enum.Parse found no MAV_CMD
-                            app.toasts.message("Command Failed", "Error");
+                            app.toasts.message(COMMAND_FAILED, "Error");
                         }
                     }
                     Confirmed::SetMode(m) => l.send(LinkCommand::SetMode(m)),
@@ -1726,7 +1758,10 @@ impl FlightDataView {
                         self.arm_pending = Some((arm, l.shared.read().messages.len()));
                         l.send(LinkCommand::Arm { arm, force: false });
                     }
-                    Confirmed::ForceArm(arm) => l.send(LinkCommand::Arm { arm, force: true }),
+                    Confirmed::ForceArm(arm) => {
+                        self.force_pending = true;
+                        l.send(LinkCommand::Arm { arm, force: true });
+                    }
                     Confirmed::ResumeWarn => {
                         let last = if self.last_auto_wp < 0 { 1 } else { self.last_auto_wp };
                         self.prompt = Some(Prompt::Input { title: "Resume at".into(), fields: vec![("Resume mission at waypoint#".into(), last.to_string())], then: Inputted::ResumeAt });
@@ -2578,11 +2613,28 @@ mod action_tests {
         let mut toasts = crate::app::Toasts::default();
         v.action_ack = Some((17, mp_core::mavcmd::cmd_name(17)));
         assert!(v.on_action_ack(&LinkEvent::CommandAck { command: 17, result: "DENIED".into(), ok: false }, None, &mut toasts));
-        assert_eq!(toasts.0, ["Command Failed LOITER_UNLIM"]);
+        assert_eq!(toasts.0, ["The Command failed to execute\n LOITER_UNLIM"]);
         assert_eq!(toasts.1, ["Error"]);
         assert!(!v.on_action_ack(&LinkEvent::CommandAck { command: 17, result: "DENIED".into(), ok: false }, None, &mut toasts), "only the awaited ACK");
         v.action_ack = Some((185, String::new()));
         v.on_action_ack(&LinkEvent::CommandAck { command: 185, result: "DENIED".into(), ok: false }, None, &mut toasts);
         assert_eq!(toasts.0.len(), 1, "Terminate_Flight ignores the result");
+    }
+}
+
+#[cfg(test)]
+mod arm_tests {
+    use super::*;
+
+    #[test]
+    fn a_refused_forced_arm_reports_rejected_by_mav_and_hides_the_generic_ack() {
+        let mut v = FlightDataView::default();
+        let mut toasts = crate::app::Toasts::default();
+        v.force_pending = true;
+        let nack = LinkEvent::CommandAck { command: 400, result: "DENIED".into(), ok: false };
+        assert!(v.on_action_ack(&nack, None, &mut toasts), "BUT_ARM_Click reports arming itself");
+        v.on_event(&nack);
+        assert_eq!(v.arm_error.as_deref(), Some("Error: command rejected by MAV"));
+        assert!(!v.force_pending);
     }
 }
