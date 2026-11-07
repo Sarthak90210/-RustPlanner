@@ -45,27 +45,28 @@ const QUICK_COLORS: [Color32; 6] = [
 
 /// CMB_action items (MAV_CMD names offered by the Actions tab).
 /// FlightData.actions enum (CMB_action items) and the command each one sends.
-const ACTIONS: &[(&str, u16, [f32; 7])] = &[
-    ("Loiter_Unlim", 17, [0.0; 7]),
-    ("Return_To_Launch", 20, [0.0; 7]),
-    ("Preflight_Calibration", 241, [1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0]),
-    ("Mission_Start", 300, [0.0; 7]),
-    ("Preflight_Reboot_Shutdown", 246, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-    ("Trigger_Camera", 203, [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
-    ("System_Time", 0, [0.0; 7]),
-    ("Battery_Reset", 42651, [255.0, 100.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-    ("ADSB_Out_Ident", 10001, [0.0; 7]),
-    ("Scripting_cmd_stop_and_restart", 42701, [3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-    ("Scripting_cmd_stop", 42701, [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-    ("HighLatency_Enable", 2600, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-    ("HighLatency_Disable", 2600, [0.0; 7]),
-    ("Toggle_Safety_Switch", 5300, [0.0; 7]),
-    ("Parachute_Release", 208, [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-    ("Engine_Start", 223, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-    ("Engine_Stop", 223, [0.0; 7]),
-    ("Terminate_Flight", 185, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-    ("Format_SD_Card", 526, [1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-    ("Reboot_Mass_Storage", 246, [3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+/// FlightData.actions, in enum order (CMB_action)
+const ACTIONS: &[(&str,)] = &[
+    ("Loiter_Unlim",),
+    ("Return_To_Launch",),
+    ("Preflight_Calibration",),
+    ("Mission_Start",),
+    ("Preflight_Reboot_Shutdown",),
+    ("Trigger_Camera",),
+    ("System_Time",),
+    ("Battery_Reset",),
+    ("ADSB_Out_Ident",),
+    ("Scripting_cmd_stop_and_restart",),
+    ("Scripting_cmd_stop",),
+    ("HighLatency_Enable",),
+    ("HighLatency_Disable",),
+    ("Toggle_Safety_Switch",),
+    ("Parachute_Release",),
+    ("Engine_Start",),
+    ("Engine_Stop",),
+    ("Terminate_Flight",),
+    ("Format_SD_Card",),
+    ("Reboot_Mass_Storage",),
 ];
 
 enum Prompt {
@@ -91,6 +92,8 @@ enum Confirmed {
     ForceArm(bool),
     /// Common.MessageShowAgain("Resume Mission", ...)
     ResumeWarn,
+    /// "You are in failsafe, are you sure?"
+    SetMode(u32),
 }
 
 /// BUT_resumemis_Click as a state machine driven by frames and link events.
@@ -115,7 +118,41 @@ enum Inputted {
     ResumeAt,
 }
 
-const MOUNT_MODES: &[&str] = &["RETRACT", "NEUTRAL", "MAVLINK_TARGETING", "RC_TARGETING", "GPS_POINT"];
+/// CMB_mountmode.DataSource: the options of the first of these parameters with any.
+fn mount_modes(fw: mp_core::firmware::Firmware) -> Vec<(i64, String)> {
+    ["MNT1_DEFLT_MODE", "MNT_DEFLT_MODE", "MNT_MODE"]
+        .iter()
+        .filter_map(|n| mp_core::param_meta::get(fw, n))
+        .map(|m| m.values.clone())
+        .find(|v| !v.is_empty())
+        .unwrap_or_default()
+}
+
+/// BUTactiondo_Click's command for a built-in action after its confirmation, or None where
+/// Enum.Parse finds no MAV_CMD (the action then fails with "Command Failed").
+fn action_command(name: &str, fw: mp_core::firmware::Firmware) -> Option<(u16, [f32; 7])> {
+    let p = |a: f32, b: f32, c: f32| [a, b, c, 0.0, 0.0, 0.0, 0.0];
+    Some(match name {
+        // request gyro on Copter; baro / airspeed always
+        "Preflight_Calibration" => (241, p(if fw == mp_core::firmware::Firmware::ArduCopter2 { 1.0 } else { 0.0 }, 0.0, 1.0)),
+        "Terminate_Flight" => (185, p(1.0, 0.0, 0.0)),
+        "Parachute_Release" => (208, p(2.0, 0.0, 0.0)),
+        // doReboot()
+        "Preflight_Reboot_Shutdown" => (246, p(1.0, 0.0, 0.0)),
+        // ArduPilot REBOOT_TO_MASS_STORAGE action
+        "Reboot_Mass_Storage" => (246, p(5.0, 0.0, 0.0)),
+        "HighLatency_Enable" => (2600, p(1.0, 0.0, 0.0)),
+        "HighLatency_Disable" => (2600, p(0.0, 0.0, 0.0)),
+        "Engine_Start" => (223, p(1.0, 0.0, 0.0)),
+        "Engine_Stop" => (223, p(0.0, 0.0, 0.0)),
+        // batt 1, 100%
+        "Battery_Reset" => (42651, p(255.0, 100.0, 0.0)),
+        "Loiter_Unlim" => (17, p(0.0, 0.0, 0.0)),
+        "Return_To_Launch" => (20, p(0.0, 0.0, 0.0)),
+        "Mission_Start" => (300, p(0.0, 0.0, 0.0)),
+        _ => return None,
+    })
+}
 
 pub struct FlightDataView {
     tab: usize,
@@ -126,6 +163,9 @@ pub struct FlightDataView {
     wp_sel: u16,
     action_sel: usize,
     mount_sel: usize,
+    /// a Do Action command waiting for its ACK: (command, "Command Failed" suffix or "" when
+    /// the original ignores the result; 203 retries as DIGICAM_CONTROL)
+    pub(crate) action_ack: Option<(u16, String)>,
     change_speed: f32,
     change_alt: f32,
     loiter_rad: f32,
@@ -182,6 +222,7 @@ impl Default for FlightDataView {
             wp_sel: 0,
             action_sel: 0,
             mount_sel: 0,
+            action_ack: None,
             change_speed: 0.0,
             change_alt: 100.0,
             loiter_rad: 0.0,
@@ -228,6 +269,29 @@ impl FlightDataView {
     /// temp form "logindex": open the log browser on a picked .bin.
     pub fn open_log_browse(&mut self) {
         self.log_browse.request_load();
+    }
+
+    /// The ACK of a Do Action command: Trigger_Camera falls back to DIGICAM_CONTROL, others
+    /// report "Command Failed <CMD>".
+    pub fn on_action_ack(&mut self, e: &LinkEvent, link: Option<&mp_core::link::Link>, toasts: &mut crate::app::Toasts) -> bool {
+        let LinkEvent::CommandAck { command, ok, .. } = e else { return false };
+        let Some((cmd, name)) = self.action_ack.clone().filter(|(c, _)| c == command) else { return false };
+        self.action_ack = None;
+        if !*ok {
+            if cmd == 203 {
+                if let Some(l) = link {
+                    use mp_core::mavlink::dialects::ardupilotmega::{MavMessage, DIGICAM_CONTROL_DATA};
+                    let (sys, comp) = {
+                        let s = l.shared.read();
+                        (s.cs.sysid, s.cs.compid)
+                    };
+                    l.send(LinkCommand::Send(Box::new(MavMessage::DIGICAM_CONTROL(DIGICAM_CONTROL_DATA { target_system: sys, target_component: comp, shot: 1, ..Default::default() }))));
+                }
+            } else if !name.is_empty() {
+                toasts.message(format!("Command Failed {name}"), "Error");
+            }
+        }
+        true
     }
 
     pub fn on_event(&mut self, e: &LinkEvent) {
@@ -1027,13 +1091,14 @@ impl FlightDataView {
                 .response
         });
         let rr = cell(0, 3);
+        let mounts = mount_modes(cs.firmware);
         ui.put(rr, |ui: &mut egui::Ui| {
             egui::ComboBox::from_id_salt("CMB_mountmode").wrap_mode(egui::TextWrapMode::Truncate)
                 .width(rr.width() - 4.0)
-                .selected_text(MOUNT_MODES[self.mount_sel])
+                .selected_text(mounts.iter().find(|(k, _)| *k == self.mount_sel as i64).map(|(_, v)| v.clone()).unwrap_or_default())
                 .show_ui(ui, |ui| {
-                    for (i, m) in MOUNT_MODES.iter().enumerate() {
-                        ui.selectable_value(&mut self.mount_sel, i, *m);
+                    for (k, m) in &mounts {
+                        ui.selectable_value(&mut self.mount_sel, *k as usize, m);
                     }
                 })
                 .response
@@ -1089,22 +1154,46 @@ impl FlightDataView {
         ui.allocate_rect(Rect::from_min_size(origin, Vec2::new(287.0, 181.0)), Sense::hover());
 
         let Some(text) = clicked else { return };
-        let Some(link) = link else {
-            app.toasts.error("Not connected");
-            return;
-        };
+        // the handlers do nothing without an open port
+        let Some(link) = link else { return };
         let find = |name: &str| modes.iter().find(|(_, n)| n.eq_ignore_ascii_case(name)).map(|(k, _)| *k);
         let fw = cs.firmware;
         match text {
             "Do Action" => {
-                self.prompt = Some(Prompt::Confirm {
-                    title: "Action".into(),
-                    text: format!("Are you sure you want to do {} ?", ACTIONS[self.action_sel].0),
-                    then: Confirmed::DoAction(self.action_sel),
-                });
+                let name = ACTIONS[self.action_sel].0;
+                // these run at once; the rest ask first
+                match name {
+                    "Format_SD_Card" => link.send(LinkCommand::CommandInt(mp_core::gimbal::CommandInt { command: 526, frame: 0, params: [1.0, 1.0, 0.0, 0.0], x: 0, y: 0, z: 0.0 })),
+                    "Trigger_Camera" => {
+                        // setDigicamControl: DIGICAM_CONTROL when the command is refused
+                        self.action_ack = Some((203, String::new()));
+                        link.send(LinkCommand::CommandLong { command: 203, params: [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0] });
+                    }
+                    "Scripting_cmd_stop_and_restart" | "Scripting_cmd_stop" => {
+                        let c = if name == "Scripting_cmd_stop" { 2.0 } else { 3.0 };
+                        link.send(LinkCommand::CommandInt(mp_core::gimbal::CommandInt { command: 42701, frame: 0, params: [c, 0.0, 0.0, 0.0], x: 0, y: 0, z: 0.0 }));
+                    }
+                    "System_Time" => {
+                        use mp_core::mavlink::dialects::ardupilotmega::{MavMessage, SYSTEM_TIME_DATA};
+                        let us = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_micros() as u64).unwrap_or(0);
+                        link.send(LinkCommand::Send(Box::new(MavMessage::SYSTEM_TIME(SYSTEM_TIME_DATA { time_unix_usec: us, time_boot_ms: 0 }))));
+                    }
+                    _ => {
+                        self.prompt = Some(Prompt::Confirm { title: "Action".into(), text: format!("Are you sure you want to do {name} ?"), then: Confirmed::DoAction(self.action_sel) });
+                    }
+                }
             }
             "Set WP" => link.send(LinkCommand::SetCurrentWp(self.wp_sel)),
-            "Set Mode" => link.send(LinkCommand::SetMode(sel_mode)),
+            "Set Mode" => {
+                // BUT_setmode_Click asks first while in failsafe
+                if cs.field("failsafe").unwrap_or(0.0) != 0.0 {
+                    self.prompt = Some(Prompt::Confirm { title: "Failsafe".into(), text: "You are in failsafe, are you sure?".into(), then: Confirmed::SetMode(sel_mode) });
+                } else {
+                    link.send(LinkCommand::SetMode(sel_mode));
+                }
+            }
+            // BUT_quickmanual_Click only switches Plane, Ateryx (not a firmware here), Rover and Copter
+            "Loiter" if !matches!(fw, Firmware::ArduPlane | Firmware::ArduRover | Firmware::ArduCopter2) => {}
             "Auto" | "Loiter" | "RTL" => {
                 if let Some(k) = find(text) {
                     link.send(LinkCommand::SetMode(k));
@@ -1154,7 +1243,14 @@ impl FlightDataView {
             "Message" => {
                 self.prompt = Some(Prompt::Input { title: "Message".into(), fields: vec![("Enter Message".into(), String::new())], then: Inputted::SendMessage })
             }
-            "Set Mount" => link.send(LinkCommand::CommandLong { command: 204, params: [self.mount_sel as f32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }),
+            // BUT_mountmode_Click: the MNT_MODE parameter, else DO_MOUNT_CONTROL with the mode in p7
+            "Set Mount" => {
+                if link.shared.read().params.contains_key("MNT_MODE") {
+                    link.send(LinkCommand::SetParam { name: "MNT_MODE".into(), value: self.mount_sel as f32 });
+                } else {
+                    link.send(LinkCommand::CommandLong { command: 205, params: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, self.mount_sel as f32] });
+                }
+            }
             "Joystick" => app.joystick.window_open = true,
             other => not_ported(app, other),
         }
@@ -1598,15 +1694,34 @@ impl FlightDataView {
                 };
                 match then {
                     Confirmed::DoAction(i) => {
-                        let (name, cmd, p) = ACTIONS[i];
-                        if name == "System_Time" {
-                            use mp_core::mavlink::dialects::ardupilotmega::{MavMessage, SYSTEM_TIME_DATA};
-                            let us = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_micros() as u64).unwrap_or(0);
-                            l.send(LinkCommand::Send(Box::new(MavMessage::SYSTEM_TIME(SYSTEM_TIME_DATA { time_unix_usec: us, time_boot_ms: 0 }))));
-                        } else {
+                        let name = ACTIONS[i].0;
+                        let fw = l.shared.read().cs.firmware;
+                        if name == "Toggle_Safety_Switch" {
+                            // setMode(SET_MODE { custom_mode = motor outputs enabled }, SAFETY_ARMED)
+                            let (sys, comp, custom) = {
+                                let s = l.shared.read();
+                                let motor = s.cs.sensors_enabled & 0x8000 != 0 && s.cs.sensors_present != 0;
+                                (s.cs.sysid, s.cs.compid, u32::from(motor))
+                            };
+                            if sys != 0 {
+                                use mp_core::mavlink::dialects::ardupilotmega::{MavMessage, MavModeFlag, SET_MODE_DATA};
+                                l.send(LinkCommand::CommandNoAck { command: 176, params: [128.0, custom as f32, 0.0, 0.0, 0.0, 0.0, 0.0] });
+                                for _ in 0..2 {
+                                    l.send(LinkCommand::Send(Box::new(MavMessage::SET_MODE(SET_MODE_DATA { custom_mode: custom, target_system: sys, base_mode: MavModeFlag::MAV_MODE_FLAG_SAFETY_ARMED }))));
+                                }
+                                let _ = comp;
+                            }
+                        } else if let Some((cmd, p)) = action_command(name, fw) {
+                            // failures report "Command Failed <MAV_CMD>" (DO_PARACHUTE by its own check)
+                            let silent = matches!(name, "Terminate_Flight" | "Preflight_Reboot_Shutdown" | "Reboot_Mass_Storage" | "HighLatency_Enable" | "HighLatency_Disable" | "Engine_Start" | "Engine_Stop");
+                            self.action_ack = Some((cmd, if silent { String::new() } else { mp_core::mavcmd::cmd_name(cmd) }));
                             l.send(LinkCommand::CommandLong { command: cmd, params: p });
+                        } else {
+                            // Enum.Parse found no MAV_CMD
+                            app.toasts.message("Command Failed", "Error");
                         }
                     }
+                    Confirmed::SetMode(m) => l.send(LinkCommand::SetMode(m)),
                     Confirmed::Arm(arm) => {
                         self.arm_pending = Some((arm, l.shared.read().messages.len()));
                         l.send(LinkCommand::Arm { arm, force: false });
@@ -2438,5 +2553,36 @@ mod quick_caption_tests {
         assert_eq!(name_and_unit("not_a_property"), "not_a_property");
         // English GetFieldDesc has no L10NU entry: the name itself
         assert_eq!(field_desc("roll"), "roll");
+    }
+}
+
+#[cfg(test)]
+mod action_tests {
+    use super::*;
+
+    #[test]
+    fn do_action_commands_follow_butactiondo() {
+        let copter = Firmware::ArduCopter2;
+        assert_eq!(action_command("Preflight_Calibration", copter).unwrap(), (241, [1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0]));
+        assert_eq!(action_command("Preflight_Calibration", Firmware::ArduPlane).unwrap().1[0], 0.0, "gyro only on Copter");
+        assert_eq!(action_command("Reboot_Mass_Storage", copter).unwrap(), (246, [5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]));
+        assert_eq!(action_command("Battery_Reset", copter).unwrap().1[..2], [255.0, 100.0]);
+        // Enum.Parse finds no ADSB_OUT_IDENT / DO_START_ADSB_OUT_IDENT
+        assert_eq!(action_command("ADSB_Out_Ident", copter), None);
+        assert_eq!(ACTIONS.len(), 20);
+    }
+
+    #[test]
+    fn failed_actions_report_command_failed_and_others_stay_silent() {
+        let mut v = FlightDataView::default();
+        let mut toasts = crate::app::Toasts::default();
+        v.action_ack = Some((17, mp_core::mavcmd::cmd_name(17)));
+        assert!(v.on_action_ack(&LinkEvent::CommandAck { command: 17, result: "DENIED".into(), ok: false }, None, &mut toasts));
+        assert_eq!(toasts.0, ["Command Failed LOITER_UNLIM"]);
+        assert_eq!(toasts.1, ["Error"]);
+        assert!(!v.on_action_ack(&LinkEvent::CommandAck { command: 17, result: "DENIED".into(), ok: false }, None, &mut toasts), "only the awaited ACK");
+        v.action_ack = Some((185, String::new()));
+        v.on_action_ack(&LinkEvent::CommandAck { command: 185, result: "DENIED".into(), ok: false }, None, &mut toasts);
+        assert_eq!(toasts.0.len(), 1, "Terminate_Flight ignores the result");
     }
 }
