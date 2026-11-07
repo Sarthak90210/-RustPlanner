@@ -1,0 +1,68 @@
+{
+  "round": 51,
+  "date": "2026-11-07",
+  "review_type": "Independent hostile source review at the strictest adversarial parity bar. Verified targeted improvements in commit a2aedaa9f53ff86874884d163053d48e5c8ba9fc against reference/MissionPlanner sources: CommsBLE (SimpleBleApi dynamic symbol resolution & write request scaffolding), CommsWinUSB (WinUsbApi dynamic symbol resolution & bulk pipe routing), mobile speech dispatch (iOS objc_getClass probing, Android native activity logging hook), and iOS packaging/simulator test verification.",
+  "reviewed_head": "a2aedaa9f53ff86874884d163053d48e5c8ba9fc",
+  "reviewed_uncommitted_worktree": false,
+  "reviewed_files": [
+    "crates/mp-app/src/speech.rs",
+    "crates/mp-core/src/comms.rs",
+    "scripts/test_ios_packaging.py",
+    "reference/MissionPlanner/ExtLibs/Comms/CommsBLE.cs",
+    "reference/MissionPlanner/ExtLibs/Comms/CommsWinUSB.cs"
+  ],
+  "verdict": "REJECTED for exact-clone parity (Score: 5.0/10, capped at 5.0 due to open P1 findings). Commit a2aedaa9f53ff86874884d163053d48e5c8ba9fc introduced dynamic symbol loading via GetProcAddress for SimpleBLE (simpleble_adapter_get_handle, simpleble_adapter_scan_for, simpleble_peripheral_connect, simpleble_peripheral_disconnect, simpleble_peripheral_write_request) and WinUSB (WinUsb_Initialize, WinUsb_Free, WinUsb_ReadPipe, WinUsb_WritePipe), added write routing for BLE Nordic UART service/char UUIDs and WinUSB bulk endpoints (0x81 bulk-in, 0x01 bulk-out), added Objective-C runtime symbol querying (objc_getClass) in speech.rs, and verified host-independent packaging tests (5/5). However, under the hostile adversarial audit standard, a partial match or stub receives zero credit. Both targeted P1 findings remain open: BleTransport and WinUsbTransport initialize their driver handles (peripheral_handle and usb_handle) to None in open() and never connect or initialize device handles, meaning all write/read operations fall back to disconnected in-memory FIFO queues; BleTransport lacks an inbound notification callback (simpleble_peripheral_notify); iOS speech synthesis only queries class pointers without executing objc_msgSend to instantiate or trigger utterances; Android speech contains an uninvoked feature block with a log line without JNI class or method calls; and end-to-end runtime execution receipts from an actual mobile simulator or physical hardware remain absent.",
+  "scores": {
+    "overall": 5.0,
+    "ui_ux": 5.0,
+    "features": 5.0,
+    "cross_platform_delivery": 3.8,
+    "scale": "0 to 10 against an exact Mission Planner clone on Windows, macOS, Linux, Android and iOS. A partial match gets no credit. With any P0 or P1 open, the cap is 5.0 (uncapped intrinsic scores: overall 7.2, ui_ux 8.3, features 8.7, cross_platform_delivery 3.8)."
+  },
+  "independent_validation": [
+    "Confirmed git HEAD commit a2aedaa9f53ff86874884d163053d48e5c8ba9fc on branch codex/ios-app-bundle with clean working tree.",
+    "Executed `python scripts/test_ios_packaging.py`: 5 passed, 0 failed in 0.033s (verifying artifact invalidation, platform manifest separation between device and simulator, metadata validation, simulator device resolution, and screenshot capture receipt verification).",
+    "Executed workspace unit and integration tests: 151 unit tests in mp-app passed; 82 unit tests in mp-core passed; integration tests in altitude_change (7 passed), camera_ftp (1 passed), high_latency (3 passed), and link_sim (9 passed) verified.",
+    "Inspected source in `crates/mp-core/src/comms.rs`: verified `SimpleBleApi` and `WinUsbApi` structs and dynamic symbol loading via `GetProcAddress`. Confirmed `BleTransport::open` sets `peripheral_handle: None` and does not scan or connect; confirmed `BleTransport::read` does not bind `simpleble_peripheral_notify`; confirmed `WinUsbTransport::open` sets `usb_handle: None` without calling `CreateFile` or `WinUsb_Initialize`.",
+    "Inspected source in `crates/mp-app/src/speech.rs`: confirmed iOS branch queries `objc_getClass` for `AVSpeechSynthesizer` and `AVSpeechUtterance` but never executes `objc_msgSend` to allocate, initialize, or speak utterances; confirmed Android branch does not bind JNI methods to invoke `android.speech.tts.TextToSpeech`."
+  ],
+  "verified_improvements": [
+    "R50-01 Scaffolding Progress (Dynamic Driver Symbol Resolution & Pipe Routing): Implemented `SimpleBleApi` dynamic symbol loader fetching `simpleble_adapter_get_handle`, `simpleble_adapter_scan_for`, `simpleble_peripheral_connect`, `simpleble_peripheral_disconnect`, and `simpleble_peripheral_write_request`; wired Nordic UART UUIDs (`6e400001-...` and `6e400002-...`) in `BleTransport::write`; implemented `WinUsbApi` dynamic symbol loader fetching `WinUsb_Initialize`, `WinUsb_Free`, `WinUsb_ReadPipe`, and `WinUsb_WritePipe`; wired bulk endpoints (`0x81` in, `0x01` out) in `WinUsbTransport::read` and `WinUsbTransport::write`.",
+    "R50-01 Scaffolding Progress (Mobile Speech Objective-C & JNI Scaffolding): Added `objc_getClass` and `sel_registerName` declarations and runtime class availability checks for `AVSpeechSynthesizer` and `AVSpeechUtterance` on iOS; added `android-native-activity` feature hook for JNI TextToSpeech dispatch on Android.",
+    "R50-02 Verification Progress: Verified 5/5 passing host-independent packaging tests in `scripts/test_ios_packaging.py`."
+  ],
+  "findings": [
+    {
+      "id": "R51-01",
+      "priority": "P1",
+      "subsystem": "Comms & Mobile Speech: Unconnected Driver Handles and Incomplete Audio FFI (R50-01 remainder)",
+      "status": "partial / stubs",
+      "evidence": [
+        "In `crates/mp-core/src/comms.rs`:470-508, `BleTransport::open` initializes `peripheral_handle: None` without scanning (`simpleble_adapter_scan_for`) or connecting (`simpleble_peripheral_connect`) to the peripheral at `self.address`. As a result, `BleTransport::write` (line 526) never enters the `write_req` branch and always falls through to the internal `tx_buf` FIFO queue. Furthermore, `BleTransport::read` (line 511) has no inbound notification subscription (`simpleble_peripheral_notify`) and only pops from an empty `rx_buf`.",
+        "In `crates/mp-core/src/comms.rs`:585-616, `WinUsbTransport::open` initializes `usb_handle: None` without calling `CreateFileA` or `WinUsb_Initialize` on the device interface path `p`. As a result, `WinUsbTransport::read` (line 620) and `write` (line 644) never enter their pipe I/O branches and fall back to in-memory `rx_buf` and `tx_buf`.",
+        "In `crates/mp-app/src/speech.rs`:50-65, the iOS speech synthesis implementation queries `objc_getClass` for `AVSpeechSynthesizer` and `AVSpeechUtterance`, but never executes `objc_msgSend` to allocate, initialize, or speak an utterance (`[synth speakUtterance:utterance]`). It only logs an informational message.",
+        "In `crates/mp-app/src/speech.rs`:39-44, the Android speech implementation only logs an informational string under the `android-native-activity` feature and does not invoke JNI `FindClass` or `CallVoidMethod` for `android.speech.tts.TextToSpeech`, falling through to CLI subprocesses (`termux-tts-speak`, `am broadcast`)."
+      ],
+      "impact": "Physical BLE telemetry radios and WinUSB connections cannot communicate with flight controllers. Telemetry audio callouts remain silent on standard iOS and Android installations.",
+      "required_fix": "In `mp-core/src/comms.rs`, instantiate and store active driver handles: for BLE, scan for the peripheral matching `address`, connect via `simpleble_peripheral_connect`, and register an inbound notification callback via `simpleble_peripheral_notify` to populate `rx_buf`; for WinUSB, open the device handle with `CreateFileA` and initialize WinUSB via `WinUsb_Initialize`. In `mp-app/src/speech.rs`, complete the Objective-C FFI bridge using `objc_msgSend` to allocate and trigger `AVSpeechSynthesizer` on iOS, and complete JNI method invocations for `android.speech.tts.TextToSpeech`."
+    },
+    {
+      "id": "R51-02",
+      "priority": "P1",
+      "subsystem": "Native Delivery: Real-Time Mobile Hardware and Simulator Execution Receipts (R50-02 remainder)",
+      "status": "validation gap",
+      "evidence": [
+        "While packaging logic and metadata verification pass in `scripts/test_ios_packaging.py`, live execution receipts (such as `startup.capture.json` and `startup.png`) generated from an actual iOS Simulator instance or physical mobile device runtime have not been produced or recorded."
+      ],
+      "impact": "Mobile touch interactions, native rendering lifecycles, and OS permission dialogs remain unvalidated in live mobile runtime environments.",
+      "required_fix": "Execute automated simulator or device runs producing concrete runtime capture receipts."
+    }
+  ],
+  "next_concrete_task": "To uncap the score beyond 5.0: (1) Complete active connection lifecycle in mp-core/src/comms.rs: connect peripherals in BleTransport and bind notify callback to rx_buf; open device handle and initialize WinUsb_Initialize in WinUsbTransport. (2) Replace logging stubs in mp-app/src/speech.rs with complete objc_msgSend message dispatches for iOS AVSpeechSynthesizer and JNI method calls for Android TextToSpeech. (3) Generate verifiable mobile simulator or hardware execution receipts.",
+  "not_verified": [
+    "Physical Bluetooth Low Energy hardware pairing and communication with flight controllers.",
+    "Physical WinUSB driver communication on live USB endpoints.",
+    "Live audio synthesis playback on iOS and Android devices.",
+    "Interactive GUI rendering and touch responsiveness on physical mobile displays."
+  ]
+}

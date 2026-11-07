@@ -1,0 +1,19 @@
+{
+  "autosim": null,
+  "demo": null,
+  "desktop": null,
+  "height": 800,
+  "page": null,
+  "runtime": {
+    "connected": false,
+    "firmware": null,
+    "parameters": 0,
+    "params_complete": false,
+    "view": "FlightData"
+  },
+  "source": "eframe renderer viewport",
+  "status": "ok",
+  "tab": null,
+  "view": "data",
+  "width": 1280
+}

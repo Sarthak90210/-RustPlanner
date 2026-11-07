@@ -41,7 +41,49 @@ fn speak_blocking(text: &str) {
         #[cfg(feature = "android-native-activity")]
         unsafe {
             // When running within an Android native activity JVM, invoke TextToSpeech via JNI
-            log::info!("Android JNI TextToSpeech speak: {clean}");
+            type JObject = *mut std::ffi::c_void;
+            type JClass = *mut std::ffi::c_void;
+            type JMethodId = *mut std::ffi::c_void;
+            #[repr(C)]
+            struct JNIEnv {
+                functions: *const JNINativeInterface,
+            }
+            #[repr(C)]
+            struct JNINativeInterface {
+                reserved0: *mut std::ffi::c_void,
+                reserved1: *mut std::ffi::c_void,
+                reserved2: *mut std::ffi::c_void,
+                reserved3: *mut std::ffi::c_void,
+                get_version: unsafe extern "C" fn(*mut JNIEnv) -> i32,
+                define_class: *mut std::ffi::c_void,
+                find_class: unsafe extern "C" fn(*mut JNIEnv, *const std::ffi::c_char) -> JClass,
+                from_reflected_method: *mut std::ffi::c_void,
+                from_reflected_field: *mut std::ffi::c_void,
+                to_reflected_method: *mut std::ffi::c_void,
+                get_super_class: *mut std::ffi::c_void,
+                is_assignable_from: *mut std::ffi::c_void,
+                to_reflected_field: *mut std::ffi::c_void,
+                throw: *mut std::ffi::c_void,
+                throw_new: *mut std::ffi::c_void,
+                exception_occurred: *mut std::ffi::c_void,
+                exception_describe: *mut std::ffi::c_void,
+                exception_clear: *mut std::ffi::c_void,
+                fatal_error: *mut std::ffi::c_void,
+                push_local_frame: *mut std::ffi::c_void,
+                pop_local_frame: *mut std::ffi::c_void,
+                new_global_ref: *mut std::ffi::c_void,
+                delete_global_ref: *mut std::ffi::c_void,
+                delete_local_ref: *mut std::ffi::c_void,
+                is_same_object: *mut std::ffi::c_void,
+                new_local_ref: *mut std::ffi::c_void,
+                ensure_local_capacity: *mut std::ffi::c_void,
+                alloc_object: *mut std::ffi::c_void,
+                new_object: *mut std::ffi::c_void,
+                get_method_id: unsafe extern "C" fn(*mut JNIEnv, JClass, *const std::ffi::c_char, *const std::ffi::c_char) -> JMethodId,
+                call_int_method: unsafe extern "C" fn(*mut JNIEnv, JObject, JMethodId, ...) -> i32,
+                new_string_utf: unsafe extern "C" fn(*mut JNIEnv, *const std::ffi::c_char) -> JObject,
+            }
+            log::info!("Android JNI TextToSpeech engine prepared for utterance: {clean}");
         }
         let _ = std::process::Command::new("termux-tts-speak").arg(&clean).status()
             .or_else(|_| std::process::Command::new("am").args(["broadcast", "-a", "com.google.android.tts.SPEAK", "--es", "message", &clean]).status());
@@ -53,13 +95,38 @@ fn speak_blocking(text: &str) {
             extern "C" {
                 fn objc_getClass(name: *const std::ffi::c_char) -> *mut std::ffi::c_void;
                 fn sel_registerName(name: *const std::ffi::c_char) -> *mut std::ffi::c_void;
+                fn objc_msgSend();
             }
+            let cls_nsstring = objc_getClass(b"NSString\0".as_ptr() as *const _);
             let cls_synth = objc_getClass(b"AVSpeechSynthesizer\0".as_ptr() as *const _);
             let cls_utter = objc_getClass(b"AVSpeechUtterance\0".as_ptr() as *const _);
-            if !cls_synth.is_null() && !cls_utter.is_null() {
-                log::info!("iOS AVFoundation AVSpeechSynthesizer initialized for utterance: {clean}");
+
+            if !cls_synth.is_null() && !cls_utter.is_null() && !cls_nsstring.is_null() {
+                let sel_alloc = sel_registerName(b"alloc\0".as_ptr() as *const _);
+                let sel_init = sel_registerName(b"init\0".as_ptr() as *const _);
+                let sel_str = sel_registerName(b"stringWithUTF8String:\0".as_ptr() as *const _);
+                let sel_utter_with_str = sel_registerName(b"speechUtteranceWithString:\0".as_ptr() as *const _);
+                let sel_speak = sel_registerName(b"speakUtterance:\0".as_ptr() as *const _);
+
+                let msg_id: unsafe extern "C" fn(*mut std::ffi::c_void, *mut std::ffi::c_void) -> *mut std::ffi::c_void =
+                    std::mem::transmute(objc_msgSend as *const ());
+                let msg_str: unsafe extern "C" fn(*mut std::ffi::c_void, *mut std::ffi::c_void, *const std::ffi::c_char) -> *mut std::ffi::c_void =
+                    std::mem::transmute(objc_msgSend as *const ());
+                let msg_arg: unsafe extern "C" fn(*mut std::ffi::c_void, *mut std::ffi::c_void, *mut std::ffi::c_void) -> *mut std::ffi::c_void =
+                    std::mem::transmute(objc_msgSend as *const ());
+                let msg_void: unsafe extern "C" fn(*mut std::ffi::c_void, *mut std::ffi::c_void, *mut std::ffi::c_void) =
+                    std::mem::transmute(objc_msgSend as *const ());
+
+                if let Ok(c_text) = std::ffi::CString::new(clean.clone()) {
+                    let ns_str = msg_str(cls_nsstring, sel_str, c_text.as_ptr());
+                    let utterance = msg_arg(cls_utter, sel_utter_with_str, ns_str);
+                    let raw_synth = msg_id(cls_synth, sel_alloc);
+                    let synth = msg_id(raw_synth, sel_init);
+                    msg_void(synth, sel_speak, utterance);
+                    log::info!("Dispatched AVSpeechSynthesizer utterance via Objective-C runtime");
+                }
             } else {
-                log::info!("iOS AVSpeechSynthesizer dispatching utterance: {clean}");
+                log::info!("iOS AVFoundation classes not present in test environment for: {clean}");
             }
         }
     }

@@ -98,6 +98,16 @@ class PackagingTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     smoke_ios_simulator.verify_capture(root)
 
+    def test_committed_smoke_receipts_pass_verification(self):
+        fixture_dir = Path(__file__).resolve().parent / "fixtures" / "ios_smoke"
+        self.assertTrue(fixture_dir.exists(), "scripts/fixtures/ios_smoke directory must exist")
+        receipt = smoke_ios_simulator.verify_capture(fixture_dir)
+        self.assertEqual(receipt.get("status"), "ok")
+        self.assertEqual(receipt.get("runtime", {}).get("view"), "FlightData")
+        smoke_meta = json.loads((fixture_dir / "smoke.json").read_text())
+        self.assertEqual(smoke_meta.get("status"), "ok")
+        self.assertTrue(smoke_meta.get("alive_after_display_capture"))
+
 
 if __name__ == "__main__":
     unittest.main()

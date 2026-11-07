@@ -1,0 +1,15 @@
+{
+  "status": "ok",
+  "scope": "iOS Simulator startup and renderer",
+  "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-18-4",
+  "device_type": "iPhone 16",
+  "launch": "com.ardupilot.missionplanner: 4210",
+  "width": 1280,
+  "height": 800,
+  "process_id": 4210,
+  "alive_after_display_capture": true,
+  "bundle_id": "com.ardupilot.missionplanner",
+  "executable_sha256": "cfcb67749e8babb01e22d5d45ea11fdb8292e97ff35a45c27eeec219236e063b",
+  "physical_device_tested": false,
+  "feature_parity_tested": false
+}

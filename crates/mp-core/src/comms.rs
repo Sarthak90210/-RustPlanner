@@ -424,13 +424,54 @@ fn probe_heartbeat(t: Box<dyn Transport>, wait: std::time::Duration) -> bool {
     false
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SimpleBleUuid {
+    pub value: [u8; 37],
+}
+
+impl SimpleBleUuid {
+    pub fn from_str(s: &str) -> Self {
+        let mut val = [0u8; 37];
+        let bytes = s.as_bytes();
+        let len = bytes.len().min(36);
+        val[..len].copy_from_slice(&bytes[..len]);
+        val[len] = 0;
+        Self { value: val }
+    }
+}
+
+extern "C" fn on_ble_notify(
+    _service: SimpleBleUuid,
+    _char: SimpleBleUuid,
+    data: *const u8,
+    data_len: usize,
+    userdata: *mut std::ffi::c_void,
+) {
+    if userdata.is_null() || data.is_null() || data_len == 0 {
+        return;
+    }
+    unsafe {
+        let q_arc = &*(userdata as *const parking_lot::Mutex<std::collections::VecDeque<u8>>);
+        let bytes = std::slice::from_raw_parts(data, data_len);
+        let mut q = q_arc.lock();
+        q.extend(bytes.iter().copied());
+    }
+}
+
 #[derive(Default)]
 pub struct SimpleBleApi {
     pub adapter_get_handle: Option<unsafe extern "C" fn(usize) -> *mut std::ffi::c_void>,
     pub adapter_scan_for: Option<unsafe extern "C" fn(*mut std::ffi::c_void, u32) -> i32>,
+    pub adapter_scan_get_results_count: Option<unsafe extern "C" fn(*mut std::ffi::c_void) -> usize>,
+    pub adapter_scan_get_results_handle: Option<unsafe extern "C" fn(*mut std::ffi::c_void, usize) -> *mut std::ffi::c_void>,
+    pub peripheral_identifier: Option<unsafe extern "C" fn(*mut std::ffi::c_void) -> *mut std::os::raw::c_char>,
+    pub peripheral_address: Option<unsafe extern "C" fn(*mut std::ffi::c_void) -> *mut std::os::raw::c_char>,
     pub peripheral_connect: Option<unsafe extern "C" fn(*mut std::ffi::c_void) -> i32>,
     pub peripheral_disconnect: Option<unsafe extern "C" fn(*mut std::ffi::c_void) -> i32>,
-    pub peripheral_write_request: Option<unsafe extern "C" fn(*mut std::ffi::c_void, [u8; 16], [u8; 16], *const u8, usize) -> i32>,
+    pub peripheral_write_request: Option<unsafe extern "C" fn(*mut std::ffi::c_void, SimpleBleUuid, SimpleBleUuid, *const u8, usize) -> i32>,
+    pub peripheral_notify: Option<unsafe extern "C" fn(*mut std::ffi::c_void, SimpleBleUuid, SimpleBleUuid, extern "C" fn(SimpleBleUuid, SimpleBleUuid, *const u8, usize, *mut std::ffi::c_void), *mut std::ffi::c_void) -> i32>,
+    pub peripheral_release_handle: Option<unsafe extern "C" fn(*mut std::ffi::c_void)>,
 }
 
 impl SimpleBleApi {
@@ -447,18 +488,36 @@ impl SimpleBleApi {
                 .map(|p| std::mem::transmute(p));
             let scan_for = GetProcAddress(lib, PCSTR(b"simpleble_adapter_scan_for\0".as_ptr()))
                 .map(|p| std::mem::transmute(p));
+            let scan_count = GetProcAddress(lib, PCSTR(b"simpleble_adapter_scan_get_results_count\0".as_ptr()))
+                .map(|p| std::mem::transmute(p));
+            let scan_handle = GetProcAddress(lib, PCSTR(b"simpleble_adapter_scan_get_results_handle\0".as_ptr()))
+                .map(|p| std::mem::transmute(p));
+            let periph_id = GetProcAddress(lib, PCSTR(b"simpleble_peripheral_identifier\0".as_ptr()))
+                .map(|p| std::mem::transmute(p));
+            let periph_addr = GetProcAddress(lib, PCSTR(b"simpleble_peripheral_address\0".as_ptr()))
+                .map(|p| std::mem::transmute(p));
             let connect = GetProcAddress(lib, PCSTR(b"simpleble_peripheral_connect\0".as_ptr()))
                 .map(|p| std::mem::transmute(p));
             let disconnect = GetProcAddress(lib, PCSTR(b"simpleble_peripheral_disconnect\0".as_ptr()))
                 .map(|p| std::mem::transmute(p));
             let write_req = GetProcAddress(lib, PCSTR(b"simpleble_peripheral_write_request\0".as_ptr()))
                 .map(|p| std::mem::transmute(p));
+            let notify = GetProcAddress(lib, PCSTR(b"simpleble_peripheral_notify\0".as_ptr()))
+                .map(|p| std::mem::transmute(p));
+            let release = GetProcAddress(lib, PCSTR(b"simpleble_peripheral_release_handle\0".as_ptr()))
+                .map(|p| std::mem::transmute(p));
             Some(Self {
                 adapter_get_handle: get_handle,
                 adapter_scan_for: scan_for,
+                adapter_scan_get_results_count: scan_count,
+                adapter_scan_get_results_handle: scan_handle,
+                peripheral_identifier: periph_id,
+                peripheral_address: periph_addr,
                 peripheral_connect: connect,
                 peripheral_disconnect: disconnect,
                 peripheral_write_request: write_req,
+                peripheral_notify: notify,
+                peripheral_release_handle: release,
             })
         }
         #[cfg(not(target_os = "windows"))]
@@ -483,6 +542,10 @@ impl BleTransport {
         if addr.is_empty() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "BLE address required"));
         }
+        let rx_buf = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
+        let tx_buf = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
+        let mut peripheral_handle = None;
+
         // In Mission Planner CommsBLE.cs, BLE communicates via SimpleBLE (simpleble-c.dll / libsimpleble-c.so / dylib).
         let api = SimpleBleApi::load();
         if let Some(ref api) = api {
@@ -491,19 +554,67 @@ impl BleTransport {
                 let adapter = unsafe { get_handle(0) };
                 if !adapter.is_null() {
                     log::info!("Found default BLE adapter via SimpleBLE");
+                    if let Some(scan) = api.adapter_scan_for {
+                        let _ = unsafe { scan(adapter, 1000) };
+                    }
+                    if let (Some(count_fn), Some(handle_fn)) = (api.adapter_scan_get_results_count, api.adapter_scan_get_results_handle) {
+                        let count = unsafe { count_fn(adapter) };
+                        for i in 0..count {
+                            let p = unsafe { handle_fn(adapter, i) };
+                            if !p.is_null() {
+                                let mut matched = count == 1;
+                                if let Some(addr_fn) = api.peripheral_address {
+                                    let c_addr = unsafe { addr_fn(p) };
+                                    if !c_addr.is_null() {
+                                        let s = unsafe { std::ffi::CStr::from_ptr(c_addr) }.to_string_lossy();
+                                        if s.eq_ignore_ascii_case(addr) || addr.contains(s.as_ref()) {
+                                            matched = true;
+                                        }
+                                    }
+                                }
+                                if matched {
+                                    if let Some(conn) = api.peripheral_connect {
+                                        let res = unsafe { conn(p) };
+                                        if res == 0 {
+                                            log::info!("Connected to SimpleBLE peripheral for {}", addr);
+                                            let rx_service = SimpleBleUuid::from_str("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
+                                            let tx_char = SimpleBleUuid::from_str("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
+                                            if let Some(notify_fn) = api.peripheral_notify {
+                                                let raw_user = std::sync::Arc::as_ptr(&rx_buf) as *mut std::ffi::c_void;
+                                                let _ = unsafe { notify_fn(p, rx_service, tx_char, on_ble_notify, raw_user) };
+                                            }
+                                            peripheral_handle = Some(p);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
-        let rx_buf = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
-        let tx_buf = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
 
         Ok(Self {
             address: addr.to_string(),
             api,
-            peripheral_handle: None,
+            peripheral_handle,
             rx_buf,
             tx_buf,
         })
+    }
+}
+
+impl Drop for BleTransport {
+    fn drop(&mut self) {
+        if let (Some(ref api), Some(periph)) = (&self.api, self.peripheral_handle) {
+            if let Some(disconnect) = api.peripheral_disconnect {
+                let _ = unsafe { disconnect(periph) };
+            }
+            if let Some(release) = api.peripheral_release_handle {
+                unsafe { release(periph) };
+            }
+        }
     }
 }
 
@@ -525,8 +636,8 @@ impl Write for BleTransport {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if let (Some(ref api), Some(periph)) = (&self.api, self.peripheral_handle) {
             if let Some(write_req) = api.peripheral_write_request {
-                let rx_service = [0x6e, 0x40, 0x00, 0x01, 0xb5, 0xa3, 0xf3, 0x93, 0xe0, 0xa9, 0xe5, 0x0e, 0x24, 0xdc, 0xca, 0x9e];
-                let rx_char = [0x6e, 0x40, 0x00, 0x02, 0xb5, 0xa3, 0xf3, 0x93, 0xe0, 0xa9, 0xe5, 0x0e, 0x24, 0xdc, 0xca, 0x9e];
+                let rx_service = SimpleBleUuid::from_str("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
+                let rx_char = SimpleBleUuid::from_str("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
                 let res = unsafe { write_req(periph, rx_service, rx_char, buf.as_ptr(), buf.len()) };
                 if res != 0 {
                     return Err(io::Error::other(format!("SimpleBLE write failed with code {res}")));
@@ -585,6 +696,7 @@ impl WinUsbApi {
 pub struct WinUsbTransport {
     pub path: String,
     pub api: Option<WinUsbApi>,
+    pub file_handle: Option<*mut std::ffi::c_void>,
     pub usb_handle: Option<*mut std::ffi::c_void>,
     pub rx_buf: std::sync::Arc<parking_lot::Mutex<std::collections::VecDeque<u8>>>,
     pub tx_buf: std::sync::Arc<parking_lot::Mutex<std::collections::VecDeque<u8>>>,
@@ -598,20 +710,85 @@ impl WinUsbTransport {
         if p.is_empty() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "WinUSB device path required"));
         }
-        let api = WinUsbApi::load();
-        if api.is_some() {
-            log::info!("Loaded winusb.dll WinUSB driver for device path {}", p);
-        }
         let rx_buf = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
         let tx_buf = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
+        let mut file_handle = None;
+        let mut usb_handle = None;
+
+        let api = WinUsbApi::load();
+        if let Some(ref api) = api {
+            log::info!("Loaded winusb.dll WinUSB driver for device path {}", p);
+            #[cfg(target_os = "windows")]
+            unsafe {
+                use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
+                use windows::core::PCSTR;
+                if let Ok(k32) = LoadLibraryA(PCSTR(b"kernel32.dll\0".as_ptr())) {
+                    if !k32.is_invalid() {
+                        let create_file: Option<unsafe extern "system" fn(*const u8, u32, u32, *mut std::ffi::c_void, u32, u32, *mut std::ffi::c_void) -> *mut std::ffi::c_void> =
+                            GetProcAddress(k32, PCSTR(b"CreateFileA\0".as_ptr())).map(|fp| std::mem::transmute(fp));
+                        if let Some(create_fn) = create_file {
+                            if let Ok(c_path) = std::ffi::CString::new(p) {
+                                let h = create_fn(
+                                    c_path.as_ptr() as *const u8,
+                                    0xC0000000, // GENERIC_READ | GENERIC_WRITE
+                                    3,          // FILE_SHARE_READ | FILE_SHARE_WRITE
+                                    std::ptr::null_mut(),
+                                    3,          // OPEN_EXISTING
+                                    0x40000080, // FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED
+                                    std::ptr::null_mut(),
+                                );
+                                if h != (-1isize as *mut std::ffi::c_void) && !h.is_null() {
+                                    file_handle = Some(h);
+                                    let mut winusb_h = std::ptr::null_mut();
+                                    if let Some(init_fn) = api.winusb_initialize {
+                                        let ok = init_fn(h, &mut winusb_h);
+                                        if ok != 0 && !winusb_h.is_null() {
+                                            log::info!("Initialized WinUSB handle for device {}", p);
+                                            usb_handle = Some(winusb_h);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         Ok(Self {
             path: p.to_string(),
             api,
-            usb_handle: None,
+            file_handle,
+            usb_handle,
             rx_buf,
             tx_buf,
         })
+    }
+}
+
+impl Drop for WinUsbTransport {
+    fn drop(&mut self) {
+        if let (Some(ref api), Some(usb_h)) = (&self.api, self.usb_handle) {
+            if let Some(free_fn) = api.winusb_free {
+                let _ = unsafe { free_fn(usb_h) };
+            }
+        }
+        #[cfg(target_os = "windows")]
+        if let Some(file_h) = self.file_handle {
+            unsafe {
+                use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
+                use windows::core::PCSTR;
+                if let Ok(k32) = LoadLibraryA(PCSTR(b"kernel32.dll\0".as_ptr())) {
+                    if !k32.is_invalid() {
+                        let close_handle: Option<unsafe extern "system" fn(*mut std::ffi::c_void) -> i32> =
+                            GetProcAddress(k32, PCSTR(b"CloseHandle\0".as_ptr())).map(|fp| std::mem::transmute(fp));
+                        if let Some(close_fn) = close_handle {
+                            let _ = close_fn(file_h);
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -622,7 +799,7 @@ impl Read for WinUsbTransport {
                 let mut transferred = 0u32;
                 let bulk_in_pipe = 0x81;
                 let ok = unsafe { read_pipe(handle, bulk_in_pipe, buf.as_mut_ptr(), buf.len() as u32, &mut transferred, std::ptr::null_mut()) };
-                if ok != 0 {
+                if ok != 0 && transferred > 0 {
                     return Ok(transferred as usize);
                 }
             }
