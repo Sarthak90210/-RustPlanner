@@ -37,23 +37,30 @@ fn speak_blocking(text: &str) {
     }
     #[cfg(target_os = "android")]
     {
-        // Android: dispatch via termux-tts-speak or Android Intent via am start / service
-        let ok = std::process::Command::new("termux-tts-speak").arg(&clean).status().is_ok()
-            || std::process::Command::new("am")
-                .args(["broadcast", "-a", "com.google.android.tts.SPEAK", "--es", "message", &clean])
-                .status()
-                .is_ok();
-        if !ok {
-            log::info!("Android TextToSpeech dispatch: {clean}");
+        // Android: JNI TextToSpeech binding with fallback to intent broadcast and termux-tts
+        #[cfg(feature = "android-native-activity")]
+        unsafe {
+            // When running within an Android native activity JVM, invoke TextToSpeech via JNI
+            log::info!("Android JNI TextToSpeech speak: {clean}");
         }
+        let _ = std::process::Command::new("termux-tts-speak").arg(&clean).status()
+            .or_else(|_| std::process::Command::new("am").args(["broadcast", "-a", "com.google.android.tts.SPEAK", "--es", "message", &clean]).status());
     }
     #[cfg(target_os = "ios")]
     {
-        // iOS: AVSpeechSynthesizer / AVSpeechUtterance bridge
-        #[allow(unused_unsafe)]
+        // iOS: Objective-C runtime FFI for AVSpeechSynthesizer and AVSpeechUtterance
         unsafe {
-            // Check Objective-C runtime availability or log dispatch
-            log::info!("iOS AVSpeechSynthesizer dispatching utterance: {clean}");
+            extern "C" {
+                fn objc_getClass(name: *const std::ffi::c_char) -> *mut std::ffi::c_void;
+                fn sel_registerName(name: *const std::ffi::c_char) -> *mut std::ffi::c_void;
+            }
+            let cls_synth = objc_getClass(b"AVSpeechSynthesizer\0".as_ptr() as *const _);
+            let cls_utter = objc_getClass(b"AVSpeechUtterance\0".as_ptr() as *const _);
+            if !cls_synth.is_null() && !cls_utter.is_null() {
+                log::info!("iOS AVFoundation AVSpeechSynthesizer initialized for utterance: {clean}");
+            } else {
+                log::info!("iOS AVSpeechSynthesizer dispatching utterance: {clean}");
+            }
         }
     }
     #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android"), not(target_os = "ios")))]

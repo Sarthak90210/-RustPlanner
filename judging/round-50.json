@@ -1,0 +1,70 @@
+{
+  "round": 50,
+  "date": "2026-11-07",
+  "review_type": "Independent hostile source review at the strictest adversarial parity bar. Verified targeted improvements in commit 8042a635554ece055623f0978b1ec65e197cf5cb against reference/MissionPlanner sources: CommsBLE (simpleble-c dynamic loader scaffolding), CommsWinUSB (winusb dynamic loader scaffolding), mobile speech dispatch (Android intent/termux dispatch, iOS utterance logging stub), and iOS packaging/simulator verification test suite (scripts/test_ios_packaging.py).",
+  "reviewed_head": "8042a635554ece055623f0978b1ec65e197cf5cb",
+  "reviewed_uncommitted_worktree": false,
+  "reviewed_files": [
+    "crates/mp-app/src/speech.rs",
+    "crates/mp-app/src/capture.rs",
+    "crates/mp-core/Cargo.toml",
+    "crates/mp-core/src/comms.rs",
+    "scripts/build_ios.py",
+    "scripts/smoke_ios_simulator.py",
+    "scripts/test_ios_packaging.py",
+    "reference/MissionPlanner/ExtLibs/Comms/CommsBLE.cs",
+    "reference/MissionPlanner/ExtLibs/Comms/CommsWinUSB.cs"
+  ],
+  "verdict": "REJECTED for exact-clone parity (Score: 5.0/10, capped at 5.0 due to open P1 findings). Commit 8042a63 introduced Windows LoadLibraryA probing for simpleble-c.dll and winusb.dll, added Android intent broadcasting and iOS logging scaffolding to speech.rs, and verified host-independent iOS bundle packaging and simulator receipt verification in scripts/test_ios_packaging.py (5 passed unit tests). However, under the hostile adversarial audit standard, a partial match or stub receives zero credit. Both targeted P1 findings remain unresolved: BleTransport and WinUsbTransport drop their DLL handles immediately after loading and continue to read/write from in-memory VecDeque buffers without binding SimpleBLE or WinUSB C API symbols or hardware endpoints (R50-01); iOS speech synthesis is an empty unsafe block that only logs an informational string with no AVFoundation FFI (R50-01); Android speech relies on CLI subprocesses ('termux-tts-speak' and 'am broadcast') that fail in standard Android sandboxed APK lifecycles without JNI TextToSpeech (R50-01); and end-to-end execution receipts from physical mobile hardware or simulator runtime remain ungenerated in the current environment (R50-02).",
+  "scores": {
+    "overall": 5.0,
+    "ui_ux": 5.0,
+    "features": 5.0,
+    "cross_platform_delivery": 3.6,
+    "scale": "0 to 10 against an exact Mission Planner clone on Windows, macOS, Linux, Android and iOS. A partial match gets no credit. With any P0 or P1 open, the cap is 5.0 (uncapped intrinsic scores: overall 7.1, ui_ux 8.3, features 8.6, cross_platform_delivery 3.6)."
+  },
+  "independent_validation": [
+    "Confirmed git HEAD commit 8042a635554ece055623f0978b1ec65e197cf5cb on branch codex/ios-app-bundle with clean working tree.",
+    "Executed `python scripts/test_ios_packaging.py`: 5 passed, 0 failed in 0.035s (verifying artifact invalidation, platform manifest separation between device and simulator, metadata validation, simulator device resolution, and screenshot capture receipt verification).",
+    "Executed unit and integration test suite across workspace: 259 passed, 0 failed, 1 ignored (mp-app: 151 passed, 1 ignored; mp-core: 82 passed; integration suites: altitude_change 7 passed, camera_ftp 1 passed, high_latency 3 passed, link_sim 9 passed, maiden_flight 1 passed, mavserial 4 passed, proximity_wire 1 passed).",
+    "Inspected source diff in `crates/mp-core/src/comms.rs`: verified that BleTransport and WinUsbTransport invoke `LoadLibraryA`, but do not retrieve function pointers (`GetProcAddress`), do not initialize SimpleBLE adapters/peripherals, and continue to implement `Read` and `Write` using internal `VecDeque<u8>` buffers.",
+    "Inspected source diff in `crates/mp-app/src/speech.rs`: verified iOS branch is an empty `unsafe` block logging to console with no `AVSpeechSynthesizer` Objective-C bridge, and Android branch dispatches via `termux-tts-speak` and `am broadcast` without JNI `android.speech.tts.TextToSpeech`."
+  ],
+  "verified_improvements": [
+    "R49-01 Scaffolding Progress (Dynamic Comms Loaders & Mobile Speech Dispatch): Added Windows platform dependency `windows = { version = '0.62', features = ['Win32_System_LibraryLoader'] }` in mp-core/Cargo.toml; added `LoadLibraryA` probing for `simpleble-c.dll` and `winusb.dll` in BleTransport and WinUsbTransport; added Android intent broadcast dispatch (`am broadcast -a com.google.android.tts.SPEAK --es message {clean}`) with termux-tts-speak fallback; added iOS speech synthesis dispatch logging hook.",
+    "R49-02 Scaffolding Progress (Packaging & Simulator Validation Suite): Added scripts/test_ios_packaging.py running host-independent tests for bundle invalidation, platform manifest generation (CFBundleSupportedPlatforms, UIFileSharingEnabled, NSLocalNetworkUsageDescription), metadata parsing/validation, CoreSimulator device inventory matching, and image/receipt CRC/dimension checks."
+  ],
+  "findings": [
+    {
+      "id": "R50-01",
+      "priority": "P1",
+      "subsystem": "Comms: Native BLE, WinUSB, and Mobile Speech API Bindings (R49-01 remainder)",
+      "status": "partial / stubs",
+      "evidence": [
+        "In `crates/mp-core/src/comms.rs`:445-455 and 508-518, `BleTransport` and `WinUsbTransport` execute `LoadLibraryA` to probe `simpleble-c.dll` and `winusb.dll`. However, the returned library handle is never stored or queried for function symbols (`GetProcAddress`). The `Read` and `Write` implementations (lines 465-488 and 528-550) continue to read from and write to in-memory `parking_lot::Mutex<VecDeque<u8>>` buffers (`self.rx_buf` and `self.tx_buf`). No packets or telemetry can flow to or from physical BLE or WinUSB devices.",
+        "In `crates/mp-app/src/speech.rs`:51-58, the iOS speech target consists solely of an empty `unsafe` block wrapping `log::info!(\"iOS AVSpeechSynthesizer dispatching utterance: {clean}\")`. No Objective-C runtime calls (`objc_msgSend`) or AVFoundation bindings (`AVSpeechSynthesizer`, `AVSpeechUtterance`) are executed.",
+        "In `crates/mp-app/src/speech.rs`:40-49, Android speech invokes subprocess commands (`termux-tts-speak`, `am broadcast`). In standard sandboxed Android app environments, spawning child processes to invoke `am` fails with permissions errors or binary missing errors. A compliant Android TTS implementation requires JNI bindings to `android.speech.tts.TextToSpeech`."
+      ],
+      "impact": "Physical Bluetooth Low Energy hardware dongles and WinUSB devices cannot communicate with vehicles on live links. Telemetry audio callouts remain silent on standard iOS and Android app installations.",
+      "required_fix": "In mp-core/src/comms.rs, bind SimpleBLE C API functions (`simpleble_adapter_get_handle`, `simpleble_peripheral_connect`, `simpleble_peripheral_write_request`, `simpleble_peripheral_notify`) and WinUSB API functions (`WinUsb_Initialize`, `WinUsb_ReadPipe`, `WinUsb_WritePipe`), routing stream I/O through the driver handles. In mp-app/src/speech.rs, implement an Objective-C FFI bridge for `AVSpeechSynthesizer` on iOS, and a JNI bridge for `TextToSpeech` on Android."
+    },
+    {
+      "id": "R50-02",
+      "priority": "P1",
+      "subsystem": "Native Delivery: Hardware / Simulator Execution Receipts (R49-02 remainder)",
+      "status": "validation gap",
+      "evidence": [
+        "While `scripts/test_ios_packaging.py` tests bundle construction and receipt validation logic on Windows host, no actual end-to-end execution receipt (such as an actual simulator launch producing `startup.capture.json` and `startup.png`, or a physical device run) is present in the repository or CI logs."
+      ],
+      "impact": "End-to-end touchscreen interactions, mobile windowing lifecycle, and platform permissions remain unverified on target mobile hardware.",
+      "required_fix": "Provide automated packaging workflows and verifiable runtime capture receipts from simulator or physical mobile devices."
+    }
+  ],
+  "next_concrete_task": "To uncap the score beyond 5.0: (1) Complete functional bindings for SimpleBLE (dynamic GetProcAddress for adapter enumeration, peripheral connect, notify callback, and write_request) and WinUSB (device interface enumeration, WinUsb_Initialize, ReadPipe, WritePipe) in mp-core/src/comms.rs. (2) Replace logging/subprocess stubs in mp-app/src/speech.rs with native iOS AVSpeechSynthesizer Objective-C FFI and Android TextToSpeech JNI bindings. (3) Generate verifiable mobile build packaging and simulator execution receipts.",
+  "not_verified": [
+    "Rendering and touch interaction on physical iOS and Android hardware.",
+    "Hardware GStreamer RTSP decoding pipeline with physical gimbal cameras.",
+    "Live USB-serial and BLE connectivity on physical flight controllers.",
+    "Audio TTS playback on non-Windows operating systems."
+  ]
+}

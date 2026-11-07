@@ -424,12 +424,58 @@ fn probe_heartbeat(t: Box<dyn Transport>, wait: std::time::Duration) -> bool {
     false
 }
 
+#[derive(Default)]
+pub struct SimpleBleApi {
+    pub adapter_get_handle: Option<unsafe extern "C" fn(usize) -> *mut std::ffi::c_void>,
+    pub adapter_scan_for: Option<unsafe extern "C" fn(*mut std::ffi::c_void, u32) -> i32>,
+    pub peripheral_connect: Option<unsafe extern "C" fn(*mut std::ffi::c_void) -> i32>,
+    pub peripheral_disconnect: Option<unsafe extern "C" fn(*mut std::ffi::c_void) -> i32>,
+    pub peripheral_write_request: Option<unsafe extern "C" fn(*mut std::ffi::c_void, [u8; 16], [u8; 16], *const u8, usize) -> i32>,
+}
+
+impl SimpleBleApi {
+    pub fn load() -> Option<Self> {
+        #[cfg(target_os = "windows")]
+        unsafe {
+            use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
+            use windows::core::PCSTR;
+            let lib = LoadLibraryA(PCSTR(b"simpleble-c.dll\0".as_ptr())).ok()?;
+            if lib.is_invalid() {
+                return None;
+            }
+            let get_handle = GetProcAddress(lib, PCSTR(b"simpleble_adapter_get_handle\0".as_ptr()))
+                .map(|p| std::mem::transmute(p));
+            let scan_for = GetProcAddress(lib, PCSTR(b"simpleble_adapter_scan_for\0".as_ptr()))
+                .map(|p| std::mem::transmute(p));
+            let connect = GetProcAddress(lib, PCSTR(b"simpleble_peripheral_connect\0".as_ptr()))
+                .map(|p| std::mem::transmute(p));
+            let disconnect = GetProcAddress(lib, PCSTR(b"simpleble_peripheral_disconnect\0".as_ptr()))
+                .map(|p| std::mem::transmute(p));
+            let write_req = GetProcAddress(lib, PCSTR(b"simpleble_peripheral_write_request\0".as_ptr()))
+                .map(|p| std::mem::transmute(p));
+            Some(Self {
+                adapter_get_handle: get_handle,
+                adapter_scan_for: scan_for,
+                peripheral_connect: connect,
+                peripheral_disconnect: disconnect,
+                peripheral_write_request: write_req,
+            })
+        }
+        #[cfg(not(target_os = "windows"))]
+        None
+    }
+}
+
 /// Bluetooth Low Energy transport (matching CommsBLE).
 pub struct BleTransport {
     pub address: String,
+    pub api: Option<SimpleBleApi>,
+    pub peripheral_handle: Option<*mut std::ffi::c_void>,
     pub rx_buf: std::sync::Arc<parking_lot::Mutex<std::collections::VecDeque<u8>>>,
     pub tx_buf: std::sync::Arc<parking_lot::Mutex<std::collections::VecDeque<u8>>>,
 }
+
+unsafe impl Send for BleTransport {}
 
 impl BleTransport {
     pub fn open(address: &str) -> io::Result<Self> {
@@ -438,24 +484,23 @@ impl BleTransport {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "BLE address required"));
         }
         // In Mission Planner CommsBLE.cs, BLE communicates via SimpleBLE (simpleble-c.dll / libsimpleble-c.so / dylib).
-        // Try dynamic binding if the library is present; otherwise initialize the streaming buffers.
-        let rx_buf = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
-        let tx_buf = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
-
-        #[cfg(target_os = "windows")]
-        unsafe {
-            use windows::Win32::System::LibraryLoader::LoadLibraryA;
-            use windows::core::PCSTR;
-            let lib = LoadLibraryA(PCSTR(b"simpleble-c.dll\0".as_ptr()));
-            if let Ok(handle) = lib {
-                if !handle.is_invalid() {
-                    log::info!("Loaded simpleble-c.dll for BLE device {}", addr);
+        let api = SimpleBleApi::load();
+        if let Some(ref api) = api {
+            log::info!("Loaded SimpleBLE driver for BLE device {}", addr);
+            if let Some(get_handle) = api.adapter_get_handle {
+                let adapter = unsafe { get_handle(0) };
+                if !adapter.is_null() {
+                    log::info!("Found default BLE adapter via SimpleBLE");
                 }
             }
         }
+        let rx_buf = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
+        let tx_buf = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
 
         Ok(Self {
             address: addr.to_string(),
+            api,
+            peripheral_handle: None,
             rx_buf,
             tx_buf,
         })
@@ -478,6 +523,17 @@ impl Read for BleTransport {
 
 impl Write for BleTransport {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        if let (Some(ref api), Some(periph)) = (&self.api, self.peripheral_handle) {
+            if let Some(write_req) = api.peripheral_write_request {
+                let rx_service = [0x6e, 0x40, 0x00, 0x01, 0xb5, 0xa3, 0xf3, 0x93, 0xe0, 0xa9, 0xe5, 0x0e, 0x24, 0xdc, 0xca, 0x9e];
+                let rx_char = [0x6e, 0x40, 0x00, 0x02, 0xb5, 0xa3, 0xf3, 0x93, 0xe0, 0xa9, 0xe5, 0x0e, 0x24, 0xdc, 0xca, 0x9e];
+                let res = unsafe { write_req(periph, rx_service, rx_char, buf.as_ptr(), buf.len()) };
+                if res != 0 {
+                    return Err(io::Error::other(format!("SimpleBLE write failed with code {res}")));
+                }
+                return Ok(buf.len());
+            }
+        }
         let mut q = self.tx_buf.lock();
         q.extend(buf.iter().copied());
         Ok(buf.len())
@@ -487,12 +543,54 @@ impl Write for BleTransport {
     }
 }
 
+#[derive(Default)]
+pub struct WinUsbApi {
+    pub winusb_initialize: Option<unsafe extern "system" fn(*mut std::ffi::c_void, *mut *mut std::ffi::c_void) -> i32>,
+    pub winusb_free: Option<unsafe extern "system" fn(*mut std::ffi::c_void) -> i32>,
+    pub winusb_read_pipe: Option<unsafe extern "system" fn(*mut std::ffi::c_void, u8, *mut u8, u32, *mut u32, *mut std::ffi::c_void) -> i32>,
+    pub winusb_write_pipe: Option<unsafe extern "system" fn(*mut std::ffi::c_void, u8, *const u8, u32, *mut u32, *mut std::ffi::c_void) -> i32>,
+}
+
+impl WinUsbApi {
+    pub fn load() -> Option<Self> {
+        #[cfg(target_os = "windows")]
+        unsafe {
+            use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
+            use windows::core::PCSTR;
+            let lib = LoadLibraryA(PCSTR(b"winusb.dll\0".as_ptr())).ok()?;
+            if lib.is_invalid() {
+                return None;
+            }
+            let init = GetProcAddress(lib, PCSTR(b"WinUsb_Initialize\0".as_ptr()))
+                .map(|p| std::mem::transmute(p));
+            let free = GetProcAddress(lib, PCSTR(b"WinUsb_Free\0".as_ptr()))
+                .map(|p| std::mem::transmute(p));
+            let read_pipe = GetProcAddress(lib, PCSTR(b"WinUsb_ReadPipe\0".as_ptr()))
+                .map(|p| std::mem::transmute(p));
+            let write_pipe = GetProcAddress(lib, PCSTR(b"WinUsb_WritePipe\0".as_ptr()))
+                .map(|p| std::mem::transmute(p));
+            Some(Self {
+                winusb_initialize: init,
+                winusb_free: free,
+                winusb_read_pipe: read_pipe,
+                winusb_write_pipe: write_pipe,
+            })
+        }
+        #[cfg(not(target_os = "windows"))]
+        None
+    }
+}
+
 /// Native WinUSB transport (matching CommsWinUSB).
 pub struct WinUsbTransport {
     pub path: String,
+    pub api: Option<WinUsbApi>,
+    pub usb_handle: Option<*mut std::ffi::c_void>,
     pub rx_buf: std::sync::Arc<parking_lot::Mutex<std::collections::VecDeque<u8>>>,
     pub tx_buf: std::sync::Arc<parking_lot::Mutex<std::collections::VecDeque<u8>>>,
 }
+
+unsafe impl Send for WinUsbTransport {}
 
 impl WinUsbTransport {
     pub fn open(path: &str) -> io::Result<Self> {
@@ -500,25 +598,17 @@ impl WinUsbTransport {
         if p.is_empty() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "WinUSB device path required"));
         }
-        // In Mission Planner CommsWinUSB.cs, WinUSB communicates via Winusb.dll and CreateFile on device path.
-        // Try dynamic binding if the library is present; otherwise initialize the streaming buffers.
+        let api = WinUsbApi::load();
+        if api.is_some() {
+            log::info!("Loaded winusb.dll WinUSB driver for device path {}", p);
+        }
         let rx_buf = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
         let tx_buf = std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new()));
 
-        #[cfg(target_os = "windows")]
-        unsafe {
-            use windows::Win32::System::LibraryLoader::LoadLibraryA;
-            use windows::core::PCSTR;
-            let lib = LoadLibraryA(PCSTR(b"winusb.dll\0".as_ptr()));
-            if let Ok(handle) = lib {
-                if !handle.is_invalid() {
-                    log::info!("Loaded winusb.dll for device path {}", p);
-                }
-            }
-        }
-
         Ok(Self {
             path: p.to_string(),
+            api,
+            usb_handle: None,
             rx_buf,
             tx_buf,
         })
@@ -527,6 +617,16 @@ impl WinUsbTransport {
 
 impl Read for WinUsbTransport {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if let (Some(ref api), Some(handle)) = (&self.api, self.usb_handle) {
+            if let Some(read_pipe) = api.winusb_read_pipe {
+                let mut transferred = 0u32;
+                let bulk_in_pipe = 0x81;
+                let ok = unsafe { read_pipe(handle, bulk_in_pipe, buf.as_mut_ptr(), buf.len() as u32, &mut transferred, std::ptr::null_mut()) };
+                if ok != 0 {
+                    return Ok(transferred as usize);
+                }
+            }
+        }
         let mut q = self.rx_buf.lock();
         if q.is_empty() {
             return Err(io::ErrorKind::TimedOut.into());
@@ -541,6 +641,16 @@ impl Read for WinUsbTransport {
 
 impl Write for WinUsbTransport {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        if let (Some(ref api), Some(handle)) = (&self.api, self.usb_handle) {
+            if let Some(write_pipe) = api.winusb_write_pipe {
+                let mut transferred = 0u32;
+                let bulk_out_pipe = 0x01;
+                let ok = unsafe { write_pipe(handle, bulk_out_pipe, buf.as_ptr(), buf.len() as u32, &mut transferred, std::ptr::null_mut()) };
+                if ok != 0 {
+                    return Ok(transferred as usize);
+                }
+            }
+        }
         let mut q = self.tx_buf.lock();
         q.extend(buf.iter().copied());
         Ok(buf.len())
