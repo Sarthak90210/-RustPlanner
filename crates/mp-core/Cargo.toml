@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[build-dependencies]
+roxmltree = "0.20"
+
 [dependencies]
 mavlink = { version = "0.21", default-features = false, features = ["std", "dialect-ardupilotmega", "dialect-common", "format-generated-code", "mav2-message-extensions"] }
 log = "0.4"

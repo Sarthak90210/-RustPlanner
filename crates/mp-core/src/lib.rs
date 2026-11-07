@@ -4,6 +4,8 @@
 //! Platform independent: no UI and no OS-specific code outside of `comms` serial support.
 
 pub mod comms;
+pub mod dotnet;
+pub mod extlibs;
 pub mod proximity;
 pub mod coords;
 pub mod dataflash;
