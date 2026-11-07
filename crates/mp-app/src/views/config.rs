@@ -1080,6 +1080,8 @@ pub struct ParamEditor {
     /// txt_search after the 500 ms filter timer (and filterList's length rule)
     search_applied: String,
     search_changed: Option<std::time::Instant>,
+    /// Reset to Default: the reboot a second after the parameter write
+    reset_reboot_at: Option<std::time::Instant>,
     /// BuildTree's nodes, rebuilt when the parameter list changes
     tree: Option<(Vec<String>, TreeNode)>,
 }
@@ -1478,16 +1480,26 @@ impl ParamEditor {
                 self.confirm_reset = false;
                 if yes && !app.readonly {
                     if let Some(link) = app.link {
-                        // FORMAT_VERSION / SYSID_SW_MREV = 0 then reboot: the autopilot reloads defaults
-                        for n in ["FORMAT_VERSION", "SYSID_SW_MREV"] {
-                            if params.contains_key(n) {
-                                link.send(LinkCommand::SetParam { name: n.into(), value: 0.0 });
-                            }
+                        // setParam(new[] { "FORMAT_VERSION", "SYSID_SW_MREV" }, 0): the first that exists
+                        if let Some(n) = ["FORMAT_VERSION", "SYSID_SW_MREV"].into_iter().find(|n| params.contains_key(*n)) {
+                            link.send(LinkCommand::SetParam { name: n.into(), value: 0.0 });
                         }
-                        link.send(LinkCommand::CommandLong { command: 246, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
-                        app.toasts.error("Your board is now rebooting, You will be required to reconnect to the autopilot.");
+                        // Thread.Sleep(1000), then doReboot and BaseStream.Close
+                        self.reset_reboot_at = Some(std::time::Instant::now() + std::time::Duration::from_secs(1));
                     }
                 }
+            }
+        }
+        if let Some(at) = self.reset_reboot_at {
+            if std::time::Instant::now() >= at {
+                self.reset_reboot_at = None;
+                if let Some(link) = app.link {
+                    link.send(LinkCommand::CommandLong { command: 246, params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
+                    app.actions.push(crate::app::AppAction::Disconnect);
+                    app.toasts.error("Your board is now rebooting, You will be required to reconnect to the autopilot.");
+                }
+            } else {
+                ui.ctx().request_repaint_after(at - std::time::Instant::now());
             }
         }
         self.compare_window(ui.ctx(), app.toasts, fw);
