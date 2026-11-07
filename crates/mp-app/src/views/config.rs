@@ -499,6 +499,14 @@ UNKNOWN "));
     }
 
     #[test]
+    fn write_confirmation_is_the_single_csharp_message() {
+        let two = vec![("ANGLE_MAX".to_string(), 3000.0, 4500.0), ("RTL_ALT".to_string(), 1500.0, 2000.5)];
+        assert_eq!(ParamEditor::write_confirm_text(&two), "You are about to change 2 parameters. Please review the changes below:\n\nANGLE_MAX: 3000 -> 4500\nRTL_ALT: 1500 -> 2000.5\n\nDo you want to proceed?");
+        let many: Vec<(String, f32, f32)> = (0..21).map(|i| (format!("P{i}"), 0.0, 1.0)).collect();
+        assert_eq!(ParamEditor::write_confirm_text(&many), "You are about to change 21 parameters. Are you sure you want to proceed?");
+    }
+
+    #[test]
     fn commit_params_reports_the_autopilots_answer() {
         let mut editor = ParamEditor::default();
         let mut toasts = Toasts::default();
@@ -1067,6 +1075,8 @@ pub struct ParamEditor {
     show_again: Option<(crate::show_again::ShowAgain, ShowAgainThen)>,
     /// writes of the current batch that failed (BUT_writePIDS_Click's `error`)
     batch_errors: usize,
+    /// the firmware the batch's reboot metadata comes from
+    batch_fw: Firmware,
     /// txt_search after the 500 ms filter timer (and filterList's length rule)
     search_applied: String,
     search_changed: Option<std::time::Instant>,
@@ -1152,6 +1162,10 @@ impl ParamEditor {
                     self.edits.remove(name);
                     self.failed.remove(name);
                     self.confirmed.insert(name.clone());
+                    // GetParameterRebootRequired for each parameter that was set
+                    if param_meta::get(self.batch_fw, name).is_some_and(|m| m.reboot_required) {
+                        self.reboot_required_staged = true;
+                    }
                 } else {
                     self.batch_errors += 1;
                     toasts.error(format!("Set {name} Failed"));
@@ -1548,6 +1562,7 @@ impl ParamEditor {
     fn start_batch(&mut self, n: usize) {
         self.write_count = n;
         self.batch_errors = 0;
+        self.reboot_required_staged = false;
     }
 
     /// The write loop's "Your are not connected": it stops, and the rest stay queued.
@@ -1584,43 +1599,26 @@ impl ParamEditor {
     }
 
     /// Confirmation dialog for parameter changes, matching C# ConfigRawParams BUT_writePIDS_Click
+    /// BUT_writePIDS_Click's "Confirm Parameter Changes" box: the changes listed up to 20.
+    pub fn write_confirm_text(changes: &[(String, f32, f32)]) -> String {
+        let n = changes.len();
+        if n <= 20 {
+            let lines: Vec<String> = changes.iter().map(|(k, old, new)| format!("{k}: {} -> {}", paramfile::format_value(*old), paramfile::format_value(*new))).collect();
+            format!("You are about to change {n} parameters. Please review the changes below:\n\n{}\n\nDo you want to proceed?", lines.join("\n"))
+        } else {
+            format!("You are about to change {n} parameters. Are you sure you want to proceed?")
+        }
+    }
+
     fn write_confirm_window(&mut self, ctx: &egui::Context, link: Option<&Link>, fw: Firmware) {
         let Some(changes) = self.write_confirm.as_ref() else { return };
         let mut answer = None;
-        let reboot_needed = changes.iter().any(|(name, _, _)| {
-            param_meta::get(fw, name).map(|m| m.reboot_required).unwrap_or(false)
-        });
+        let text = Self::write_confirm_text(changes);
         egui::Modal::new(egui::Id::new("confirm_write_params")).show(ctx, |ui| {
-            ui.set_width(380.0);
+            ui.set_min_width(300.0);
             ui.label(RichText::new(crate::i18n::t("Confirm Parameter Changes")).strong());
             ui.add_space(6.0);
-            let count = changes.len();
-            if count <= 20 {
-                ui.label(format!("You are about to change {count} parameters. Please review the changes below:"));
-                ui.add_space(4.0);
-                egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
-                    egui::Grid::new("confirm_write_grid").num_columns(1).striped(true).show(ui, |ui| {
-                        for (name, old, new) in changes {
-                            let is_reboot = param_meta::get(fw, name).map(|m| m.reboot_required).unwrap_or(false);
-                            let tag = if is_reboot { " [Reboot Required]" } else { "" };
-                            ui.label(RichText::new(format!("{name}: {} -> {}{tag}", paramfile::format_value(*old), paramfile::format_value(*new))).monospace());
-                            ui.end_row();
-                        }
-                    });
-                });
-                if reboot_needed {
-                    ui.add_space(6.0);
-                    ui.colored_label(Color32::from_rgb(255, 180, 0), "⚠️ Note: One or more parameters require an autopilot reboot to take effect.");
-                }
-                ui.add_space(6.0);
-                ui.label(crate::i18n::t("Do you want to proceed?"));
-            } else {
-                ui.label(format!("You are about to change {count} parameters. Are you sure you want to proceed?"));
-                if reboot_needed {
-                    ui.add_space(6.0);
-                    ui.colored_label(Color32::from_rgb(255, 180, 0), "⚠️ Note: One or more parameters require an autopilot reboot to take effect.");
-                }
-            }
+            egui::ScrollArea::vertical().max_height(400.0).show(ui, |ui| theme::label(ui, &text));
             ui.add_space(10.0);
             ui.horizontal(|ui| {
                 if theme::button(ui, "Yes").clicked() {
@@ -1637,11 +1635,9 @@ impl ParamEditor {
         if let Some(yes) = answer {
             let changes = self.write_confirm.take().unwrap();
             if yes {
-                if reboot_needed {
-                    self.reboot_required_staged = true;
-                }
                 if let Some(link) = link {
                     self.start_batch(changes.len());
+                    self.batch_fw = fw;
                     for (name, _, new) in changes {
                         link.send(LinkCommand::SetParam { name: name.clone(), value: new });
                         self.pending.insert(name);
