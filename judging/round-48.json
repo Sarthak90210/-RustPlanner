@@ -1,0 +1,164 @@
+{
+  "round": 48,
+  "date": "2026-11-07",
+  "review_type": "Independent hostile source review at the strictest adversarial parity bar. Verified fixes in 34cee4b and preceding commits between da4214b and 34cee4b against reference/MissionPlanner sources: GimbalVideoControl (ResolveSettingsCamera fallback chain, Custom Settings enable state, focus-scoped keyboard handling, guarded recording, no-video image asset), CameraCustomSettingsForm (exact C# readonly status text, keep form open on link disconnect, defer CAMERA_INFORMATION reloads while loading, synthetic Current/Waiting option in combo dropdown, cancel-aware HTTP reader with 250ms polling), CameraSettingsSession (IndexMap insertion order for PARAM_EXT_REQUEST_READ / SET), ConfigRawParams (GetParameterOptionsInt non-integer key filtering, raw Range/Values cell text, 36 px row height, RowEnter from any cell, NumericUpDown spinbox, SlowMachine Refresh Table, center label1, format_value write_confirm_text exact C# strings, single message box confirm, armed Refresh Params warning, FORMAT_VERSION reset with port close, ParamCompare modal 428x523 with toggle-all and QuadPlanes filter, queue_value routing for file load and compare), FlightPlanner (savewaypoints with Mission/JSON filters, WPFileDirectory persistence, SRTM home drag altitude, vehicle home in updateUndoBuffer, raw command ID support in write_fast, dotnet_fixed MidpointAwayFromZero rounding, context-menu InputBox sequences for Text, UTM, Spline Circle, Circle Survey, Offset Polygon, Measure Distance two-click flow with MessageShowAgain and AZ/Distance formatting, saveWPs post-upload radius parameters), FlightData (Reboot_Mass_Storage param1=5, BUTactiondo branch order and no-confirm actions, Preflight_Calibration copter gyro gate, Toggle Safety via SET_MODE SAFETY_ARMED, Set Mount via MNT_MODE / DO_MOUNT_CONTROL, BUT_ARM Force Arm/Disarm custom buttons, STATUSTEXT linebreaks, refused forced arm error, Clear Track camerapoints, Set Home Alt multiplieralt, Send Message prompt and title), InitialSetup (Calibrate Radio 10 Hz rate, channel 1 800..2200 gate, centered stick trims, Bad channel 1 canceling, summary box; Elevon checkboxes bound to ELEVON_* params; Accelerometer calibration PREFLIGHT_CALIBRATION ACK gate and STATUSTEXT handling).",
+  "reviewed_head": "34cee4b2759de94fc7f99e7228406dbe32c71c31",
+  "reviewed_uncommitted_worktree": false,
+  "reviewed_files": [
+    "crates/mp-app/src/assets.rs",
+    "crates/mp-app/src/camera_settings.rs",
+    "crates/mp-app/src/views/config.rs",
+    "crates/mp-app/src/views/flight_plan.rs",
+    "crates/mp-app/src/views/flight_plan/menu.rs",
+    "crates/mp-app/src/views/gimbal_video.rs",
+    "crates/mp-app/src/views/flight_data.rs",
+    "crates/mp-app/src/views/setup.rs",
+    "crates/mp-app/src/views/dronecan_page.rs",
+    "crates/mp-app/src/app.rs",
+    "crates/mp-core/src/camdef.rs",
+    "crates/mp-core/src/wpfast.rs",
+    "crates/mp-core/src/param_meta.rs",
+    "crates/mp-core/src/paramfile.rs",
+    "crates/mp-core/src/comms.rs",
+    "crates/mp-app/src/speech.rs",
+    "reference/MissionPlanner/Controls/GimbalVideoControl.cs",
+    "reference/MissionPlanner/Controls/CameraCustomSettingsForm.cs",
+    "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/CameraSettingsSession.cs",
+    "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigRawParams.cs",
+    "reference/MissionPlanner/Controls/paramcompare.cs",
+    "reference/MissionPlanner/GCSViews/FlightPlanner.cs",
+    "reference/MissionPlanner/GCSViews/FlightData.cs",
+    "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigRadioInput.cs",
+    "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs",
+    "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigDroneCAN.cs",
+    "reference/MissionPlanner/MainV2.cs"
+  ],
+  "verdict": "REJECTED for exact-clone parity (Score: 4.8/10). The series of 24 commits ending at 34cee4b successfully resolved 38 distinct findings from round 47 across gimbal video, camera settings, raw parameter editing, flight plan tools/dialogs/rounding, flight data actions, radio calibration, and accelerometer calibration. Test suite expanded to 255 passed tests with 0 failures. However, under the strict hostile adversarial audit standard, any open P1 finding caps the overall score at <= 5.0. Five critical P1 gaps remain open: DroneCAN auxiliary tools (R47-18) are unported stubs; MainV2 post-connect tasks (R47-19: param cache, Params_BG, NewFirmware, CheckBatteryShow, RALLY_TOTAL) are missing; desktop-only rfd file pickers (R47-20) remain unported to platform::FilePicker across 15+ call sites; mobile serial/BLE/WinUSB transports and TTS speech backends (R47-21) are unimplemented; and mobile native packaging/device execution receipts (R47-22) remain absent. Additionally, Flight Data force-arm still processes the Enter hotkey and lacks the un-acked arm timeout path (R47-05).",
+  "scores": {
+    "overall": 4.8,
+    "ui_ux": 4.8,
+    "features": 4.9,
+    "cross_platform_delivery": 2.5,
+    "scale": "0 to 10 against an exact Mission Planner clone on Windows, macOS, Linux, Android and iOS. A partial match gets no credit. With any P0 or P1 open, the cap is 5.0."
+  },
+  "independent_validation": [
+    "Confirmed git HEAD commit 34cee4b2759de94fc7f99e7228406dbe32c71c31 on branch codex/ios-app-bundle with clean worktree.",
+    "Executed `cargo test --workspace`: 255 tests passed, 0 failed, 1 ignored (mp-app: 147 passed, 1 ignored; mp-core: 82 passed; altitude_change: 7 passed; camera_ftp: 1 passed; high_latency: 3 passed; link_sim: 9 passed; maiden_flight: 1 passed; mavserial: 4 passed; proximity_wire: 1 passed). All passed in 30.6s on Windows host.",
+    "Inspected commit 34cee4b: verified resolve_settings_camera fallback priority (settings_camera_address -> gimbal_video_stream URI match -> CAMERA_INFORMATION definition URI -> MAV.Camera default), no-video.png texture rendering, has_focus gated keyboard handling, guarded set_recording, write_confirm_text exact C# strings, cancel-aware HTTP reader with 250ms polling, IndexMap insertion order in CameraSettingsSession, and dotnet_fixed MidpointAwayFromZero rounding.",
+    "Verified all commits between da4214b and 34cee4b: e0256cd (R47-01), 7ddf3d1 (R47-02, R47-03, R47-04), 742ff04 (R47-05), a55ec0c (R47-06), 1211912 (R47-07, R47-08), a5db398 (R47-09, R47-11, R47-12, R47-23), ddcca42 (R47-10), e0b18bf (R47-13), 31de152 (R47-14), 22dede8 (R47-15), aae9d57 (R47-16), 2867ead (R47-17), a19a077 (R47-24, R47-25, R47-26, R47-27, R47-28), f3ecc7f (R47-29, R47-31, R47-32, R47-33, R47-41, R47-44), 3cd8c36 (R47-30), 092fa48 (R47-34), c42bb29 (R47-37, R47-38), 34cee4b (R47-35, R47-36, R47-39, R47-40, R47-42, R47-43)."
+  ],
+  "verified_improvements": [
+    "R47-35 & R47-36 (Gimbal Video): resolve_settings_camera (gimbal_video.rs:455-490) implements the 4-step fallback from GimbalVideoControl.cs:771-795; Custom Settings menu item enablement bound to resolve_settings_camera(app).is_some(); keyboard handling scoped via has_focus click/drag tracking; set_recording guarded against missing camera; no-video.png rendered on missing feed.",
+    "R47-39 (ParamEditor write_confirm_text): Exact C# formatting for <= 20 parameters ('You are about to change N parameters. Please review the changes below:\\n\\n<name: prev -> new>\\n\\nDo you want to proceed?') and > 20 parameters ('You are about to change N parameters. Are you sure you want to proceed?'), verified by unit tests.",
+    "R47-40 (HTTP Definition Download): ureq agent configured with 250ms timeout_per_read, cooperative cancellation checked each read loop, and overall 15s elapsed timeout handling.",
+    "R47-42 (dotnet_fixed Rounding): rust_decimal Decimal::round_dp_with_strategy(dp, RoundingStrategy::MidpointAwayFromZero) matches .NET MidpointAwayFromZero rounding, verified by unit tests (0.25 -> 0.3, -0.25 -> -0.3, 180.5 -> 181).",
+    "R47-43 (CameraSettingsSession Ordering): reads and writes switched from BTreeMap to IndexMap, preserving definition order in PARAM_EXT_REQUEST_READ / SET batches.",
+    "R47-01 (Param Metadata Options): parse_values uses int.Parse (key.parse::<i32>()), discarding non-integer fractional keys like GetParameterOptionsInt; values_raw and range_raw preserve original strings.",
+    "R47-02, R47-03, R47-04 (Flight Data Actions): Reboot_Mass_Storage uses command 246 with param1=5.0; BUTactiondo runs Format_SD_Card, Trigger_Camera, Scripting_cmd_stop*, and System_Time immediately without confirm prompt; Preflight_Calibration sets gyro param1=1.0 only on ArduCopter2; Toggle Safety sends SET_MODE with MAV_MODE_FLAG_SAFETY_ARMED; Set Mount checks MNT_MODE param, falling back to DO_MOUNT_CONTROL param7; refused actions report 'The Command failed to execute\\n <CMD>'.",
+    "R47-05 (Force Arm Dialog): Custom buttons 'Force Arm'/'Force Disarm' and 'Cancel'; STATUSTEXT reasons formatted with linebreaks; 'Error: command rejected by MAV' on refused force arm.",
+    "R47-06 (saveWPs Post-Upload): Inserts home only for ArduPilot missions; forces GLOBAL (0) frame on fence items; requests home position; writes WP_RADIUS, WP_RADIUS_M, WPNAV_RADIUS (*100), and LOITER_RAD / WP_LOITER_RAD.",
+    "R47-07 & R47-08 (Flight Plan Tools): Sequenced InputBox prompts matching C# for Text (font, size x1.35, rotation), UTM (zone, easting, northing, south hemisphere letter), Spline Circle (radius, min/max alt, alt step, start angle), Circle Survey, Offset Polygon (miter offset); Measure Distance 2-click flow with 'Measure Dist' MessageShowAgain and 'Distance: .. AZ: ..' calculation.",
+    "R47-09 & R47-10 (Raw Params Queue & Confirm): File load and ParamCompare Continue route through queue_value with ReadOnly rejection and out-of-range prompt queue; single C# confirmation dialog without invented reboot notes.",
+    "R47-11, R47-12, R47-13 (Raw Params Lifecycle): Raw Param Warning MessageShowAgain on Activate; rawparam_splitterdistance and rawparam_panel1collapsed persisted; Ctrl+S hotkey writes params; Refresh Params warns if armed; Reset to Default sets FORMAT_VERSION/SYSID_SW_MREV, sleeps 1s, sends reboot 246, closes connection, and toasts reboot notice.",
+    "R47-14 (ParamCompare): Modal 428x523 form titled 'ParamCompare'; Check/Uncheck All toggle; QuadPlanes subfolder support when Q_ENABLE >= 1; presaved downloads cached to user data directory.",
+    "R47-15 & R47-16 (Radio Calibration & Elevons): Calibrate Radio requests RC_CHANNELS at 10 Hz; gates on ch1 in 800..2200; 'Bad channel 1 input, canceling'; stick-centering prompt before trim capture; original save condition; 'Radio' summary caption; Elevon checkboxes bound to ELEVON_MIXING, ELEVON_REVERSE, ELEVON_CH1_REV, ELEVON_CH2_REV.",
+    "R47-17 (Accel Calibration): PREFLIGHT_CALIBRATION ACK gate; STATUSTEXT and ACCELCAL_VEHICLE_POS messages; disabled Done button on completion; Level and Simple Accel Cal await ACK.",
+    "R47-23, R47-24, R47-25, R47-26, R47-27, R47-28 (Raw Params Grid): Values equal to current still queued in edits; 36 px row height; row selection from any cell; NumericUpDown spinbox with up/down buttons; SlowMachine Refresh Table; centered label1; invented offline texts removed; Commit Params timeout reports 'Invalid command'.",
+    "R47-29, R47-30, R47-31, R47-32, R47-33 (Flight Plan Grid & Storage): Ctrl+M copies grid to MAV.wps; savewaypoints supports Mission and Mission JSON filters, WPFileDirectory persistence, last file name; home drag updates altitude from SRTM; update_undo_buffer preserves vehicle home when known; write_fast sends unknown commands as raw MISSION_ITEM_INT frames.",
+    "R47-34 (Flight Data Actions Cleanups): Clear Track clears camerapoints; Set Home Alt divides by multiplieralt; Send Message uses 'Enter Message' title and 'Enter Message to be logged' prompt.",
+    "R47-37 & R47-38 (Camera Settings Lifecycle): Exact C# readonly error status; form stays open on link disconnect; CAMERA_INFORMATION reloads deferred while loading; synthetic Current/Waiting option inserted into combo dropdown.",
+    "R47-41 & R47-44 (App Infrastructure): Message queue preserves duplicate messages without collapsing; not_ported fallback completely removed."
+  ],
+  "findings": [
+    {
+      "id": "R48-01",
+      "priority": "P1",
+      "subsystem": "Initial Setup / DroneCAN: Inspector, Filter and Stats buttons (R47-18 still open)",
+      "status": "stubs",
+      "evidence": [
+        "C# ConfigDroneCAN.cs:714-722 But_uavcaninspector_Click opens DroneCANInspector form; but_filter_Click (897+) applies the default message filter list; but_stats_Click (1392+) opens CanStats DataGridView window fed by dronecan_protocol_CanStats.",
+        "Rust crates/mp-app/src/views/dronecan_page.rs:101-102 sends 'but_stats' to app.toasts.info (logger only, no visible UI); 'but_uavcaninspector' and 'but_filter' log 'Node and message details are shown below the node list.' No window or filter table is opened."
+      ],
+      "impact": "DroneCAN diagnostic inspector, filter configuration, and bus traffic statistics tools are inoperable.",
+      "required_fix": "Port DroneCANInspector form, filter list management, and the bus statistics DataGridView window."
+    },
+    {
+      "id": "R48-02",
+      "priority": "P1",
+      "subsystem": "MainV2: doConnect post-connect steps (R47-19 still open)",
+      "status": "missing behaviour",
+      "evidence": [
+        "C# MainV2.cs:1664-1696 loads parameter cache (UseCachedParams, ParamCachePath younger than 1 h) or, when Params_BG is set, runs getParamListMavftp in the background. It then checks for newer firmware with Common.MessageShowAgain(Strings.NewFirmware ...). It saves '<port>_BAUD', runs FlightData.CheckBatteryShow, and fetches rally points when RALLY_TOTAL > 0 (1769-1780).",
+        "In crates/mp-app/src, no occurrences of ParamCachePath, NewFirmware, CheckBatteryShow, or RALLY_TOTAL exist. Params_BG setting is never evaluated."
+      ],
+      "impact": "Autopilot connect sequence skips parameter cache acceleration, background MAVFtp param sync, firmware update notification, rally point download, and battery voltage check dialog.",
+      "required_fix": "Port the full post-connect tail in MainV2/link connection handler."
+    },
+    {
+      "id": "R48-03",
+      "priority": "P1",
+      "subsystem": "Cross-platform: file dialogs used by user-facing tools (R47-20 still open)",
+      "status": "desktop-only",
+      "evidence": [
+        "crates/mp-app/Cargo.toml restricts `rfd` to non-mobile targets. Over 15 direct `rfd::FileDialog` invocations remain across firmware_ui.rs:452, georef_ui.rs:64/70, joystick.rs:440/452, more_tools.rs:121/139/306, tool_windows.rs:22/32, config.rs:2276, device_pages.rs:119, fd_tabs.rs:223, flight_data.rs:564/2207, flight_plan.rs:781, mavftp.rs:155/268, setup_pages.rs:37/45, and survey_ui.rs:747.",
+        "On Android and iOS, `rfd::FileDialog` calls are compiled out or unavailable, causing file open/save actions to fail silently."
+      ],
+      "impact": "Key user-facing file workflows (log loading, script loading, HUD recording, custom firmware, joystick configs, KML/Shape injection) are unusable on mobile platforms.",
+      "required_fix": "Refactor all user-facing file dialog call sites to use `platform::FilePicker`, which includes mobile file provider integration."
+    },
+    {
+      "id": "R48-04",
+      "priority": "P1",
+      "subsystem": "Cross-platform: transports and speech (R47-21 still open)",
+      "status": "desktop-only / unsupported",
+      "evidence": [
+        "crates/mp-core/src/comms.rs:126 and 132 return Err('... transport is not yet supported') for CommsEndpoint::Ble and CommsEndpoint::WinUsb. comms.rs:162-168 returns 'serial ports are not available on this platform' on Android and iOS.",
+        "crates/mp-app/src/speech.rs:26-48 speak_blocking implements Windows SAPI, macOS say, and Linux speech-dispatcher/espeak branches only. Android and iOS speech synthesis are completely absent."
+      ],
+      "impact": "Bluetooth Low Energy and USB-serial connectivity on mobile/tablet platforms fail. Voice telemetry announcements are silent on Android and iOS.",
+      "required_fix": "Implement mobile serial drivers (Android USB Host / UsbSerial), CoreBluetooth / Android BLE GATT transports, and Android TextToSpeech / iOS AVSpeechSynthesizer TTS bridges."
+    },
+    {
+      "id": "R48-05",
+      "priority": "P1",
+      "subsystem": "Native delivery: iOS and Android packaging (R47-22 still open)",
+      "status": "validation gap",
+      "evidence": [
+        "The project has no automated build receipt, signed packaging artifact, or device execution receipt for iOS (.ipa / TestFlight) or Android (.apk / .aab). Audits remain confined to host-platform execution on Windows."
+      ],
+      "impact": "Cross-platform delivery claim remains unverified on target mobile hardware.",
+      "required_fix": "Provide automated packaging scripts and verifiable run logs / screenshots from physical or simulator iOS and Android runs."
+    },
+    {
+      "id": "R48-06",
+      "priority": "P2",
+      "subsystem": "Flight Data: BUT_ARM_Click Enter shortcut and arm timeout path (R47-05 remainder)",
+      "status": "minor divergence",
+      "evidence": [
+        "C# FlightData.cs:1070-1075: doARM() returning false without an ACK (e.g. timeout after 8000ms) opens the Force Arm prompt. The CustomMessageBox shown with custom buttons ('Force Arm', 'Cancel') does not default Enter to Force Arm.",
+        "Rust flight_data.rs:1741 has an unconditional `else if ctx.input(|i| i.key_pressed(egui::Key::Enter)) { result = Some(true); }`, allowing accidental keyboard trigger of Force Arm. Furthermore, arming failure only triggers on negative CommandAck (flight_data.rs:335), not on timeout."
+      ],
+      "impact": "If arm command packets are dropped, the force-arm dialog never appears. Users pressing Enter in error can accidentally force-arm.",
+      "required_fix": "Disable Enter shortcut on Confirmed::ForceArm prompt, and add an 8-second timeout fallback that opens the force-arm prompt when no ACK arrives."
+    },
+    {
+      "id": "R48-07",
+      "priority": "P2",
+      "subsystem": "Flight Plan: saveWPs Terrain.checkTerrain loop (R47-06 remainder)",
+      "status": "missing behaviour",
+      "evidence": [
+        "C# FlightPlanner.cs:6330-6345 iterates through all located waypoints in the mission and runs `Terrain.checkTerrain(loc.lat, loc.lng)` to pre-cache elevation data, reporting 'Done.' only after terrain checking completes.",
+        "Rust flight_plan.rs:583-605 handles parameter writes and home query in post_upload, but omits the Terrain.checkTerrain prefetch loop."
+      ],
+      "impact": "Terrain data for planned waypoints is not pre-cached to disk upon upload.",
+      "required_fix": "Add background terrain tile check/download loop following mission upload completion."
+    }
+  ],
+  "next_concrete_task": "Address the remaining blocking P1 findings to uncap the score beyond 5.0: (1) Replace remaining direct `rfd::FileDialog` call sites across all views with `platform::FilePicker` (R48-03). (2) Implement MainV2 post-connect steps: param cache loading, MAVFtp background fetch when Params_BG is true, NewFirmware version check, RALLY_TOTAL check and rally fetch, and CheckBatteryShow (R48-02). (3) Wire up DroneCAN Inspector, Filter, and Stats forms (R48-01). (4) Implement mobile serial and speech synthesis backends for Android/iOS (R48-04). (5) Remove Enter shortcut from ForceArm prompt and add arm timeout fallback (R48-06).",
+  "not_verified": [
+    "Rendering and touch interaction on physical iOS and Android hardware.",
+    "Hardware GStreamer RTSP decoding pipeline with physical gimbal cameras.",
+    "Live USB-serial and BLE connectivity on physical flight controllers.",
+    "Audio TTS playback on non-Windows operating systems."
+  ]
+}

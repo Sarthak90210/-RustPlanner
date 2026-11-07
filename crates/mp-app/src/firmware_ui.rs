@@ -447,12 +447,6 @@ impl FirmwareInstaller {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn custom_file() -> Option<std::path::PathBuf> {
-    rfd::FileDialog::new().add_filter("Firmware", &["apj", "px4"]).pick_file()
-}
-
-#[cfg(any(target_os = "android", target_os = "ios"))]
-fn custom_file() -> Option<std::path::PathBuf> {
-    None
+    crate::platform::pick_file("Select Firmware", "Firmware", &["apj", "px4"])
 }

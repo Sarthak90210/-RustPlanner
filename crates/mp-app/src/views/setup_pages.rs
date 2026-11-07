@@ -32,21 +32,12 @@ pub struct ExtraPages {
     trk_find: Option<Arc<Mutex<Option<String>>>>,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn open_file(filter: &str, ext: &[&str]) -> Option<std::path::PathBuf> {
-    rfd::FileDialog::new().add_filter(filter, ext).pick_file()
+    crate::platform::pick_file("Select File", filter, ext)
 }
-#[cfg(any(target_os = "android", target_os = "ios"))]
-fn open_file(_: &str, _: &[&str]) -> Option<std::path::PathBuf> {
-    None
-}
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+
 fn save_file(name: &str) -> Option<std::path::PathBuf> {
-    rfd::FileDialog::new().add_filter("*.pem", &["pem"]).set_file_name(name).save_file()
-}
-#[cfg(any(target_os = "android", target_os = "ios"))]
-fn save_file(name: &str) -> Option<std::path::PathBuf> {
-    Some(crate::platform::data_dir().join(name))
+    crate::platform::save_file_as("Save File", name, "*.pem", &["pem"])
 }
 
 /// "x.bin" -> "x-signed.bin" next to it.

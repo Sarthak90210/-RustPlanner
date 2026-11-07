@@ -151,10 +151,7 @@ impl MavFtpUi {
                 Done::Refresh(dir) => self.list(link, dir),
                 Done::Downloaded(name, bytes) => {
                     let n = bytes.len();
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    let target = rfd::FileDialog::new().set_file_name(&name).save_file();
-                    #[cfg(any(target_os = "android", target_os = "ios"))]
-                    let target = Some(crate::platform::data_dir().join(&name));
+                    let target = crate::platform::save_file_as("Save File", &name, "All Files", &["*"]);
                     if let Some(p) = target {
                         match std::fs::write(&p, bytes) {
                             Ok(()) => self.shared.lock().unwrap().status = format!("Downloaded {name} ({}) to {}", human(n as u64), p.display()),
@@ -264,8 +261,7 @@ impl MavFtpUi {
                 });
             }
             (Some("Upload"), _) => {
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                if let Some(p) = rfd::FileDialog::new().pick_file() {
+                if let Some(p) = crate::platform::pick_file("Upload File", "All Files", &["*"]) {
                     if let Ok(bytes) = std::fs::read(&p) {
                         let name = p.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
                         let path = join(&self.cwd, &name);

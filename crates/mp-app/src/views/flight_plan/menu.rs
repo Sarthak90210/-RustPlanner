@@ -241,14 +241,8 @@ pub(super) fn read_kml(text: &str) -> Vec<Vec<(f64, f64, f64)>> {
         .collect()
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn pick(title: &str, filter: &str, exts: &[&str]) -> Option<std::path::PathBuf> {
-    rfd::FileDialog::new().set_title(title).add_filter(filter, exts).pick_file()
-}
-
-#[cfg(any(target_os = "android", target_os = "ios"))]
-fn pick(_title: &str, _filter: &str, exts: &[&str]) -> Option<std::path::PathBuf> {
-    platform::list_files(exts).last().cloned()
+    platform::pick_file(title, filter, exts)
 }
 
 impl FlightPlanView {

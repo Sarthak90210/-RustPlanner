@@ -134,6 +134,8 @@ pub struct CurrentState {
     pub track: Vec<(f64, f64)>,
     pub camerapoints: Vec<(f64, f64, f32)>,
     pub extra: std::collections::BTreeMap<String, f64>,
+    pub version_string: String,
+    pub uid2: String,
 
     last_pos_update: Option<Instant>,
     /// the alt setter's lastalt / oldalt and gotVFR
@@ -243,6 +245,8 @@ impl Default for CurrentState {
             track: Vec::new(),
             camerapoints: Vec::new(),
             extra: default_extra(),
+            version_string: String::new(),
+            uid2: String::new(),
             last_pos_update: None,
             last_alt: None,
             old_alt: 0.0,

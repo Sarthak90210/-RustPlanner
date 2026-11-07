@@ -39,7 +39,7 @@ pub enum LinkStatus {
     Connected,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Param {
     pub value: f32,
     pub ptype: u8,
@@ -1197,6 +1197,11 @@ impl Worker {
             }
             if let MavMessage::AUTOPILOT_VERSION(v) = &msg {
                 s.autopilot_version = Some((v.flight_sw_version, v.capabilities.bits()));
+                let major = (v.flight_sw_version >> 24) & 0xff;
+                let minor = (v.flight_sw_version >> 16) & 0xff;
+                let patch = (v.flight_sw_version >> 8) & 0xff;
+                s.cs.version_string = format!("{major}.{minor}.{patch}");
+                s.cs.uid2 = format!("{:016X}", v.uid);
             }
             if let MavMessage::MAG_CAL_PROGRESS(m) = &msg {
                 if let Some(p) = s.mag_progress.get_mut(m.compass_id as usize) {

@@ -60,14 +60,13 @@ impl GeorefWindow {
     fn button(&mut self, b: &str, app: &mut AppCtx) {
         match b {
             "BUT_browselog" => {
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                if let Some(p) = rfd::FileDialog::new().add_filter("Logs", &["tlog", "bin", "BIN"]).set_directory(crate::platform::data_dir().join("logs")).pick_file() {
+                let log_dir = crate::platform::data_dir().join("logs");
+                if let Some(p) = crate::platform::pick_file_in("Logs", "Logs", &["tlog", "bin", "BIN"], Some(&log_dir)) {
                     self.st.set("TXT_logfile", p.display().to_string());
                 }
             }
             "BUT_browsedir" => {
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                if let Some(p) = crate::platform::pick_folder("Select Image Directory") {
                     self.st.set("TXT_jpgdir", p.display().to_string());
                 }
             }

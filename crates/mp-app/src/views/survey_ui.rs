@@ -743,8 +743,7 @@ impl GridUi {
                 }
                 let r = ui.scope_builder(egui::UiBuilder::new().max_rect(at(g.x + 58.0, g.y + 149.0, 110.0, 23.0)), |ui| theme::button_sized(ui, "Load Sample Photo", Vec2::new(110.0, 23.0))).inner;
                 if r.clicked() {
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    if let Some(path) = rfd::FileDialog::new().add_filter("*.jpg", &["jpg", "jpeg", "JPG"]).pick_file() {
+                    if let Some(path) = crate::platform::pick_file("Load Sample Photo", "*.jpg", &["jpg", "jpeg", "JPG"]) {
                         match std::fs::read(&path).ok().and_then(|b| read_exif(&b)) {
                             Some(x) => {
                                 if let Some((w, h)) = x.size {

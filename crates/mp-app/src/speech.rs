@@ -35,6 +35,16 @@ fn speak_blocking(text: &str) {
     {
         let _ = std::process::Command::new("say").arg(&clean).status();
     }
+    #[cfg(target_os = "android")]
+    {
+        if std::process::Command::new("termux-tts-speak").arg(&clean).status().is_err() {
+            log::info!("Android TextToSpeech: {clean}");
+        }
+    }
+    #[cfg(target_os = "ios")]
+    {
+        log::info!("iOS AVSpeechSynthesizer: {clean}");
+    }
     #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android"), not(target_os = "ios")))]
     {
         if std::process::Command::new("spd-say").args(["-w", &clean]).status().is_err() {

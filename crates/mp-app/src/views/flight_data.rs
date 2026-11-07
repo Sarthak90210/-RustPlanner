@@ -182,8 +182,8 @@ pub struct FlightDataView {
     last_mode: String,
     mode_changed: Instant,
     last_armed: bool,
-    /// doARM in flight: (arm, message count when sent)
-    arm_pending: Option<(bool, usize)>,
+    /// doARM in flight: (arm, message count when sent, time sent)
+    arm_pending: Option<(bool, usize, Instant)>,
     /// a Force Arm / Force Disarm waiting for its ACK
     force_pending: bool,
     /// Strings.ErrorRejectedByMAV after a refused forced arm
@@ -339,7 +339,7 @@ impl FlightDataView {
             if std::mem::take(&mut self.force_pending) && !ok {
                 self.arm_error = Some("Error: command rejected by MAV".into());
             }
-            if let Some((arm, _)) = self.arm_pending {
+            if let Some((arm, _, _)) = self.arm_pending {
                 if !ok {
                     self.arm_failed = Some((arm, String::new()));
                 } else {
@@ -357,15 +357,17 @@ impl FlightDataView {
         if let Some(e) = self.arm_error.take() {
             app.toasts.message(e, "Error");
         }
-        let Some(l) = app.link else {
-            self.resume = None;
-            return;
-        };
-        if let (Some((arm, _)), Some((arm2, reasons))) = (self.arm_pending, self.arm_failed.as_mut()) {
+        // 8-second arm command timeout fallback: if vehicle does not ACK, prompt Force Arm
+        if let Some((arm, _, sent_at)) = self.arm_pending {
+            if sent_at.elapsed() >= std::time::Duration::from_secs(8) && self.arm_failed.is_none() {
+                self.arm_failed = Some((arm, String::new()));
+            }
+        }
+        if let (Some((arm, _, _)), Some((arm2, reasons))) = (self.arm_pending, self.arm_failed.as_mut()) {
             if arm == *arm2 && reasons.is_empty() {
                 let start = self.arm_pending.map(|p| p.1).unwrap_or(0);
                 // the STATUSTEXTs heard while arming, each with AppendLine's line break
-                let msgs: String = l.shared.read().messages.iter().skip(start).map(|m| format!("{}\n", m.text)).collect();
+                let msgs: String = app.link.map(|l| l.shared.read().messages.iter().skip(start).map(|m| format!("{}\n", m.text)).collect()).unwrap_or_default();
                 *reasons = " ".into();
                 let action = if arm { "Arm" } else { "Disarm" };
                 self.prompt = Some(Prompt::Confirm {
@@ -377,6 +379,10 @@ impl FlightDataView {
                 self.arm_failed = None;
             }
         }
+        let Some(l) = app.link else {
+            self.resume = None;
+            return;
+        };
         let find = |name: &str| cs.firmware.modes().into_iter().find(|(_, n)| n.eq_ignore_ascii_case(name)).map(|(k, _)| k);
         let copter = cs.firmware == mp_core::firmware::Firmware::ArduCopter2;
         let fail = |toasts: &mut crate::app::Toasts| toasts.error("No response from the vehicle");
@@ -560,8 +566,7 @@ impl FlightDataView {
         ui.menu_button(crate::i18n::t("Video"), |ui| {
             let rec = self.video.as_ref().map(|v| v.recording()).unwrap_or(false);
             if ui.add_enabled(self.video.is_some() && !rec, egui::Button::new("Record Hud to AVI")).clicked() {
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                if let Some(p) = rfd::FileDialog::new().add_filter("AVI", &["avi"]).set_file_name("hud.avi").save_file() {
+                if let Some(p) = crate::platform::save_file_as("Record Hud to AVI", "hud.avi", "AVI", &["avi"]) {
                     if let Some(v) = &self.video {
                         if let Err(e) = v.record(Some(p)) {
                             app.toasts.error(e.to_string());
@@ -1233,7 +1238,7 @@ impl FlightDataView {
                 if cs.armed {
                     self.prompt = Some(Prompt::Confirm { title: "Disarm".into(), text: "Are you sure you want to Disarm".into(), then: Confirmed::Arm(false) });
                 } else {
-                    self.arm_pending = Some((true, link.shared.read().messages.len()));
+                    self.arm_pending = Some((true, link.shared.read().messages.len(), Instant::now()));
                     link.send(LinkCommand::Arm { arm: true, force: false });
                 }
             }
@@ -1737,8 +1742,9 @@ impl FlightDataView {
                 }
             });
         });
+        let is_force_arm = self.prompt.as_ref().map(|p| matches!(p, Prompt::Confirm { then: Confirmed::ForceArm(_), .. })).unwrap_or(false);
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) { result = Some(false); }
-        else if ctx.input(|i| i.key_pressed(egui::Key::Enter)) { result = Some(true); }
+        else if !is_force_arm && ctx.input(|i| i.key_pressed(egui::Key::Enter)) { result = Some(true); }
         let Some(ok) = result else { return };
         let Some(prompt) = self.prompt.take() else { return };
         if !ok {
@@ -1788,7 +1794,7 @@ impl FlightDataView {
                         l.send(LinkCommand::CommandNoAck { command: 512, params: [242.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
                     }
                     Confirmed::Arm(arm) => {
-                        self.arm_pending = Some((arm, l.shared.read().messages.len()));
+                        self.arm_pending = Some((arm, l.shared.read().messages.len(), Instant::now()));
                         l.send(LinkCommand::Arm { arm, force: false });
                     }
                     Confirmed::ForceArm(arm) => {
@@ -2202,14 +2208,9 @@ fn chrono_like(utc: u32) -> String {
     format!("{y:04}-{m:02}-{d:02} {:02}-{:02}-{:02}", secs / 3600, (secs / 60) % 60, secs % 60)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn rfd_pick_tlog() -> Option<std::path::PathBuf> {
-    rfd::FileDialog::new().add_filter("Telemetry Log", &["tlog"]).set_directory(crate::platform::data_dir().join("logs")).pick_file()
-}
-
-#[cfg(any(target_os = "android", target_os = "ios"))]
-fn rfd_pick_tlog() -> Option<std::path::PathBuf> {
-    None
+    let logs_dir = crate::platform::data_dir().join("logs");
+    crate::platform::pick_file_in("Telemetry Log", "Telemetry Log", &["tlog"], Some(&logs_dir))
 }
 
 // ------------------------------------------------------------------ QuickView
@@ -2689,5 +2690,67 @@ mod arm_tests {
         v.on_event(&nack);
         assert_eq!(v.arm_error.as_deref(), Some("Error: command rejected by MAV"));
         assert!(!v.force_pending);
+    }
+
+    #[test]
+    fn arm_timeout_prompts_force_arm_and_enter_key_is_suppressed() {
+        let ctx = egui::Context::default();
+        let assets = crate::assets::Assets::load(&ctx);
+        let mut tiles = crate::map::TileCache::offline();
+        let mut toasts = crate::app::Toasts::default();
+        let mut settings = crate::app::Settings::default();
+        let mut joystick = crate::joystick::Joystick::default();
+        let mut actions = Vec::new();
+
+        let mut v = FlightDataView::default();
+        let cs = CurrentState::default();
+
+        // Arm sent 9 seconds ago with no ACK
+        v.arm_pending = Some((true, 0, Instant::now() - std::time::Duration::from_secs(9)));
+        {
+            let mut app = AppCtx {
+                link: None,
+                extra_links: &[],
+                tiles: &mut tiles,
+                toasts: &mut toasts,
+                settings: &mut settings,
+                actions: &mut actions,
+                sim_running: false,
+                assets: &assets,
+                readonly: false,
+                joystick: &mut joystick,
+            };
+            v.actions_tick(&mut app, &cs);
+        }
+        assert!(v.prompt.is_some(), "arm failure prompt created by 8s timeout");
+
+        // Run UI with Enter key pressed - must NOT trigger result
+        let input = egui::RawInput {
+            events: vec![egui::Event::Key {
+                key: egui::Key::Enter,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            ..Default::default()
+        };
+        let mut out = ctx.run_ui(input, |ui| {
+            let mut app = AppCtx {
+                link: None,
+                extra_links: &[],
+                tiles: &mut tiles,
+                toasts: &mut toasts,
+                settings: &mut settings,
+                actions: &mut actions,
+                sim_running: false,
+                assets: &assets,
+                readonly: false,
+                joystick: &mut joystick,
+            };
+            v.prompt_ui(ui.ctx(), &mut app);
+        });
+        out.textures_delta.clear();
+        assert!(v.prompt.is_some(), "ForceArm prompt must not be dismissed by Enter key");
     }
 }

@@ -17,24 +17,14 @@ use crate::theme;
 
 // ------------------------------------------------------------------ file pickers
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn pick(title: &str, filter: &str, exts: &[&str]) -> Option<PathBuf> {
-    rfd::FileDialog::new().set_title(title).add_filter(filter, exts).set_directory(crate::platform::data_dir().join("logs")).pick_file()
+    let logs_dir = crate::platform::data_dir().join("logs");
+    crate::platform::pick_file_in(title, filter, exts, Some(&logs_dir))
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
-fn pick(_title: &str, _filter: &str, exts: &[&str]) -> Option<PathBuf> {
-    crate::platform::list_files_in(&crate::platform::data_dir().join("logs"), exts).last().cloned()
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn pick_dir(title: &str) -> Option<PathBuf> {
-    rfd::FileDialog::new().set_title(title).set_directory(crate::platform::data_dir().join("logs")).pick_folder()
-}
-
-#[cfg(any(target_os = "android", target_os = "ios"))]
-fn pick_dir(_title: &str) -> Option<PathBuf> {
-    Some(crate::platform::data_dir().join("logs"))
+    let logs_dir = crate::platform::data_dir().join("logs");
+    crate::platform::pick_folder_in(title, Some(&logs_dir))
 }
 
 // ------------------------------------------------------------------ NMEA helpers

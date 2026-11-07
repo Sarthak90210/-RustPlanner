@@ -117,8 +117,7 @@ impl MoreTools {
             },
             "map logs" => self.map_logs(toasts),
             "Shp to Poly" => {
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                if let Some(p) = rfd::FileDialog::new().add_filter("Shape file", &["shp"]).pick_file() {
+                if let Some(p) = crate::platform::pick_file("Select Shape file", "Shape file", &["shp"]) {
                     let shapes = std::fs::read(&p).map(|b| crate::views::flight_plan::menu::read_shp(&b)).unwrap_or_default();
                     let mut n = 0;
                     for (i, s) in shapes.iter().enumerate() {
@@ -135,8 +134,7 @@ impl MoreTools {
                 }
             }
             "Inject GE" => {
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                if let Some(dir) = rfd::FileDialog::new().set_title("Inject GE").pick_folder() {
+                if let Some(dir) = crate::platform::pick_folder("Inject GE") {
                     let counts = crate::map::inject_custom_tiles(&crate::platform::tile_cache_dir(), &dir);
                     let total: usize = counts.values().sum();
                     if total > 0 {
@@ -301,10 +299,8 @@ impl MoreTools {
     }
 
     fn map_logs(&mut self, toasts: &mut Toasts) {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        {
-            let Some(dir) = rfd::FileDialog::new().set_title("map logs").pick_folder() else { return };
-            let mut n = 0;
+        let Some(dir) = crate::platform::pick_folder("map logs") else { return };
+        let mut n = 0;
             for f in crate::platform::list_files_in(&dir, &["tlog"]) {
                 let Ok(recs) = mp_core::tlog::read(&f) else { continue };
                 let pts: Vec<(f64, f64)> = recs
@@ -344,7 +340,6 @@ impl MoreTools {
                 }
             }
             self.text = Some(("map logs".into(), format!("Created {n} map images in {}", dir.display())));
-        }
         let _ = toasts;
     }
 

@@ -218,10 +218,7 @@ impl ExtraTabs {
         p.text(o + Vec2::new(19.0, 29.0), egui::Align2::LEFT_TOP, format!("Selected Script: {sel}"), f, Color32::WHITE);
         ui.put(r(19.0, 50.0, 140.0, 17.0), egui::Checkbox::new(&mut self.redirect, crate::i18n::t("Redirect Output")));
         if put_btn(ui, r(16.0, 80.0, 71.0, 23.0), "Select Script") {
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            {
-                self.script = rfd::FileDialog::new().add_filter("Script", &["py", "lua", "sh", "bat"]).pick_file();
-            }
+            self.script = crate::platform::pick_file("Select Script", "Script", &["py", "lua", "sh", "bat"]);
         }
         if put_btn(ui, r(92.0, 80.0, 71.0, 23.0), "Run Script") {
             match &self.script {

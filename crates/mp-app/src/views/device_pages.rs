@@ -115,8 +115,7 @@ impl DevicePages {
             }
             ("cubeid", "but_upfw") => self.cubeid(None, st, app),
             ("cubeid", "but_customfw") => {
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                if let Some(p) = rfd::FileDialog::new().add_filter("*.bin", &["bin"]).pick_file() {
+                if let Some(p) = crate::platform::pick_file("Select Firmware Binary", "*.bin", &["bin"]) {
                     self.cubeid(Some(p), st, app);
                 }
             }

@@ -436,23 +436,23 @@ impl Joystick {
             }
         }
         if btn(ui, r(394.0, 12.0, 49.0, 23.0), "Export") {
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            if let Some(p) = rfd::FileDialog::new()
-                .add_filter("Joystick config", &["json"])
-                .set_file_name("joystick.json")
-                .save_file()
-            {
+            if let Some(p) = crate::platform::save_file_as(
+                "Export Joystick Config",
+                "joystick.json",
+                "Joystick config",
+                &["json"],
+            ) {
                 if let Err(e) = self.save_to(&p) {
                     toasts.error(e.to_string());
                 }
             }
         }
         if btn(ui, r(449.0, 12.0, 49.0, 23.0), "Import") {
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            if let Some(p) = rfd::FileDialog::new()
-                .add_filter("Joystick config", &["json"])
-                .pick_file()
-            {
+            if let Some(p) = crate::platform::pick_file(
+                "Import Joystick Config",
+                "Joystick config",
+                &["json"],
+            ) {
                 match std::fs::read_to_string(&p)
                     .ok()
                     .and_then(|t| serde_json::from_str::<Saved>(&t).ok())

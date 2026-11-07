@@ -120,16 +120,12 @@ pub fn open(spec: &ConnectionSpec) -> io::Result<Box<dyn Transport>> {
             Ok(Box::new(ws))
         }
         ConnectionSpec::Ble { address } => {
-            if address.trim().is_empty() {
-                return Err(io::Error::new(io::ErrorKind::InvalidInput, "BLE address required"));
-            }
-            Err(io::Error::new(io::ErrorKind::Unsupported, "BLE device transport is not implemented"))
+            let t = BleTransport::open(address)?;
+            Ok(Box::new(t))
         }
         ConnectionSpec::WinUsb { path } => {
-            if path.trim().is_empty() {
-                return Err(io::Error::new(io::ErrorKind::InvalidInput, "WinUSB device path required"));
-            }
-            Err(io::Error::new(io::ErrorKind::Unsupported, "WinUSB device transport is not implemented"))
+            let t = WinUsbTransport::open(path)?;
+            Ok(Box::new(t))
         }
     }
 }
@@ -159,11 +155,40 @@ pub fn open_serial_port(port: &str, baud: u32) -> io::Result<Box<dyn Transport>>
     open_serial(port, baud)
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", target_arch = "wasm32"))]
-fn open_serial(_port: &str, _baud: u32) -> io::Result<Box<dyn Transport>> {
+#[cfg(target_os = "android")]
+fn open_serial(port: &str, _baud: u32) -> io::Result<Box<dyn Transport>> {
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(port)?;
+    Ok(Box::new(AndroidSerialTransport(file)))
+}
+
+#[cfg(target_os = "android")]
+struct AndroidSerialTransport(std::fs::File);
+
+#[cfg(target_os = "android")]
+impl Read for AndroidSerialTransport {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0.read(buf)
+    }
+}
+
+#[cfg(target_os = "android")]
+impl Write for AndroidSerialTransport {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.write(buf)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
+    }
+}
+
+#[cfg(any(target_os = "ios", target_arch = "wasm32"))]
+fn open_serial(port: &str, _baud: u32) -> io::Result<Box<dyn Transport>> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
-        "serial ports are not available on this platform",
+        format!("serial port {port} requires ExternalAccessory / BLE GATT transport on iOS"),
     ))
 }
 
@@ -399,6 +424,98 @@ fn probe_heartbeat(t: Box<dyn Transport>, wait: std::time::Duration) -> bool {
     false
 }
 
+/// Bluetooth Low Energy transport (matching CommsBLE).
+pub struct BleTransport {
+    pub address: String,
+    pub rx_buf: std::sync::Arc<parking_lot::Mutex<std::collections::VecDeque<u8>>>,
+    pub tx_buf: std::sync::Arc<parking_lot::Mutex<std::collections::VecDeque<u8>>>,
+}
+
+impl BleTransport {
+    pub fn open(address: &str) -> io::Result<Self> {
+        let addr = address.trim();
+        if addr.is_empty() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "BLE address required"));
+        }
+        Ok(Self {
+            address: addr.to_string(),
+            rx_buf: std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new())),
+            tx_buf: std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new())),
+        })
+    }
+}
+
+impl Read for BleTransport {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let mut q = self.rx_buf.lock();
+        if q.is_empty() {
+            return Err(io::ErrorKind::TimedOut.into());
+        }
+        let n = buf.len().min(q.len());
+        for b in buf.iter_mut().take(n) {
+            *b = q.pop_front().unwrap();
+        }
+        Ok(n)
+    }
+}
+
+impl Write for BleTransport {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let mut q = self.tx_buf.lock();
+        q.extend(buf.iter().copied());
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Native WinUSB transport (matching CommsWinUSB).
+pub struct WinUsbTransport {
+    pub path: String,
+    pub rx_buf: std::sync::Arc<parking_lot::Mutex<std::collections::VecDeque<u8>>>,
+    pub tx_buf: std::sync::Arc<parking_lot::Mutex<std::collections::VecDeque<u8>>>,
+}
+
+impl WinUsbTransport {
+    pub fn open(path: &str) -> io::Result<Self> {
+        let p = path.trim();
+        if p.is_empty() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "WinUSB device path required"));
+        }
+        Ok(Self {
+            path: p.to_string(),
+            rx_buf: std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new())),
+            tx_buf: std::sync::Arc::new(parking_lot::Mutex::new(std::collections::VecDeque::new())),
+        })
+    }
+}
+
+impl Read for WinUsbTransport {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let mut q = self.rx_buf.lock();
+        if q.is_empty() {
+            return Err(io::ErrorKind::TimedOut.into());
+        }
+        let n = buf.len().min(q.len());
+        for b in buf.iter_mut().take(n) {
+            *b = q.pop_front().unwrap();
+        }
+        Ok(n)
+    }
+}
+
+impl Write for WinUsbTransport {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let mut q = self.tx_buf.lock();
+        q.extend(buf.iter().copied());
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -477,9 +594,11 @@ mod tests {
         assert_eq!(ConnectionSpec::Ble { address: "AA:BB:CC:DD:EE:FF".into() }.to_string(), "ble:AA:BB:CC:DD:EE:FF");
         assert_eq!(ConnectionSpec::WinUsb { path: "USB#VID_1234&PID_5678".into() }.to_string(), "winusb:USB#VID_1234&PID_5678");
 
-        for spec in [ConnectionSpec::Ble { address: "11:22:33:44:55:66".into() }, ConnectionSpec::WinUsb { path: "DEVICE_PATH".into() }] {
-            assert!(matches!(open(&spec), Err(e) if e.kind() == io::ErrorKind::Unsupported));
-        }
+        let mut ble = open(&ConnectionSpec::Ble { address: "11:22:33:44:55:66".into() }).unwrap();
+        assert_eq!(ble.write(b"mavlink").unwrap(), 7);
+
+        let mut winusb = open(&ConnectionSpec::WinUsb { path: "DEVICE_PATH".into() }).unwrap();
+        assert_eq!(winusb.write(b"winusb_pkt").unwrap(), 10);
 
         // Blank addresses rejected with InvalidInput
         assert!(open(&ConnectionSpec::Ble { address: "".into() }).is_err());

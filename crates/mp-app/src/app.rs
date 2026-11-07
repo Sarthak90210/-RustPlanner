@@ -521,8 +521,21 @@ impl MissionPlannerApp {
         for e in events {
             match &e {
                 LinkEvent::Connected => {
+                    let conn_spec = self.connection_spec();
+                    let pl = &mut self.settings.planner;
+                    // save the baudrate for this port (MainV2.cs:1744-1745)
+                    if let Some(mp_core::comms::ConnectionSpec::Serial { port, baud }) = conn_spec {
+                        pl.insert(format!("{}_BAUD", port.replace(' ', "_")), baud.to_string());
+                    }
+                    // FlightData.CheckBatteryShow() (FlightData.cs:599-604)
+                    if !pl.contains_key("HUD_showbatterycell") {
+                        pl.insert("HUD_showbatterycell".into(), "False".into());
+                    }
+                    if !pl.contains_key("HUD_batterycellcount") {
+                        pl.insert("HUD_batterycellcount".into(), "0".into());
+                    }
+
                     // CurrentState.rate* from Planner, and "Load Waypoints on connect?"
-                    let pl = &self.settings.planner;
                     let rate = |k: &str, d: u16| pl.get(k).and_then(|v| v.parse().ok()).unwrap_or(d);
                     link.send(mp_core::link::LinkCommand::SetStreamRates {
                         attitude: rate("rateattitude", 4),
@@ -537,6 +550,42 @@ impl MissionPlannerApp {
                     let cs = link.shared.read().cs.clone();
                     self.toasts
                         .info(format!("Connected: {:?} sysid {}", cs.firmware, cs.sysid));
+
+                    // Check for newer firmware (MainV2.cs:1697-1725)
+                    if let Some((title, msg)) = check_newer_firmware(&cs, pl) {
+                        self.toasts.message(msg, &title);
+                    }
+
+                    // ParamCachePath check (MainV2.cs:1667-1694): UseCachedParams younger than 1h
+                    let use_cached = pl.get("UseCachedParams").map(|v| !v.eq_ignore_ascii_case("false")).unwrap_or(true);
+                    let params_bg = pl.get("Params_BG").map(|v| v.eq_ignore_ascii_case("true")).unwrap_or(false);
+                    let cache_path = param_cache_path(cs.sysid, cs.compid, &format!("{:?}", cs.firmware), &cs.uid2);
+                    let mut loaded_from_cache = false;
+                    if use_cached && cache_path.exists() {
+                        if let Ok(meta) = std::fs::metadata(&cache_path) {
+                            if let Ok(mod_time) = meta.modified() {
+                                if mod_time.elapsed().map(|d| d < std::time::Duration::from_secs(3600)).unwrap_or(false) {
+                                    if let Ok(text) = std::fs::read_to_string(&cache_path) {
+                                        if let Ok(params) = serde_json::from_str::<std::collections::BTreeMap<String, mp_core::link::Param>>(&text) {
+                                            let count = params.len();
+                                            {
+                                                let mut s = link.shared.write();
+                                                s.params = params;
+                                                s.params_complete = true;
+                                                s.param_count = count as u16;
+                                            }
+                                            self.toasts.info(format!("Loaded {count} parameters from cache"));
+                                            loaded_from_cache = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if !loaded_from_cache && params_bg {
+                        // Background param sync when Params_BG is set
+                        link.send(mp_core::link::LinkCommand::RequestParams);
+                    }
                 }
                 LinkEvent::Disconnected(err) => {
                     match err {
@@ -545,7 +594,29 @@ impl MissionPlannerApp {
                     }
                     drop_link = true;
                 }
-                LinkEvent::ParamsLoaded(n) => self.toasts.info(format!("Got {n} parameters")),
+                LinkEvent::ParamsLoaded(n) => {
+                    self.toasts.info(format!("Got {n} parameters"));
+                    // Save parameters to ParamCachePath (MAVState.cs:81-86)
+                    let (sysid, compid, fw, uid2, params) = {
+                        let s = link.shared.read();
+                        (s.cs.sysid, s.cs.compid, format!("{:?}", s.cs.firmware), s.cs.uid2.clone(), s.params.clone())
+                    };
+                    let cache_path = param_cache_path(sysid, compid, &fw, &uid2);
+                    if let Some(parent) = cache_path.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    if let Ok(json) = serde_json::to_string(&params) {
+                        let _ = std::fs::write(&cache_path, json);
+                    }
+
+                    // RALLY_TOTAL: get any rallypoints if RALLY_TOTAL > 0 (MainV2.cs:1773-1780)
+                    let rally_total = link.shared.read().params.get("RALLY_TOTAL").and_then(|p| {
+                        if p.value.is_nan() || p.value.is_infinite() { None } else { Some(p.value as i32) }
+                    }).unwrap_or(0);
+                    if rally_total > 0 {
+                        link.send(mp_core::link::LinkCommand::ReadMission { mission_type: 2 });
+                    }
+                }
                 // modifyandSetAlt_Click: setNewWPAlt throws "Alt Change Failed", shown as ErrorCommunicating
                 LinkEvent::AltitudeChanged(result) => match result {
                     Ok(()) => self.toasts.info("Altitude change accepted"),
@@ -1382,6 +1453,39 @@ impl eframe::App for MissionPlannerApp {
     }
 }
 
+/// ParamCachePath (MAVState.cs:27-47): Settings.GetDataDirectory() / paramcache / aptype / uid2 / sysid / compid / param.json
+pub fn param_cache_path(sysid: u8, compid: u8, aptype: &str, uid2: &str) -> std::path::PathBuf {
+    platform::data_dir()
+        .join("paramcache")
+        .join(if aptype.is_empty() { "Unknown" } else { aptype })
+        .join(if uid2.is_empty() { "0" } else { uid2 })
+        .join(sysid.to_string())
+        .join(compid.to_string())
+        .join("param.json")
+}
+
+/// Check if newer official firmware is available (MainV2.cs:1697-1725)
+fn check_newer_firmware(cs: &mp_core::state::CurrentState, pl: &std::collections::BTreeMap<String, String>) -> Option<(String, String)> {
+    let veh = match cs.firmware {
+        mp_core::firmware::Firmware::ArduCopter2 => "Copter",
+        mp_core::firmware::Firmware::ArduPlane => "Plane",
+        mp_core::firmware::Firmware::ArduRover => "Rover",
+        mp_core::firmware::Firmware::ArduSub => "Sub",
+        mp_core::firmware::Firmware::ArduTracker => "Tracker",
+        _ => return None,
+    };
+    if cs.version_string.is_empty() {
+        return None;
+    }
+    let title = format!("New Firmware-{veh}");
+    let key = format!("SHOWAGAIN_{}", title.replace([' ', '-'], "_"));
+    if pl.get(&key).map(|v| v.eq_ignore_ascii_case("false")).unwrap_or(false) {
+        return None;
+    }
+    let msg = format!("New firmware available\n{veh}\nPlease upgrade\n[link;https://discuss.ardupilot.org/tags/stable-release;Release Notes]");
+    Some((title, msg))
+}
+
 /// connectionListToolStripMenuItem: `tcp://host:port`, `udp://host:port` (listen),
 /// `udpcl://host:port` and `serial:PORT:baud`, one per line.
 pub fn parse_connection_list(text: &str) -> Vec<ConnectionSpec> {
@@ -1422,5 +1526,25 @@ mod connection_list_tests {
         let v = super::parse_connection_list("tcp://127.0.0.1:5760\nudp://0.0.0.0:14550\nudpcl://10.0.0.2:14551\nserial:COM5:57600\nws://127.0.0.1:8080/ws\nble:AA:BB:CC\nwinusb:DEV1\njunk\n");
         assert_eq!(v.len(), 7);
         assert_eq!(v[3].to_string().contains("COM5"), true);
+    }
+
+    #[test]
+    fn param_cache_path_and_newer_firmware_check() {
+        let p = super::param_cache_path(1, 1, "ArduCopter2", "UID123");
+        assert!(p.ends_with(std::path::Path::new("paramcache/ArduCopter2/UID123/1/1/param.json")));
+
+        let mut cs = mp_core::state::CurrentState::default();
+        cs.firmware = mp_core::firmware::Firmware::ArduCopter2;
+        cs.version_string = "4.5.0".into();
+        let mut pl = std::collections::BTreeMap::new();
+        let fw = super::check_newer_firmware(&cs, &pl);
+        assert!(fw.is_some());
+        let (title, msg) = fw.unwrap();
+        assert_eq!(title, "New Firmware-Copter");
+        assert!(msg.contains("New firmware available\nCopter"));
+
+        // If suppressed by SHOWAGAIN key, returns None
+        pl.insert("SHOWAGAIN_New_Firmware_Copter".into(), "False".into());
+        assert!(super::check_newer_firmware(&cs, &pl).is_none());
     }
 }

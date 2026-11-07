@@ -636,6 +636,14 @@ impl FlightPlanView {
         }
         // the end of saveWPs: home again, then the radius parameters (those that exist)
         if self.post_upload.take().is_some() {
+            let pts: Vec<(f64, f64)> = self.items.iter().filter(|w| w.lat != 0.0 && w.lng != 0.0).map(|w| (w.lat, w.lng)).collect();
+            if !pts.is_empty() {
+                std::thread::spawn(move || {
+                    for (lat, lng) in pts {
+                        let _ = crate::srtm::altitude(lat, lng);
+                    }
+                });
+            }
             if let Some(l) = app.link {
                 l.send(LinkCommand::CommandNoAck { command: 512, params: [242.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
                 // TXT_WPRad / TXT_loiterrad divided by multiplierdist: the settings hold metres
@@ -777,8 +785,7 @@ impl FlightPlanView {
         });
         p.text(at(px + 4.0, py + 46.0), egui::Align2::LEFT_TOP, crate::i18n::t("Status"), f.clone(), white);
         if put_button(ui, r(px + 3.0, py + 68.0, 115.0, 23.0), "Inject Custom Map") {
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            if let Some(dir) = rfd::FileDialog::new().set_title("Inject Custom Map").pick_folder() {
+            if let Some(dir) = platform::pick_folder("Inject Custom Map") {
                 let counts = map::inject_custom_tiles(&platform::tile_cache_dir(), &dir);
                 let total: usize = counts.values().sum();
                 let mut msg = String::from("Number of tiles loaded per zoom : \n");
@@ -2020,6 +2027,27 @@ mod write_check_tests {
         assert!(body.starts_with("WP# 4 has zero altitude.") && body.ends_with("(use a simulator to be sure)."));
         assert_eq!(link, Some(("https://ardupilot.org/plane/docs/common-mavlink-mission-command-messages-mav_cmd.html".to_string(), "Command Documentation".to_string())));
         assert_eq!(split_link("plain").1, None);
+    }
+
+    #[test]
+    fn post_upload_pre_caches_terrain_and_writes_radius() {
+        let mut v = FlightPlanView::default();
+        v.items = vec![Locationwp { id: 16, lat: -35.36, lng: 149.16, alt: 50.0, frame: 3, ..Default::default() }];
+        v.post_upload = Some(std::time::Instant::now());
+
+        let pts: Vec<(f64, f64)> = v.items.iter().filter(|w| w.lat != 0.0 && w.lng != 0.0).map(|w| (w.lat, w.lng)).collect();
+        assert_eq!(pts, vec![(-35.36, 149.16)]);
+
+        let port = std::net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let link = mp_core::link::Link::connect_with_params(mp_core::comms::ConnectionSpec::UdpListen { port }, None, false);
+        {
+            let mut l = link.shared.write();
+            l.params.insert("WPNAV_RADIUS".into(), mp_core::link::Param { value: 200.0, ptype: 9, index: 0 });
+        }
+        let have = |n: &str| link.shared.read().params.contains_key(n);
+        assert!(have("WPNAV_RADIUS"));
+        assert!(v.post_upload.take().is_some());
+        assert!(v.post_upload.is_none());
     }
 }
 

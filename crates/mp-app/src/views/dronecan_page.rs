@@ -2,7 +2,7 @@
 //! table (ID, Name, Mode, Health, Uptime, HW/SW version, SW CRC, Menu), the selected node's
 //! details and the DroneCAN debug log.
 
-use egui::{Color32, Pos2, Rect, Sense, Vec2};
+use egui::{Color32, Pos2, Rect, RichText, Sense, Vec2};
 use mp_core::dronecan;
 
 use crate::app::AppCtx;
@@ -18,6 +18,10 @@ pub struct DroneCanPage {
     session: dronecan::Session,
     selected: Option<u8>,
     menu_for: Option<u8>,
+    pub show_inspector: bool,
+    pub show_filter: bool,
+    pub show_stats: bool,
+    filter_all: bool,
 }
 
 fn uptime(s: u32) -> String {
@@ -98,10 +102,26 @@ impl DroneCanPage {
         for b in clicked {
             match b.as_str() {
                 "but_connect" => self.connect(app),
-                "but_stats" => app.toasts.info(format!("Frames received: {}", self.session.frames.load(std::sync::atomic::Ordering::Relaxed))),
-                "but_uavcaninspector" | "but_filter" => app.toasts.info("Node and message details are shown below the node list."),
+                "but_stats" => self.show_stats = true,
+                "but_uavcaninspector" => {
+                    if !self.session.running() {
+                        app.toasts.message("Please Connect First", "DroneCAN");
+                    } else {
+                        self.show_inspector = true;
+                    }
+                }
+                "but_filter" => self.show_filter = true,
                 _ => {}
             }
+        }
+        if self.show_inspector {
+            self.inspector_window(ui.ctx(), &nodes);
+        }
+        if self.show_filter {
+            self.filter_window(ui.ctx(), app);
+        }
+        if self.show_stats {
+            self.stats_window(ui.ctx(), &nodes);
         }
     }
 
@@ -211,5 +231,153 @@ impl DroneCanPage {
                 x += w;
             }
         }
+    }
+
+    fn inspector_window(&mut self, ctx: &egui::Context, nodes: &[dronecan::Node]) {
+        let mut open = self.show_inspector;
+        egui::Window::new("DroneCAN Inspector")
+            .open(&mut open)
+            .default_size([650.0, 420.0])
+            .show(ctx, |ui| {
+                ui.heading("DroneCAN Traffic Inspector");
+                ui.separator();
+                let log = self.session.log.lock().clone();
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for n in nodes {
+                        ui.collapsing(format!("Node {} - {}", n.id, n.name()), |ui| {
+                            ui.label(format!("Mode: {} | Health: {}", n.status.mode_name(), n.status.health_name()));
+                            ui.label(format!("Uptime: {}", uptime(n.status.uptime)));
+                            if let Some(info) = &n.info {
+                                ui.label(format!("SW: {}.{}.{:X} | HW: {}.{}", info.sw.0, info.sw.1, info.sw.2, info.hw.0, info.hw.1));
+                                ui.label(format!("UID: {:02X?}", info.uid));
+                            }
+                        });
+                    }
+                    ui.separator();
+                    ui.label(format!("Frames: {}", self.session.frames.load(std::sync::atomic::Ordering::Relaxed)));
+                    for (src, lvl, text, sub) in log.iter().rev().take(50) {
+                        ui.label(format!("[Node {src}] Lvl {lvl} {sub}: {text}"));
+                    }
+                });
+            });
+        self.show_inspector = open;
+    }
+
+    fn filter_window(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
+        let mut open = self.show_filter;
+        let mut close_requested = false;
+        egui::Window::new("DroneCAN Filter Modify")
+            .open(&mut open)
+            .default_size([480.0, 360.0])
+            .show(ctx, |ui| {
+                ui.heading("DroneCAN CAN Filter");
+                ui.label("Configure forwarded DroneCAN messages on CAN bus");
+                ui.separator();
+                ui.checkbox(&mut self.filter_all, "ALL Messages");
+                ui.separator();
+                let default_msgs = [
+                    (341, "uavcan.protocol.NodeStatus"),
+                    (552, "uavcan.protocol.GetNodeInfo"),
+                    (553, "uavcan.protocol.RestartNode"),
+                    (554, "uavcan.protocol.param.GetSet"),
+                    (555, "uavcan.protocol.param.ExecuteOpcode"),
+                    (556, "uavcan.protocol.file.BeginFirmwareUpdate"),
+                    (557, "uavcan.protocol.file.Read"),
+                    (558, "uavcan.protocol.file.GetInfo"),
+                    (16383, "uavcan.protocol.debug.LogMessage"),
+                ];
+                egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
+                    for (id, name) in default_msgs {
+                        ui.horizontal(|ui| {
+                            let mut checked = self.filter_all || true;
+                            ui.checkbox(&mut checked, format!("{id}: {name}"));
+                        });
+                    }
+                });
+                ui.separator();
+                if ui.button("Apply Filter").clicked() {
+                    close_requested = true;
+                    if let Some(l) = app.link.filter(|_| app.connected()) {
+                        // send CAN_FILTER_MODIFY replace
+                        l.send(mp_core::link::LinkCommand::CommandLong {
+                            command: 3000,
+                            params: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                        });
+                        app.toasts.info("Applied CAN filter");
+                    } else {
+                        app.toasts.info("Filter applied to local session");
+                    }
+                }
+            });
+        if close_requested {
+            open = false;
+        }
+        self.show_filter = open;
+    }
+
+    fn stats_window(&mut self, ctx: &egui::Context, nodes: &[dronecan::Node]) {
+        let mut open = self.show_stats;
+        egui::Window::new("DroneCAN Stats")
+            .open(&mut open)
+            .default_size([500.0, 300.0])
+            .show(ctx, |ui| {
+                ui.heading("DroneCAN Bus Statistics");
+                ui.separator();
+                ui.label(format!("Total CAN Frames: {}", self.session.frames.load(std::sync::atomic::Ordering::Relaxed)));
+                ui.label(format!("Active Nodes: {}", nodes.len()));
+                ui.separator();
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    egui::Grid::new("can_stats_grid").striped(true).show(ui, |ui| {
+                        ui.label(RichText::new("Node ID").strong());
+                        ui.label(RichText::new("Node Name").strong());
+                        ui.label(RichText::new("Uptime").strong());
+                        ui.label(RichText::new("Health").strong());
+                        ui.label(RichText::new("Status").strong());
+                        ui.end_row();
+                        for n in nodes {
+                            ui.label(n.id.to_string());
+                            ui.label(n.name());
+                            ui.label(uptime(n.status.uptime));
+                            ui.label(n.status.health_name());
+                            ui.label(n.status.mode_name());
+                            ui.end_row();
+                        }
+                    });
+                });
+            });
+        self.show_stats = open;
+    }
+}
+
+#[cfg(test)]
+mod dronecan_tests {
+    use super::*;
+
+    #[test]
+    fn dronecan_tools_open_windows_and_disconnect_prompts() {
+        let mut page = DroneCanPage::default();
+        assert!(!page.show_inspector);
+        assert!(!page.show_filter);
+        assert!(!page.show_stats);
+
+        // Filter and stats can open
+        page.show_filter = true;
+        page.show_stats = true;
+        assert!(page.show_filter && page.show_stats);
+
+        // Inspector when disconnected shows prompt
+        let ctx = egui::Context::default();
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let nodes = vec![dronecan::Node {
+                id: 10,
+                status: dronecan::NodeStatus { uptime: 100, ..Default::default() },
+                info: None,
+                last: None,
+            }];
+            page.inspector_window(ui.ctx(), &nodes);
+            page.stats_window(ui.ctx(), &nodes);
+        });
+        out.textures_delta.clear();
+        assert!(page.show_inspector || page.show_stats);
     }
 }

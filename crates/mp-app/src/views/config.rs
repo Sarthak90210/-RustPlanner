@@ -2272,8 +2272,7 @@ fn planner(ui: &mut egui::Ui, app: &mut AppCtx, _fw: Firmware) {
         }
         let br = r(496.0, 393.0, 75.0, 23.0);
         if ui.put(br, |ui: &mut egui::Ui| theme::button_sized(ui, "Browse", br.size())).clicked() {
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            if let Some(d) = rfd::FileDialog::new().pick_folder() {
+            if let Some(d) = platform::pick_folder("Select Log Directory") {
                 pl.insert("logdirectory".into(), d.display().to_string());
             }
         }

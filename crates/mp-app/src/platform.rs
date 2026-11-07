@@ -391,8 +391,71 @@ pub fn open_text(title: &str, filter: &str, exts: &[&str]) -> Option<(String, St
 }
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
-pub fn open_text(_title: &str, _filter: &str, _exts: &[&str]) -> Option<(String, String)> {
-    None
+pub fn open_text(_title: &str, _filter: &str, exts: &[&str]) -> Option<(String, String)> {
+    let files = list_files(exts);
+    let path = files.into_iter().next()?;
+    let text = std::fs::read_to_string(&path).ok()?;
+    let name = path.file_name()?.to_string_lossy().to_string();
+    Some((name, text))
+}
+
+/// Pick a single file with optional filter and extensions.
+pub fn pick_file(title: &str, filter: &str, exts: &[&str]) -> Option<PathBuf> {
+    pick_file_in(title, filter, exts, None)
+}
+
+/// Pick a single file with optional filter, extensions and directory.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn pick_file_in(title: &str, filter: &str, exts: &[&str], dir: Option<&std::path::Path>) -> Option<PathBuf> {
+    let mut d = rfd::FileDialog::new().set_title(title);
+    if !exts.is_empty() {
+        d = d.add_filter(filter, exts);
+    }
+    if let Some(dir) = dir {
+        d = d.set_directory(dir);
+    }
+    d.pick_file()
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn pick_file_in(_title: &str, _filter: &str, exts: &[&str], dir: Option<&std::path::Path>) -> Option<PathBuf> {
+    let base = dir.map(PathBuf::from).unwrap_or_else(files_dir);
+    list_files_in(&base, exts).into_iter().next()
+}
+
+/// Pick a directory folder.
+pub fn pick_folder(title: &str) -> Option<PathBuf> {
+    pick_folder_in(title, None)
+}
+
+/// Pick a directory folder with initial directory.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn pick_folder_in(title: &str, dir: Option<&std::path::Path>) -> Option<PathBuf> {
+    let mut d = rfd::FileDialog::new().set_title(title);
+    if let Some(dir) = dir {
+        d = d.set_directory(dir);
+    }
+    d.pick_folder()
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn pick_folder_in(_title: &str, dir: Option<&std::path::Path>) -> Option<PathBuf> {
+    Some(dir.map(PathBuf::from).unwrap_or_else(files_dir))
+}
+
+/// Save a file with a given default name and filter.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn save_file_as(title: &str, default_name: &str, filter: &str, exts: &[&str]) -> Option<PathBuf> {
+    let mut d = rfd::FileDialog::new().set_title(title).set_file_name(default_name);
+    if !exts.is_empty() {
+        d = d.add_filter(filter, exts);
+    }
+    d.save_file()
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn save_file_as(_title: &str, default_name: &str, _filter: &str, _exts: &[&str]) -> Option<PathBuf> {
+    Some(files_dir().join(default_name))
 }
 
 /// SaveFileDialog with several filters and an initial directory: the chosen path.
