@@ -2,6 +2,7 @@
 //! Mission Planner UI (egui/eframe). One codebase for desktop, Android and iOS.
 
 pub mod app;
+pub mod show_again;
 pub mod camera_settings;
 pub mod assets;
 pub mod display;

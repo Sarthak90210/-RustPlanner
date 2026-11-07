@@ -1689,11 +1689,11 @@ fn zero_alt_tag(plane: bool) -> &'static str {
 
 /// MessageShowAgain's settings key
 fn show_again_key(tag: &str) -> String {
-    format!("SHOWAGAIN_{}", tag.replace([' ', '+', '-', '.'], "_"))
+    crate::show_again::key(tag)
 }
 
 fn show_again(planner: &std::collections::BTreeMap<String, String>, tag: &str) -> bool {
-    planner.get(&show_again_key(tag)).map(|v| !v.eq_ignore_ascii_case("false")).unwrap_or(true)
+    crate::show_again::should_show(planner, tag)
 }
 
 /// Strings.ZeroAltWarningPlane / ZeroAltWarningCopter
@@ -1705,15 +1705,8 @@ fn zero_alt_text(plane: bool, wp: usize) -> String {
     }
 }
 
-/// MessageShowAgain's [link;url;text] token: the text without it, and the link below.
 fn split_link(text: &str) -> (String, Option<(String, String)>) {
-    let Some(start) = text.find("[link;") else { return (text.to_string(), None) };
-    let Some(end) = text[start..].find(']').map(|e| start + e) else { return (text.to_string(), None) };
-    let inner = &text[start + 6..end];
-    match inner.rsplit_once(';') {
-        Some((url, label)) => (format!("{}{}", &text[..start], &text[end + 1..]), Some((url.to_string(), label.to_string()))),
-        None => (text.to_string(), None),
-    }
+    crate::show_again::split_link(text)
 }
 
 /// The parts of Commands_SelectionChangeCommitted that set cells for the chosen command.

@@ -328,23 +328,25 @@ mod parameter_file_tests {
         let mut editor = ParamEditor::default(); let mut toasts = Toasts::default();
         editor.file_target = Some((42,1));
         editor.file_request = Some((ParamFileAction::Load, FilePicker::in_directory("Parameters", root.clone(), &["param", "txt"], None)));
-        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts, true); picker::click(&ctx, &mut draw, "a.param"); picker::click(&ctx, &mut draw, "Open"); }
+        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts, true, Firmware::ArduCopter2); picker::click(&ctx, &mut draw, "a.param"); picker::click(&ctx, &mut draw, "Open"); }
         assert_eq!(editor.edits, BTreeMap::from([("ALT".into(), 5.0)]));
-        assert!(editor.modified_only && editor.pending.is_empty());
-        assert_eq!(editor.missing_dialog, Some(vec!["UNKNOWN".to_string()]));
+        assert!(!editor.modified_only && editor.pending.is_empty(), "loading does not tick Modified");
+        assert_eq!(toasts.0.last().map(String::as_str), Some("Missing 1 params
+UNKNOWN "));
+        assert_eq!(toasts.1.last().map(String::as_str), Some("No matching Params"));
         assert!(editor.file_request.is_none() && editor.file_target.is_none());
         editor.file_target = Some((42,1));
         editor.file_request = Some((ParamFileAction::Compare, FilePicker::in_directory("Compare", root.clone(), &["param"], None)));
-        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts, true); picker::click(&ctx, &mut draw, "Cancel"); }
+        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts, true, Firmware::ArduCopter2); picker::click(&ctx, &mut draw, "Cancel"); }
         assert!(editor.compare.is_none()); assert_eq!(editor.edits["ALT"], 5.0);
         editor.file_target = Some((42,1));
         editor.file_request = Some((ParamFileAction::Compare, FilePicker::in_directory("Compare", root.clone(), &["param"], None)));
-        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts, true); picker::click(&ctx, &mut draw, "z.param"); picker::click(&ctx, &mut draw, "Open"); }
+        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts, true, Firmware::ArduCopter2); picker::click(&ctx, &mut draw, "z.param"); picker::click(&ctx, &mut draw, "Open"); }
         assert_eq!(editor.compare, Some(vec![("ALT".into(), 1.0, 99.0, true)]));
         assert_eq!(editor.edits["ALT"], 5.0); assert!(editor.pending.is_empty());
         editor.file_target = Some((42,1));
         editor.file_request = Some((ParamFileAction::Load, FilePicker::in_directory("Parameters", root.clone(), &["txt"], None)));
-        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts, true); picker::click(&ctx, &mut draw, "bad.txt"); picker::click(&ctx, &mut draw, "Open"); }
+        { let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &params, (42,1), &mut toasts, true, Firmware::ArduCopter2); picker::click(&ctx, &mut draw, "bad.txt"); picker::click(&ctx, &mut draw, "Open"); }
         assert_eq!(editor.edits["ALT"], 5.0); assert!(editor.file_target.is_none());
         assert!(toasts.0.last().unwrap().contains("bad.txt"));
         for name in ["a.param", "z.param", "bad.txt"] { std::fs::remove_file(root.join(name)).unwrap(); } std::fs::remove_dir(root).unwrap();
@@ -356,7 +358,7 @@ mod parameter_file_tests {
         let mut editor = ParamEditor::default(); let mut toasts = Toasts::default();
         editor.file_target = Some((42,1));
         editor.file_request = Some((ParamFileAction::Load, FilePicker::in_directory("Parameters", root.clone(), &["param"], None)));
-        picker::frame(&ctx, &mut |ctx| editor.file_ui(ctx, &BTreeMap::new(), (43,1), &mut toasts, true), Vec::new());
+        picker::frame(&ctx, &mut |ctx| editor.file_ui(ctx, &BTreeMap::new(), (43,1), &mut toasts, true, Firmware::ArduCopter2), Vec::new());
         assert!(editor.file_request.is_none() && editor.edits.is_empty());
         assert!(toasts.0.last().unwrap().contains("Vehicle changed"));
         std::fs::remove_dir(root).unwrap();
@@ -393,13 +395,13 @@ mod parameter_file_tests {
         let mut toasts = Toasts::default();
         editor.file_request = Some((ParamFileAction::Load, FilePicker::in_directory("Parameters", root.clone(), &["param"], None)));
         {
-            let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &BTreeMap::new(), (0, 0), &mut toasts, false);
+            let mut draw = |ctx: &egui::Context| editor.file_ui(ctx, &BTreeMap::new(), (0, 0), &mut toasts, false, Firmware::ArduCopter2);
             picker::click(&ctx, &mut draw, "offline.param");
             picker::click(&ctx, &mut draw, "Open");
         }
         assert_eq!(editor.offline_params.len(), 3);
         assert_eq!(editor.offline_params["WPNAV_SPEED"].value, 500.0);
-        assert!(editor.missing_dialog.is_none(), "Offline mode does not show missing params dialog");
+        assert!(toasts.0.is_empty(), "offline loading reports nothing");
 
         // Edit a param offline
         editor.edits.insert("WPNAV_SPEED".into(), 650.0);
@@ -523,14 +525,14 @@ mod parameter_file_tests {
         assert_eq!(toasts.1, ["ReadOnly"]);
         assert!(editor.edits.is_empty());
         editor.queue_value("R", 20.0, 1.0, Some(&ranged), &mut toasts);
-        assert_eq!(editor.range_confirm, Some(("R".to_string(), 20.0)));
+        assert_eq!(editor.range_queue.front(), Some(&("R".to_string(), 20.0)));
         assert!(editor.edits.is_empty(), "waits for Yes");
-        editor.range_confirm = None;
+        editor.range_queue.clear();
         editor.queue_value("R", 5.0, 1.0, Some(&ranged), &mut toasts);
         assert_eq!(editor.edits.get("R"), Some(&5.0));
-        // back to the vehicle's value clears the edit
+        // the vehicle's own value is still queued (_changes[name] = newvalue)
         editor.queue_value("R", 1.0, 1.0, Some(&ranged), &mut toasts);
-        assert!(editor.edits.is_empty());
+        assert_eq!(editor.edits.get("R"), Some(&1.0));
     }
 
     #[test]
@@ -635,6 +637,20 @@ mod parameter_file_tests {
         assert_eq!(toasts.0, ["Your are not connected"]);
         assert_eq!(toasts.1, ["Error"]);
     }
+}
+
+/// loadparamsfromfile's names never copied from a file.
+const LOAD_SKIP: &[&str] = &["SYSID_SW_MREV", "WP_TOTAL", "CMD_TOTAL", "FENCE_TOTAL", "SYS_NUM_RESETS", "ARSPD_OFFSET", "GND_ABS_PRESS", "GND_TEMP", "CMD_INDEX", "LOG_LASTFILE", "FORMAT_VERSION"];
+
+/// Strings.RawParamWarning / RawParamWarningi / WarningUpdateParamList
+const RAW_PARAM_WARNING: &str = "Raw Param Warning";
+const RAW_PARAM_WARNING_TEXT: &str = "All values on this screen are not min/max checked. Please double check your input.\nPlease use Standard/Advanced Params for the safe settings";
+const WARNING_UPDATE_PARAM_LIST: &str = "Update Params\nDON'T DO THIS IF YOU ARE IN THE AIR\n";
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum ShowAgainThen {
+    Nothing,
+    Refresh,
 }
 
 /// Params_CellValueChanged: RCn_REV/HSn_REV "0" becomes "-1", ',' is a decimal point, and the
@@ -1027,7 +1043,6 @@ pub struct ParamEditor {
     current: Option<String>,
     /// MavlinkCheckBoxBitMask shown by "Set Bitmask" (param name)
     bitmask_edit: Option<String>,
-    missing_dialog: Option<Vec<String>>,
     /// Offline parameters loaded when not connected to a vehicle
     pub offline_params: BTreeMap<String, mp_core::link::Param>,
     /// Write parameters confirmation dialog: list of (name, old_value, new_value)
@@ -1044,8 +1059,12 @@ pub struct ParamEditor {
     pub commit_pending: bool,
     /// Whether to check if available parameter count diverged from vehicle reported count post-save
     pub check_param_count_divergence: bool,
-    /// "Out of range" Yes/No for an edited value (name, value)
-    range_confirm: Option<(String, f32)>,
+    /// "Out of range" Yes/No boxes, one after another (name, value)
+    range_queue: std::collections::VecDeque<(String, f32)>,
+    /// the frame this page last drew (a gap means Activate runs again)
+    active_frame: u64,
+    /// Activate's Raw Param Warning / Refresh Params' armed warning
+    show_again: Option<(crate::show_again::ShowAgain, ShowAgainThen)>,
     /// writes of the current batch that failed (BUT_writePIDS_Click's `error`)
     batch_errors: usize,
     /// txt_search after the 500 ms filter timer (and filterList's length rule)
@@ -1056,7 +1075,7 @@ pub struct ParamEditor {
 }
 
 impl ParamEditor {
-    fn file_ui(&mut self, ctx: &egui::Context, params: &BTreeMap<String, mp_core::link::Param>, target: (u8, u8), toasts: &mut Toasts, is_connected: bool) {
+    fn file_ui(&mut self, ctx: &egui::Context, params: &BTreeMap<String, mp_core::link::Param>, target: (u8, u8), toasts: &mut Toasts, is_connected: bool, fw: Firmware) {
         if is_connected && self.file_request.is_some() && self.file_target != Some(target) {
             self.file_request = None; self.file_target = None;
             toasts.error("Vehicle changed while selecting a parameter file");
@@ -1068,19 +1087,32 @@ impl ParamEditor {
             match action {
                 ParamFileAction::Load => {
                     if is_connected {
+                        // loadparamsfromfile: rows whose text differs get the file's value, which
+                        // goes through Params_CellValueChanged
                         let mut missing = Vec::new();
                         for (name, value) in values {
+                            if LOAD_SKIP.contains(&name.as_str()) {
+                                missing.push(name);
+                                continue;
+                            }
                             if let Some(p) = params.get(&name) {
-                                if p.value != value {
-                                    self.edits.insert(name, value);
+                                let shown = self.edits.get(&name).copied().unwrap_or(p.value);
+                                let text = paramfile::format_value(value);
+                                if paramfile::format_value(shown) != text {
+                                    match cell_value(&name, &text) {
+                                        Some(nv) => self.queue_value(&name, nv, p.value, param_meta::get(fw, &name), toasts),
+                                        None => {
+                                            self.failed.insert(name.clone());
+                                        }
+                                    }
                                 }
                             } else {
                                 missing.push(name);
                             }
                         }
-                        self.modified_only = true;
                         if !missing.is_empty() {
-                            self.missing_dialog = Some(missing);
+                            let list: String = missing.iter().map(|m| format!("{m} ")).collect();
+                            toasts.message(format!("Missing {} params\n{list}", missing.len()), "No matching Params");
                         }
                     } else {
                         // Offline mode: populate offline_params from file
@@ -1092,8 +1124,6 @@ impl ParamEditor {
                             });
                         }
                         self.edits.clear();
-                        self.modified_only = false;
-                        toasts.info(format!("Loaded {} parameters offline.", self.offline_params.len()));
                     }
                 }
                 ParamFileAction::Compare => {
@@ -1173,7 +1203,8 @@ impl ParamEditor {
             }
         }
 
-        self.file_ui(ui.ctx(), &params, target, app.toasts, is_connected);
+        self.file_ui(ui.ctx(), &params, target, app.toasts, is_connected, fw);
+        self.activate_and_keys(ui.ctx(), app, &params);
 
         if is_connected {
             let values: BTreeMap<String, f32> = params.iter().map(|(k, p)| (k.clone(), p.value)).collect();
@@ -1218,25 +1249,16 @@ impl ParamEditor {
             }
             ui.add_enabled_ui(is_connected && !app.readonly, |ui| {
                 if b(ui, r(66.0, 19.0), "Write Params") {
-                    if self.edits.is_empty() {
-                        app.toasts.message("No parameters were changed.", "No changes");
-                    } else {
-                        let mut keys: Vec<String> = self.edits.keys().cloned().collect();
-                        sort_enable(&mut keys);
-                        let changes: Vec<(String, f32, f32)> = keys.into_iter().map(|k| {
-                            let old = params.get(&k).map(|p| p.value).unwrap_or(0.0);
-                            let new = self.edits[&k];
-                            (k, old, new)
-                        }).collect();
-                        self.write_confirm = Some(changes);
-                    }
+                    self.write_params(&params, app.toasts);
                 }
             });
             ui.add_enabled_ui(is_connected, |ui| {
                 if b(ui, r(91.0, 19.0), "Refresh Params") {
-                    self.edits.clear();
-                    self.failed.clear();
-                    if let Some(link) = app.link {
+                    // BUT_rerequestparams_Click: asks first while armed
+                    let armed = app.link.is_some_and(|l| l.shared.read().cs.armed);
+                    if armed && crate::show_again::should_show(&app.settings.planner, "Refresh Params") {
+                        self.show_again = Some((crate::show_again::ShowAgain::new("Refresh Params", WARNING_UPDATE_PARAM_LIST, true), ShowAgainThen::Refresh));
+                    } else if let Some(link) = app.link {
                         link.send(LinkCommand::RequestParams);
                     }
                 }
@@ -1352,11 +1374,16 @@ impl ParamEditor {
             }
             let tree = &self.tree.as_ref().unwrap().1;
             let mut sel = self.selected_group.clone();
-            egui::Panel::left("raw_tree").resizable(true).default_size(180.0).frame(egui::Frame::new().fill(theme::control_bg())).show(ui, |ui| {
+            let tree_panel = egui::Panel::left("raw_tree").resizable(true).default_size(app.settings.planner.get("rawparam_splitterdistance").and_then(|v| v.parse::<f32>().ok()).unwrap_or(180.0)).frame(egui::Frame::new().fill(theme::control_bg())).show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     tree_ui(ui, tree, &mut sel, true);
                 });
             });
+            // Deactivate saves rawparam_splitterdistance
+            let width = format!("{}", tree_panel.response.rect.width().round());
+            if app.settings.planner.get("rawparam_splitterdistance") != Some(&width) {
+                app.settings.planner.insert("rawparam_splitterdistance".into(), width);
+            }
             // treeView1_AfterSelect
             self.selected_group = sel;
         } else {
@@ -1367,6 +1394,8 @@ impl ParamEditor {
             let r = Rect::from_min_size(ui.max_rect().min, Vec2::new(18.0, 18.0));
             if ui.put(r, |ui: &mut egui::Ui| theme::button_sized(ui, if show_tree { "<" } else { ">" }, r.size())).clicked() {
                 self.tree_collapsed = !self.tree_collapsed;
+                // Deactivate saves rawparam_panel1collapsed
+                app.settings.planner.insert("rawparam_panel1collapsed".into(), if self.tree_collapsed { "True" } else { "False" }.into());
             }
         });
 
@@ -1447,8 +1476,7 @@ impl ParamEditor {
                 }
             }
         }
-        self.compare_window(ui.ctx());
-        self.missing_window(ui.ctx());
+        self.compare_window(ui.ctx(), app.toasts, fw);
         self.write_confirm_window(ui.ctx(), app.link, fw);
         self.range_confirm_window(ui.ctx(), &params);
     }
@@ -1461,14 +1489,59 @@ impl ParamEditor {
             return;
         }
         if meta.and_then(|m| m.range).is_some_and(|(lo, hi)| nv < lo || nv > hi) {
-            self.range_confirm = Some((name.to_string(), nv as f32));
+            self.range_queue.push_back((name.to_string(), nv as f32));
             return;
         }
+        // _changes[name] = newvalue, even when it matches the vehicle
+        let _ = current;
         self.failed.remove(name);
-        if nv as f32 == current {
-            self.edits.remove(name);
-        } else {
-            self.edits.insert(name.to_string(), nv as f32);
+        self.edits.insert(name.to_string(), nv as f32);
+    }
+
+    /// BUT_writePIDS_Click up to its confirmation box.
+    fn write_params(&mut self, params: &BTreeMap<String, mp_core::link::Param>, toasts: &mut Toasts) {
+        if self.edits.is_empty() {
+            toasts.message("No parameters were changed.", "No changes");
+            return;
+        }
+        let mut keys: Vec<String> = self.edits.keys().cloned().collect();
+        sort_enable(&mut keys);
+        let changes: Vec<(String, f32, f32)> = keys
+            .into_iter()
+            .map(|k| {
+                let old = params.get(&k).map(|p| p.value).unwrap_or(0.0);
+                let new = self.edits[&k];
+                (k, old, new)
+            })
+            .collect();
+        self.write_confirm = Some(changes);
+    }
+
+    /// Activate (each time the page is shown): _changes cleared, the tree's saved splitter
+    /// state, and the Raw Param Warning; ProcessCmdKey's Ctrl+S writes.
+    fn activate_and_keys(&mut self, ctx: &egui::Context, app: &mut AppCtx, params: &BTreeMap<String, mp_core::link::Param>) {
+        let frame = ctx.cumulative_frame_nr();
+        if self.active_frame == 0 || frame > self.active_frame + 1 {
+            self.edits.clear();
+            self.failed.clear();
+            self.tree_collapsed = app.settings.planner.get("rawparam_panel1collapsed").is_some_and(|v| v.eq_ignore_ascii_case("true"));
+            if crate::show_again::should_show(&app.settings.planner, RAW_PARAM_WARNING) {
+                self.show_again = Some((crate::show_again::ShowAgain::new(RAW_PARAM_WARNING, RAW_PARAM_WARNING_TEXT, false), ShowAgainThen::Nothing));
+            }
+        }
+        self.active_frame = frame.max(1);
+        if let Some((prompt, then)) = self.show_again.clone() {
+            if let Some(ok) = prompt.ui(ctx, &mut app.settings.planner) {
+                self.show_again = None;
+                if ok && then == ShowAgainThen::Refresh {
+                    if let Some(link) = app.link {
+                        link.send(LinkCommand::RequestParams);
+                    }
+                }
+            }
+        }
+        if app.link.is_some() && !app.readonly && !ctx.egui_wants_keyboard_input() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
+            self.write_params(params, app.toasts);
         }
     }
 
@@ -1486,7 +1559,7 @@ impl ParamEditor {
 
     /// Params_CellValueChanged's "Out of range" box: No puts the old value back.
     fn range_confirm_window(&mut self, ctx: &egui::Context, params: &BTreeMap<String, mp_core::link::Param>) {
-        let Some((name, value)) = self.range_confirm.clone() else { return };
+        let Some((name, value)) = self.range_queue.front().cloned() else { return };
         let mut answer = None;
         egui::Modal::new(egui::Id::new("param_out_of_range")).show(ctx, |ui| {
             ui.set_width(300.0);
@@ -1502,14 +1575,11 @@ impl ParamEditor {
             });
         });
         let Some(yes) = answer else { return };
-        self.range_confirm = None;
+        self.range_queue.pop_front();
+        let _ = params;
         if yes {
             self.failed.remove(&name);
-            if params.get(&name).is_some_and(|p| p.value == value) {
-                self.edits.remove(&name);
-            } else {
-                self.edits.insert(name, value);
-            }
+            self.edits.insert(name, value);
         }
     }
 
@@ -1581,37 +1651,7 @@ impl ParamEditor {
         }
     }
 
-    /// "No matching Params": dialog showing missing params that were not present on the vehicle
-    fn missing_window(&mut self, ctx: &egui::Context) {
-        let Some(missing) = self.missing_dialog.as_ref() else { return };
-        let mut open = true;
-        let mut dismiss = false;
-        egui::Window::new(crate::i18n::t("No matching Params"))
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(true)
-            .default_size(Vec2::new(420.0, 260.0))
-            .show(ctx, |ui| {
-                ui.label(RichText::new(format!("Missing {} params", missing.len())).strong().color(Color32::WHITE));
-                ui.add_space(4.0);
-                egui::ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
-                    let list = missing.join(" ");
-                    ui.label(RichText::new(list).color(Color32::LIGHT_GRAY));
-                });
-                ui.add_space(8.0);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                    if theme::button(ui, "OK").clicked() {
-                        dismiss = true;
-                    }
-                });
-            });
-        if !open || dismiss {
-            self.missing_dialog = None;
-        }
-    }
-
-    /// ParamCompare form: diff against a file, tick the rows to take, Continue.
-    fn compare_window(&mut self, ctx: &egui::Context) {
+    fn compare_window(&mut self, ctx: &egui::Context, toasts: &mut Toasts, fw: Firmware) {
         let Some(diffs) = self.compare.as_mut() else { return };
         let mut open = true;
         let mut apply = false;
@@ -1638,12 +1678,14 @@ impl ParamEditor {
             }
         });
         if apply {
-            for (n, _, new, take) in self.compare.take().unwrap_or_default() {
+            // paramcompare's Continue sets each ticked row's Value cell
+            for (n, cur, new, take) in self.compare.take().unwrap_or_default() {
                 if take {
-                    self.edits.insert(n, new);
+                    if let Some(nv) = cell_value(&n, &paramfile::format_value(new)) {
+                        self.queue_value(&n, nv, cur, param_meta::get(fw, &n), toasts);
+                    }
                 }
             }
-            self.modified_only = true;
         } else if !open {
             self.compare = None;
         }
