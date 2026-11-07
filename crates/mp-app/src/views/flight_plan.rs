@@ -110,6 +110,8 @@ pub struct FlightPlanView {
     read_confirm: bool,
     /// saveWPsFast running on its own thread
     fast_job: Option<crossbeam_channel::Receiver<Result<bool, String>>>,
+    /// a protocol upload finished: saveWPs' home request and radius parameters are due
+    post_upload: Option<std::time::Instant>,
     /// FlightPlanner.history: home and list before each undoable change
     history: Vec<(Locationwp, Vec<Locationwp>)>,
     /// a marker drag records one undo step when it starts
@@ -177,6 +179,7 @@ impl Default for FlightPlanView {
             read_confirm: false,
             fast_job: None,
             history: Vec::new(),
+            post_upload: None,
             drag_undo: false,
             grid: false,
             alt_warn: 0.0,
@@ -241,8 +244,9 @@ impl FlightPlanView {
                 toasts.info(format!("Got {} items", items.len()));
             }
             LinkEvent::MissionUploaded { mission_type: 1 | 2, result } => {
-                if let Err(e) = result {
-                    toasts.error(format!("Write failed: {e}"));
+                match result {
+                    Ok(()) => self.post_upload = Some(std::time::Instant::now()),
+                    Err(e) => toasts.error(format!("Write failed: {e}")),
                 }
             }
             LinkEvent::MissionDownloaded { mission_type: 0, items } => {
@@ -255,7 +259,10 @@ impl FlightPlanView {
                 self.selected = None;
             }
             LinkEvent::MissionUploaded { mission_type: 0, result } => match result {
-                Ok(()) => toasts.info("Done"),
+                Ok(()) => {
+                    self.post_upload = Some(std::time::Instant::now());
+                    toasts.info("Done");
+                }
                 Err(e) => toasts.error(format!("Write failed: {e}")),
             },
             _ => {}
@@ -324,9 +331,16 @@ impl FlightPlanView {
             });
             self.fast_job = Some(rx);
         } else {
-            // home is item 0 of the mission only; fence and rally lists are sent as-is
-            let mut all = if self.mission_type == 0 { vec![self.home] } else { Vec::new() };
+            // saveWPs: home is item 0 of an ArduPilot mission; a fence is always GLOBAL
+            let ardupilot = l.shared.read().cs.firmware != Firmware::Px4;
+            let mut all = if self.mission_type == 0 && ardupilot { vec![Locationwp { frame: 0, ..self.home }] } else { Vec::new() };
             all.extend(self.items.iter().copied());
+            if self.mission_type == 1 {
+                for w in &mut all {
+                    w.frame = 0;
+                }
+            }
+            self.post_upload = None;
             self.mission_io(l, self.mission_type as u8, false, all);
         }
     }
@@ -560,6 +574,28 @@ impl FlightPlanView {
         if let Some(ev) = self.ftp_job.as_ref().and_then(|rx| rx.try_recv().ok()) {
             self.ftp_job = None;
             self.on_event(&ev, app.toasts);
+            // a MAVFtp upload returns before the parameter steps
+            if matches!(ev, LinkEvent::MissionUploaded { .. }) {
+                self.post_upload = None;
+            }
+        }
+        // the end of saveWPs: home again, then the radius parameters (those that exist)
+        if self.post_upload.take().is_some() {
+            if let Some(l) = app.link {
+                l.send(LinkCommand::CommandNoAck { command: 512, params: [242.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
+                // TXT_WPRad / TXT_loiterrad divided by multiplierdist: the settings hold metres
+                let wp = app.settings.wp_radius;
+                let loiter = app.settings.loiter_radius;
+                let have = |n: &str| l.shared.read().params.contains_key(n);
+                for (n, v) in [("WP_RADIUS", wp), ("WP_RADIUS_M", wp), ("WPNAV_RADIUS", wp * 100.0)] {
+                    if have(n) {
+                        l.send(LinkCommand::SetParam { name: n.into(), value: v });
+                    }
+                }
+                if let Some(n) = ["LOITER_RAD", "WP_LOITER_RAD"].into_iter().find(|n| have(n)) {
+                    l.send(LinkCommand::SetParam { name: n.into(), value: loiter });
+                }
+            }
         }
         if self.ftp_job.is_some() {
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
