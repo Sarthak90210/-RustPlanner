@@ -11,7 +11,7 @@ fn download_http(uri: &str, cancel: &AtomicBool, progress: &Mutex<String>) -> Re
     let mut address = url::Url::parse(uri).map_err(|e| e.to_string())?;
     let agent: ureq::Agent = ureq::Agent::config_builder().max_redirects(0).max_redirects_will_error(false).timeout_global(None)
         .timeout_connect(Some(Duration::from_secs(15))).timeout_recv_response(Some(Duration::from_secs(15)))
-        .timeout_recv_body(None).timeout_per_read(Some(Duration::from_secs(15))).build().into();
+        .timeout_recv_body(None).timeout_per_read(Some(Duration::from_millis(250))).build().into();
     for redirects in 0..=5 {
         cancelled(cancel)?;
         if !matches!(address.scheme(), "http" | "https") { return Err("Definition URI must use MAVFTP, HTTP or HTTPS".into()); }
@@ -26,13 +26,24 @@ fn download_http(uri: &str, cancel: &AtomicBool, progress: &Mutex<String>) -> Re
         if response.headers().get("content-length").and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<u64>().ok()).is_some_and(|n| n > camdef::MAX_SIZE as u64) { return Err("Camera definition is too large".into()); }
         let mut data = Vec::new(); let mut chunk = [0u8; 8192];
         let mut reader = response.body_mut().as_reader();
+        let started = Instant::now();
         loop {
             cancelled(cancel)?;
-            let n = reader.read(&mut chunk).map_err(|e| e.to_string())?;
-            if n == 0 { break; }
-            if data.len() + n > camdef::MAX_SIZE { return Err("Camera definition is too large".into()); }
-            data.extend_from_slice(&chunk[..n]);
-            *progress.lock().unwrap() = format!("Downloading camera definition… {} bytes", data.len());
+            match reader.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(n) => {
+                    if data.len() + n > camdef::MAX_SIZE { return Err("Camera definition is too large".into()); }
+                    data.extend_from_slice(&chunk[..n]);
+                    *progress.lock().unwrap() = format!("Downloading camera definition… {} bytes", data.len());
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::TimedOut || e.kind() == std::io::ErrorKind::WouldBlock => {
+                    if started.elapsed() > Duration::from_secs(15) {
+                        return Err("Camera definition download timed out".into());
+                    }
+                    continue;
+                }
+                Err(e) => return Err(e.to_string()),
+            }
         }
         cancelled(cancel)?; return Ok(data);
     }

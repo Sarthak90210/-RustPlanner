@@ -55,6 +55,7 @@ pub struct Assets {
     pub ft_v: TextureHandle,
     pub ft_h: TextureHandle,
     pub ft_y6b: TextureHandle,
+    pub no_video: TextureHandle,
 }
 
 fn load(ctx: &egui::Context, name: &str, bytes: &[u8], repeat: bool) -> TextureHandle {
@@ -127,6 +128,7 @@ impl Assets {
             ft_v: asset!(ctx, "ft_v.png"),
             ft_h: asset!(ctx, "ft_h.png"),
             ft_y6b: asset!(ctx, "ft_y6b.png"),
+            no_video: asset!(ctx, "no-video.png"),
         }
     }
 }

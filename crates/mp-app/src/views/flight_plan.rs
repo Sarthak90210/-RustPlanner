@@ -1903,16 +1903,27 @@ fn grad_dist_az(home: &Locationwp, points: &[Option<OverlayPoint>], rows: usize,
     out
 }
 
-/// double.ToString("0.0") on .NET Framework: NaN and the infinities by name.
+/// double.ToString("0.0") on .NET Framework: 15-digit precision with MidpointAwayFromZero rounding,
+/// and NaN / infinities by name.
 fn dotnet_fixed(v: f64, dp: usize) -> String {
     if v.is_nan() {
         "NaN".into()
     } else if v.is_infinite() {
         if v > 0.0 { "Infinity".into() } else { "-Infinity".into() }
     } else {
-        let s = format!("{v:.dp$}");
-        // .NET rounds "-0.0" to "0.0"
-        if s.trim_start_matches('-').chars().all(|c| c == '0' || c == '.') { s.trim_start_matches('-').to_string() } else { s }
+        use mp_core::rust_decimal::{Decimal, RoundingStrategy};
+        let dec = Decimal::from_f64_retain(v).unwrap_or_default();
+        let rounded = dec.round_dp_with_strategy(dp as u32, RoundingStrategy::MidpointAwayFromZero);
+        let s = if dp == 0 {
+            format!("{rounded:.0}")
+        } else {
+            format!("{rounded:.dp$}")
+        };
+        if s.trim_start_matches('-').chars().all(|c| c == '0' || c == '.') {
+            if dp == 0 { "0".to_string() } else { format!("0.{:0<dp$}", "") }
+        } else {
+            s
+        }
     }
 }
 
@@ -1952,6 +1963,11 @@ mod grid_stat_tests {
         assert_eq!(dotnet_fixed(f64::NAN, 1), "NaN");
         assert_eq!(dotnet_fixed(f64::INFINITY, 1), "Infinity");
         assert_eq!(dotnet_fixed(-0.04, 1), "0.0");
+        assert_eq!(dotnet_fixed(0.25, 1), "0.3");
+        assert_eq!(dotnet_fixed(0.75, 1), "0.8");
+        assert_eq!(dotnet_fixed(-0.25, 1), "-0.3");
+        assert_eq!(dotnet_fixed(180.5, 0), "181");
+        assert_eq!(dotnet_fixed(0.0, 0), "0");
     }
 }
 

@@ -7,6 +7,8 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::{Duration, Instant};
 
+use indexmap::IndexMap;
+
 use mavlink::dialects::ardupilotmega::*;
 use num_traits::FromPrimitive;
 
@@ -658,8 +660,8 @@ pub struct CameraSettingsSession {
     pub values: HashMap<String, Value>,
     pub errors: HashMap<String, String>,
     pub status: String,
-    reads: BTreeMap<String, Request>,
-    writes: BTreeMap<String, Request>,
+    reads: IndexMap<String, Request>,
+    writes: IndexMap<String, Request>,
     write_errors: BTreeSet<String>,
     system: u8,
     component: u8,
@@ -685,8 +687,8 @@ impl CameraSettingsSession {
             values: HashMap::new(),
             errors: HashMap::new(),
             status: "Reading camera settings".into(),
-            reads: BTreeMap::new(),
-            writes: BTreeMap::new(),
+            reads: IndexMap::new(),
+            writes: IndexMap::new(),
             write_errors: BTreeSet::new(),
             system,
             component,

@@ -429,6 +429,19 @@ mod parameter_file_tests {
         });
         out.textures_delta.clear();
 
+        let text = ParamEditor::write_confirm_text(&changes);
+        assert_eq!(
+            text,
+            "You are about to change 2 parameters. Please review the changes below:\n\nBATT_ENABLE: 0 -> 1\nWPNAV_SPEED: 500 -> 650\n\nDo you want to proceed?"
+        );
+
+        // Over 20 parameters gives the short message
+        let many_changes: Vec<(String, f32, f32)> = (0..21).map(|i| (format!("PARAM_{i}"), 0.0, 1.0)).collect();
+        assert_eq!(
+            ParamEditor::write_confirm_text(&many_changes),
+            "You are about to change 21 parameters. Are you sure you want to proceed?"
+        );
+
         // After Escape, the confirmation modal is dismissed and changes cleared
         assert!(editor.write_confirm.is_none());
         assert!(editor.pending.is_empty());
@@ -596,6 +609,21 @@ mod parameter_file_tests {
         editor.on_event(&LinkEvent::ParamSet { name: "CAN_D1_PROTOCOL".into(), ok: true }, &mut toasts);
         assert!(editor.check_param_count_divergence);
         assert!(editor.pending.is_empty());
+
+        toasts.0.clear();
+        toasts.1.clear();
+
+        // Verify exact C# message strings for armed and disarmed divergence
+        let armed_msg = "The number of available parameters changed, until full param refresh is done, some parameters will not be available.";
+        let disarmed_msg = "The number of available parameters changed. A full param refresh will be done to show all params.";
+        toasts.message(disarmed_msg, "Params");
+        assert_eq!(toasts.0, [disarmed_msg]);
+        assert_eq!(toasts.1, ["Params"]);
+        toasts.0.clear();
+        toasts.1.clear();
+        toasts.message(armed_msg, "Params");
+        assert_eq!(toasts.0, [armed_msg]);
+        assert_eq!(toasts.1, ["Params"]);
     }
 
     #[test]

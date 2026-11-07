@@ -405,6 +405,7 @@ pub struct GimbalVideo {
     selector: Option<Selector>,
     settings: Option<SettingsForm>,
     custom_settings: Option<crate::camera_settings::CameraSettingsForm>,
+    has_focus: bool,
 }
 
 impl Default for GimbalVideo {
@@ -431,6 +432,7 @@ impl Default for GimbalVideo {
             selector: None,
             settings: None,
             custom_settings: None,
+            has_focus: false,
         }
     }
 }
@@ -449,6 +451,44 @@ fn gimbal_manager(app: &AppCtx) -> Option<(GimbalManager, f64)> {
 }
 
 impl GimbalVideo {
+    /// ResolveSettingsCamera (GimbalVideoControl.cs:771-795)
+    pub fn resolve_settings_camera(&self, app: &AppCtx) -> Option<(u8, u8)> {
+        let link = app.link?;
+        let state = link.shared.read();
+        let sysid = state.cs.sysid;
+
+        // 1. settingsCameraAddress
+        if let Some(addr) = self.settings_camera_address {
+            if state.mavs.contains_key(&addr) || (addr.0 == sysid && addr.1 == state.cs.compid) {
+                return Some(addr);
+            }
+        }
+
+        // 2. Matching stream URI in video_streams
+        let uri = app.settings.planner.get("gimbal_video_stream").cloned().unwrap_or_default();
+        if !uri.is_empty() {
+            for v in state.video_streams.values() {
+                if v.sysid == sysid && v.uri == uri {
+                    return Some((v.sysid, v.compid));
+                }
+            }
+        }
+
+        // 3. Camera with definition URI
+        for (&(s, comp, _), stat) in &state.inspector {
+            if s == sysid {
+                if let mp_core::mavlink::dialects::ardupilotmega::MavMessage::CAMERA_INFORMATION(m) = &stat.msg {
+                    if m.cam_definition_uri.iter().any(|b| *b != 0) {
+                        return Some((s, comp));
+                    }
+                }
+            }
+        }
+
+        // 4. MAV.Camera default autopilot camera (if connected)
+        Some((sysid, state.cs.compid))
+    }
+
     /// The selected camera with UITimer's preference overrides.
     fn camera(&self, app: &AppCtx) -> Option<Camera> {
         let l = app.link?;
@@ -549,7 +589,9 @@ impl GimbalVideo {
 
     fn set_recording(&mut self, start: bool, app: &AppCtx) {
         self.is_recording = start;
-        send(app, Some(if start { Camera::start_recording() } else { Camera::stop_recording() }));
+        if self.camera(app).is_some() {
+            send(app, Some(if start { Camera::start_recording() } else { Camera::stop_recording() }));
+        }
     }
 
     fn point_down(&self, app: &AppCtx) {
@@ -623,7 +665,7 @@ impl GimbalVideo {
 
     /// PreFilterMessage: bound keys while the control's window has focus and no text box does.
     fn keyboard(&mut self, ctx: &egui::Context, app: &AppCtx) {
-        if self.custom_settings.is_some() || self.settings.as_ref().is_some_and(|s| s.listening.is_some()) || ctx.egui_wants_keyboard_input() || !ctx.input(|i| i.focused) {
+        if self.custom_settings.is_some() || self.settings.as_ref().is_some_and(|s| s.listening.is_some()) || ctx.egui_wants_keyboard_input() || !ctx.input(|i| i.focused) || !self.has_focus {
             if !self.held.is_empty() {
                 self.held.clear();
                 self.held_keys(self.last_modifiers, app);
@@ -689,8 +731,7 @@ impl GimbalVideo {
                 painter.image(t, fit, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
             }
             None => {
-                painter.rect_filled(fit, 0.0, Color32::from_rgb(20, 20, 20));
-                painter.text(fit.center(), egui::Align2::CENTER_CENTER, crate::i18n::t("NO VIDEO"), crate::fonts::ui_id((fit.height() / 8.0).max(10.0)), Color32::from_gray(120));
+                painter.image(app.assets.no_video.id(), fit, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
             }
         }
         let to_image = |p: Pos2| gimbal::image_position((p.x - rect.left()) as f64, (p.y - rect.top()) as f64, rect.width() as f64, rect.height() as f64, iw as f64, ih as f64);
@@ -747,6 +788,12 @@ impl GimbalVideo {
             self.mouse_marker = None;
             self.drag_start = None;
             self.drag_end = None;
+        }
+
+        if resp.clicked() || resp.dragged() || resp.hovered() {
+            self.has_focus = true;
+        } else if ui.input(|i| i.pointer.any_pressed()) {
+            self.has_focus = false;
         }
 
         self.context_menu(&resp, app, camera.as_ref());
@@ -823,7 +870,8 @@ impl GimbalVideo {
             if item(ui, "Shortcuts", true) {
                 action = Some("shortcuts");
             }
-            if item(ui, "Custom Settings", app.connected()) { action = Some("custom_settings"); }
+            let custom_settings_target = self.resolve_settings_camera(app);
+            if item(ui, "Custom Settings", custom_settings_target.is_some()) { action = Some("custom_settings"); }
             // FlightData's items: Mini map (Full Sized), Swap with map, Close
             if placement == GimbalPlacement::FullSized {
                 let mut mini = self.show_mini_map;
@@ -853,14 +901,10 @@ impl GimbalVideo {
             Some("rec_stop") => self.set_recording(false, app),
             Some("shortcuts") => self.settings = Some(SettingsForm { prefs: self.prefs.clone(), listening: None, clash: None }),
             Some("custom_settings") => {
-                if let Some(link) = app.link {
-                    let target = {
-                        let state = link.shared.read();
-                        self.settings_camera_address.or_else(|| state.inspector.iter().find_map(|(&(sys, comp, _), stat)| match &stat.msg {
-                            mp_core::mavlink::dialects::ardupilotmega::MavMessage::CAMERA_INFORMATION(m) if sys == state.cs.sysid && m.cam_definition_uri.iter().any(|b| *b != 0) => Some((sys,comp)), _ => None,
-                        })).unwrap_or((state.cs.sysid,state.cs.compid))
-                    };
-                    if self.custom_settings.as_ref().is_none_or(|form| form.target != target) { self.custom_settings = Some(crate::camera_settings::CameraSettingsForm::open(link,target,app.readonly)); }
+                if let (Some(link), Some(target)) = (app.link, self.resolve_settings_camera(app)) {
+                    if self.custom_settings.as_ref().is_none_or(|form| form.target != target) {
+                        self.custom_settings = Some(crate::camera_settings::CameraSettingsForm::open(link, target, app.readonly));
+                    }
                 }
             }
             _ => {}

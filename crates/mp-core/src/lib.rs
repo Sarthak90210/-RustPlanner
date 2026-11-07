@@ -36,6 +36,7 @@ pub mod tlog;
 pub mod wpfast;
 
 pub use mavlink;
+pub use rust_decimal;
 
 /// Local time zone offset from UTC, in seconds.
 pub fn local_utc_offset_secs() -> i64 {
