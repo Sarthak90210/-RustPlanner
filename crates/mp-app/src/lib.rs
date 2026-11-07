@@ -46,8 +46,13 @@ pub fn title_base() -> String {
 }
 
 fn options() -> eframe::NativeOptions {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let persistence_path = Some(platform::data_dir().join("state.ron"));
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let persistence_path = std::env::var_os("MP_DATA_DIR")
+        .map(|p| std::path::PathBuf::from(p).join("state.ron"));
     eframe::NativeOptions {
-        persistence_path: std::env::var_os("MP_DATA_DIR").map(|p| std::path::PathBuf::from(p).join("state.ron")),
+        persistence_path,
         persist_window: std::env::var_os("MP_CAPTURE").is_none(),
         viewport: egui::ViewportBuilder::default()
             .with_title(title_base())

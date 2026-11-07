@@ -2,3 +2,4 @@
 /reference
 *.log
 /.claude/worktrees/
+/scripts/__pycache__/

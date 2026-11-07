@@ -3,12 +3,15 @@
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
 pub struct Capture {
     path: PathBuf,
     started: Instant,
     after: Duration,
     requested: bool,
+    keep_open: bool,
+    finished: Arc<AtomicBool>,
 }
 
 impl Capture {
@@ -16,13 +19,16 @@ impl Capture {
         let path = PathBuf::from(std::env::var_os("MP_CAPTURE")?);
         let seconds = std::env::var("MP_CAPTURE_AFTER").ok().and_then(|v| v.parse::<f64>().ok())
             .filter(|n| n.is_finite() && *n >= 0.0 && *n <= 300.0).unwrap_or(7.0);
-        Some(Self { path, started: Instant::now(), after: Duration::from_secs_f64(seconds), requested: false })
+        Some(Self { path, started: Instant::now(), after: Duration::from_secs_f64(seconds), requested: false,
+            keep_open: std::env::var_os("MP_CAPTURE_KEEP_OPEN").is_some(), finished: Arc::new(AtomicBool::new(false)) })
     }
 
     pub fn tick(&mut self, ctx: &egui::Context, ready: bool, runtime: serde_json::Value) {
+        if self.finished.load(Ordering::Acquire) { return; }
         if self.started.elapsed() > self.after + Duration::from_secs(20) {
             log::error!("Renderer capture timed out: {}", self.path.display());
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            self.finished.store(true, Ordering::Release);
+            if !self.keep_open { ctx.send_viewport_cmd(egui::ViewportCommand::Close); }
             return;
         }
         ctx.request_repaint_after(Duration::from_millis(50));
@@ -31,6 +37,8 @@ impl Capture {
         let path = self.path.clone();
         let ctx = ctx.clone();
         let callback_ctx = ctx.clone();
+        let keep_open = self.keep_open;
+        let finished = self.finished.clone();
         ctx.request_screenshot(move |image| {
             let result = (|| -> Result<(), String> {
                 if let Some(parent) = path.parent() { std::fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
@@ -44,7 +52,8 @@ impl Capture {
                 std::fs::write(path.with_extension("capture.json"), serde_json::to_vec_pretty(&receipt).unwrap()).map_err(|e| e.to_string())
             })();
             if let Err(e) = result { log::error!("Renderer capture failed: {e}"); }
-            callback_ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            finished.store(true, Ordering::Release);
+            if !keep_open { callback_ctx.send_viewport_cmd(egui::ViewportCommand::Close); }
             callback_ctx.request_repaint();
         });
     }

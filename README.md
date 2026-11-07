@@ -40,13 +40,26 @@ Requires the Android SDK and NDK (`ANDROID_HOME`, `ANDROID_NDK_ROOT`). Connect o
 ### iOS
 
 ```sh
-rustup target add aarch64-apple-ios
-cargo build -p mp-app --lib --target aarch64-apple-ios --release
+rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+python3 scripts/build_ios.py --target simulator --release
+python3 scripts/smoke_ios_simulator.py
+# Build for an iPhone/iPad instead:
+python3 scripts/build_ios.py --target device --release
 ```
 
-The library exposes `start_mission_planner()` for an Xcode wrapper. The wrapper, signing, packaging and
-device validation remain to be completed. This command alone does not produce an installable iOS app.
-The iOS target selects wgpu for rendering.
+Requires macOS, Python 3.11+, Xcode and an installed iOS Simulator runtime. The builder packages the
+Rust executable directly, with an iPhone/iPad manifest and a launch screen. It selects the simulator
+architecture from the Mac's CPU and uses wgpu for rendering. The minimum deployment target is iOS 15.
+The `.app`, ZIP and build receipt are under `target/ios/simulator` or `target/ios/device-unsigned`.
+The device bundle is unsigned and requires Apple provisioning and signing before installation.
+This is a development packaging path; App Store distribution is not configured.
+
+The simulator script creates its own simulator, installs and launches the app, requires an image and
+receipt from the eframe renderer, and saves evidence under `target/ios/smoke` before deleting that
+simulator. CI runs this check and uploads its evidence. A passing simulator smoke establishes startup
+and rendering only. Physical-device operation, touch workflows and feature parity require separate tests.
+App settings and caches use persistent sandbox storage; iOS documents use the app's Documents directory,
+which can be reached through Finder file sharing. Native document-provider selection is still pending.
 
 ## Status
 
@@ -159,7 +172,8 @@ Known gaps include:
 - Complete source-by-source behavior and visual parity across all pages and tools.
 - Native GUI verification outside Windows and Android/iOS device runs. Run 22 CI passed desktop
   tests/release builds on Windows/macOS/Linux, Android debug APK packaging and the iOS release library.
-  The iOS app bundle and mobile runtime behavior remain unverified. See `judging/platform-build-22.json`.
+  iOS app packaging and simulator startup now have CI jobs; until those jobs pass, they remain unverified.
+  Physical mobile runtime behavior remains unverified. See `judging/platform-build-22.json` for the older run.
 - Mobile file picking and Android USB serial integration. Mobile serial and some desktop-only tools
   need platform adapters; several mobile file-open paths currently return no selection.
 - Real flight-controller, firmware-flashing, camera, radio and tracker qualification for the implemented tools.

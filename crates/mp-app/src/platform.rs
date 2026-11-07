@@ -44,12 +44,28 @@ pub fn data_dir() -> PathBuf {
                     return d;
                 }
             }
+            #[cfg(target_os = "ios")]
+            if let Some(home) = std::env::var_os("HOME") {
+                return ios_data_dir(std::path::Path::new(&home));
+            }
             std::env::temp_dir().join("MissionPlannerRS")
         })
         .clone()
 }
 
+// iOS may purge tmp while the app is suspended. Settings, missions and tile caches
+// belong in the application's persistent sandbox instead.
+#[cfg(target_os = "ios")]
+fn ios_data_dir(home: &std::path::Path) -> PathBuf {
+    home.join("Library").join("Application Support").join("MissionPlannerRS")
+}
+
 pub fn files_dir() -> PathBuf {
+    #[cfg(target_os = "ios")]
+    let d = std::env::var_os("HOME")
+        .map(|home| PathBuf::from(home).join("Documents"))
+        .unwrap_or_else(|| data_dir().join("files"));
+    #[cfg(not(target_os = "ios"))]
     let d = data_dir().join("files");
     let _ = std::fs::create_dir_all(&d);
     d
