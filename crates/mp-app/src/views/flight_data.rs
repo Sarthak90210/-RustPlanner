@@ -1242,7 +1242,11 @@ impl FlightDataView {
             "Resume Mission" => {
                 self.prompt = Some(Prompt::Confirm { title: "Resume Mission".into(), text: "Warning this will reprogram your mission, arm and issue a takeoff command (copter)".into(), then: Confirmed::ResumeWarn });
             }
-            "Clear Track" => link.shared.write().cs.track.clear(),
+            "Clear Track" => {
+                let mut s = link.shared.write();
+                s.cs.track.clear();
+                s.cs.camerapoints.clear();
+            }
             "Change Speed" => link.send(LinkCommand::CommandLong { command: 178, params: [0.0, self.change_speed, 0.0, 0.0, 0.0, 0.0, 0.0] }),
             // modifyandSetAlt: (int)Value / multiplieralt
             "Change Alt" => link.send(LinkCommand::ChangeAltitude { alt: (self.change_alt.trunc()) / crate::units::alt(1.0) }),
@@ -1260,17 +1264,22 @@ impl FlightDataView {
             }
             "Abort Landing" => link.send(LinkCommand::CommandLong { command: 191, params: [0.0; 7] }),
             "Set Home Alt" => {
-                // BUT_Homealt: altoffsethome = -HomeAlt, so alt reads above sea level (toggle back)
+                // BUT_Homealt: altoffsethome = -HomeAlt / multiplieralt, so alt reads above sea level (toggle back)
                 let mut s = link.shared.write();
                 if s.cs.altoffsethome != 0.0 {
                     s.cs.altoffsethome = 0.0;
                 } else {
-                    s.cs.altoffsethome = -(s.cs.home.map(|h| h.alt as f32).unwrap_or(0.0));
+                    let home_alt = s.cs.home.map(|h| h.alt as f32).unwrap_or(0.0);
+                    s.cs.altoffsethome = -home_alt / crate::units::alt(1.0);
                 }
             }
             "Raw Sensor View" => self.raw_sensor = true,
             "Message" => {
-                self.prompt = Some(Prompt::Input { title: "Message".into(), fields: vec![("Enter Message".into(), String::new())], then: Inputted::SendMessage })
+                self.prompt = Some(Prompt::Input {
+                    title: "Enter Message".into(),
+                    fields: vec![("Enter Message to be logged".into(), String::new())],
+                    then: Inputted::SendMessage,
+                })
             }
             // BUT_mountmode_Click: the MNT_MODE parameter, else DO_MOUNT_CONTROL with the mode in p7
             "Set Mount" => {
@@ -1864,7 +1873,7 @@ impl FlightDataView {
                 Inputted::SendMessage => {
                     if let (Some(l), Some((_, text))) = (link, fields.first()) {
                         use mp_core::mavlink::dialects::ardupilotmega::{MavMessage, MavSeverity, STATUSTEXT_DATA};
-                        l.send(LinkCommand::Send(Box::new(MavMessage::STATUSTEXT(STATUSTEXT_DATA { severity: MavSeverity::MAV_SEVERITY_INFO, text: text.as_str().into(), id: 0, chunk_seq: 0 }))));
+                        l.send(LinkCommand::Send(Box::new(MavMessage::STATUSTEXT(STATUSTEXT_DATA { severity: MavSeverity::MAV_SEVERITY_NOTICE, text: text.as_str().into(), id: 0, chunk_seq: 0 }))));
                     }
                 }
                 Inputted::AddPoi(lat, lng) => {

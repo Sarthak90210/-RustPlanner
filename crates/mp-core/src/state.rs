@@ -132,6 +132,7 @@ pub struct CurrentState {
     pub packets_lost: u64,
 
     pub track: Vec<(f64, f64)>,
+    pub camerapoints: Vec<(f64, f64, f32)>,
     pub extra: std::collections::BTreeMap<String, f64>,
 
     last_pos_update: Option<Instant>,
@@ -240,6 +241,7 @@ impl Default for CurrentState {
             packets_received: 0,
             packets_lost: 0,
             track: Vec::new(),
+            camerapoints: Vec::new(),
             extra: default_extra(),
             last_pos_update: None,
             last_alt: None,
@@ -972,6 +974,12 @@ impl CurrentState {
                         .to_string();
                     self.message_high_severity = sev;
                 }
+            }
+            MavMessage::CAMERA_FEEDBACK(c) => {
+                let lat = c.lat as f64 * 1e-7;
+                let lng = c.lng as f64 * 1e-7;
+                let alt = c.alt_msl;
+                self.camerapoints.push((lat, lng, alt));
             }
             _ => {}
         }
