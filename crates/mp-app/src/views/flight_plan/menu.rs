@@ -15,18 +15,128 @@ use crate::{platform, theme};
 const R: f64 = 6_378_137.0;
 
 /// Prompts opened from the context menu.
+/// The tools that ask one InputBox after another.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub(super) enum ChainTool {
+    SplineCircle,
+    CircleSurvey,
+    Utm,
+    Text,
+    OffsetPolygon,
+}
+
+/// One tool's InputBox sequence: the answers so far and where it was opened.
+pub(super) struct InputChain {
+    pub tool: ChainTool,
+    pub step: usize,
+    pub values: Vec<String>,
+    pub text: String,
+    pub lat: f64,
+    pub lng: f64,
+}
+
+impl ChainTool {
+    /// (title, prompt, default) of each InputBox.Show
+    fn prompts(self, zone: &str) -> Vec<(&'static str, &'static str, String)> {
+        match self {
+            ChainTool::SplineCircle => vec![("Radius", "Radius", "50".into()), ("min alt", "Min Alt", "5".into()), ("max alt", "Max Alt", "20".into()), ("alt step", "alt step", "5".into()), ("angle", "Angle of first point (whole degrees)", "0".into())],
+            ChainTool::CircleSurvey => vec![("", "startalt", "10".into()), ("", "endalt", "20".into()), ("", "seperation", "2".into()), ("", "radius", "5".into()), ("", "photos", "50".into()), ("", "start heading", "0".into())],
+            ChainTool::Utm => vec![("Zone", "Enter Zone. (eg 50S, 11N)", zone.to_string()), ("Easting", "Easting", "578994".into()), ("Northing", "Northing", "6126244".into())],
+            ChainTool::Text => vec![("Enter String", "Enter String (requires 1CamBam_Stick_3 font)", String::new()), ("Enter size", "Enter size", "5".into()), ("Enter rotation", "Enter rotation", "0".into())],
+            ChainTool::OffsetPolygon => vec![("Offset in Meters", "Please enter the offset in meters. Enter a negative value to make the polygon smaller", "0".into())],
+        }
+    }
+
+    /// Cancel ends these tools; the others carry on with the default
+    fn cancel_ends(self) -> bool {
+        matches!(self, ChainTool::SplineCircle | ChainTool::Utm)
+    }
+}
+
+/// createSplineCircleToolStripMenuItem_Click's rings: (lat, lng, alt) after the ROI. Four
+/// points per lap and 360 inclusive (five), the first lap at min alt, then the altitude rising
+/// altstep / 4 (whole numbers) per point until past max alt.
+pub(super) fn spline_circle(lat: f64, lng: f64, radius: i32, minalt: i32, maxalt: i32, altstep: i32) -> Vec<(f64, f64, i32)> {
+    let points = 4;
+    let step = 360.0f32 as f64 / points as f64;
+    let (d, r) = (radius as f64, 6371000.0f64);
+    let mut out = Vec::new();
+    let mut startup = true;
+    let mut stepalt = minalt;
+    while stepalt <= maxalt {
+        let mut a = 0.0f64;
+        while a <= 360.0 && a >= 0.0 {
+            let la = lat.to_radians();
+            let lat2 = (la.sin() * (d / r).cos() + la.cos() * (d / r).sin() * a.to_radians().cos()).asin();
+            let lon2 = lng.to_radians() + (a.to_radians().sin() * (d / r).sin() * la.cos()).atan2((d / r).cos() - la.sin() * lat2.sin());
+            out.push((lat2.to_degrees(), lon2.to_degrees(), stepalt));
+            if !startup {
+                stepalt += altstep / points;
+            }
+            a += step;
+            // the original never ends when the step rounds to 0
+            if out.len() > 10000 {
+                return out;
+            }
+        }
+        if startup {
+            stepalt = minalt;
+        }
+        startup = false;
+        if altstep / points == 0 {
+            return out;
+        }
+    }
+    out
+}
+
+/// ClipperOffset (jtMiter, closed polygon) in metres around the first vertex: positive grows.
+pub(super) fn offset_polygon(poly: &[(f64, f64)], d: f64) -> Vec<(f64, f64)> {
+    if poly.len() < 3 {
+        return poly.to_vec();
+    }
+    let (lat0, lng0) = poly[0];
+    let k = R * lat0.to_radians().cos();
+    let mut pts: Vec<(f64, f64)> = poly.iter().map(|&(a, b)| ((b - lng0).to_radians() * k, (a - lat0).to_radians() * R)).collect();
+    if pts.first() == pts.last() {
+        pts.pop();
+    }
+    // counter-clockwise so the outward normal of (dx, dy) is (dy, -dx)
+    let area: f64 = (0..pts.len()).map(|i| { let (a, b) = (pts[i], pts[(i + 1) % pts.len()]); a.0 * b.1 - b.0 * a.1 }).sum();
+    if area < 0.0 {
+        pts.reverse();
+    }
+    let n = pts.len();
+    let normal = |i: usize| {
+        let (a, b) = (pts[i], pts[(i + 1) % n]);
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let len = (dx * dx + dy * dy).sqrt().max(1e-9);
+        (dy / len, -dx / len)
+    };
+    let mut out = Vec::new();
+    for i in 0..n {
+        let (n1, n2) = (normal((i + n - 1) % n), normal(i));
+        let p = pts[i];
+        let cos = (n1.0 * n2.0 + n1.1 * n2.1).clamp(-1.0, 1.0);
+        // miter limit 2 (Clipper's default): square the corner off beyond it
+        if 1.0 + cos < 2.0 / 4.0 {
+            out.push((p.0 + n1.0 * d, p.1 + n1.1 * d));
+            out.push((p.0 + n2.0 * d, p.1 + n2.1 * d));
+        } else {
+            let q = d / (1.0 + cos);
+            out.push((p.0 + (n1.0 + n2.0) * q, p.1 + (n1.1 + n2.1) * q));
+        }
+    }
+    out.into_iter().map(|(x, y)| (lat0 + (y / R).to_degrees(), lng0 + (x / k).to_degrees())).collect()
+}
+
 pub(super) enum MenuPrompt {
     RotateMap(String),
-    OffsetPolygon(String),
     #[allow(dead_code)]
     ZoomTo(String, String),
     ZoomToLocation(String),
     GdalOpacity(String),
     ModifyAlt(String),
-    Utm(String, String, String, bool),
-    Text(f64, f64, String, String),
-    CircleSurvey(f64, f64, String, String),
-    SplineCircle(f64, f64, String, String),
     PoiAdd(f64, f64, String),
     PoiEdit(usize, String),
     /// Commands_SelectionChangeCommitted's InputBox for UNKNOWN: row, id text
@@ -198,17 +308,14 @@ impl FlightPlanView {
             ui.close();
         }
         if ui.button(crate::i18n::t("Offset Polygon")).clicked() {
-            self.menu_prompt = Some(MenuPrompt::OffsetPolygon("10".into()));
+            // nothing to offset: no question either
+            if !self.polygon.is_empty() {
+                self.start_chain(ChainTool::OffsetPolygon, 0.0, 0.0);
+            }
             ui.close();
         }
         if ui.button(crate::i18n::t("Area")).clicked() {
-            // areaToolStripMenuItem_Click (the tab stops drawn as spaces)
-            let a = mp_core::survey::area(&self.polygon).abs();
-            let tab = "        ";
-            app.toasts.message(format!("Area: {a:.0} m2
-{tab}{:.2} Acre
-{tab}{:.2} Hectare
-{tab}{:.0} sqf", a * 0.000247105, a * 1e-4, a * 10.7639), "Area");
+            area_message(&self.polygon, app);
             ui.close();
         }
         if self.mission_type == 1 {
@@ -389,20 +496,19 @@ impl FlightPlanView {
                 ui.close();
             }
             if spline && ui.button(crate::i18n::t("Create Spline Circle")).clicked() {
-                self.menu_prompt = Some(MenuPrompt::SplineCircle(lat, lng, "50".into(), "8".into()));
+                self.start_chain(ChainTool::SplineCircle, lat, lng);
                 ui.close();
             }
             if ui.button(crate::i18n::t("Area")).clicked() {
-                let a = mp_core::survey::area(&self.polygon);
-                app.toasts.error(format!("Area: {a:.0} m2 ({:.3} km2)", a / 1e6));
+                area_message(&self.polygon, app);
                 ui.close();
             }
             if text && ui.button(crate::i18n::t("Text")).clicked() {
-                self.menu_prompt = Some(MenuPrompt::Text(lat, lng, "MP".into(), "20".into()));
+                self.start_chain(ChainTool::Text, lat, lng);
                 ui.close();
             }
             if circle_survey && ui.button(crate::i18n::t("Create Circle Survey")).clicked() {
-                self.menu_prompt = Some(MenuPrompt::CircleSurvey(lat, lng, "100".into(), "20".into()));
+                self.start_chain(ChainTool::CircleSurvey, lat, lng);
                 ui.close();
             }
             if ui.button(crate::i18n::t("Survey (Grid)")).clicked() {
@@ -416,7 +522,7 @@ impl FlightPlanView {
         });
         ui.menu_button(crate::i18n::t("Map Tool"), |ui| {
             if ui.button(crate::i18n::t("Measure Distance")).clicked() {
-                self.measure = Some((lat, lng));
+                self.context_measure(lat, lng, app);
                 ui.close();
             }
             if ui.button(crate::i18n::t("Zoom To")).clicked() {
@@ -544,8 +650,7 @@ impl FlightPlanView {
             ui.close();
         }
         if ui.button(crate::i18n::t("Enter UTM Coord")).clicked() {
-            let zone = ((lng + 180.0) / 6.0).floor() as i32 + 1;
-            self.menu_prompt = Some(MenuPrompt::Utm(zone.to_string(), String::new(), String::new(), lat < 0.0));
+            self.start_chain(ChainTool::Utm, lat, lng);
             ui.close();
         }
         if ui.button(crate::i18n::t("Switch Docking")).clicked() {
@@ -617,21 +722,162 @@ impl FlightPlanView {
         }
     }
 
+    fn start_chain(&mut self, tool: ChainTool, lat: f64, lng: f64) {
+        let first = tool.prompts(&self.utm_zone)[0].2.clone();
+        self.input_chain = Some(InputChain { tool, step: 0, values: Vec::new(), text: first, lat, lng });
+    }
+
+    /// ContextMeasure_Click: the first click marks the start, the second reports and clears.
+    fn context_measure(&mut self, lat: f64, lng: f64, app: &mut AppCtx) {
+        match self.measure.take() {
+            None => {
+                self.measure = Some((lat, lng));
+                if crate::show_again::should_show(&app.settings.planner, "Measure Dist") {
+                    self.fp_show_again = Some(crate::show_again::ShowAgain::new("Measure Dist", "You can now pan/zoom around.\nClick this option again to get the distance.", false));
+                }
+            }
+            Some((a, b)) => {
+                let (from, to) = (mp_core::geo::PointLatLngAlt::new(a, b, 0.0), mp_core::geo::PointLatLngAlt::new(lat, lng, 0.0));
+                let km = from.distance(&to) / 1000.0;
+                app.toasts.error(format!("Distance: {} AZ: {:.0}", super::format_distance(&app.settings.planner, km, true), from.bearing(&to)));
+            }
+        }
+    }
+
+    /// The current InputBox of a tool's sequence; the tool runs after the last answer.
+    fn chain_ui(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
+        let Some(chain) = self.input_chain.as_mut() else { return };
+        let prompts = chain.tool.prompts(&self.utm_zone);
+        let (title, prompt, _) = prompts[chain.step].clone();
+        let mut answer = None;
+        egui::Modal::new(egui::Id::new(("fp_inputbox", chain.step))).show(ctx, |ui| {
+            ui.set_min_width(300.0);
+            ui.label(egui::RichText::new(crate::i18n::t(title)).strong());
+            theme::label(ui, prompt);
+            let r = ui.text_edit_singleline(&mut chain.text);
+            r.request_focus();
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                if theme::button(ui, "Cancel").clicked() {
+                    answer = Some(false);
+                }
+                if theme::button(ui, "OK").clicked() {
+                    answer = Some(true);
+                }
+            });
+        });
+        if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+            answer = Some(true);
+        } else if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            answer = Some(false);
+        }
+        let Some(ok) = answer else { return };
+        if !ok && chain.tool.cancel_ends() {
+            self.input_chain = None;
+            return;
+        }
+        let value = if ok { chain.text.clone() } else { prompts[chain.step].2.clone() };
+        chain.values.push(value);
+        chain.step += 1;
+        if chain.step < prompts.len() {
+            chain.text = prompts[chain.step].2.clone();
+            return;
+        }
+        let chain = self.input_chain.take().unwrap();
+        self.run_chain(chain, app);
+    }
+
+    fn run_chain(&mut self, c: InputChain, app: &mut AppCtx) {
+        let v = &c.values;
+        let alt_unit = crate::units::alt(1.0);
+        let frame = app.settings.alt_frame;
+        match c.tool {
+            ChainTool::SplineCircle => {
+                let int = |s: &str| s.trim().parse::<i32>().ok();
+                let Some(radius) = int(&v[0]) else { return app.toasts.error("Bad Radius") };
+                let Some(minalt) = int(&v[1]) else { return app.toasts.error("Bad min alt") };
+                let Some(maxalt) = int(&v[2]) else { return app.toasts.error("Bad maxalt") };
+                let Some(altstep) = int(&v[3]) else { return app.toasts.error("Bad alt step") };
+                self.update_undo_buffer();
+                self.items.push(Locationwp { id: mavcmd::DO_SET_ROI, lat: c.lat, lng: c.lng, alt: 0.0, frame, ..Default::default() });
+                for (a, b, alt) in spline_circle(c.lat, c.lng, radius, minalt, maxalt, altstep) {
+                    self.items.push(Locationwp { id: mavcmd::SPLINE_WAYPOINT, lat: a, lng: b, alt: alt as f32 / alt_unit, frame, ..Default::default() });
+                }
+            }
+            ChainTool::CircleSurvey => {
+                // InputBox(ref int) keeps the default for text that is not a number
+                let int = |s: &str, d: i32| s.trim().parse::<i32>().unwrap_or(d);
+                let (startalt, endalt, sep, radius, photos, heading0) = (int(&v[0], 10), int(&v[1], 20), int(&v[2], 2), int(&v[3], 5), int(&v[4], 50), int(&v[5], 0));
+                self.items.push(Locationwp { id: mavcmd::DO_SET_ROI, lat: c.lat, lng: c.lng, alt: 0.0, frame, ..Default::default() });
+                if sep <= 0 || photos <= 0 || 360 / photos == 0 {
+                    return;
+                }
+                let centre = mp_core::geo::PointLatLngAlt::new(c.lat, c.lng, 0.0);
+                let mut alt = startalt;
+                while alt <= endalt {
+                    let mut heading = heading0;
+                    while heading <= heading0 + 360 {
+                        let p = centre.newpos(heading as f64, radius as f64);
+                        self.items.push(Locationwp { id: mavcmd::WAYPOINT, p1: 2.0, lat: p.lat, lng: p.lng, alt: alt as f32, frame, ..Default::default() });
+                        // DO_DIGICAM_CONTROL with 1 in the Lat column: take a shot
+                        self.items.push(Locationwp { id: 203, lat: 1.0, frame, ..Default::default() });
+                        heading += 360 / photos;
+                    }
+                    alt += sep;
+                }
+            }
+            ChainTool::Utm => {
+                self.utm_zone = v[0].clone();
+                // the zone digits; zone.ToLower().Contains("N") is never true, so south
+                let digits = v[0].to_lowercase().replace(['s', 'n'], " ");
+                let (Ok(z), Ok(e), Ok(n)) = (digits.trim().parse::<i32>(), v[1].trim().parse::<f64>(), v[2].trim().parse::<f64>()) else { return };
+                let (a, b) = utm_to_latlng(z, true, e, n);
+                self.update_undo_buffer();
+                let wp = self.new_wp(app, mavcmd::WAYPOINT, a, b);
+                self.items.push(wp);
+            }
+            ChainTool::Text => {
+                let (Ok(size), Ok(rot)) = (v[1].trim().parse::<f64>(), v[2].trim().parse::<f64>()) else { return };
+                // the path is size * 1.35 tall; rotated clockwise on screen, y pointing down
+                let px = size * 1.35 / 7.0;
+                let (sin, cos) = rot.to_radians().sin_cos();
+                for (ci, ch) in v[0].chars().enumerate() {
+                    for (row, bits) in glyph(ch).iter().enumerate() {
+                        let cols: Vec<usize> = if row % 2 == 0 { (0..5).collect() } else { (0..5).rev().collect() };
+                        for col in cols {
+                            if bits & (1 << (4 - col)) != 0 {
+                                let (x, y) = ((ci as f64 * 6.0 + col as f64) * px, row as f64 * px);
+                                let (xr, yr) = (x * cos - y * sin, x * sin + y * cos);
+                                let (a, b) = offset_m(c.lat, c.lng, -yr, xr);
+                                let wp = self.new_wp(app, mavcmd::WAYPOINT, a, b);
+                                self.items.push(wp);
+                            }
+                        }
+                    }
+                }
+            }
+            ChainTool::OffsetPolygon => {
+                let d = if v[0] != "0" { v[0].trim().parse::<f64>().unwrap_or(0.0) } else { 0.0 };
+                self.polygon = offset_polygon(&self.polygon, d);
+            }
+        }
+    }
+
     /// Context-menu prompts and the elevation graph window.
     pub(super) fn menu_dialogs(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
+        self.chain_ui(ctx, app);
+        if let Some(p) = self.fp_show_again.clone() {
+            if p.ui(ctx, &mut app.settings.planner).is_some() {
+                self.fp_show_again = None;
+            }
+        }
         if let Some(p) = self.menu_prompt.as_mut() {
             let mut done = None;
             let title = match p {
                 MenuPrompt::RotateMap(_) => "Rotate map to heading",
-                MenuPrompt::OffsetPolygon(_) => "Offset Polygon",
                 MenuPrompt::ZoomTo(..) => "Zoom To",
                 MenuPrompt::ZoomToLocation(..) => "Location",
                 MenuPrompt::GdalOpacity(..) => "Opacity 0.0-1.0",
                 MenuPrompt::ModifyAlt(_) => "Modify Alt",
-                MenuPrompt::Utm(..) => "Enter UTM Coord",
-                MenuPrompt::Text(..) => "Text",
-                MenuPrompt::CircleSurvey(..) => "Create Circle Survey",
-                MenuPrompt::SplineCircle(..) => "Create Spline Circle",
                 MenuPrompt::PoiAdd(..) => "POI",
                 MenuPrompt::PoiEdit(..) => "POI",
                 MenuPrompt::CommandId(..) => "Mavlink ID",
@@ -643,7 +889,6 @@ impl FlightPlanView {
                 };
                 match p {
                     MenuPrompt::RotateMap(h) => field(ui, "Enter new UP heading", h),
-                    MenuPrompt::OffsetPolygon(d) => field(ui, "Distance (m, negative shrinks)", d),
                     MenuPrompt::ZoomTo(a, b) => {
                         field(ui, "Lat", a);
                         field(ui, "Lng", b);
@@ -651,24 +896,6 @@ impl FlightPlanView {
                     MenuPrompt::ZoomToLocation(loc) => field(ui, "Enter your location", loc),
                     MenuPrompt::GdalOpacity(op) => field(ui, "Enter opacity (0.0-1.0)", op),
                     MenuPrompt::ModifyAlt(a) => field(ui, "Altitude", a),
-                    MenuPrompt::Utm(z, e, n, s) => {
-                        field(ui, "Zone", z);
-                        field(ui, "Easting", e);
-                        field(ui, "Northing", n);
-                        ui.checkbox(s, crate::i18n::t("Southern hemisphere"));
-                    }
-                    MenuPrompt::Text(_, _, t, h) => {
-                        field(ui, "Enter your text", t);
-                        field(ui, "Character height (m)", h);
-                    }
-                    MenuPrompt::CircleSurvey(_, _, r, s) => {
-                        field(ui, "Radius (m)", r);
-                        field(ui, "Spacing (m)", s);
-                    }
-                    MenuPrompt::SplineCircle(_, _, r, n) => {
-                        field(ui, "Radius (m)", r);
-                        field(ui, "Points", n);
-                    }
                     MenuPrompt::PoiAdd(_, _, n) | MenuPrompt::PoiEdit(_, n) => field(ui, "Enter ID", n),
                     MenuPrompt::CommandId(_, n) => field(ui, "Please enter the command ID", n),
                 }
@@ -699,24 +926,6 @@ impl FlightPlanView {
                     Some(h) => app.settings.fp_map.bearing = h.rem_euclid(360.0),
                     None => app.toasts.error("Please enter a finite heading in degrees."),
                 }
-            }
-            MenuPrompt::OffsetPolygon(d) => {
-                let Some(d) = num(&d) else { return };
-                if self.polygon.len() < 3 {
-                    return;
-                }
-                let n = self.polygon.len() as f64;
-                let c = (self.polygon.iter().map(|p| p.0).sum::<f64>() / n, self.polygon.iter().map(|p| p.1).sum::<f64>() / n);
-                self.polygon = self
-                    .polygon
-                    .iter()
-                    .map(|&(a, b)| {
-                        let north = (a - c.0).to_radians() * R;
-                        let east = (b - c.1).to_radians() * R * c.0.to_radians().cos();
-                        let len = (north * north + east * east).sqrt().max(1e-6);
-                        offset_m(a, b, north / len * d, east / len * d)
-                    })
-                    .collect();
             }
             MenuPrompt::ZoomTo(a, b) => {
                 if let (Some(a), Some(b)) = (num(&a), num(&b)) {
@@ -765,50 +974,6 @@ impl FlightPlanView {
                         if w.has_location() {
                             w.alt = a as f32;
                         }
-                    }
-                }
-            }
-            MenuPrompt::Utm(z, e, n, s) => {
-                if let (Ok(z), Some(e), Some(n)) = (z.trim().parse::<i32>(), num(&e), num(&n)) {
-                    let (a, b) = utm_to_latlng(z, s, e, n);
-                    let wp = self.new_wp(app, mavcmd::WAYPOINT, a, b);
-                    self.items.push(wp);
-                }
-            }
-            MenuPrompt::Text(lat, lng, t, h) => {
-                let px = num(&h).unwrap_or(20.0) / 7.0;
-                for (ci, ch) in t.chars().enumerate() {
-                    let g = glyph(ch);
-                    for (row, bits) in g.iter().enumerate() {
-                        // serpentine through each glyph row so the path stays short
-                        let cols: Vec<usize> = if row % 2 == 0 { (0..5).collect() } else { (0..5).rev().collect() };
-                        for col in cols {
-                            if bits & (1 << (4 - col)) != 0 {
-                                let (a, b) = offset_m(lat, lng, -(row as f64) * px, (ci as f64 * 6.0 + col as f64) * px);
-                                let wp = self.new_wp(app, mavcmd::WAYPOINT, a, b);
-                                self.items.push(wp);
-                            }
-                        }
-                    }
-                }
-            }
-            MenuPrompt::CircleSurvey(lat, lng, r, s) => {
-                let (Some(r), Some(s)) = (num(&r), num(&s)) else { return };
-                let mut rad = r;
-                while rad > s / 2.0 {
-                    let pts = ((2.0 * std::f64::consts::PI * rad / s).ceil() as usize).max(6);
-                    for (a, b) in mp_core::survey::circle((lat, lng), rad, pts) {
-                        let wp = self.new_wp(app, mavcmd::WAYPOINT, a, b);
-                        self.items.push(wp);
-                    }
-                    rad -= s;
-                }
-            }
-            MenuPrompt::SplineCircle(lat, lng, r, n) => {
-                if let (Some(r), Ok(n)) = (num(&r), n.trim().parse::<usize>()) {
-                    for (a, b) in mp_core::survey::circle((lat, lng), r, n) {
-                        let wp = self.new_wp(app, mavcmd::SPLINE_WAYPOINT, a, b);
-                        self.items.push(wp);
                     }
                 }
             }
@@ -939,5 +1104,56 @@ mod tests {
         assert_eq!(geocode_location("Perth Airport, Australia").unwrap(), (-31.9403, 115.9669));
         assert_eq!(geocode_location("Canberra").unwrap(), (-35.2809, 149.1300));
         assert!(geocode_location("").is_err());
+    }
+}
+
+/// areaToolStripMenuItem_Click (calcpolygonarea asks for a polygon first; tab stops drawn as spaces)
+fn area_message(polygon: &[(f64, f64)], app: &mut AppCtx) {
+    if polygon.is_empty() {
+        app.toasts.error("Please define a polygon!");
+        return;
+    }
+    let a = mp_core::survey::area(polygon).abs();
+    let tab = "        ";
+    app.toasts.message(format!("Area: {a:.0} m2\n{tab}{:.2} Acre\n{tab}{:.2} Hectare\n{tab}{:.0} sqf", a * 0.000247105, a * 1e-4, a * 10.7639), "Area");
+}
+
+#[cfg(test)]
+mod tool_tests {
+    use super::*;
+
+    #[test]
+    fn spline_circle_rings_follow_the_original_loop() {
+        let pts = spline_circle(-35.0, 149.0, 50, 5, 20, 5);
+        // first lap: five points at 5; then the alt rises 1 (5 / 4) per point to past 20
+        assert_eq!(pts.iter().take(5).map(|p| p.2).collect::<Vec<_>>(), [5, 5, 5, 5, 5]);
+        assert_eq!(pts[5].2, 5);
+        assert_eq!(pts[6].2, 6);
+        // the lap test is between laps only: the last lap starts at most at 20 and climbs on
+        assert_eq!(pts.iter().map(|p| p.2).max(), Some(24));
+        let first = mp_core::geo::PointLatLngAlt::new(pts[0].0, pts[0].1, 0.0);
+        assert!((first.distance(&mp_core::geo::PointLatLngAlt::new(-35.0, 149.0, 0.0)) - 50.0).abs() < 0.5);
+        // a step under four never rises: one lap, not an endless loop
+        assert_eq!(spline_circle(-35.0, 149.0, 50, 5, 20, 3).len(), 5);
+    }
+
+    #[test]
+    fn offset_polygon_moves_each_edge_by_the_distance() {
+        // a 100 m square grown by 10 m becomes 120 m wide
+        let sq = [(0.0, 0.0), (0.0, 0.000898315), (0.000904369, 0.000898315), (0.000904369, 0.0)];
+        let out = offset_polygon(&sq, 10.0);
+        let w = (out.iter().map(|p| p.1).fold(f64::MIN, f64::max) - out.iter().map(|p| p.1).fold(f64::MAX, f64::min)).to_radians() * R;
+        assert!((w - 120.0).abs() < 0.5, "{w}");
+        let inner = offset_polygon(&sq, -10.0);
+        let w = (inner.iter().map(|p| p.1).fold(f64::MIN, f64::max) - inner.iter().map(|p| p.1).fold(f64::MAX, f64::min)).to_radians() * R;
+        assert!((w - 80.0).abs() < 0.5, "{w}");
+    }
+
+    #[test]
+    fn utm_prompt_defaults_and_cancel_rules() {
+        let p = ChainTool::Utm.prompts("50s");
+        assert_eq!(p[0], ("Zone", "Enter Zone. (eg 50S, 11N)", "50s".to_string()));
+        assert!(ChainTool::Utm.cancel_ends() && !ChainTool::Text.cancel_ends());
+        assert_eq!(ChainTool::CircleSurvey.prompts("").len(), 6);
     }
 }

@@ -133,6 +133,12 @@ pub struct FlightPlanView {
     /// Fence Circle Around Home: radius prompt
     fence_circle: Option<String>,
     menu_prompt: Option<menu::MenuPrompt>,
+    /// a context-menu tool's InputBox sequence
+    input_chain: Option<menu::InputChain>,
+    /// FlightPlanner.zone, the last UTM zone typed (static "50s")
+    utm_zone: String,
+    /// Measure Dist's MessageShowAgain
+    fp_show_again: Option<crate::show_again::ShowAgain>,
     kml_overlay: Vec<Vec<(f64, f64)>>,
     elevation_open: bool,
     /// Switch Docking: waypoint list docked right instead of bottom
@@ -196,6 +202,9 @@ impl Default for FlightPlanView {
             grid_ui: None,
             fence_circle: None,
             menu_prompt: None,
+            input_chain: None,
+            utm_zone: "50s".into(),
+            fp_show_again: None,
             kml_overlay: Vec::new(),
             elevation_open: false,
             waypoints_right: false,
@@ -1342,9 +1351,6 @@ impl FlightPlanView {
         }
         if let (Some((lat, lng)), true) = (add_at, self.drawing_polygon) {
             self.polygon.push((lat, lng));
-        } else if let (Some((lat, lng)), Some(_)) = (add_at, self.measure) {
-            let _ = (lat, lng);
-            self.measure = None;
         } else if let (Some((lat, lng)), 1 | 2) = (add_at, self.mission_type) {
             let id = if self.mission_type == 1 { 5001 } else { 5100 };
             let wp = Locationwp { id, lat, lng, alt: app.settings.default_alt, frame: if id == 5100 { 3 } else { 0 }, ..Default::default() };
