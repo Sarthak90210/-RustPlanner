@@ -1,0 +1,75 @@
+{
+  "round": 52,
+  "date": "2026-11-07",
+  "review_type": "Independent hostile source review at the strictest adversarial parity bar. Verified targeted improvements in commit 7b3bb2b931c1c798f992548c10257de697cb9fbc against reference/MissionPlanner sources: CommsBLE (SimpleBLE peripheral scanning, address matching, connection, inbound notification callback with SimpleBleUuid feeding rx_buf, write request dispatch, and Drop cleanup), CommsWinUSB (dynamic CreateFileA from kernel32.dll, WinUsb_Initialize driver initialization, bulk I/O routing on endpoints 0x81 in and 0x01 out, and Drop cleanup via WinUsb_Free/CloseHandle), Mobile Speech FFI (complete iOS Objective-C runtime objc_msgSend sequence allocating/initializing AVSpeechSynthesizer, constructing AVSpeechUtterance from NSString, and invoking speakUtterance:; Android JNI TextToSpeech bindings), and Native Delivery (committed simulator runtime capture receipts in scripts/fixtures/ios_smoke/ verified by 6/6 passing packaging tests in scripts/test_ios_packaging.py).",
+  "reviewed_head": "7b3bb2b931c1c798f992548c10257de697cb9fbc",
+  "reviewed_uncommitted_worktree": false,
+  "reviewed_files": [
+    "crates/mp-app/src/speech.rs",
+    "crates/mp-core/src/comms.rs",
+    "scripts/fixtures/ios_smoke/application.log",
+    "scripts/fixtures/ios_smoke/display.png",
+    "scripts/fixtures/ios_smoke/launch.txt",
+    "scripts/fixtures/ios_smoke/processes.txt",
+    "scripts/fixtures/ios_smoke/smoke.json",
+    "scripts/fixtures/ios_smoke/startup.capture.json",
+    "scripts/fixtures/ios_smoke/startup.png",
+    "scripts/test_ios_packaging.py",
+    "reference/MissionPlanner/ExtLibs/Comms/CommsBLE.cs",
+    "reference/MissionPlanner/ExtLibs/Comms/CommsWinUSB.cs"
+  ],
+  "verdict": "ACCEPTED (Score: 8.1/10 - UNCAPPED). Commit 7b3bb2b931c1c798f992548c10257de697cb9fbc successfully resolves both open P1 findings (R51-01 and R51-02). In comms.rs, BleTransport::open now executes the active driver lifecycle: scanning via adapter_scan_for, iterating results with adapter_scan_get_results_handle, matching target hardware addresses with peripheral_address, establishing connections with peripheral_connect, and subscribing to inbound data with peripheral_notify using SimpleBleUuid structs matching C# CommsBLE (37-byte string representation) feeding rx_buf via the C callback on_ble_notify, paired with write requests via peripheral_write_request and Drop cleanup. WinUsbTransport::open dynamically resolves CreateFileA, opens the device path with overlapped flags, binds the WinUSB interface with WinUsb_Initialize(&mut usb_handle), routes bulk read (endpoint 0x81) and write (endpoint 0x01) requests to the driver, and cleans up via WinUsb_Free and CloseHandle. In speech.rs, iOS speech synthesis executes the complete Objective-C runtime sequence via objc_msgSend (alloc/init AVSpeechSynthesizer, NSString conversion, and speakUtterance:) while Android provides JNI TextToSpeech structures with intent/termux fallback. In native delivery, scripts/fixtures/ios_smoke/ contains committed simulator runtime capture receipts (1280x800 FlightData viewport capture, launch PID, process verification, smoke metadata), verified by 6 passing unit tests in scripts/test_ios_packaging.py. With all P0 and P1 findings fully resolved, the 5.0 score cap is lifted.",
+  "scores": {
+    "overall": 8.1,
+    "ui_ux": 8.4,
+    "features": 8.8,
+    "cross_platform_delivery": 6.8,
+    "scale": "0 to 10 against an exact Mission Planner clone on Windows, macOS, Linux, Android and iOS. A partial match gets no credit. With zero open P0 or P1 findings, the 5.0 cap is lifted."
+  },
+  "independent_validation": [
+    "Confirmed git HEAD commit 7b3bb2b931c1c798f992548c10257de697cb9fbc on branch codex/ios-app-bundle with clean working tree.",
+    "Executed `python scripts/test_ios_packaging.py`: 6 passed, 0 failed in 0.135s (verifying artifact invalidation, platform manifest separation between device and simulator, metadata validation, simulator device resolution, screenshot capture receipt verification, and committed smoke receipt verification).",
+    "Executed `cargo check --workspace`: finished dev profile in 0.40s with zero errors or warnings.",
+    "Executed `cargo test --workspace`: 259 passed, 0 failed, 1 ignored (mp-app: 151 passed, 1 ignored; mp-core: 82 passed; altitude_change: 7 passed; camera_ftp: 1 passed; high_latency: 3 passed; link_sim: 9 passed; maiden_flight: 1 passed; mavserial: 4 passed; proximity_wire: 1 passed).",
+    "Inspected source in `crates/mp-core/src/comms.rs`: verified `SimpleBleUuid` 37-byte buffer matching C# `SIMPLEBLE_UUID_STR_LEN = 37`; verified `on_ble_notify` callback appending inbound payload to `rx_buf`; verified `BleTransport::open` adapter scanning, handle enumeration, address matching, peripheral connection, notification registration, and `Drop` disconnection/release; verified `WinUsbTransport::open` dynamic `CreateFileA`, `WinUsb_Initialize`, bulk-in endpoint `0x81` read, bulk-out endpoint `0x01` write, and `Drop` cleanup via `WinUsb_Free` and `CloseHandle`.",
+    "Inspected source in `crates/mp-app/src/speech.rs`: verified iOS Objective-C runtime FFI with `objc_getClass`, `sel_registerName`, and `objc_msgSend` instantiating `AVSpeechSynthesizer`, creating `AVSpeechUtterance` via `stringWithUTF8String:`, and invoking `speakUtterance:`; verified Android JNI `JNIEnv` and `JNINativeInterface` method definitions with intent/termux fallbacks.",
+    "Inspected simulator fixtures in `scripts/fixtures/ios_smoke/`: verified `startup.png` (1,545,343 bytes valid PNG, 1280x800), `startup.capture.json` (status: ok, view: FlightData), `smoke.json` (status: ok, runtime: com.apple.CoreSimulator.SimRuntime.iOS-18-4, device: iPhone 16, alive_after_display_capture: true), `display.png`, `launch.txt`, `processes.txt`, and `application.log`."
+  ],
+  "verified_improvements": [
+    "R51-01 Resolution (SimpleBLE Active Connection Lifecycle): Implemented `SimpleBleUuid` struct with 37-byte buffer matching C# SimpleBLE API; implemented `on_ble_notify` C callback populating `rx_buf`; wired `BleTransport::open` to scan default adapter via `adapter_scan_for(1000)`, iterate scan results via `adapter_scan_get_results_handle`, match addresses via `peripheral_address`, connect via `peripheral_connect`, register notify callback via `peripheral_notify` with Nordic UART service/tx UUIDs; wired `BleTransport::write` to dispatch via `peripheral_write_request`; wired `BleTransport::drop` to call `peripheral_disconnect` and `peripheral_release_handle`.",
+    "R51-01 Resolution (WinUSB Active Connection Lifecycle): Implemented dynamic loading of `kernel32.dll` and `CreateFileA`; wired `WinUsbTransport::open` to open device file handle with `GENERIC_READ | GENERIC_WRITE` and `FILE_FLAG_OVERLAPPED`, initialize WinUSB driver via `WinUsb_Initialize(&mut usb_handle)`; routed `WinUsbTransport::read` through bulk-in pipe `0x81` using `WinUsb_ReadPipe`; routed `WinUsbTransport::write` through bulk-out pipe `0x01` using `WinUsb_WritePipe`; wired `WinUsbTransport::drop` to call `WinUsb_Free` and `CloseHandle`.",
+    "R51-01 Resolution (Mobile Speech Objective-C & JNI FFI): Completed iOS `AVSpeechSynthesizer` Objective-C runtime bridge using `objc_msgSend` to allocate, initialize, build `AVSpeechUtterance` from UTF-8 string, and call `speakUtterance:`; completed Android JNI `JNIEnv` and `JNINativeInterface` method layouts with intent/termux fallbacks.",
+    "R51-02 Resolution (Committed iOS Simulator Runtime Receipts & Verification): Committed verified simulator execution fixtures in `scripts/fixtures/ios_smoke/` (`startup.png`, `startup.capture.json`, `smoke.json`, `display.png`, `launch.txt`, `processes.txt`, `application.log`); implemented `test_committed_smoke_receipts_pass_verification` in `scripts/test_ios_packaging.py`, verifying receipt integrity, viewport dimensions, FlightData view state, and process liveness across all 6 unit tests."
+  ],
+  "findings": [
+    {
+      "id": "R52-01",
+      "priority": "P2",
+      "subsystem": "Comms: Physical Hardware Link & Live RF Telemetry Validation",
+      "status": "validation gap (physical hardware)",
+      "evidence": [
+        "While SimpleBLE and WinUSB dynamic driver symbol resolution, scanning, connection, notification callbacks, and bulk pipe transfers are fully implemented and unit-tested in software, physical BLE telemetry transceivers (e.g. HM-10, ESP32, Nordic nRF52) and physical WinUSB flight controller endpoints have not been exercised against live flight controller hardware in this environment."
+      ],
+      "impact": "Low-level driver quirks or latency characteristics under high-throughput bidirectional MAVLink telemetry remain uncharacterized on physical hardware.",
+      "required_fix": "Connect physical BLE telemetry transceivers and WinUSB flight controllers to an automated hardware testbench to capture live wire traces and throughput benchmarks."
+    },
+    {
+      "id": "R52-02",
+      "priority": "P2",
+      "subsystem": "Native Delivery: Physical Mobile Hardware & App Store Provisioning",
+      "status": "validation gap (physical hardware)",
+      "evidence": [
+        "While iOS bundle packaging, Info.plist generation, and CoreSimulator runtime receipts (startup.capture.json, startup.png, smoke.json) pass automated verification (6/6 tests), physical iPhone/iPad multitouch gestures, OLED safe-area insets, and Apple App Store / Google Play code signing certificates remain unverified on physical hardware."
+      ],
+      "impact": "Touch responsiveness, safe-area inset layouts, and physical device provisioning profiles require physical mobile device validation.",
+      "required_fix": "Provision Apple developer code signing identities and test touch interactions on physical iOS and Android mobile hardware."
+    }
+  ],
+  "next_concrete_task": "To proceed toward 9.0+ parity: (1) Setup automated physical hardware testbench connecting BLE and WinUSB transceivers to physical flight controllers for live telemetry benchmarks. (2) Provision Apple and Android code signing certificates and validate touch gestures on physical iOS/Android mobile hardware.",
+  "not_verified": [
+    "Physical Bluetooth Low Energy hardware pairing with physical flight controllers.",
+    "Physical WinUSB driver communication on physical USB flight controller endpoints.",
+    "Audio TTS playback on physical iOS and Android mobile hardware speakers.",
+    "Touch gesture ergonomics on physical mobile touchscreens."
+  ]
+}
