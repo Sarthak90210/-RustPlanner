@@ -94,6 +94,8 @@ enum Confirmed {
     ResumeWarn,
     /// "You are in failsafe, are you sure?"
     SetMode(u32),
+    /// setHomeHereToolStripMenuItem_Click (OK / Cancel): lat, lng, terrain alt
+    SetHome(f64, f64, f64),
 }
 
 /// BUT_resumemis_Click as a state machine driven by frames and link events.
@@ -112,6 +114,10 @@ enum Resume {
 enum Inputted {
     FlyToCoords,
     PointCameraCoords,
+    /// pointCameraHereToolStripMenuItem_Click's target altitude
+    PointCameraHere(f64, f64),
+    /// takeOffToolStripMenuItem_Click's altitude
+    TakeOff,
     AddPoi(f64, f64),
     SendMessage,
     JumpTag,
@@ -1553,8 +1559,10 @@ impl FlightDataView {
                 }
                 "Add Poi" => self.prompt = Some(Prompt::Input { title: "POI".into(), fields: vec![("Enter ID".into(), String::new())], then: Inputted::AddPoi(ll.0, ll.1) }),
                 "Point Camera Here" => {
-                    if let Some(l) = need_link(app) {
-                        l.send(LinkCommand::CommandLong { command: mavcmd::DO_SET_ROI, params: [0.0, 0.0, 0.0, 0.0, ll.0 as f32, ll.1 as f32, 0.0] });
+                    if link.is_none() {
+                        app.toasts.error("Please Connect First");
+                    } else {
+                        self.prompt = Some(Prompt::Input { title: "Enter Alt".into(), fields: vec![("Enter Target Alt (Relative to home)".into(), "0".into())], then: Inputted::PointCameraHere(ll.0, ll.1) });
                     }
                 }
                 "Point Camera Coords" => {
@@ -1564,15 +1572,23 @@ impl FlightDataView {
                         then: Inputted::PointCameraCoords,
                     })
                 }
+                // setDigicamControl(true): DIGICAM_CONTROL when the command is refused
                 "Trigger Camera NOW" => {
-                    if let Some(l) = need_link(app) {
+                    if let Some(l) = link {
+                        self.action_ack = Some((203, String::new()));
                         l.send(LinkCommand::CommandLong { command: 203, params: [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0] });
                     }
                 }
                 "Flight Planner" => app.settings.view = crate::app::View::FlightPlan,
                 "Set Home Here" => {
-                    if let Some(l) = need_link(app) {
-                        l.send(LinkCommand::CommandLong { command: 179, params: [0.0, 0.0, 0.0, 0.0, ll.0 as f32, ll.1 as f32, 0.0] });
+                    if link.is_some() {
+                        // srtm.getAltitude must be valid (or ocean)
+                        match crate::srtm::altitude(ll.0, ll.1) {
+                            None => app.toasts.message("No SRTM data for this area", "Error"),
+                            Some(alt) => {
+                                self.prompt = Some(Prompt::Confirm { title: "Are you sure?".into(), text: "This will reset the onboard home position (effects RTL etc). Are you Sure?".into(), then: Confirmed::SetHome(ll.0, ll.1, alt) });
+                            }
+                        }
                     }
                 }
                 "Set EKF Origin Here" => {
@@ -1588,8 +1604,9 @@ impl FlightDataView {
                     }
                 }
                 "TakeOff" => {
-                    if let Some(l) = need_link(app) {
-                        l.send(LinkCommand::CommandLong { command: mavcmd::TAKEOFF, params: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, guided_wp.alt] });
+                    if link.is_some() {
+                        let alt = app.settings.planner.get("takeoff_alt").cloned().unwrap_or_else(|| "5".into());
+                        self.prompt = Some(Prompt::Input { title: "Enter Alt".into(), fields: vec![("Enter Takeoff Alt".into(), alt)], then: Inputted::TakeOff });
                     }
                 }
                 "Jump To Tag" => {
@@ -1693,6 +1710,8 @@ impl FlightDataView {
             ui.horizontal(|ui| {
                 let force = match prompt {
                     Prompt::Confirm { then: Confirmed::ForceArm(arm), .. } => Some(if *arm { "Force Arm" } else { "Force Disarm" }),
+                    // MessageBoxButtons.OKCancel
+                    Prompt::Confirm { then: Confirmed::SetHome(..), .. } => Some("OK"),
                     _ => None,
                 };
                 let (yes, no) = match force {
@@ -1754,6 +1773,11 @@ impl FlightDataView {
                         }
                     }
                     Confirmed::SetMode(m) => l.send(LinkCommand::SetMode(m)),
+                    Confirmed::SetHome(lat, lng, alt) => {
+                        l.send(LinkCommand::CommandInt(mp_core::gimbal::CommandInt { command: 179, frame: 0, params: [0.0; 4], x: (lat * 1e7) as i32, y: (lng * 1e7) as i32, z: alt as f32 }));
+                        // getHomePositionAsync
+                        l.send(LinkCommand::CommandNoAck { command: 512, params: [242.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] });
+                    }
                     Confirmed::Arm(arm) => {
                         self.arm_pending = Some((arm, l.shared.read().messages.len()));
                         l.send(LinkCommand::Arm { arm, force: false });
@@ -1805,6 +1829,30 @@ impl FlightDataView {
                         // get all: the current mission from the vehicle, then trim and re-upload
                         l.send(LinkCommand::ReadMission { mission_type: 0 });
                         self.resume = Some(Resume::Download { wp });
+                    }
+                }
+                Inputted::PointCameraHere(lat, lng) => {
+                    let text = fields.first().map(|(_, t)| t.trim().to_string()).unwrap_or_default();
+                    match text.parse::<f32>() {
+                        Err(_) => app.toasts.error("Bad Alt"),
+                        Ok(_) if lat == 0.0 || lng == 0.0 => app.toasts.error("Bad Lat/Long"),
+                        Ok(alt) => {
+                            if let Some(l) = link {
+                                l.send(LinkCommand::CommandInt(mp_core::gimbal::CommandInt { command: mavcmd::DO_SET_ROI, frame: 3, params: [0.0; 4], x: (lat * 1e7) as i32, y: (lng * 1e7) as i32, z: alt / crate::units::alt(1.0) }));
+                            }
+                        }
+                    }
+                }
+                Inputted::TakeOff => {
+                    let text = fields.first().map(|(_, t)| t.trim().to_string()).unwrap_or_default();
+                    // float.Parse: an unreadable altitude stops here
+                    if let (Some(l), Ok(alt)) = (link, text.parse::<f32>()) {
+                        app.settings.planner.insert("takeoff_alt".into(), alt.to_string());
+                        let guided = l.shared.read().cs.firmware.modes().into_iter().find(|(_, n)| n.eq_ignore_ascii_case("GUIDED")).map(|(k, _)| k);
+                        if let Some(m) = guided {
+                            l.send(LinkCommand::SetMode(m));
+                        }
+                        l.send(LinkCommand::CommandLong { command: mavcmd::TAKEOFF, params: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, alt] });
                     }
                 }
                 Inputted::JumpTag => {

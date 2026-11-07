@@ -1,0 +1,606 @@
+{
+  "round": 47,
+  "date": "2026-11-07",
+  "review_type": "Independent hostile source review at the stricter bar. Compared about 30 user-facing handlers line by line against reference/MissionPlanner: ConfigRawParams (Activate, BUT_load, loadparamsfromfile, BUT_writePIDS, BUT_rerequestparams, Params_CellValueChanged, Params_RowEnter, BuildTree, filterList, BUT_paramfileload, BUT_reset_params, BUT_commitToFlash, BUT_refreshTable, ParamCompare); FlightPlanner (BUT_read, BUT_write, but_writewpfast/saveWPsFast, saveWPs, ProcessCmdKey/undo, updateUndoBuffer, callMeDrag, Commands_SelectionChangeCommitted, setgradanddistandaz, ContextMeasure, text/UTM/spline-circle/circle-survey/offset prompts, savewaypoints); GimbalVideoControl (key handling, click actions, RenderFrame, ResolveSettingsCamera, AutoConnect); CameraCustomSettingsForm, CameraSettingsSession and the definition download; FlightData (BUT_ARM, BUTactiondo, BUT_mountmode, BUT_clear_track, BUT_SendMSG, BUT_Homealt); InitialSetup (accelerometer calibration, radio calibration, elevon config, DroneCAN tools); MainV2.doConnect.",
+  "reviewed_head": "da4214b27840be8b89da9c279e69c0816692ae86",
+  "reviewed_uncommitted_worktree": false,
+  "reviewed_files": [
+    "crates/mp-app/src/views/config.rs",
+    "crates/mp-app/src/views/flight_plan.rs",
+    "crates/mp-app/src/views/flight_plan/menu.rs",
+    "crates/mp-core/src/wpfast.rs",
+    "crates/mp-core/src/link.rs",
+    "crates/mp-core/src/param_meta.rs",
+    "crates/mp-core/src/paramfile.rs",
+    "crates/mp-app/src/views/gimbal_video.rs",
+    "crates/mp-app/src/camera_settings.rs",
+    "crates/mp-core/src/camdef.rs",
+    "crates/mp-app/src/views/flight_data.rs",
+    "crates/mp-app/src/views/setup.rs",
+    "crates/mp-app/src/views/dronecan_page.rs",
+    "crates/mp-app/src/app.rs",
+    "crates/mp-app/src/speech.rs",
+    "crates/mp-core/src/comms.rs",
+    "crates/mp-app/Cargo.toml",
+    "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigRawParams.cs",
+    "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigRawParams.resx",
+    "reference/MissionPlanner/Controls/paramcompare.cs",
+    "reference/MissionPlanner/Controls/paramcompare.Designer.cs",
+    "reference/MissionPlanner/GCSViews/FlightPlanner.cs",
+    "reference/MissionPlanner/GCSViews/FlightPlanner.resx",
+    "reference/MissionPlanner/GCSViews/FlightData.cs",
+    "reference/MissionPlanner/Controls/GimbalVideoControl.cs",
+    "reference/MissionPlanner/Controls/GimbalVideoControl.Designer.cs",
+    "reference/MissionPlanner/Controls/CameraCustomSettingsForm.cs",
+    "reference/MissionPlanner/ExtLibs/ArduPilot/Mavlink/CameraSettingsSession.cs",
+    "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs",
+    "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigRadioInput.cs",
+    "reference/MissionPlanner/GCSViews/ConfigurationView/ConfigDroneCAN.cs",
+    "reference/MissionPlanner/MainV2.cs",
+    "reference/MissionPlanner/Utilities/CircleSurveyMission.cs",
+    "reference/MissionPlanner/ExtLibs/Utilities/ParameterMetaDataRepository.cs",
+    "reference/MissionPlanner/ExtLibs/Strings/Strings.resx"
+  ],
+  "verdict": "REJECTED for exact-clone parity (Score: 3.5/10). The newest work is close to its C# sources: CameraSettingsSession is a near line-for-line port, saveWPsFast's retry and partial-upload loop matches, and the camera rows now use CameraCustomSettingsForm's 63 px panels, 270 px combo and 200x27 slider. Elsewhere the comparison found many divergences, several of which change what is sent to the vehicle. The Options combo writes 0 for every fractional metadata option, so picking 'High' on ACRO_RP_EXPO writes Disabled. Do Action Reboot_Mass_Storage reboots into the bootloader (param1 3 instead of 5). Set Mount sends DO_MOUNT_CONFIGURE instead of setting MNT_MODE or sending DO_MOUNT_CONTROL. Mission Write never sets WP_RADIUS, WPNAV_RADIUS or LOITER_RAD. Radio calibration invents an acceptance rule and skips the 'Bad channel 1' cancel and the sticks-centred step. Accelerometer level reports Completed without an ACK. The elevon checkboxes and three DroneCAN tools are stubs. Parameter-file and compare values bypass the ReadOnly and range checks. Several FlightPlanner InputBox sequences (Text, UTM, Spline Circle, Circle Survey, Offset) and Measure Distance are invented replacements. More than 15 file-dialog actions are no-ops on mobile. cargo test --workspace: 242 passed, 0 failed, 1 ignored. Several tests check copied logic or invented rules.",
+  "scores": {
+    "overall": 3.5,
+    "ui_ux": 3.0,
+    "features": 3.5,
+    "cross_platform_delivery": 2.0,
+    "scale": "0 to 10 against an exact Mission Planner clone on Windows, macOS, Linux, Android and iOS. A partial match gets no credit. With any P0 or P1 open, the cap is 5."
+  },
+  "independent_validation": [
+    "git checkout --detach da4214b in this worktree; git log -1 shows da4214b ('Camera custom settings rows use CameraCustomSettingsForm's panel coordinates; ...').",
+    "cargo test --workspace --no-fail-fast (Windows host), exit 0: mp_app lib 137 passed / 1 ignored; mp_core lib 79; altitude_change 7; camera_ftp 1; high_latency 3; link_sim 9; maiden_flight 1; mavserial 4; proximity_wire 1; mp_plugin and mp_plugin_example 0 tests. Total 242 passed, 0 failed, 1 ignored, no compiler warnings in the log.",
+    "Counted 27 <Values> entries with fractional keys and 380 <Range> entries with '.0' bounds in crates/mp-core/assets/ParameterMetaDataBackup.xml, confirming the scale of R47-01 and R47-25.",
+    "Parsed ConfigRawParams.resx and FlightPlanner.resx for the coordinates cited. The ConfigRawParams right-panel button coordinates (6,6 / 6,31 / 6,66 / 6,91 / 6,116 / 6,141 / 6,201 / 6,228 / 6,255 / 6,302 / 6,328 / 6,351 / 6,384) match config.rs:1206-1327.",
+    "Confirmed by grep that crates/mp-app/src has no 'min/max checked', 'rawparam_', 'WPNAV_RADIUS' write path, 'WPFileDirectory', 'RALLY_TOTAL', 'ParamCachePath' or 'NewFirmware'."
+  ],
+  "verified_improvements": [
+    "R46-03's concrete geometry item is fixed: camera_settings.rs:186-221 now uses 63 px panels, 8/4 margins, a 325x23 description, a 270 px combo at 335,3, a 200x27 slider, a 120x23 slider label at 540,6, a 68x27 Apply at 535,2 and a 690x23 detail at 4,33, matching CameraCustomSettingsForm.cs:211-262.",
+    "CameraSettingsSession (camdef.rs:656-880) matches CameraSettingsSession.cs branch for branch: RequestAll, Read, SetValue, Received, Receive (type mismatch, IN_PROGRESS, rejection, adjusted read-back) and Tick (5 reads per 200 ms, 3 attempts, the 30 s write expiry). Only the map ordering differs (R47-43).",
+    "saveWPsFast's loop (wpfast.rs:140-216) follows FlightPlanner.cs:6436-6555, including the 1.1 s wait, INVALID_SEQUENCE sleep, partial-list resend on ERROR, the NO_SPACE, INVALID and other-result texts, the frame selection and the unscaled DIGICAM x/y.",
+    "BUT_write_Click and but_writewpfast_Click pre-checks: the absolute-alt prompt, 'Only available for missions', invalid home, low alt (TAKEOFF/LAND/RTL exempt, column 0 before the number check) and checkZeroAlts with MessageShowAgain keys are present (flight_plan.rs:267-333, 1670-1707).",
+    "Commands_SelectionChangeCommitted's TAKEOFF, LAND, DO_DIGICAM_CONTROL and UNKNOWN 'Mavlink ID'/'Please enter the command ID' branches are present (flight_plan.rs:441-454, 1720-1745, menu.rs:637/673).",
+    "GimbalVideoControl HandleKeyPress and HandleHeldKeys, the click POI/attitude/track bindings, the drag rectangle and the tracking overlay follow the C# order and values (gimbal_video.rs:573-622, 700-783)."
+  ],
+  "findings": [
+    {
+      "id": "R47-01",
+      "priority": "P1",
+      "subsystem": "Config / Raw Params: Options combo values (param metadata parsing)",
+      "status": "wrong behaviour",
+      "evidence": [
+        "C# ParameterMetaDataRepository.GetParameterOptionsInt (ExtLibs/Utilities/ParameterMetaDataRepository.cs:76-103) calls int.Parse on every key and skips entries that fail ('Bad entry in param meta data'), so ACRO_RP_EXPO ('0:Disabled,0.1:Very Low,0.2:Low,...') gets a one-entry combo. The Options text cell uses the raw metadata string, so it shows '0.1:Very Low' (ConfigRawParams.cs:607).",
+        "Rust mp-core/src/param_meta.rs:26-33 parse_values parses the key as f64 and casts it to i64, so every fractional key becomes 0. 27 Values entries in ParameterMetaDataBackup.xml have fractional keys. config.rs:1782-1797 then offers 'Disabled, Very Low, Low, Medium, High, Very High', all with key 0. Picking 'High' queues 0 (Disabled). options_text (config.rs:918-922) prints '0:Very Low'."
+      ],
+      "impact": "Picking a named option on ACRO_RP_EXPO, ACRO_Y_EXPO and 25 other parameters silently writes a different value (0). This changes vehicle tuning against the user's intent.",
+      "required_fix": "Keep the raw Values string for the Options cell and tooltip. For the RowEnter combo, mirror GetParameterOptionsInt: int.Parse each key and drop any entry that is not an integer."
+    },
+    {
+      "id": "R47-02",
+      "priority": "P1",
+      "subsystem": "Flight Data / Actions: Do Action Reboot_Mass_Storage",
+      "status": "wrong command parameter",
+      "evidence": [
+        "C# FlightData.cs:1823-1829 sends PREFLIGHT_REBOOT_SHUTDOWN with param1 = 5f (const rebootToMassStorage = 5f, the ArduPilot REBOOT_TO_MASS_STORAGE action).",
+        "Rust flight_data.rs:68 ACTIONS has (\"Reboot_Mass_Storage\", 246, [3.0, ...]). MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN param1=3 means 'reboot and keep in bootloader'."
+      ],
+      "impact": "The mass-storage action reboots the autopilot into the bootloader instead.",
+      "required_fix": "Use param1 = 5.0 and keep the C# no-ack doCommand semantics."
+    },
+    {
+      "id": "R47-03",
+      "priority": "P1",
+      "subsystem": "Flight Data / Actions: BUTactiondo_Click branch order and per-action logic",
+      "status": "missing branches",
+      "evidence": [
+        "C# FlightData.cs:1706-1781 runs Format_SD_Card (doCommandInt STORAGE_FORMAT 1,1), Trigger_Camera (setDigicamControl), Scripting_cmd_stop_and_restart, Scripting_cmd_stop and System_Time without the 'Are you sure you want to do X ?' box. The box at 1783-1785 only guards the remaining actions.",
+        "C# 1796-1801: Preflight_Calibration sets param1=1 (gyro) only on ArduCopter2, and param3=1 always. Toggle_Safety_Switch (1838-1848) sends SET_MODE with MAV_MODE_FLAG.SAFETY_ARMED and custom_mode taken from sensors_enabled.motor_control, and returns early when sysid is 0. A false doCommand shows Strings.CommandFailed + ' ' + cmd with caption Error (1890-1897).",
+        "Rust flight_data.rs:1099-1104 asks for confirmation on every action. ACTIONS (flight_data.rs:51) hard-codes [1,0,1] for every firmware. flight_data.rs:62 sends command 5300 (DO_SET_SAFETY_SWITCH_STATE) instead of SET_MODE. The confirmed branch (flight_data.rs:1598-1607) sends a fire-and-forget CommandLong and never shows 'Command Failed'. Plugin CustomActions (C# 1693-1704) have no counterpart."
+      ],
+      "impact": "Five actions ask a question C# never asks. Plane and Rover calibrate the gyro when C# would not. The safety toggle uses a different protocol message. Failures are silent.",
+      "required_fix": "Port BUTactiondo_Click branch by branch: the no-confirm actions first, the per-firmware Preflight_Calibration params, SET_MODE safety toggling, doCommand ack handling with the Command Failed box, and CustomActions dispatch."
+    },
+    {
+      "id": "R47-04",
+      "priority": "P1",
+      "subsystem": "Flight Data / Actions: BUT_mountmode_Click (Set Mount)",
+      "status": "wrong command",
+      "evidence": [
+        "C# FlightData.cs:1401-1422 sets MNT_MODE when that parameter exists. Otherwise it sends DO_MOUNT_CONTROL (205) with the mode in param7. Failure shows Strings.ErrorNoResponse with caption Error.",
+        "Rust flight_data.rs:1157 always sends CommandLong 204 (DO_MOUNT_CONFIGURE) with the mode in param1, and never sets MNT_MODE."
+      ],
+      "impact": "Set Mount does not change the mount mode the way Mission Planner does on any ArduPilot vehicle with MNT_MODE.",
+      "required_fix": "Set MNT_MODE when present, else send DO_MOUNT_CONTROL with param7, and show ErrorNoResponse on failure."
+    },
+    {
+      "id": "R47-05",
+      "priority": "P1",
+      "subsystem": "Flight Data: BUT_ARM_Click force-arm dialog and error paths",
+      "status": "wrong buttons / missing branches",
+      "evidence": [
+        "C# FlightData.cs:1070-1075 shows the force prompt with icon Exclamation and custom buttons 'Force Arm'/'Force Disarm' and 'Cancel'. When the forced doARM also fails it shows Strings.ErrorRejectedByMAV ('Error: command rejected by MAV', Error). An exception shows Strings.ErrorNoResponse ('Error: no response from MAV'). doARM returning false without an ACK (timeout) also leads to the force prompt.",
+        "Rust flight_data.rs:1575 renders every Confirm prompt with 'Yes'/'No'. flight_data.rs:1585 makes Enter confirm the force-arm prompt, which C# does not do. flight_data.rs:1614 sends force arm and never checks its result. The force prompt only appears on a negative COMMAND_ACK (flight_data.rs:256-263), never on timeout."
+      ],
+      "impact": "The safety-critical force-arm dialog has the wrong buttons and a new Enter shortcut. A rejected force arm or a missing ack is silent.",
+      "required_fix": "Give Prompt::Confirm custom button texts ('Force Arm'/'Cancel'), drop the Enter shortcut, add an arm timeout path, and show ErrorRejectedByMAV or ErrorNoResponse after the forced attempt."
+    },
+    {
+      "id": "R47-06",
+      "priority": "P1",
+      "subsystem": "Flight Plan: saveWPs post-upload steps",
+      "status": "missing behaviour",
+      "evidence": [
+        "C# FlightPlanner.cs:6283-6345 (saveWPs): after the upload it calls getHomePositionAsync (falling back to getWP(0)) and reports 'Setting params' (95%). It then writes WP_RADIUS, WP_RADIUS_M and WPNAV_RADIUS (*100) from TXT_WPRad, and LOITER_RAD/WP_LOITER_RAD from TXT_loiterrad. It runs Terrain.checkTerrain for every located item and reports 'Done.' (100%). It forces frame GLOBAL on every fence item (6243-6250) and inserts home only for ArduPilotMega autopilots (6237-6239).",
+        "Rust flight_plan.rs:326-331 and mp-core link.rs:651-672 (WriteMission) send only the mission protocol. A grep for WPNAV_RADIUS, WP_RADIUS_M or checkTerrain in crates/mp-app/src finds no such write path. Fence items are sent 'as-is' (flight_plan.rs:327)."
+      ],
+      "impact": "Writing a mission in the Rust app leaves the vehicle's WP radius and loiter radius unchanged. Fence frames and terrain prefetch also differ from Mission Planner.",
+      "required_fix": "Port the tail of saveWPs: home re-fetch, the four radius parameter writes with their unit conversions, fence frame forcing, the apname check and the checkTerrain loop."
+    },
+    {
+      "id": "R47-07",
+      "priority": "P1",
+      "subsystem": "Flight Plan: context-menu InputBox prompts (Text, UTM, Spline Circle, Circle Survey, Offset Polygon)",
+      "status": "invented dialogs",
+      "evidence": [
+        "C# textToolStripMenuItem_Click (FlightPlanner.cs:6850-6870) asks three InputBoxes ('Enter String (requires 1CamBam_Stick_3 font)', 'Enter size' default 5, 'Enter rotation' default 0) and traces glyph outlines with GraphicsPath. Rust menu.rs:46+ uses an invented 5x7 bitmap glyph table and asks 'Enter your text' and 'Character height (m)' in one window (menu.rs:660-662).",
+        "C# enterUTMCoordToolStripMenuItem_Click (3271-3300) asks 'Enter Zone. (eg 50S, 11N)', then 'Easting' (default 578994), then 'Northing' (6126244), and reads the hemisphere from the zone letter. Rust menu.rs:654-659 shows one 'Enter UTM Coord' window with an invented 'Southern hemisphere' checkbox.",
+        "C# createSplineCircle (2871-2895) asks Radius, 'Min Alt', 'Max Alt', 'alt step' and 'Angle of first point (whole degrees)'. Rust menu.rs:668-670 asks 'Radius (m)' and 'Points'. C# CircleSurveyMission.createGrid (Utilities/CircleSurveyMission.cs:17-22) asks startalt, endalt, seperation, radius, photos and 'start heading'. Rust menu.rs:664-666 asks 'Radius (m)' and 'Spacing (m)'.",
+        "C# offsetPolygon (3661) uses title 'Offset in Meters' and prompt 'Please enter the offset in meters. Enter a negative value to make the polygon smaller'. Rust menu.rs:625 and 646 use 'Offset Polygon' and 'Distance (m, negative shrinks)'."
+      ],
+      "impact": "Five map tools ask different questions and produce different missions from Mission Planner.",
+      "required_fix": "Replace each window with the exact sequence of InputBox calls (title, prompt, default and cancel behaviour) and port the C# geometry for each tool."
+    },
+    {
+      "id": "R47-08",
+      "priority": "P1",
+      "subsystem": "Flight Plan: ContextMeasure_Click (Measure Distance)",
+      "status": "invented behaviour",
+      "evidence": [
+        "C# FlightPlanner.cs:2613-2647: the first click drops a red marker and shows Common.MessageShowAgain('Measure Dist', 'You can now pan/zoom around.\\nClick this option again to get the distance.'). The second click draws a green line and shows CustomMessageBox 'Distance: <FormatDistance> AZ: <bearing 0>', then clears the overlay.",
+        "Rust menu.rs:418-420 stores a start point. flight_plan.rs:1183-1189 draws a live white rubber-band line with a '{d:.1} m' label, and a later map click just clears it (flight_plan.rs:1287-1289). There is no show-again box, no message, no bearing and no unit formatting."
+      ],
+      "impact": "The measuring workflow and its output differ entirely.",
+      "required_fix": "Port the two-click menu flow with the MessageShowAgain box, the markers and the 'Distance: ... AZ: ...' message."
+    },
+    {
+      "id": "R47-09",
+      "priority": "P1",
+      "subsystem": "Config / Raw Params: load-from-file and ParamCompare bypass Params_CellValueChanged",
+      "status": "missing branches",
+      "evidence": [
+        "C# loadparamsfromfile (ConfigRawParams.cs:149-222) and ParamCompare.BUT_save_Click (Controls/paramcompare.cs:88-104) write the Value cell. That fires Params_CellValueChanged (454-532), which runs the RC/HS _REV rule, the ReadOnly box and the 'Out of range' Yes/No for each value.",
+        "Rust config.rs:1075 (file load) and config.rs:1641-1645 (compare Continue) insert into self.edits directly and skip queue_value (config.rs:1458-1474). A read-only or out-of-range value from a file is queued with no box."
+      ],
+      "impact": "A parameter file can queue writes to ReadOnly parameters, or out-of-range values, without the warnings Mission Planner shows.",
+      "required_fix": "Route every file and compare value through the same cell_value and queue_value path, and serialise the range prompts."
+    },
+    {
+      "id": "R47-10",
+      "priority": "P1",
+      "subsystem": "Config / Raw Params: BUT_writePIDS_Click confirmation box",
+      "status": "invented UI",
+      "evidence": [
+        "C# ConfigRawParams.cs:296-309 shows one CustomMessageBox: 'You are about to change N parameters. Please review the changes below:\\n\\n<name: prev -> new lines>\\n\\nDo you want to proceed?', caption 'Confirm Parameter Changes', Information icon, YesNo. Above 20 changes it shows the short text instead. Previous values come from MAVLinkParam.ToString() and new values from double.ToString().",
+        "Rust config.rs:1517-1583 builds a separate window with a striped grid. It appends an invented ' [Reboot Required]' tag (config.rs:1535) and an invented orange '⚠️ Note: One or more parameters require an autopilot reboot to take effect.' line (config.rs:1543, 1551). It stages reboot_required for the whole batch before any write; C# only sets reboot after setParam succeeds (ConfigRawParams.cs:322-326)."
+      ],
+      "impact": "The text and layout differ, and the confirmation adds a warning Mission Planner never shows.",
+      "required_fix": "Render the exact single message string through the CustomMessageBox path, and compute reboot only from writes that succeeded."
+    },
+    {
+      "id": "R47-11",
+      "priority": "P1",
+      "subsystem": "Config / Raw Params: Activate warnings, settings and hotkey",
+      "status": "missing behaviour",
+      "evidence": [
+        "C# Activate (ConfigRawParams.cs:50-97) shows Common.MessageShowAgain(Strings.RawParamWarning 'Raw Param Warning', Strings.RawParamWarningi 'All values on this screen are not min/max checked. Please double check your input.'). It restores rawparam_<col>_width, rawparam_splitterdistance (180) and rawparam_panel1collapsed, and saves them in Deactivate (99-112). ProcessCmdKey (114-123) maps Ctrl+S to BUT_writePIDS_Click.",
+        "A grep for 'min/max checked', 'rawparam_' and Key::S in crates/mp-app/src/views/config.rs finds nothing. The collapse state is an in-memory bool (config.rs:1013) and the columns are fixed widths (config.rs:1655)."
+      ],
+      "impact": "The first-visit warning and the Ctrl+S write shortcut are missing, and column and splitter layout is not persisted.",
+      "required_fix": "Add the MessageShowAgain box, the five settings keys and Ctrl+S."
+    },
+    {
+      "id": "R47-12",
+      "priority": "P1",
+      "subsystem": "Config / Raw Params: BUT_rerequestparams_Click (Refresh Params)",
+      "status": "missing branch",
+      "evidence": [
+        "C# ConfigRawParams.cs:421-452: when cs.armed, it asks Common.MessageShowAgain('Refresh Params', Strings.WarningUpdateParamList, true) and continues only on OK. getParamList failure shows Strings.ErrorReceivingParams with caption Error. The button stays disabled while the list downloads. It does not clear _changes.",
+        "Rust config.rs:1236-1243 clears edits and failed state (invented) and sends RequestParams with no armed check and no error box. The Friendly params page has the armed warning (friendly.rs:329-330), the raw page does not."
+      ],
+      "impact": "An armed vehicle gets a full parameter re-request with no warning, and the user's queued edits are discarded.",
+      "required_fix": "Add the armed MessageShowAgain, the error box and the button disabling, and keep the pending edits."
+    },
+    {
+      "id": "R47-13",
+      "priority": "P1",
+      "subsystem": "Config / Raw Params: BUT_reset_params_Click (Reset to Default)",
+      "status": "wrong order / missing steps",
+      "evidence": [
+        "C# ConfigRawParams.cs:980-1004 calls setParam(['FORMAT_VERSION','SYSID_SW_MREV'], 0) unconditionally. It then sleeps 1000 ms, calls doReboot(false, true), closes BaseStream and shows the reboot message. On an exception it shows Strings.ErrorCommunicating + ex with caption Error.",
+        "Rust config.rs:1435-1447 only sends the names that are present, fires PREFLIGHT_REBOOT_SHUTDOWN at once (no 1 s wait for the parameter write), keeps the link open, and has no error path."
+      ],
+      "impact": "The reboot can overtake the FORMAT_VERSION write, so defaults may never be restored. The port stays open while the board reboots.",
+      "required_fix": "Port the exact sequence: setParam with its result, sleep, doReboot, close the port, and the error box."
+    },
+    {
+      "id": "R47-14",
+      "priority": "P1",
+      "subsystem": "Config / Raw Params: ParamCompare form (Compare Params / Load Presaved)",
+      "status": "wrong UI, missing controls and messages",
+      "evidence": [
+        "C# Controls/paramcompare.Designer.cs: title 'ParamCompare', ClientSize 428x523, grid at 12,12 sized 399x474, 'Continue' at 171,492, and CHK_toggleall 'Check/Uncheck All' at 306,496. It is shown with ShowDialog (modal). BUT_paramfileload_Click (ConfigRawParams.cs:946-974) shows 'Loaded parameters, please make sure you write them!' (caption 'Loaded') on OK and saves the download to the user data directory. updatedefaultlist (860-887) uses the QuadPlanes/ subfolder when Q_ENABLE >= 1.",
+        "Rust config.rs:1614-1650 uses a non-modal window titled 'Param Compare' at 480x400 with no toggle-all checkbox. It adds an invented 'No differences' label and sets modified_only=true on Continue (invented). Load Presaved never shows the 'Loaded parameters...' message. The Frame_params listing (config.rs:1267) ignores Q_ENABLE."
+      ],
+      "impact": "Compare and Load Presaved look and behave differently, and QuadPlane users get the wrong presaved list.",
+      "required_fix": "Port ParamCompare's designer layout, modality and toggle-all, the 'Loaded' message, the file save and the QuadPlanes subdirectory."
+    },
+    {
+      "id": "R47-15",
+      "priority": "P1",
+      "subsystem": "Initial Setup / Radio Calibration: BUT_Calibrateradio_Click",
+      "status": "missing branches / invented rules",
+      "evidence": [
+        "C# ConfigRadioInput.cs:197-394 sets raterc=10, requests RC_CHANNELS at 10 Hz and restores the old rates afterwards. It collects min/max only while ch1in is between 800 and 2200. If rcmin[0] is outside 800..2200 it shows 'Bad channel 1 input, canceling'. It then shows 'Ensure all your sticks are centered and throttle is down, and click ok to continue' and takes trims after that OK. The save condition is min<max, non-zero, min<=trim<=max. A failure shows 'Failed to set Channel N'. The label reads 'Saving' during the writes, and the summary box has caption 'Radio'.",
+        "Rust setup.rs:609-617 and 645-663 skip the stream-rate change, the channel-1 gate and the 'Bad channel 1' cancel, and never show the sticks-centred step: trims come from the click itself. setup.rs:653 adds an invented '> 200 us span' rule and setup.rs:655 sets throttle trim to its minimum. The summary goes out through toasts.error with an empty caption instead of 'Radio'."
+      ],
+      "impact": "Radio calibration can store different RC trims and limits from Mission Planner, and can save an invalid calibration that C# would cancel.",
+      "required_fix": "Port the whole calibration sequence with its message boxes, rate handling and acceptance condition."
+    },
+    {
+      "id": "R47-16",
+      "priority": "P1",
+      "subsystem": "Initial Setup / Radio: Elevon Config checkboxes",
+      "status": "stub",
+      "evidence": [
+        "C# ConfigRadioInput.cs:130-132 binds CHK_elevonrev, CHK_elevonch1rev and CHK_elevonch2rev to ELEVON_REVERSE, ELEVON_CH1_REV and ELEVON_CH2_REV through MavlinkCheckBox.setup.",
+        "Rust setup.rs:671-675 draws four checkboxes from a throwaway `let mut b = false;`. They are always unticked and changing them writes nothing."
+      ],
+      "impact": "Plane elevon configuration on this page is a dead placeholder.",
+      "required_fix": "Bind each box to its parameter, with the MavlinkCheckBox enable and visibility rules."
+    },
+    {
+      "id": "R47-17",
+      "priority": "P1",
+      "subsystem": "Initial Setup / Accelerometer Calibration handlers",
+      "status": "missing branches",
+      "evidence": [
+        "C# ConfigAccelerometerCalibration.cs:39-89 enters calibration and shows 'Click when Done' only when doCommand(PREFLIGHT_CALIBRATION param5=1) succeeds; otherwise it shows Strings.CommandFailed with caption Error. The step button sends ACCELCAL_VEHICLE_POS with the last pos and shows CommandFailed if that throws. receivedPacket (91-130) shows the STATUSTEXT itself, or 'Please place vehicle ' + pos.ToString(). On 'calibration successful' or 'calibration failed' it sets Text=Done and Enabled=false. BUT_level_Click and BUT_simpleAccelCal_Click (143-185) set 'Completed' only on success, else CommandFailed, or 'Failed to level' / 'Failed to simple accelerometer calibration'.",
+        "Rust setup.rs:790-818 starts calibration without waiting for the ACK and has no failure box. It invents 'Calibration successful' and 'Calibration FAILED' texts and resets to 'Calibrate Accel' on failure, with the button still enabled. Level and Simple Accel Cal (setup.rs:807-816) show 'Completed' whether or not the autopilot accepted."
+      ],
+      "impact": "The user is told calibration completed when the autopilot rejected it.",
+      "required_fix": "Wait for the command ACK, port receivedPacket's text and button rules, and add the failure boxes."
+    },
+    {
+      "id": "R47-18",
+      "priority": "P1",
+      "subsystem": "Initial Setup / DroneCAN: Inspector, Filter and Stats buttons",
+      "status": "stubs",
+      "evidence": [
+        "C# ConfigDroneCAN.cs:714-722 But_uavcaninspector_Click opens DroneCANInspector. but_filter_Click (897+) applies the default message filter list. but_stats_Click (1392+) opens a CanStats/Stats DataGridView window fed by dronecan_protocol_CanStats.",
+        "Rust views/dronecan_page.rs:101-102 sends 'but_stats' to app.toasts.info (log only, the user sees nothing). 'but_uavcaninspector' and 'but_filter' log 'Node and message details are shown below the node list.'"
+      ],
+      "impact": "Three DroneCAN tools do nothing visible.",
+      "required_fix": "Port DroneCANInspector, the filter list and the stats window."
+    },
+    {
+      "id": "R47-19",
+      "priority": "P1",
+      "subsystem": "MainV2: doConnect post-connect steps",
+      "status": "missing behaviour",
+      "evidence": [
+        "C# MainV2.cs:1664-1696 loads the param cache (UseCachedParams, ParamCachePath younger than 1 h) or, when Params_BG is set, runs getParamListMavftp in the background. It then checks for newer firmware with Common.MessageShowAgain(Strings.NewFirmware ...). It saves '<port>_BAUD', runs FlightData.CheckBatteryShow, and fetches rally points when RALLY_TOTAL > 0 (1769-1780).",
+        "In crates/mp-app/src, 'Params_BG' appears only as a settings checkbox (config.rs:2289) that nothing reads. There is no match for ParamCachePath, RALLY_TOTAL, CheckBatteryShow or NewFirmware."
+      ],
+      "impact": "A Planner setting does nothing, and the connect flow skips the firmware notice, cached parameters and rally download.",
+      "required_fix": "Port doConnect's tail: param cache, the Params_BG MAVFtp path, the firmware check, rally fetch and the battery panel."
+    },
+    {
+      "id": "R47-20",
+      "priority": "P1",
+      "subsystem": "Cross-platform: file dialogs used by user-facing tools",
+      "status": "desktop-only",
+      "evidence": [
+        "The rfd crate is only a desktop dependency (crates/mp-app/Cargo.toml:35-39). Every direct rfd::FileDialog call is wrapped in #[cfg(not(any(target_os = \"android\", target_os = \"ios\")))], so on mobile the button does nothing: Flight Plan 'Inject Custom Map' (flight_plan.rs:689-690), Planner log directory 'Browse' (config.rs:2152-2153), 'Record Hud to AVI' (flight_data.rs:474-475), Shape file and 'Inject GE' (more_tools.rs:120-139), map logs (more_tools.rs:304-306), the device page .bin picker (device_pages.rs:118-119), the script picker (fd_tabs.rs:223), georef (georef_ui.rs:64-70), joystick load and save (joystick.rs:440-452), custom firmware (firmware_ui.rs:452), tool_windows log pickers (tool_windows.rs:22-32) and flight_plan/menu.rs:136."
+      ],
+      "impact": "More than 15 user-facing actions are silent no-ops on Android and iOS.",
+      "required_fix": "Route every picker through platform::FilePicker (which has a mobile implementation) and test each call site on a mobile target."
+    },
+    {
+      "id": "R47-21",
+      "priority": "P1",
+      "subsystem": "Cross-platform: transports and speech (R46-02 still open)",
+      "status": "desktop-only / unsupported",
+      "evidence": [
+        "mp-core/src/comms.rs:126 and 132 return Unsupported for BLE and WinUSB. comms.rs:162-168 returns 'serial ports are not available on this platform' on Android and iOS.",
+        "mp-app/src/speech.rs:26-48 speak_blocking has Windows, macOS and desktop-Unix branches only, so Android and iOS are silent."
+      ],
+      "impact": "Connection types and voice announcements that Mission Planner supports are missing on mobile.",
+      "required_fix": "Implement the BLE, WinUSB and mobile serial transports and platform TTS backends, or remove those options from the UI on platforms that lack them."
+    },
+    {
+      "id": "R47-22",
+      "priority": "P1",
+      "subsystem": "Native delivery (R46-01 still open)",
+      "status": "validation gap",
+      "evidence": [
+        "round-46.json R46-01 is unchanged at da4214b: no signed iOS build, no device install or render receipt, and no Android device run. This round could only run host tests on Windows."
+      ],
+      "impact": "The requested cross-platform clone cannot be shown to run on iOS or Android devices.",
+      "required_fix": "Produce signed iOS and Android builds with device install, startup and render evidence."
+    },
+    {
+      "id": "R47-23",
+      "priority": "P2",
+      "subsystem": "Config / Raw Params: Params_CellValueChanged equal-value branch",
+      "status": "invented behaviour",
+      "evidence": [
+        "C# ConfigRawParams.cs:516-519 always sets _changes[name] = newvalue and colours the cell Green, even when the new value equals the vehicle value.",
+        "Rust config.rs:1468-1472 (queue_value) removes the edit when nv == current. The test every_value_change_runs_readonly_then_range (config.rs:533-534) asserts this invented rule."
+      ],
+      "impact": "Typing the current value back does not count as a change, so the Write Params count differs from C#.",
+      "required_fix": "Always queue the edit as C# does."
+    },
+    {
+      "id": "R47-24",
+      "priority": "P2",
+      "subsystem": "Config / Raw Params: Params_RowEnter ranged editor",
+      "status": "different control",
+      "evidence": [
+        "C# ConfigRawParams.cs:1268-1310 builds a NumericUpDown (Dock Fill) inside a Panel with the row's BackColor. num.TextChanged writes num.Text to the Value cell. The control appears when the row is entered by any cell click or by keyboard row navigation.",
+        "Rust config.rs:1803 uses egui::DragValue, which changes the value by dragging and has no spin buttons. `current` is set only by clicks on the Name or Value cell (config.rs:1717-1736), so keyboard navigation and clicks on Units, Options or Desc never enter the row."
+      ],
+      "impact": "The Options editor does not look or behave like Mission Planner's.",
+      "required_fix": "Use a spin-box control with up/down buttons and text entry, and set the current row from any cell or from keyboard navigation."
+    },
+    {
+      "id": "R47-25",
+      "priority": "P2",
+      "subsystem": "Config / Raw Params: grid geometry and Options text",
+      "status": "layout / text divergence",
+      "evidence": [
+        "C# processToScreen (ConfigRawParams.cs:578) creates rows with Height = 36 and row headers (Designer line 251). The Options cell is (range + '\\n' + options).Trim() using the raw metadata range (for example '0.0 1.0'). label1 'All Units are in raw \\nformat with no scaling' is 110x26 with MiddleCenter alignment (resx).",
+        "Rust config.rs:1661 uses 22 px rows and no row headers. options_text (config.rs:918-922) rebuilds the range from f64 Display, so 380 ranges such as '0.0 1.0' become '0 1'. config.rs:1260 draws label1 LEFT_TOP without the trailing space."
+      ],
+      "impact": "The grid is visibly denser and the Options column text differs for hundreds of parameters.",
+      "required_fix": "Use 36 px rows and row headers, keep the raw metadata Range string, and centre label1."
+    },
+    {
+      "id": "R47-26",
+      "priority": "P2",
+      "subsystem": "Config / Raw Params: BUT_refreshTable and Load Presaved enablement",
+      "status": "stub / wrong state",
+      "evidence": [
+        "C# Activate (ConfigRawParams.cs:62-67): BUT_refreshTable.Visible = SlowMachine, and its click re-runs processToScreen (1119-1124). CMB_paramfiles and BUT_paramfileload stay disabled until updatedefaultlist finishes, whether or not a vehicle is connected.",
+        "Rust config.rs:1327 always draws 'Refresh Table' and ignores the click. config.rs:1302-1303 enables Load Presaved only when connected."
+      ],
+      "impact": "One button is a dead stub and another is gated on the wrong condition.",
+      "required_fix": "Show Refresh Table only when SlowMachine is set and make it rebuild the grid. Match the C# enable rules."
+    },
+    {
+      "id": "R47-27",
+      "priority": "P2",
+      "subsystem": "Config / Raw Params: invented messages and offline-mode texts",
+      "status": "invented UI",
+      "evidence": [
+        "C# BUT_load_Click (ConfigRawParams.cs:127-147) shows no toast after offline loading; it adds the parameters and calls Activate. C# has no vehicle-changed guard and no empty-state label.",
+        "Rust adds 'Vehicle changed while selecting a parameter file' (config.rs:1062), 'Loaded {n} parameters offline.' (config.rs:1096), and the label 'No parameters loaded.\\nClick 'Load from file' to edit parameters offline, or connect to a vehicle.' (config.rs:1377). Online file load sets modified_only=true (config.rs:1081), which C# never does."
+      ],
+      "impact": "Text and state changes that are not in Mission Planner.",
+      "required_fix": "Remove the invented messages and the Modified auto-tick."
+    },
+    {
+      "id": "R47-28",
+      "priority": "P2",
+      "subsystem": "Config / Raw Params: BUT_commitToFlash_Click timeout branch",
+      "status": "missing branch",
+      "evidence": [
+        "C# ConfigRawParams.cs:1093-1107: doCommand throws on timeout as well as on refusal, and both show 'Invalid command'.",
+        "Rust config.rs:1108-1118 only reacts to a COMMAND_ACK. If no ACK arrives, commit_pending stays true forever and nothing is shown."
+      ],
+      "impact": "A silent timeout instead of 'Invalid command'.",
+      "required_fix": "Add the doCommand timeout and retry semantics."
+    },
+    {
+      "id": "R47-29",
+      "priority": "P2",
+      "subsystem": "Flight Plan: ProcessCmdKey",
+      "status": "missing branches",
+      "evidence": [
+        "C# FlightPlanner.cs:345-412 also handles Ctrl+N (toggle GMapControl.GDI) and Ctrl+M (copy the grid into MAV.wps with planned home as item 0).",
+        "Rust flight_plan.rs:471-512 (hotkeys) has no Ctrl+N or Ctrl+M branch. It also returns early whenever egui wants keyboard input, which C#'s ProcessCmdKey does not."
+      ],
+      "impact": "Two hotkeys are missing.",
+      "required_fix": "Add Ctrl+M (MAV.wps copy) and a Ctrl+N renderer toggle."
+    },
+    {
+      "id": "R47-30",
+      "priority": "P2",
+      "subsystem": "Flight Plan: savewaypoints (Ctrl+S / Save WP File)",
+      "status": "missing options",
+      "evidence": [
+        "C# FlightPlanner.cs:6083-6195: filter 'Mission|*.waypoints;*.txt|Mission JSON|*.mission', InitialDirectory from the WPFileDirectory setting (saved back after use), FileName = wpfilename, a .mission JSON branch, and writeKML afterwards (5900-5904).",
+        "Rust flight_plan.rs:500-510 offers only 'Waypoints' (*.waypoints) with the fixed name 'mission.waypoints'. There is no WPFileDirectory setting, no .mission export and no KML refresh."
+      ],
+      "impact": "The save dialog differs, the user's directory is not remembered, and .mission export is missing.",
+      "required_fix": "Port savewaypoints in full."
+    },
+    {
+      "id": "R47-31",
+      "priority": "P2",
+      "subsystem": "Flight Plan: callMeDrag home drag",
+      "status": "missing branch",
+      "evidence": [
+        "C# FlightPlanner.cs:742-752: dragging 'H' records undo and sets TXT_homealt from srtm.getAltitude * multiplieralt ('auto update home alt').",
+        "Rust flight_plan.rs:1274-1276 moves home lat and lng only."
+      ],
+      "impact": "The home altitude is left unchanged after a drag, so relative altitudes are planned from a stale home.",
+      "required_fix": "Update the home altitude from SRTM on a home drag."
+    },
+    {
+      "id": "R47-32",
+      "priority": "P2",
+      "subsystem": "Flight Plan: updateUndoBuffer home source",
+      "status": "divergence",
+      "evidence": [
+        "C# FlightPlanner.cs:1038-1075 stores MAV.cs.HomeLocation when it is non-zero, else PlannedHomeLocation, as history item 0, and drops the blank row when noBlankRow is false.",
+        "Rust flight_plan.rs:465-467 always stores the grid's self.home. There are 14 Rust call sites against 19 in C#."
+      ],
+      "impact": "Undo restores a different home than Mission Planner when a vehicle home exists. Some edits have no undo step.",
+      "required_fix": "Port updateUndoBuffer's home selection and audit every C# call site."
+    },
+    {
+      "id": "R47-33",
+      "priority": "P2",
+      "subsystem": "Flight Plan: Write Fast drops unknown commands",
+      "status": "divergence",
+      "evidence": [
+        "C# saveWPsFast (FlightPlanner.cs:6512-6555) sends loc.id as-is for any command.",
+        "Rust mp-core/src/wpfast.rs:85-104 `item()` returns None when MavCmd::from_u16 fails, and write_fast skips that item silently. UNKNOWN or custom command IDs are dropped while the count still includes them."
+      ],
+      "impact": "Write Fast can produce a short or mismatched upload for missions with custom commands.",
+      "required_fix": "Send the raw command ID in MISSION_ITEM_INT."
+    },
+    {
+      "id": "R47-34",
+      "priority": "P2",
+      "subsystem": "Flight Data / Actions: other buttons",
+      "status": "divergences",
+      "evidence": [
+        "C# BUT_clear_track_Click (FlightData.cs:1110-1117) also clears MAV.camerapoints; Rust flight_data.rs:1127 clears only the track.",
+        "C# BUT_SendMSG_Click (1264-1275) uses InputBox title 'Enter Message' and prompt 'Enter Message to be logged'; Rust flight_data.rs:1154-1156 uses title 'Message' and field 'Enter Message'.",
+        "C# BUT_Homealt_Click (1245-1256) divides HomeAlt by CurrentState.multiplieralt; Rust flight_data.rs:1144-1152 does not.",
+        "C# button handlers disable the sender during the command and show Strings.CommandFailed on exceptions (for example BUT_setwp_Click 1667-1681 and BUT_quickauto_Click 1424-1437). Rust sends fire-and-forget with no failure box (flight_data.rs:1106-1112)."
+      ],
+      "impact": "Several action buttons show different texts and drop their error paths.",
+      "required_fix": "Port each handler's text, unit conversion, side effects and error box."
+    },
+    {
+      "id": "R47-35",
+      "priority": "P2",
+      "subsystem": "Gimbal video: ResolveSettingsCamera and Custom Settings enablement",
+      "status": "divergence",
+      "evidence": [
+        "C# GimbalVideoControl.cs:704-717 enables Custom Settings when ResolveSettingsCamera()?.MavState != null. ResolveSettingsCamera (768-795) tries, in order: settingsCameraAddress, _selectedCamera, the camera whose stream URI matches gimbal_video_stream, a camera with a definition URI, then MAV.Camera. customSettingsToolStripMenuItem_Click (797-813) brings an existing form to the front, or closes it and opens a new one.",
+        "Rust gimbal_video.rs:829 enables the item whenever app.connected(). gimbal_video.rs:847-856 resolves settings_camera_address, then any CAMERA_INFORMATION with a URI, then the autopilot (sysid, compid). It skips the stream-URI step and can open the editor for a component that is not a camera."
+      ],
+      "impact": "Custom Settings is offered when no camera exists and can open the wrong component.",
+      "required_fix": "Port ResolveSettingsCamera and the UITimer enable rule."
+    },
+    {
+      "id": "R47-36",
+      "priority": "P2",
+      "subsystem": "Gimbal video: no-video image and keyboard scope",
+      "status": "divergence",
+      "evidence": [
+        "C# RenderFrame (GimbalVideoControl.cs:224-229) shows Properties.Resources.no_video. PreFilterMessage (338-349) handles keys only while Parent.ContainsFocus. SetRecording (518-531) and Retract act through selectedCamera?/selectedGimbalManager? and do nothing when no camera exists.",
+        "Rust gimbal_video.rs:691-694 paints an invented grey box with 'NO VIDEO' text. keyboard() (gimbal_video.rs:625-631) takes bound keys whenever the window is focused and no text field is, even when the video control is not focused. set_recording (gimbal_video.rs:550-553) sends camera commands with no camera present."
+      ],
+      "impact": "A different placeholder, and gimbal hotkeys fire while the user works elsewhere in the app.",
+      "required_fix": "Use the no_video bitmap, scope key handling to the control's focus, and guard on camera presence."
+    },
+    {
+      "id": "R47-37",
+      "priority": "P2",
+      "subsystem": "Camera Custom Settings: read-only and disconnect behaviour",
+      "status": "text / behaviour divergence",
+      "evidence": [
+        "C# ReloadAsync (CameraCustomSettingsForm.cs:150-193) throws on a read-only link, so status shows 'Could not load custom settings: Link is read-only; disable ReadOnly link mode to request or change camera settings. Use Refresh to retry.' UpdateRows never runs without a session. The form stays open when the link drops, and Poll ignores CAMERA_INFORMATION changes while loading (282-296).",
+        "Rust camera_settings.rs:79 sets a bare 'Link is read-only; disable ...' status, and ui() (camera_settings.rs:153-155) shows 'Link is read-only; changing camera settings is disabled' instead. ui() closes the form when the link is not Connected (camera_settings.rs:146), which C# does not do. poll() (camera_settings.rs:121-127) restarts a definition download in the middle of loading when CAMERA_INFORMATION changes."
+      ],
+      "impact": "Status texts and lifecycle differ from the C# form.",
+      "required_fix": "Use the C# status strings, keep the form open on disconnect, and defer URI-change reloads until loading has finished."
+    },
+    {
+      "id": "R47-38",
+      "priority": "P2",
+      "subsystem": "Camera Custom Settings: combo item list",
+      "status": "divergence",
+      "evidence": [
+        "C# UpdateRows (CameraCustomSettingsForm.cs:362-375) inserts a selectable 'Current: <value>' or 'Waiting for camera' item at index 0 of the combo when the value is not among the options, and keeps it selected.",
+        "Rust camera_settings.rs:199-201 puts that text only in the closed combo's label. The drop-down list has no such entry."
+      ],
+      "impact": "The open drop-down differs.",
+      "required_fix": "Insert the synthetic first item into the list."
+    },
+    {
+      "id": "R47-39",
+      "priority": "P2",
+      "subsystem": "Tests: tautological or mislabelled tests",
+      "status": "test quality",
+      "evidence": [
+        "config.rs:387-422 offline_parameter_editing_loads_file_edits_and_saves inserts edits directly and calls paramfile::save with a copy of the Save button's iterator. It also re-implements the Write Params key sort instead of driving 'Save to file' or 'Write Params'.",
+        "config.rs:424-450 write_confirm_dialog_flow_escape_cancels_and_modal_presents_sorted_changes only checks that Escape closes the box; nothing checks the presented order or text.",
+        "config.rs:595-606 post_write_parameter_count_divergence_triggers_check_flag checks a bool, not the 'Params' message or the RequestParams send.",
+        "config.rs:516-535 asserts the invented equal-value drop."
+      ],
+      "impact": "These tests pass even where the handlers diverge from C# (for example R47-09 and R47-23).",
+      "required_fix": "Drive the real handlers through egui input and assert the exact C# strings and side effects."
+    },
+    {
+      "id": "R47-40",
+      "priority": "P2",
+      "subsystem": "HTTP definition download cancellation (R45-04 still open)",
+      "status": "partial",
+      "evidence": [
+        "C# CameraDefinitionLoader aborts the HttpWebRequest on cancel. Rust camera_settings.rs:10-39 checks an AtomicBool only between blocking ureq calls and reads, with a 15 s per-read timeout."
+      ],
+      "impact": "Cancel or Close can block for up to the read timeout.",
+      "required_fix": "Use an interruptible transport, or drop the connection on cancel."
+    },
+    {
+      "id": "R47-41",
+      "priority": "P3",
+      "subsystem": "MessageBox queue (Toasts::message)",
+      "status": "divergence",
+      "evidence": [
+        "app.rs:165-172 drops a message whose text is already queued, so identical CustomMessageBox calls collapse into one. Toasts::info (app.rs:155-157) only logs, so it is not a visible box."
+      ],
+      "impact": "Repeated C# message boxes are shown once.",
+      "required_fix": "Queue every message."
+    },
+    {
+      "id": "R47-42",
+      "priority": "P3",
+      "subsystem": "Flight Plan: setgradanddistandaz number formatting",
+      "status": "edge divergence",
+      "evidence": [
+        "C# FlightPlanner.cs:6611-6622 formats with .NET Framework ToString('0.0') and ToString('0'), which round half away from zero after 15-digit precision. Rust dotnet_fixed (flight_plan.rs:1830-1840) uses Rust's `{:.1}` formatting, which rounds exact binary midpoints differently (for example 0.25 gives '0.2' where .NET gives '0.3')."
+      ],
+      "impact": "Grad, Dist and AZ cells can differ by one in the last digit.",
+      "required_fix": "Emulate .NET's 15-digit 'R' rounding before formatting."
+    },
+    {
+      "id": "R47-43",
+      "priority": "P3",
+      "subsystem": "Camera Settings session: request order",
+      "status": "edge divergence",
+      "evidence": [
+        "C# CameraSettingsSession keeps reads and writes in Dictionary insertion order (definition order). Rust camdef.rs:661-662 uses BTreeMap (alphabetical), so the five-per-200 ms batches go out in a different order (camdef.rs:835-855)."
+      ],
+      "impact": "Different PARAM_EXT_REQUEST_READ order on the wire.",
+      "required_fix": "Use an insertion-ordered map."
+    },
+    {
+      "id": "R47-44",
+      "priority": "P3",
+      "subsystem": "Flight Data: not_ported fallback",
+      "status": "placeholder",
+      "evidence": [
+        "flight_data.rs:1159 and 2310-2312 keep a `not_ported` arm that shows '<button>: not available in this port yet'. It is unreachable with the current buttons but remains a placeholder."
+      ],
+      "impact": "A placeholder message path ships in the product.",
+      "required_fix": "Remove the fallback."
+    }
+  ],
+  "next_concrete_task": "Fix the five findings that send wrong data to the vehicle before any further UI work. (1) param_meta parse_values: keep the raw Values string for the Options cell and use int-only parsing for the combo (R47-01). (2) Set Reboot_Mass_Storage param1 to 5 and port BUTactiondo_Click branch by branch (R47-02, R47-03). (3) Port BUT_mountmode_Click (R47-04). (4) Port saveWPs' post-upload WP_RADIUS/WP_RADIUS_M/WPNAV_RADIUS/LOITER_RAD writes, fence frame forcing and home re-fetch (R47-06). (5) Route parameter-file and ParamCompare values through queue_value (R47-09). Add tests that click the real buttons and assert the exact C# strings and MAVLink payloads.",
+  "not_verified": [
+    "Rendering on a device or in the simulator: no Android or iOS build was run in this review.",
+    "Pixel-level comparison against a running Windows Mission Planner.",
+    "Every FlightPlanner context-menu item beyond those listed; the 2.4k lines of FlightData handlers beyond the Actions tab; ConfigFriendlyParams, ConfigPlanner settings keys beyond those cited.",
+    "MAVLinkInterface.setWPTotal retry timing compared with wpfast.rs's 700 ms x3 loop.",
+    "GimbalControlSettingsForm designer coordinates and the VideoStreamSelector layout.",
+    "mav_mission.upload/download progress status strings against link.rs labels."
+  ]
+}
