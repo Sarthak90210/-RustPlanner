@@ -1247,9 +1247,9 @@ impl FlightDataView {
                     let s = link.shared.read();
                     ["LOITER_RAD", "WP_LOITER_RAD"].into_iter().find(|n| s.params.contains_key(*n))
                 };
-                match name {
-                    Some(n) => link.send(LinkCommand::SetParam { name: n.into(), value: self.loiter_rad.trunc() / crate::units::dist(1.0) }),
-                    None => app.toasts.error("Failed to set LOITER_RAD"),
+                // setParam(string[]) returns false when neither exists; the handler ignores it
+                if let Some(n) = name {
+                    link.send(LinkCommand::SetParam { name: n.into(), value: self.loiter_rad.trunc() / crate::units::dist(1.0) });
                 }
             }
             "Abort Landing" => link.send(LinkCommand::CommandLong { command: 191, params: [0.0; 7] }),

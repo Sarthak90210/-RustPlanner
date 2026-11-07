@@ -547,9 +547,13 @@ impl MissionPlannerApp {
                     drop_link = true;
                 }
                 LinkEvent::ParamsLoaded(n) => self.toasts.info(format!("Got {n} parameters")),
+                // modifyandSetAlt_Click: setNewWPAlt throws "Alt Change Failed", shown as ErrorCommunicating
                 LinkEvent::AltitudeChanged(result) => match result {
                     Ok(()) => self.toasts.info("Altitude change accepted"),
-                    Err(e) => self.toasts.error(e),
+                    Err(e) => {
+                        log::error!("{e}");
+                        self.toasts.message("Error communicating with the autopilot", "Error");
+                    }
                 },
                 LinkEvent::OperationError(e) => self.toasts.error(e),
                 // BUT_commitToFlash_Click reports its own result
