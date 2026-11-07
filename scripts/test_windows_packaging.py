@@ -57,6 +57,12 @@ class WindowsPackagingTests(unittest.TestCase):
             self.assertTrue(manifest_path.is_file())
             self.assertIn(sha256, manifest_path.read_text())
 
+    def test_type_hints_resolve_cleanly(self):
+        import typing
+        hints = typing.get_type_hints(bwi.assemble_portable_zip)
+        self.assertIn("return", hints)
+
 
 if __name__ == "__main__":
     unittest.main()
+
