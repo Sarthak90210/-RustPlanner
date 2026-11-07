@@ -6,6 +6,7 @@
 
 #[allow(clippy::module_inception)]
 pub mod mavlink;
+pub mod component_information;
 pub mod mavlinkcrc;
 pub mod mavlinkheader;
 pub mod mavlinkmessage;

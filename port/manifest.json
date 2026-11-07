@@ -9515,16 +9515,16 @@
  {
   "cs": "ExtLibs/Mavlink/component_information/Parameter.cs",
   "rust": "crates/mp-core/src/extlibs/mavlink/component_information/parameter.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 379,
   "note": ""
  },
  {
   "cs": "ExtLibs/Mavlink/Mavlink.cs",
   "rust": "crates/mp-core/src/extlibs/mavlink/mavlink.rs",
-  "status": "ported",
+  "status": "generated",
   "lines": 39032,
-  "note": "mavlink crate, generated from the same ExtLibs/Mavlink/message_definitions XML"
+  "note": "emitted by crates/mp-core/build.rs, a port of pymavlink mavgen_cs.py, from the same message_definitions XML; Rust counterpart present"
  },
  {
   "cs": "ExtLibs/Mavlink/MavlinkCRC.cs",
@@ -9578,51 +9578,51 @@
  {
   "cs": "ExtLibs/Mavlink/pymavlink/generator/CS/MavlinkCRC.cs",
   "rust": "crates/mp-core/src/extlibs/mavlink/pymavlink/generator/cs/mavlinkcrc.rs",
-  "status": "todo",
+  "status": "n/a",
   "lines": 43,
-  "note": ""
+  "note": "template copy inside the generator; ExtLibs/Mavlink/*.cs are the shipped versions"
  },
  {
   "cs": "ExtLibs/Mavlink/pymavlink/generator/CS/MavlinkHeader.cs",
   "rust": "crates/mp-core/src/extlibs/mavlink/pymavlink/generator/cs/mavlinkheader.rs",
-  "status": "todo",
+  "status": "n/a",
   "lines": 83,
-  "note": ""
+  "note": "template copy inside the generator; ExtLibs/Mavlink/*.cs are the shipped versions"
  },
  {
   "cs": "ExtLibs/Mavlink/pymavlink/generator/CS/MAVLinkMessage.cs",
   "rust": "crates/mp-core/src/extlibs/mavlink/pymavlink/generator/cs/mavlinkmessage.rs",
-  "status": "todo",
+  "status": "n/a",
   "lines": 250,
-  "note": ""
+  "note": "template copy inside the generator; ExtLibs/Mavlink/*.cs are the shipped versions"
  },
  {
   "cs": "ExtLibs/Mavlink/pymavlink/generator/CS/MAVLinkParam.cs",
   "rust": "crates/mp-core/src/extlibs/mavlink/pymavlink/generator/cs/mavlinkparam.rs",
-  "status": "todo",
+  "status": "n/a",
   "lines": 199,
-  "note": ""
+  "note": "template copy inside the generator; ExtLibs/Mavlink/*.cs are the shipped versions"
  },
  {
   "cs": "ExtLibs/Mavlink/pymavlink/generator/CS/MAVLinkParamList.cs",
   "rust": "crates/mp-core/src/extlibs/mavlink/pymavlink/generator/cs/mavlinkparamlist.rs",
-  "status": "todo",
+  "status": "n/a",
   "lines": 111,
-  "note": ""
+  "note": "template copy inside the generator; ExtLibs/Mavlink/*.cs are the shipped versions"
  },
  {
   "cs": "ExtLibs/Mavlink/pymavlink/generator/CS/MavlinkParse.cs",
   "rust": "crates/mp-core/src/extlibs/mavlink/pymavlink/generator/cs/mavlinkparse.rs",
-  "status": "todo",
+  "status": "n/a",
   "lines": 396,
-  "note": ""
+  "note": "template copy inside the generator; ExtLibs/Mavlink/*.cs are the shipped versions"
  },
  {
   "cs": "ExtLibs/Mavlink/pymavlink/generator/CS/MavlinkUtil.cs",
   "rust": "crates/mp-core/src/extlibs/mavlink/pymavlink/generator/cs/mavlinkutil.rs",
-  "status": "todo",
+  "status": "n/a",
   "lines": 337,
-  "note": ""
+  "note": "template copy inside the generator; ExtLibs/Mavlink/*.cs are the shipped versions"
  },
  {
   "cs": "ExtLibs/MavlinkMessagePlugin/MavlinkMessagePlugin.cs",

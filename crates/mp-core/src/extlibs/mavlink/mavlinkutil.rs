@@ -165,37 +165,74 @@ impl MavlinkUtil {
         obj.to_bytes()
     }
 
-    /// `StructureToByteArrayBigEndian(params object[] list)`: scalars written MSB first.
-    pub fn structure_to_byte_array_big_endian<T: MarshalStruct>(obj: &T) -> Vec<u8> {
-        let mut data = obj.to_bytes();
+    /// `StructureToByteArrayBigEndian(params object[] list)`: scalars written MSB first. The C#
+    /// switch has no `SByte` case, so sbyte fields stay 0; any array other than `byte[]` fails
+    /// the `(byte[])` cast with InvalidCastException.
+    pub fn structure_to_byte_array_big_endian<T: MarshalStruct>(obj: &T) -> Result<Vec<u8>, Exception> {
+        let src = obj.to_bytes();
+        let mut data = vec![0u8; T::SIZE];
+        let mut offset = 0usize;
         for f in T::fields() {
-            if f.array_length == 0 {
-                let size = field_scalar_size(f);
-                data[f.offset..f.offset + size].reverse();
+            let size = field_scalar_size(f);
+            if f.array_length != 0 {
+                if f.cs_type != "byte[]" {
+                    return Err(Exception::InvalidCast(format!(
+                        "Unable to cast object of type 'System.{}' to type 'System.Byte[]'.",
+                        cs_array_type_name(f.cs_type)
+                    )));
+                }
+                let length = f.array_length;
+                data[offset..offset + length].copy_from_slice(&src[f.offset..f.offset + length]);
+                offset += length;
+            } else {
+                if f.cs_type != "sbyte" {
+                    for i in 0..size {
+                        data[offset + i] = src[f.offset + size - 1 - i];
+                    }
+                }
+                offset += size;
             }
         }
-        data
+        Ok(data)
     }
 }
 
-/// `GetMessageInfo(this message_info[] source, uint msgid)`: prints "Unknown Packet" and
-/// returns an empty `message_info` when the id is not in the table.
-pub fn get_message_info(source: &'static [message_info], msgid: u32) -> &'static message_info {
-    if std::ptr::eq(source, super::mavlink::MAVLINK_MESSAGE_INFOS) {
-        static INDEX: std::sync::OnceLock<std::collections::HashMap<u32, usize>> = std::sync::OnceLock::new();
-        let idx = INDEX.get_or_init(|| {
-            let mut m = std::collections::HashMap::new();
-            for (i, item) in source.iter().enumerate() {
-                m.entry(item.msgid).or_insert(i);
-            }
-            m
-        });
-        if let Some(&i) = idx.get(&msgid) {
-            return &source[i];
-        }
-    } else if let Some(item) = source.iter().find(|i| i.msgid == msgid) {
-        return item;
+fn cs_array_type_name(cs: &str) -> &'static str {
+    match cs {
+        "float[]" => "Single[]",
+        "double[]" => "Double[]",
+        "sbyte[]" => "SByte[]",
+        "short[]" => "Int16[]",
+        "ushort[]" => "UInt16[]",
+        "int[]" => "Int32[]",
+        "uint[]" => "UInt32[]",
+        "long[]" => "Int64[]",
+        "ulong[]" => "UInt64[]",
+        _ => "Byte[]",
     }
+}
+
+/// `GetMessageInfo(this message_info[] source, uint msgid)`: the first entry with that id;
+/// otherwise prints "Unknown Packet" and returns an empty `message_info`. The scan is the C#
+/// linear search, memoised per table (the table can be swapped at runtime).
+pub fn get_message_info(source: &'static [message_info], msgid: u32) -> &'static message_info {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+    type Index = Option<(usize, usize, HashMap<u32, usize>)>;
+    static INDEX: Mutex<Index> = Mutex::new(None);
+    let key = (source.as_ptr() as usize, source.len());
+    let mut guard = INDEX.lock().unwrap_or_else(|e| e.into_inner());
+    if guard.as_ref().is_none_or(|(p, l, _)| (*p, *l) != key) {
+        let mut m = HashMap::new();
+        for (i, item) in source.iter().enumerate() {
+            m.entry(item.msgid).or_insert(i);
+        }
+        *guard = Some((key.0, key.1, m));
+    }
+    if let Some(&i) = guard.as_ref().unwrap().2.get(&msgid) {
+        return &source[i];
+    }
+    drop(guard);
     println!("Unknown Packet {msgid}");
     &message_info::EMPTY
 }
@@ -227,15 +264,27 @@ mod tests {
     #[test]
     fn big_endian_round_trip() {
         let hb = mavlink_heartbeat_t { custom_mode: 0x01020304, r#type: 2, ..Default::default() };
-        let be = MavlinkUtil::structure_to_byte_array_big_endian(&hb);
+        let be = MavlinkUtil::structure_to_byte_array_big_endian(&hb).unwrap();
         assert_eq!(&be[..4], &[1, 2, 3, 4]);
         let back: mavlink_heartbeat_t = MavlinkUtil::byte_array_to_structure_big_endian(&be, 0);
         assert_eq!(back, hb);
+        // no SByte case in the C# switch: sbyte fields are written as 0
+        let t = mavlink_named_value_int_t { value: 1, ..Default::default() };
+        assert!(MavlinkUtil::structure_to_byte_array_big_endian(&t).is_ok());
+        // a short[] field fails the (byte[]) cast
+        let s = mavlink_servo_output_raw_t::default();
+        assert!(MavlinkUtil::structure_to_byte_array_big_endian(&s).is_ok());
+        let r = mavlink_rc_channels_override_t::default();
+        assert!(MavlinkUtil::structure_to_byte_array_big_endian(&r).is_ok());
+        let d = mavlink_debug_vect_t::default();
+        assert!(MavlinkUtil::structure_to_byte_array_big_endian(&d).is_ok());
+        let a = mavlink_attitude_quaternion_cov_t::default();
+        assert!(matches!(MavlinkUtil::structure_to_byte_array_big_endian(&a), Err(Exception::InvalidCast(_))));
     }
 
     #[test]
     fn unknown_message_info_is_empty() {
-        let i = get_message_info(MAVLINK_MESSAGE_INFOS, 0xFFFFFF);
+        let i = get_message_info(MAVLINK_MESSAGE_INFOS.get(), 0xFFFFFF);
         assert!(i.r#type.is_none());
         assert_eq!(i.name, "");
     }

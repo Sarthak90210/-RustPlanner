@@ -164,15 +164,143 @@ fn own_text(n: roxmltree::Node) -> String {
     n.children().filter(|c| c.is_text()).map(|c| c.text().unwrap_or("")).collect()
 }
 
+/// mavparse evaluates `value` with Python `eval()`. The XML only ever uses integer literals
+/// and integer arithmetic, so this evaluates Python integer expressions: decimal, hex, octal
+/// and binary literals, unary + - ~, ** * // % + - << >> & ^ | and parentheses.
 fn parse_value(s: &str) -> i64 {
-    let s = s.trim();
-    if let Some(h) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-        i64::from_str_radix(h, 16).expect("hex enum value")
-    } else if let Some((a, b)) = s.split_once("**") {
-        a.trim().parse::<i64>().unwrap().pow(b.trim().parse::<u32>().unwrap())
-    } else {
-        s.parse::<i64>().unwrap_or_else(|_| panic!("enum value {s}"))
+    struct P<'a> {
+        t: &'a [u8],
+        i: usize,
     }
+    impl P<'_> {
+        fn ws(&mut self) {
+            while self.i < self.t.len() && self.t[self.i].is_ascii_whitespace() {
+                self.i += 1;
+            }
+        }
+        fn eat(&mut self, op: &str) -> bool {
+            self.ws();
+            if self.t[self.i..].starts_with(op.as_bytes()) {
+                // don't take '*' out of '**', '/' out of '//', '<' out of '<<'
+                self.i += op.len();
+                true
+            } else {
+                false
+            }
+        }
+        fn or(&mut self) -> i64 {
+            let mut v = self.xor();
+            while self.eat("|") {
+                v |= self.xor();
+            }
+            v
+        }
+        fn xor(&mut self) -> i64 {
+            let mut v = self.and();
+            while self.eat("^") {
+                v ^= self.and();
+            }
+            v
+        }
+        fn and(&mut self) -> i64 {
+            let mut v = self.shift();
+            while self.eat("&") {
+                v &= self.shift();
+            }
+            v
+        }
+        fn shift(&mut self) -> i64 {
+            let mut v = self.sum();
+            loop {
+                if self.eat("<<") {
+                    v <<= self.sum();
+                } else if self.eat(">>") {
+                    v >>= self.sum();
+                } else {
+                    return v;
+                }
+            }
+        }
+        fn sum(&mut self) -> i64 {
+            let mut v = self.term();
+            loop {
+                if self.eat("+") {
+                    v += self.term();
+                } else if self.eat("-") {
+                    v -= self.term();
+                } else {
+                    return v;
+                }
+            }
+        }
+        fn term(&mut self) -> i64 {
+            let mut v = self.unary();
+            loop {
+                self.ws();
+                if self.t[self.i..].starts_with(b"**") {
+                    return v;
+                }
+                if self.eat("//") {
+                    v = v.div_euclid(self.unary());
+                } else if self.eat("*") {
+                    v *= self.unary();
+                } else if self.eat("%") {
+                    v = v.rem_euclid(self.unary());
+                } else {
+                    return v;
+                }
+            }
+        }
+        fn unary(&mut self) -> i64 {
+            if self.eat("-") {
+                -self.unary()
+            } else if self.eat("+") {
+                self.unary()
+            } else if self.eat("~") {
+                !self.unary()
+            } else {
+                self.power()
+            }
+        }
+        fn power(&mut self) -> i64 {
+            let b = self.atom();
+            if self.eat("**") {
+                let e = self.unary();
+                b.pow(e as u32)
+            } else {
+                b
+            }
+        }
+        fn atom(&mut self) -> i64 {
+            if self.eat("(") {
+                let v = self.or();
+                assert!(self.eat(")"), "missing )");
+                return v;
+            }
+            self.ws();
+            let start = self.i;
+            while self.i < self.t.len() && (self.t[self.i].is_ascii_alphanumeric() || self.t[self.i] == b'_') {
+                self.i += 1;
+            }
+            let lit = std::str::from_utf8(&self.t[start..self.i]).unwrap().replace('_', "");
+            let lower = lit.to_ascii_lowercase();
+            let (digits, radix) = if let Some(h) = lower.strip_prefix("0x") {
+                (h.to_string(), 16)
+            } else if let Some(o) = lower.strip_prefix("0o") {
+                (o.to_string(), 8)
+            } else if let Some(b) = lower.strip_prefix("0b") {
+                (b.to_string(), 2)
+            } else {
+                (lower, 10)
+            };
+            i64::from_str_radix(&digits, radix).unwrap_or_else(|_| panic!("enum value literal {lit:?}"))
+        }
+    }
+    let mut p = P { t: s.as_bytes(), i: 0 };
+    let v = p.or();
+    p.ws();
+    assert_eq!(p.i, p.t.len(), "unparsed enum value {s:?}");
+    v
 }
 
 /// mavparse.MAVXML for wire protocol 2.0.
@@ -237,7 +365,7 @@ fn parse_xml(filename: &Path) -> MavXml {
                                         type_length(&ty).unwrap_or_else(|| panic!("unknown type {ty}"))
                                     }
                                 };
-                                let units = c.attribute("units").map(|u| format!("[{u}]")).unwrap_or_default();
+                                let units = c.attribute("units").filter(|u| !u.is_empty()).map(|u| format!("[{u}]")).unwrap_or_default();
                                 m.fields.push(MavField {
                                     name,
                                     wire_length: if array_length != 0 { array_length * tl } else { tl },
@@ -410,30 +538,10 @@ fn ident(name: &str) -> String {
     }
 }
 
-/// Day-of-week/month/day/year formatting of the generation time, like time.strftime("%a %b %d %Y").
-fn parse_time() -> String {
-    let secs = std::env::var("SOURCE_DATE_EPOCH")
-        .ok()
-        .and_then(|s| s.parse::<i64>().ok())
-        .unwrap_or_else(|| {
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
-        });
-    let days = secs.div_euclid(86400);
-    // civil_from_days (Howard Hinnant)
-    let z = days + 719468;
-    let era = z.div_euclid(146097);
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    let wd = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"][days.rem_euclid(7) as usize];
-    let mn = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][(m - 1) as usize];
-    format!("{wd} {mn} {d:02} {y}")
-}
+/// `MAVLINK_BUILD_DATE` in C# is the time mavgen ran (`time.strftime("%a %b %d %Y")`) and is
+/// frozen into the committed Mavlink.cs. The Rust mirrors that file, so it carries the same
+/// value instead of the time of each cargo build.
+const MAVLINK_BUILD_DATE: &str = "Sun Oct 04 2026";
 
 fn main() {
     let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
@@ -527,13 +635,13 @@ fn main() {
     let mut out = String::with_capacity(4 << 20);
     let o = &mut out;
     writeln!(o, "// @generated by crates/mp-core/build.rs from message_definitions/all.xml and offspec.xml").unwrap();
-    writeln!(o, "pub const MAVLINK_BUILD_DATE: &str = {};", rust_str(&parse_time())).unwrap();
+    writeln!(o, "pub const MAVLINK_BUILD_DATE: &str = {};", rust_str(MAVLINK_BUILD_DATE)).unwrap();
     writeln!(o, "pub const MAVLINK_WIRE_PROTOCOL_VERSION: &str = \"2.0\";").unwrap();
     writeln!(o, "pub const MAVLINK_MAX_PAYLOAD_LEN: i32 = {largest_payload};").unwrap();
     writeln!(o, "pub const MAVLINK_STX: u8 = {PROTOCOL_MARKER};").unwrap();
     writeln!(o, "pub const MAVLINK_VERSION: u8 = {};", xml[0].version).unwrap();
     writeln!(o, "\n/// msgid, name, crc, minlength, length, type").unwrap();
-    writeln!(o, "pub static MAVLINK_MESSAGE_INFOS: &[message_info] = &[").unwrap();
+    writeln!(o, "pub const MAVLINK_MESSAGE_INFOS_GENERATED: &[message_info] = &[").unwrap();
     for (id, name, crc, minlen, len) in &infos {
         let t = format!("mavlink_{}_t", name.to_lowercase());
         writeln!(
@@ -601,10 +709,21 @@ fn main() {
     }
 
     // Lookup by enum type name, standing in for `Type.GetType("MAVLink+" + name)` reflection.
-    writeln!(o, "/// The members of the generated enum called `name`.\npub fn enum_entries(name: &str) -> Option<&'static [EnumEntry]> {{\n    Some(match name {{").unwrap();
+    writeln!(o, "/// The generated enum called `name`: its members, C# underlying type and `[Flags]`.\npub fn enum_info(name: &str) -> Option<EnumInfo> {{\n    Some(match name {{").unwrap();
     for x in &xml {
         for e in &x.enums {
-            writeln!(o, "        {} => {}::ENTRIES,", rust_str(&e.name), e.name).unwrap();
+            let desc = clean_text(&e.description);
+            let flags = desc.to_lowercase().contains("bitmask") || e.name.to_lowercase().contains("_flags");
+            let base = enumtypes.get(&e.name).copied().unwrap_or("int");
+            writeln!(
+                o,
+                "        {} => EnumInfo {{ name: {}, base_type: {}, flags: {flags}, entries: {}::ENTRIES }},",
+                rust_str(&e.name),
+                rust_str(&e.name),
+                rust_str(base),
+                e.name
+            )
+            .unwrap();
         }
     }
     writeln!(o, "        _ => return None,\n    }})\n}}\n").unwrap();
@@ -654,24 +773,23 @@ fn main() {
                 let cs_full = if f.array_length != 0 { format!("{cs}[]") } else { cs.to_string() };
                 writeln!(
                     o,
-                    "        FieldInfo {{ name: {}, cs_type: {}, offset: {}, array_length: {}, units: {}, description: {}, enum_name: {}, display: {} }},",
+                    "        FieldInfo {{ name: {}, cs_type: {}, offset: {}, array_length: {}, units: {}, description: {} }},",
                     rust_str(&f.name),
                     rust_str(&cs_full),
                     f.wire_offset,
                     f.array_length,
                     rust_str(&f.units),
-                    rust_str(&clean_text(&f.description)),
-                    rust_str(&f.enum_),
-                    rust_str(&f.display)
+                    rust_str(&clean_text(&f.description))
                 )
                 .unwrap();
             }
             writeln!(o, "    ];").unwrap();
             writeln!(
                 o,
-                "    pub const TYPE: MessageType = MessageType {{ name: {}, size: {}, fields: Self::FIELDS, type_id: || std::any::TypeId::of::<{t}>(), deserialize: |b| Box::new({t}::from_bytes(b)) }};",
+                "    pub const TYPE: MessageType = MessageType {{ name: {}, size: {}, obsolete: {}, fields: Self::FIELDS, type_id: || std::any::TypeId::of::<{t}>(), deserialize: |b| Box::new({t}::from_bytes(b)) }};",
                 rust_str(&t),
-                m.wire_length
+                m.wire_length,
+                m.deprecated
             )
             .unwrap();
 

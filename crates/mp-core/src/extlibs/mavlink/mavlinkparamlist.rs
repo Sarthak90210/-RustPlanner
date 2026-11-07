@@ -9,14 +9,16 @@ use indexmap::IndexMap;
 use super::mavlinkparam::MAVLinkParam;
 use crate::dotnet::Exception;
 
-type PropertyChangedHandler = Box<dyn Fn(&str) + Send + Sync>;
+/// `PropertyChangedEventHandler(object sender, PropertyChangedEventArgs e)`
+type PropertyChangedHandler = Box<dyn Fn(&MAVLinkParamList, &str) + Send + Sync>;
 
 /// `MAVLink.MAVLinkParamList : List<MAVLinkParam>, INotifyPropertyChanged`
 #[derive(Default)]
 pub struct MAVLinkParamList {
     items: Vec<MAVLinkParam>,
     pub total_reported: i32,
-    property_changed: Vec<PropertyChangedHandler>,
+    property_changed: Vec<(usize, PropertyChangedHandler)>,
+    next_handler: usize,
 }
 
 impl std::fmt::Debug for MAVLinkParamList {
@@ -28,7 +30,7 @@ impl std::fmt::Debug for MAVLinkParamList {
 impl Clone for MAVLinkParamList {
     /// Copies the items; event subscribers stay with the original, as a new C# list has none.
     fn clone(&self) -> Self {
-        MAVLinkParamList { items: self.items.clone(), total_reported: self.total_reported, property_changed: vec![] }
+        MAVLinkParamList { items: self.items.clone(), total_reported: self.total_reported, property_changed: vec![], next_handler: 0 }
     }
 }
 
@@ -36,6 +38,13 @@ impl std::ops::Deref for MAVLinkParamList {
     type Target = Vec<MAVLinkParam>;
     fn deref(&self) -> &Vec<MAVLinkParam> {
         &self.items
+    }
+}
+
+/// The inherited `List<MAVLinkParam>` members (`Insert`, `Remove`, `Sort`, `this[int]`, ...).
+impl std::ops::DerefMut for MAVLinkParamList {
+    fn deref_mut(&mut self) -> &mut Vec<MAVLinkParam> {
+        &mut self.items
     }
 }
 
@@ -125,14 +134,22 @@ impl MAVLinkParamList {
         Ok(copy)
     }
 
-    /// `event PropertyChangedEventHandler PropertyChanged` (+=)
-    pub fn add_property_changed(&mut self, handler: impl Fn(&str) + Send + Sync + 'static) {
-        self.property_changed.push(Box::new(handler));
+    /// `PropertyChanged += handler`; the returned id removes it again.
+    pub fn add_property_changed(&mut self, handler: impl Fn(&MAVLinkParamList, &str) + Send + Sync + 'static) -> usize {
+        let id = self.next_handler;
+        self.next_handler += 1;
+        self.property_changed.push((id, Box::new(handler)));
+        id
+    }
+
+    /// `PropertyChanged -= handler`
+    pub fn remove_property_changed(&mut self, id: usize) {
+        self.property_changed.retain(|(i, _)| *i != id);
     }
 
     fn on_property_changed(&self, property_name: &str) {
-        for h in &self.property_changed {
-            h(property_name);
+        for (_, h) in &self.property_changed {
+            h(self, property_name);
         }
     }
 }
@@ -152,7 +169,7 @@ mod tests {
         let seen = Arc::new(Mutex::new(vec![]));
         let mut l = MAVLinkParamList::new();
         let s = seen.clone();
-        l.add_property_changed(move |n| s.lock().unwrap().push(n.to_string()));
+        let id = l.add_property_changed(move |_, n| s.lock().unwrap().push(n.to_string()));
         l.add(p("A", 1.0));
         l.add(p("A", 2.0));
         l.add_range([p("A", 3.0), p("B", 4.0)]);
@@ -162,6 +179,11 @@ mod tests {
         assert_eq!(l.to_dictionary().unwrap()["A"], 3.0);
         assert!(l.get_any(&["A", "B"]).is_none());
         assert_eq!(l.get_any(&["B", "C"]).unwrap().name, "B");
+        l.remove_property_changed(id);
+        l.add(p("B", 9.0));
+        assert_eq!(seen.lock().unwrap().len(), 2, "unsubscribed handler is not called");
+        l.insert(0, p("Z", 0.0));
+        assert_eq!(l[0].name, "Z");
         l.total_reported = 5;
         l.clear();
         assert_eq!((l.len(), l.total_reported), (0, 0));

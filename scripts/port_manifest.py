@@ -135,8 +135,10 @@ def classify(rel: Path) -> tuple[str, str, str]:
         lib = parts[1]
         crate = "mp-app" if lib in UI_EXTLIBS else "mp-core"
         rust = Path("crates", crate, "src", *rs_parts)
+        if lib == "Mavlink" and parts[2:4] == ["pymavlink", "generator"]:
+            return str(rust).replace("\\", "/"), "n/a",                 "template copy inside the generator; ExtLibs/Mavlink/*.cs are the shipped versions"
         if lib == "Mavlink" and stem == "Mavlink":
-            return str(rust).replace("\\", "/"), "generated",                 "mavlink crate, generated from the same ExtLibs/Mavlink/message_definitions XML"
+            return str(rust).replace("\\", "/"), "generated",                 "emitted by crates/mp-core/build.rs, a port of pymavlink mavgen_cs.py, from the same message_definitions XML"
         if lib == "DroneCAN" and len(parts) > 2 and parts[2] == "out":
             return str(rust).replace("\\", "/"), "generated",                 "emitted by canard_dsdlc from DSDL; port the generator, not its output"
         if lib in VENDORED:
@@ -172,10 +174,13 @@ def main() -> int:
         rust_abs = ROOT / rust
         lines = sum(1 for _ in cs.open(encoding="utf-8", errors="replace"))
         if rust_abs.exists():
-            if header_ok(rust_abs, rel_s):
+            if not header_ok(rust_abs, rel_s):
+                bad.append(rust)
+            elif status == "todo":
                 status = "ported"
             else:
-                bad.append(rust)
+                # generated output reproduced by a ported generator: not owned code
+                note = (note + "; " if note else "") + "Rust counterpart present"
         rows.append({"cs": rel_s, "rust": rust, "status": status, "lines": lines, "note": note})
 
     if "--check" in sys.argv:

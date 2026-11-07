@@ -4,14 +4,15 @@ use super::mavlink::MAV_PARAM_TYPE;
 use crate::dotnet::{self, Exception};
 
 /// `MAVLink.MAVLinkParam`
-#[derive(Debug, Clone, PartialEq)]
+/// C# compares instances by reference; Rust callers compare `name` explicitly where needed.
+#[derive(Debug, Clone)]
 pub struct MAVLinkParam {
     /// Parameter name
     pub name: String,
     /// Over the wire storage format
     pub r#type: MAV_PARAM_TYPE,
-    /// Default value of the parameter; `None` when not available.
-    pub default_value: Option<f64>,
+    /// `public readonly double? default_value`: set by the constructors only.
+    default_value: Option<f64>,
     _typeap: MAV_PARAM_TYPE,
     _data: [u8; 4],
 }
@@ -69,8 +70,18 @@ impl MAVLinkParam {
         f32::from_le_bytes(self._data)
     }
 
+    /// Default value of the parameter; `None` when not available.
+    pub fn default_value(&self) -> Option<f64> {
+        self.default_value
+    }
+
     pub fn data(&self) -> &[u8; 4] {
         &self._data
+    }
+
+    /// The `data` getter hands out the array itself, so callers can write into it.
+    pub fn data_mut(&mut self) -> &mut [u8; 4] {
+        &mut self._data
     }
 
     /// The `data` setter: the bytes resized to four.
@@ -111,8 +122,10 @@ impl MAVLinkParam {
     /// `Value` setter (`SetValue(double)`); other wire types leave the data unchanged.
     pub fn set_value(&mut self, input: f64) {
         match self.r#type {
-            MAV_PARAM_TYPE::UINT8 => self.set_data(&[dotnet::cast_u8(input)]),
-            MAV_PARAM_TYPE::INT8 => self.set_data(&[dotnet::cast_i8(input) as u8]),
+            // BitConverter has no byte or sbyte overload: both calls bind to GetBytes(short), so
+            // the value is widened (sign-extended for INT8) into two bytes before the resize to four.
+            MAV_PARAM_TYPE::UINT8 => self.set_data(&(dotnet::cast_u8(input) as i16).to_le_bytes()),
+            MAV_PARAM_TYPE::INT8 => self.set_data(&(dotnet::cast_i8(input) as i16).to_le_bytes()),
             MAV_PARAM_TYPE::UINT16 => self.set_data(&dotnet::cast_u16(input).to_le_bytes()),
             MAV_PARAM_TYPE::INT16 => self.set_data(&dotnet::cast_i16(input).to_le_bytes()),
             MAV_PARAM_TYPE::UINT32 => self.set_data(&dotnet::cast_u32(input).to_le_bytes()),
@@ -184,6 +197,9 @@ mod tests {
         assert_eq!(p.data(), &[44, 0, 0, 0]);
         assert_eq!(p.value().unwrap(), 44.0);
         assert_eq!(p.default_value_to_string(), "1");
+        let p = MAVLinkParam::new("X", -1.0, MAV_PARAM_TYPE::INT8, None);
+        assert_eq!(p.data(), &[0xFF, 0xFF, 0, 0], "GetBytes(short) sign-extends");
+        assert_eq!(p.value().unwrap(), -1.0);
         let p = MAVLinkParam::new("X", -1.0, MAV_PARAM_TYPE::INT16, None);
         assert_eq!(p.value().unwrap(), -1.0);
         assert_eq!(p.default_value_to_string(), "NaN");

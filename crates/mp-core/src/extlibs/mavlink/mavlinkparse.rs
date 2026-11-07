@@ -1,8 +1,8 @@
 //! Port of `ExtLibs/Mavlink/MavlinkParse.cs`
 //!
-//! The `Units`, `Description` and `hasLocation` attribute classes declared in this file are
-//! carried by the generated metadata (`FieldInfo::units`, `FieldInfo::description`,
-//! `EnumEntry::description`, `EnumEntry::has_location`).
+//! The `Units`, `Description` and `hasLocation` attribute classes are declared here. The
+//! generator attaches them through `FieldInfo` and `EnumEntry`; `FieldInfo::attributes` and
+//! `EnumEntry::attributes` give them back as these types, like `GetCustomAttributes`.
 
 use sha2::{Digest, Sha256};
 
@@ -13,24 +13,84 @@ use super::mavlinkmessage::MAVLinkMessage;
 use super::mavlinkutil::{get_message_info, MavlinkUtil};
 use crate::dotnet::{DateTime, DateTimeKind, Exception, Stream};
 
+/// `MAVLink.Units` attribute
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Units {
+    pub unit: String,
+}
+
+impl Units {
+    pub fn new(unit: &str) -> Self {
+        Units { unit: unit.to_string() }
+    }
+}
+
+/// `MAVLink.Description` attribute
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Description {
+    pub text: String,
+}
+
+impl Description {
+    pub fn new(desc: &str) -> Self {
+        Description { text: desc.to_string() }
+    }
+}
+
+/// `MAVLink.hasLocation` attribute
+#[allow(non_camel_case_types)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct hasLocation;
+
+/// One custom attribute, as `GetCustomAttributes(false)` returns them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Attribute {
+    Units(Units),
+    Description(Description),
+    HasLocation(hasLocation),
+    Obsolete,
+}
+
+impl FieldInfo {
+    /// `field.GetCustomAttributes(false)`: `[Units]` then `[Description]`, as generated.
+    pub fn attributes(&self) -> Vec<Attribute> {
+        vec![Attribute::Units(Units::new(self.units)), Attribute::Description(Description::new(self.description))]
+    }
+}
+
+impl EnumEntry {
+    /// The member's custom attributes in the generator's order.
+    pub fn attributes(&self) -> Vec<Attribute> {
+        let mut v = vec![];
+        if self.has_location {
+            v.push(Attribute::HasLocation(hasLocation));
+        }
+        if self.obsolete {
+            v.push(Attribute::Obsolete);
+        }
+        v.push(Attribute::Description(Description::new(self.description)));
+        v
+    }
+}
+
 /// `GetUnit(fieldname, packetype = null, name = "", msgid = UInt32.MaxValue)`. Every failure
 /// path in C# ends in the swallowed exception and `""`.
 pub fn get_unit(fieldname: &str, packetype: Option<&MessageType>, name: &str, msgid: u32) -> String {
     let mut msginfo: Option<&message_info> = None;
     if let Some(pt) = packetype {
-        match MAVLINK_MESSAGE_INFOS.iter().find(|a| a.r#type.is_some_and(|t| t == pt)) {
+        match MAVLINK_MESSAGE_INFOS.get().iter().find(|a| a.r#type.is_some_and(|t| t == pt)) {
             Some(m) => msginfo = Some(m),
             None => return String::new(),
         }
     }
     if msgid != u32::MAX {
-        match MAVLINK_MESSAGE_INFOS.iter().find(|a| a.msgid == msgid) {
+        match MAVLINK_MESSAGE_INFOS.get().iter().find(|a| a.msgid == msgid) {
             Some(m) => msginfo = Some(m),
             None => return String::new(),
         }
     }
     if !name.is_empty() {
-        match MAVLINK_MESSAGE_INFOS.iter().find(|a| a.name == name) {
+        match MAVLINK_MESSAGE_INFOS.get().iter().find(|a| a.name == name) {
             Some(m) => msginfo = Some(m),
             None => return String::new(),
         }
@@ -38,10 +98,15 @@ pub fn get_unit(fieldname: &str, packetype: Option<&MessageType>, name: &str, ms
     // A default message_info has a null name and type: the C# dereference throws, caught as "".
     let Some(msginfo) = msginfo else { return String::new() };
     let Some(t) = msginfo.r#type else { return String::new() };
-    match t.get_field(fieldname) {
-        Some(f) => f.units.to_string(),
-        None => String::new(),
+    let Some(typeofthing) = t.get_field(fieldname) else { return String::new() };
+    let attrib = typeofthing.attributes();
+    if !attrib.is_empty() {
+        return attrib
+            .iter()
+            .find_map(|a| if let Attribute::Units(u) = a { Some(u.unit.clone()) } else { None })
+            .unwrap_or_default();
     }
+    String::new()
 }
 
 /// `MAVLink.MavlinkParse`
@@ -76,7 +141,7 @@ impl MavlinkParse {
                 timeout = 60000;
             }
         }
-        let mut to = DateTime::utc_now().add_milliseconds(timeout as f64);
+        let mut to = DateTime::utc_now().add_milliseconds(timeout as f64)?;
         let mut toread = count;
         let mut pos = offset;
         loop {
@@ -84,7 +149,7 @@ impl MavlinkParse {
             toread -= read;
             pos += read;
             if read > 0 {
-                to = DateTime::utc_now().add_milliseconds(timeout as f64);
+                to = DateTime::utc_now().add_milliseconds(timeout as f64)?;
             }
             if toread == 0 {
                 break;
@@ -112,10 +177,10 @@ impl MavlinkParse {
             let mut datearray = [0u8; 8];
             Self::read_with_timeout(base_stream, &mut datearray, 0, 8)?;
             datearray.reverse();
-            let mut date1 = DateTime::new(1970, 1, 1, 0, 0, 0, DateTimeKind::Utc);
+            let mut date1 = DateTime::new(1970, 1, 1, 0, 0, 0, DateTimeKind::Utc)?;
             let dateint = u64::from_le_bytes(datearray);
             if (dateint / 1000 / 1000 / 60 / 60) < 9999999 {
-                date1 = date1.add_milliseconds((dateint / 1000) as f64);
+                date1 = date1.add_milliseconds((dateint / 1000) as f64)?;
                 packettime = date1.to_local_time();
             }
         }
@@ -166,7 +231,7 @@ impl MavlinkParse {
         let buf = message.buffer().unwrap_or(&[]);
         let mut crc = MavlinkCRC::crc_calculate(buf, message.headerlength() + message.payloadlength() as i32);
         if message.header() == MAVLINK_STX || message.header() == MAVLINK_STX_MAVLINK1 {
-            crc = MavlinkCRC::crc_accumulate(get_message_info(MAVLINK_MESSAGE_INFOS, message.msgid()).crc, crc);
+            crc = MavlinkCRC::crc_accumulate(get_message_info(MAVLINK_MESSAGE_INFOS.get(), message.msgid()).crc, crc);
         }
         if (message.crc16() >> 8) != (crc >> 8) || (message.crc16() & 0xff) != (crc & 0xff) {
             self.bad_crc += 1;
@@ -205,7 +270,7 @@ impl MavlinkParse {
             i += 1;
         }
         let mut checksum = MavlinkCRC::crc_calculate(&packet, packet[1] as i32 + 6);
-        checksum = MavlinkCRC::crc_accumulate(get_message_info(MAVLINK_MESSAGE_INFOS, message_type.0 as u32).crc, checksum);
+        checksum = MavlinkCRC::crc_accumulate(get_message_info(MAVLINK_MESSAGE_INFOS.get(), message_type.0 as u32).crc, checksum);
         packet[i] = (checksum & 0xFF) as u8;
         i += 1;
         packet[i] = (checksum >> 8) as u8;
@@ -266,7 +331,7 @@ impl MavlinkParse {
         }
 
         let mut checksum = MavlinkCRC::crc_calculate(&packet, (data.len() + header_length) as i32);
-        checksum = MavlinkCRC::crc_accumulate(get_message_info(MAVLINK_MESSAGE_INFOS, message_type.0 as u32).crc, checksum);
+        checksum = MavlinkCRC::crc_accumulate(get_message_info(MAVLINK_MESSAGE_INFOS.get(), message_type.0 as u32).crc, checksum);
         packet[i] = (checksum & 0xFF) as u8;
         i += 1;
         packet[i] = (checksum >> 8) as u8;
@@ -274,7 +339,7 @@ impl MavlinkParse {
 
         if sign {
             // signature = sha256_48(secret_key + header + payload + CRC + link-ID + timestamp)
-            let since = DateTime::utc_now() - DateTime::new(2015, 1, 1, 0, 0, 0, DateTimeKind::Unspecified);
+            let since = DateTime::utc_now() - DateTime::new(2015, 1, 1, 0, 0, 0, DateTimeKind::Unspecified)?;
             let mut timestamp = (since.total_milliseconds() * 100.0) as u64;
             if timestamp == self.lasttimestamp {
                 timestamp += 1;

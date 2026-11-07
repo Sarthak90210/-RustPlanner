@@ -72,12 +72,32 @@ impl fmt::Debug for message_info {
     }
 }
 
+/// `public static message_info[] MAVLINK_MESSAGE_INFOS`: a static field that code such as
+/// `MavlinkMessagePlugin` replaces with an extended copy at runtime.
+pub struct MessageInfoTable(std::sync::RwLock<&'static [message_info]>);
+
+impl MessageInfoTable {
+    /// The current table.
+    pub fn get(&self) -> &'static [message_info] {
+        *self.0.read().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Assign a new array to the field.
+    pub fn set(&self, table: &'static [message_info]) {
+        *self.0.write().unwrap_or_else(|e| e.into_inner()) = table;
+    }
+}
+
+pub static MAVLINK_MESSAGE_INFOS: MessageInfoTable = MessageInfoTable(std::sync::RwLock::new(MAVLINK_MESSAGE_INFOS_GENERATED));
+
 /// What C# reaches through `System.Type` for a generated `mavlink_*_t` struct.
 pub struct MessageType {
     /// C# type name, e.g. `mavlink_heartbeat_t`.
     pub name: &'static str,
     /// `Marshal.SizeOf(type)`: the full wire length.
     pub size: usize,
+    /// `[Obsolete]` on the struct (a deprecated or work-in-progress message).
+    pub obsolete: bool,
     /// `type.GetFields()` in declaration (wire) order.
     pub fields: &'static [FieldInfo],
     pub type_id: fn() -> TypeId,
@@ -115,8 +135,6 @@ pub struct FieldInfo {
     pub array_length: usize,
     pub units: &'static str,
     pub description: &'static str,
-    pub enum_name: &'static str,
-    pub display: &'static str,
 }
 
 /// A boxed field value, as `FieldInfo.GetValue` returns an `object`.
@@ -242,6 +260,16 @@ pub struct EnumEntry {
     pub description: &'static str,
     pub obsolete: bool,
     pub has_location: bool,
+}
+
+/// A generated enum as reflection sees it: `Enum.GetUnderlyingType`, `[Flags]`, the members.
+#[derive(Debug, Clone, Copy)]
+pub struct EnumInfo {
+    pub name: &'static str,
+    /// C# underlying type (`byte`, `ushort`, `uint`, `int`, ...).
+    pub base_type: &'static str,
+    pub flags: bool,
+    pub entries: &'static [EnumEntry],
 }
 
 /// Behaviour shared by every generated enum (C# `System.Enum`).
@@ -435,13 +463,13 @@ mod tests {
     #[test]
     fn message_table_matches_mission_planner_mavlink_cs() {
         // Spot checks against reference/MissionPlanner/ExtLibs/Mavlink/Mavlink.cs.
-        let first = &MAVLINK_MESSAGE_INFOS[0];
+        let first = &MAVLINK_MESSAGE_INFOS.get()[0];
         assert_eq!((first.msgid, first.name, first.crc, first.minlength, first.length), (0, "HEARTBEAT", 50, 9, 9));
-        let s = &MAVLINK_MESSAGE_INFOS[1];
+        let s = &MAVLINK_MESSAGE_INFOS.get()[1];
         assert_eq!((s.msgid, s.name, s.crc, s.minlength, s.length), (1, "SYS_STATUS", 124, 31, 43));
-        let last = MAVLINK_MESSAGE_INFOS.last().unwrap();
+        let last = MAVLINK_MESSAGE_INFOS.get().last().unwrap();
         assert_eq!((last.msgid, last.name, last.crc, last.minlength, last.length), (26900, "zVIDEO_STREAM_INFORMATION", 124, 246, 246));
-        assert_eq!(MAVLINK_MESSAGE_INFOS.len(), 354);
+        assert_eq!(MAVLINK_MESSAGE_INFOS.get().len(), 354);
         assert_eq!(MAVLINK_MAX_PAYLOAD_LEN, 255);
     }
 
@@ -465,70 +493,78 @@ mod tests {
     }
 }
 
-/// Whole-table comparison with the generated C# when the reference tree is checked out.
+/// Whole-file comparison with Mission Planner's generated Mavlink.cs, through the digest
+/// `scripts/mavlink_cs_digest.py` extracts into `tests/fixtures/` (the reference tree itself
+/// is not committed).
 #[cfg(test)]
-mod reference_tests {
+mod digest_tests {
     use super::*;
-    use std::path::PathBuf;
+    use serde_json::Value;
 
-    fn reference() -> Option<String> {
-        let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../reference/MissionPlanner/ExtLibs/Mavlink/Mavlink.cs");
-        std::fs::read_to_string(p).ok()
+    fn digest() -> Value {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mavlink_cs_digest.json.gz");
+        let f = std::fs::File::open(path).expect("mavlink_cs_digest.json.gz");
+        serde_json::from_reader(flate2::read::GzDecoder::new(f)).unwrap()
     }
 
     #[test]
-    fn every_message_info_row_matches() {
-        let Some(cs) = reference() else { return };
-        let re = regex::Regex::new(r#"new message_info\((\d+), "([^"]+)", (\d+), (\d+), (\d+), typeof\( (\w+) \)\)"#).unwrap();
-        let rows: Vec<_> = re.captures_iter(&cs).collect();
-        assert_eq!(rows.len(), MAVLINK_MESSAGE_INFOS.len());
-        for (c, r) in rows.iter().zip(MAVLINK_MESSAGE_INFOS) {
-            assert_eq!(c[1].parse::<u32>().unwrap(), r.msgid, "{}", &c[2]);
-            assert_eq!(&c[2], r.name);
-            assert_eq!(c[3].parse::<u8>().unwrap(), r.crc, "{}", r.name);
-            assert_eq!(c[4].parse::<u32>().unwrap(), r.minlength, "{}", r.name);
-            assert_eq!(c[5].parse::<u32>().unwrap(), r.length, "{}", r.name);
-            assert_eq!(&c[6], r.r#type.unwrap().name);
+    fn build_date_and_message_infos_match() {
+        let d = digest();
+        assert_eq!(d["build_date"], MAVLINK_BUILD_DATE);
+        let rows = d["message_infos"].as_array().unwrap();
+        let table = MAVLINK_MESSAGE_INFOS.get();
+        assert_eq!(rows.len(), table.len());
+        for (row, r) in rows.iter().zip(table) {
+            assert_eq!(row[0], r.msgid);
+            assert_eq!(row[1], r.name);
+            assert_eq!(row[2], r.crc as u64, "{}", r.name);
+            assert_eq!(row[3], r.minlength, "{}", r.name);
+            assert_eq!(row[4], r.length, "{}", r.name);
+            assert_eq!(row[5], r.r#type.unwrap().name);
         }
     }
 
     #[test]
-    fn every_enum_member_matches() {
-        let Some(cs) = reference() else { return };
-        let enum_re = regex::Regex::new(r"public enum (\w+): ([\w /*]+)\s*\{([^}]*)\}").unwrap();
-        let member_re = regex::Regex::new(r"(?m)^\s*(?:\[[^\]]*\]\s*)*(\w+)=(-?\d+),").unwrap();
-        let mut checked = 0;
-        for e in enum_re.captures_iter(&cs) {
-            let members: Vec<(String, i64)> = member_re
-                .captures_iter(&e[3])
-                .map(|m| (m[1].to_string(), m[2].parse().unwrap()))
-                .collect();
-            let ours = enum_entries(&e[1]).unwrap_or_else(|| panic!("missing enum {}", &e[1]));
-            let ours: Vec<(String, i64)> = ours.iter().map(|x| (x.name.to_string(), x.value)).collect();
-            assert_eq!(members, ours, "enum {}", &e[1]);
-            checked += 1;
+    fn every_enum_matches_with_attributes() {
+        let d = digest();
+        let enums = d["enums"].as_array().unwrap();
+        assert_eq!(enums.len(), 232);
+        for e in enums {
+            let name = e["name"].as_str().unwrap();
+            let ours = enum_info(name).unwrap_or_else(|| panic!("missing enum {name}"));
+            assert_eq!(e["base"], ours.base_type, "{name} underlying type");
+            assert_eq!(e["flags"], ours.flags, "{name} [Flags]");
+            let members = e["members"].as_array().unwrap();
+            assert_eq!(members.len(), ours.entries.len(), "{name} member count");
+            for (m, o) in members.iter().zip(ours.entries) {
+                assert_eq!(m[0], o.name, "{name}");
+                assert_eq!(m[1], o.value, "{name}.{}", o.name);
+                assert_eq!(m[2], o.description, "{name}.{} [Description]", o.name);
+                assert_eq!(m[3], o.obsolete, "{name}.{} [Obsolete]", o.name);
+                assert_eq!(m[4], o.has_location, "{name}.{} [hasLocation()]", o.name);
+            }
         }
-        assert!(checked > 200, "only {checked} enums parsed");
     }
 
     #[test]
-    fn every_struct_field_matches() {
-        let Some(cs) = reference() else { return };
-        let struct_re = regex::Regex::new(r"(?s)public struct (mavlink_\w+_t)\s*\{(.*?)
-    \};").unwrap();
-        let field_re = regex::Regex::new(r"(?m)^\s*(?:\[MarshalAs\(UnmanagedType\.ByValArray,SizeConst=(\d+)\)\]\s*)?public\s+(/\*\w+\*/)?([\w\[\]]+) @?(\w+);").unwrap();
-        let mut checked = 0;
-        for st in struct_re.captures_iter(&cs) {
-            let info = MAVLINK_MESSAGE_INFOS.iter().find(|i| i.r#type.unwrap().name == &st[1]).unwrap();
-            let ours = info.r#type.unwrap().fields;
-            let theirs: Vec<(String, String, usize)> = field_re
-                .captures_iter(&st[2])
-                .map(|f| (f[4].to_string(), f[3].to_string(), f.get(1).map(|n| n.as_str().parse().unwrap()).unwrap_or(0)))
-                .collect();
-            let mine: Vec<(String, String, usize)> = ours.iter().map(|f| (f.name.to_string(), f.cs_type.to_string(), f.array_length)).collect();
-            assert_eq!(theirs, mine, "{}", &st[1]);
-            checked += 1;
+    fn every_struct_field_matches_with_attributes() {
+        let d = digest();
+        let structs = d["structs"].as_array().unwrap();
+        assert_eq!(structs.len(), MAVLINK_MESSAGE_INFOS.get().len());
+        for st in structs {
+            let name = st["name"].as_str().unwrap();
+            let t = MAVLINK_MESSAGE_INFOS.get().iter().find_map(|i| i.r#type.filter(|t| t.name == name)).unwrap();
+            assert_eq!(st["obsolete"], t.obsolete, "{name} [Obsolete]");
+            let fields = st["fields"].as_array().unwrap();
+            assert_eq!(fields.len(), t.fields.len(), "{name} field count");
+            for (f, o) in fields.iter().zip(t.fields) {
+                assert_eq!(f[0], o.name, "{name}");
+                assert_eq!(f[1], o.cs_type, "{name}.{}", o.name);
+                assert_eq!(f[2], o.array_length, "{name}.{} SizeConst", o.name);
+                assert_eq!(f[3], o.offset, "{name}.{} FieldOffset", o.name);
+                assert_eq!(f[4], o.units, "{name}.{} [Units]", o.name);
+                assert_eq!(f[5], o.description, "{name}.{} [Description]", o.name);
+            }
         }
-        assert_eq!(checked, MAVLINK_MESSAGE_INFOS.len());
     }
 }

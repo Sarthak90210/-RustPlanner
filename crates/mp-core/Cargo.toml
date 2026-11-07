@@ -34,4 +34,4 @@ indexmap = "2"
 serialport = { version = "4.10", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62", features = ["Win32_System_LibraryLoader"] }
+windows = { version = "0.62", features = ["Win32_System_LibraryLoader", "Win32_Globalization"] }

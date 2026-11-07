@@ -30,32 +30,6 @@ pub struct MAVLinkMessage {
 
 static INVALID: LazyLock<MAVLinkMessage> = LazyLock::new(MAVLinkMessage::new);
 
-impl Clone for MAVLinkMessage {
-    fn clone(&self) -> Self {
-        let data = OnceLock::new();
-        if let Some(d) = self._data.get() {
-            let _ = data.set(d.clone());
-        }
-        MAVLinkMessage {
-            _buffer: self._buffer.clone(),
-            rxtime: self.rxtime,
-            header: self.header,
-            payloadlength: self.payloadlength,
-            incompat_flags: self.incompat_flags,
-            compat_flags: self.compat_flags,
-            seq: self.seq,
-            sysid: self.sysid,
-            compid: self.compid,
-            headerlength: self.headerlength,
-            target_system: self.target_system,
-            msgid: self.msgid,
-            crc16: self.crc16,
-            sig: self.sig.clone(),
-            _data: data,
-        }
-    }
-}
-
 impl std::fmt::Debug for MAVLinkMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.to_cs_string())
@@ -163,14 +137,14 @@ impl MAVLinkMessage {
         if self.target_system.is_some() {
             return self.target_system;
         }
-        let r#type = get_message_info(MAVLINK_MESSAGE_INFOS, self.msgid).r#type?;
+        let r#type = get_message_info(MAVLINK_MESSAGE_INFOS.get(), self.msgid).r#type?;
         let field = get_target_system_field(r#type)?;
         self.data()?.get_field(field.name)?.to_u32()
     }
 
     /// `GetTargetComponent()`
     pub fn get_target_component(&self) -> Option<u8> {
-        let r#type = get_message_info(MAVLINK_MESSAGE_INFOS, self.msgid).r#type?;
+        let r#type = get_message_info(MAVLINK_MESSAGE_INFOS.get(), self.msgid).r#type?;
         r#type.get_field("target_component")?;
         match self.data()?.get_field("target_component")? {
             FieldValue::Byte(b) => Some(b),
@@ -195,7 +169,7 @@ impl MAVLinkMessage {
 
     /// `msgtypename`: the message name, empty (C# null) for an unknown id.
     pub fn msgtypename(&self) -> &'static str {
-        get_message_info(MAVLINK_MESSAGE_INFOS, self.msgid).name
+        get_message_info(MAVLINK_MESSAGE_INFOS.get(), self.msgid).name
     }
 
     /// `data`: the payload decoded into its generated struct, built once. `None` for an
@@ -203,7 +177,7 @@ impl MAVLinkMessage {
     pub fn data(&self) -> Option<&dyn MavlinkData> {
         self._data
             .get_or_init(|| {
-                let typeinfo = get_message_info(MAVLINK_MESSAGE_INFOS, self.msgid);
+                let typeinfo = get_message_info(MAVLINK_MESSAGE_INFOS.get(), self.msgid);
                 let t = typeinfo.r#type?;
                 if self.payloadlength == 0 {
                     return Some((t.deserialize)(&[]));
