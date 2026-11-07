@@ -175,7 +175,9 @@ fn tlog_logs_and_playback() {
     let port = free_port();
     let link = Link::connect_with(ConnectionSpec::UdpListen { port }, Some(dir.join("tlogs")));
     let _sim = sim::spawn(port).unwrap();
-    wait_event(&link, Duration::from_secs(30), |e| matches!(e, LinkEvent::ParamsLoaded(_)));
+    // ~3000 parameters over UDP while every simulator test runs at once: dropped values are
+    // re-requested ten per idle period, so allow for a slow download
+    wait_event(&link, Duration::from_secs(60), |e| matches!(e, LinkEvent::ParamsLoaded(_)));
 
     // DataFlash log list + download over MAVLink (resend LogList if UDP packet was dropped)
     let start = Instant::now();
