@@ -1,0 +1,45 @@
+{
+  "round": 53,
+  "date": "2026-11-07",
+  "review_type": "Independent hostile source review at the strictest adversarial parity bar. Verified targeted improvements in commit 5bf8d0b02addf0c12b2cfab0152e5f7a464a3fec against reference/MissionPlanner sources: Comms Hardware-in-the-Loop Telemetry Benchmark (BleTransport and WinUsbTransport loopback, inject_rx, take_tx, and comms_hardware_bench.rs validating 20-byte BLE 4.0 ATT MTU slicing, 64-byte WinUSB bulk endpoints, MAVLink v2 framing, CRC integrity, and RF noise recovery), Mobile Safe-Area Insets & Touch Target Ergonomics (SafeAreaInsets and MIN_TOUCH_TARGET = 44.0 in platform.rs, top bar safe-area padding and CentralPanel inner_margin in app.rs), and Mobile Code Signing & Provisioning Profile Validator (validate_mobile_signing.py extracting PKCS#7/CMS envelopes, validating iOS entitlements and expiration, app bundle validation, and Android keystore checks, verified by 7/7 passing unit tests in test_mobile_signing.py).",
+  "reviewed_head": "5bf8d0b02addf0c12b2cfab0152e5f7a464a3fec",
+  "reviewed_uncommitted_worktree": false,
+  "reviewed_files": [
+    "crates/mp-app/src/app.rs",
+    "crates/mp-app/src/platform.rs",
+    "crates/mp-core/src/comms.rs",
+    "crates/mp-core/tests/comms_hardware_bench.rs",
+    "scripts/test_mobile_signing.py",
+    "scripts/validate_mobile_signing.py",
+    "scripts/test_ios_packaging.py"
+  ],
+  "verdict": "ACCEPTED (Score: 8.5/10 - UNCAPPED). Commit 5bf8d0b02addf0c12b2cfab0152e5f7a464a3fec successfully resolves both open P2 findings from Round 52 (R52-01 and R52-02). In comms, BleTransport and WinUsbTransport provide deterministic loopback test interfaces (inject_rx, take_tx, loopback_pair) exercised by a dedicated HIL benchmark suite (crates/mp-core/tests/comms_hardware_bench.rs) verifying BLE 4.0 ATT MTU slicing (20-byte chunks), WinUSB 64-byte bulk endpoints across 500-packet bursts, and RF channel noise resynchronization with MAVLink v2 framing. In platform and app, SafeAreaInsets and MIN_TOUCH_TARGET = 44.0 pt (mandated by iOS HIG and Android Material Design) are integrated into platform.rs and applied to the top menu bar height, icon/button sizing, and CentralPanel margins in app.rs. In mobile delivery, scripts/validate_mobile_signing.py provides production-grade code signing and provisioning profile validation (extracting XML plists from PKCS#7 CMS envelopes, validating team identifiers, expiration dates, required multicast and keychain entitlements, app bundle structure, and Android keystore integrity), verified by 7 passing unit tests in scripts/test_mobile_signing.py alongside 6 passing tests in scripts/test_ios_packaging.py. With zero open P0 or P1 findings, the score remains uncapped and advances to 8.5/10.",
+  "scores": {
+    "overall": 8.5,
+    "ui_ux": 8.6,
+    "features": 8.9,
+    "cross_platform_delivery": 8.0,
+    "scale": "0 to 10 against an exact Mission Planner clone on Windows, macOS, Linux, Android and iOS. A partial match gets no credit. With zero open P0 or P1 findings, the 5.0 cap is lifted."
+  },
+  "independent_validation": [
+    "Confirmed git HEAD commit 5bf8d0b02addf0c12b2cfab0152e5f7a464a3fec on branch codex/ios-app-bundle with clean working tree.",
+    "Executed `python scripts/test_ios_packaging.py`: 6 passed, 0 failed in 0.046s (verifying artifact invalidation, platform manifest separation, simulator device resolution, screenshot capture receipt verification, and committed smoke receipt verification).",
+    "Executed `python scripts/test_mobile_signing.py`: 7 passed, 0 failed in 0.027s (verifying valid profile acceptance, expired profile rejection, bundle id mismatch rejection, required entitlement enforcement, PKCS#7 CMS envelope parsing, iOS app bundle structure validation, and Android keystore validation).",
+    "Executed `cargo test --test comms_hardware_bench`: 3 passed, 0 failed in 0.00s (ble_telemetry_mtu_chunking_and_reassembly, rf_telemetry_jitter_and_framing_resynchronization, winusb_bulk_endpoint_high_throughput_benchmark).",
+    "Executed `cargo test --workspace`: 262 passed, 0 failed, 1 ignored (mp-app: 151 passed, 1 ignored; mp-core: 82 passed; altitude_change: 7 passed; camera_ftp: 1 passed; comms_hardware_bench: 3 passed; high_latency: 3 passed; link_sim: 9 passed; maiden_flight: 1 passed; mavserial: 4 passed; proximity_wire: 1 passed).",
+    "Inspected source in `crates/mp-core/src/comms.rs` and `crates/mp-core/tests/comms_hardware_bench.rs`: verified `BleTransport` and `WinUsbTransport` loopback and injection APIs; verified MAVLink v2 frame construction, 20-byte BLE 4.0 ATT MTU slicing, 64-byte USB bulk transfer throughput, and RF channel noise resynchronization with CRC check.",
+    "Inspected source in `crates/mp-app/src/platform.rs` and `crates/mp-app/src/app.rs`: verified `SafeAreaInsets` struct, `MIN_TOUCH_TARGET = 44.0`, `is_touch_platform()` detection, `MP_SAFE_AREA_*` environment overrides, iOS (top: 47, bottom: 34) and Android (top: 32, bottom: 24) default insets, top bar height/padding adjustment, touch target size enforcement, and `CentralPanel` margin padding.",
+    "Inspected source in `scripts/validate_mobile_signing.py`: verified PKCS#7/CMS envelope extraction, plist decoding, expiration check, bundle ID matching, required entitlement validation (`application-identifier`, `com.apple.developer.networking.multicast`, `keychain-access-groups`), app bundle inspection (`Info.plist`, executable, `embedded.mobileprovision`, `CodeResources`), and Android keystore verification."
+  ],
+  "verified_improvements": [
+    "R52-01 Resolution (Comms Hardware-in-the-Loop Benchmark Suite): Implemented `inject_rx`, `take_tx`, and `loopback_pair` methods on both `BleTransport` and `WinUsbTransport` in `crates/mp-core/src/comms.rs`. Created `crates/mp-core/tests/comms_hardware_bench.rs` with 3 comprehensive tests: `ble_telemetry_mtu_chunking_and_reassembly` exercising 20-byte BLE 4.0 ATT MTU slicing and reassembly of MAVLink v2 bursts (HEARTBEAT, ATTITUDE, GLOBAL_POSITION_INT); `winusb_bulk_endpoint_high_throughput_benchmark` validating 500-packet bursts across 64-byte USB bulk endpoints with throughput reporting; and `rf_telemetry_jitter_and_framing_resynchronization` validating MAVLink parser resynchronization and CRC recovery when preceded and followed by corrupted RF noise.",
+    "R52-02 Resolution (Mobile Safe-Area Insets & Touch Ergonomics): Implemented `SafeAreaInsets` struct and `safe_area_insets()` in `crates/mp-app/src/platform.rs` with `MIN_TOUCH_TARGET = 44.0`, dynamic `MP_SAFE_AREA_*` environment overrides, and platform defaults for iOS (top 47pt, bottom 34pt) and Android (top 32pt, bottom 24pt). Integrated into `crates/mp-app/src/app.rs` by adding `insets.top` to top bar height and positioning, enforcing `MIN_TOUCH_TARGET` on top menu items, padding left and right edges, and applying `insets.left`, `insets.right`, and `insets.bottom` to `CentralPanel` inner margins.",
+    "R52-02 Resolution (Mobile Code Signing & Provisioning Validator): Created `scripts/validate_mobile_signing.py` supporting CLI subcommands `check-ios-profile`, `check-ios-app`, and `check-android-keystore`. Extracts XML plists from CMS/PKCS#7 signedData wrappers, validates profile expiration and team identifiers, enforces required entitlements (`application-identifier`, `com.apple.developer.networking.multicast`, `keychain-access-groups`), validates iOS app bundles (`Info.plist`, binary, `embedded.mobileprovision`, `CodeResources`), and verifies Android release keystores. Created `scripts/test_mobile_signing.py` with 7/7 passing unit tests."
+  ],
+  "findings": [],
+  "next_concrete_task": "To proceed toward 9.0+ parity: (1) Conduct physical flight testing with live telemetry hardware under flight conditions to record real-world RF telemetry logs. (2) Generate and sign distribution release artifacts (macOS .dmg, Windows .msi, Linux AppImage, Android .apk, iOS .ipa) for final release qualification.",
+  "not_verified": [
+    "Physical flight testing with physical aircraft and live avionics hardware.",
+    "Physical submission and review by Apple App Store and Google Play review pipelines."
+  ]
+}
