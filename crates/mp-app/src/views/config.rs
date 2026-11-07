@@ -647,6 +647,17 @@ UNKNOWN "));
     }
 }
 
+/// ParamCompare.processToScreen: names whose value text differs, sorted by name, all ticked.
+fn compare_rows(params: &BTreeMap<String, mp_core::link::Param>, file: impl IntoIterator<Item = (String, f32)>) -> Vec<(String, f32, f32, bool)> {
+    let mut rows: Vec<(String, f32, f32, bool)> = file
+        .into_iter()
+        .filter(|(k, _)| !k.is_empty())
+        .filter_map(|(k, v)| params.get(&k).filter(|p| paramfile::format_value(p.value) != paramfile::format_value(v)).map(|p| (k, p.value, v, true)))
+        .collect();
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    rows
+}
+
 /// loadparamsfromfile's names never copied from a file.
 const LOAD_SKIP: &[&str] = &["SYSID_SW_MREV", "WP_TOTAL", "CMD_TOTAL", "FENCE_TOTAL", "SYS_NUM_RESETS", "ARSPD_OFFSET", "GND_ABS_PRESS", "GND_TEMP", "CMD_INDEX", "LOG_LASTFILE", "FORMAT_VERSION"];
 
@@ -1080,6 +1091,10 @@ pub struct ParamEditor {
     /// txt_search after the 500 ms filter timer (and filterList's length rule)
     search_applied: String,
     search_changed: Option<std::time::Instant>,
+    /// the ParamCompare rows came from Load Presaved (its "Loaded" message)
+    compare_presaved: bool,
+    /// CHK_toggleall
+    compare_all: bool,
     /// Reset to Default: the reboot a second after the parameter write
     reset_reboot_at: Option<std::time::Instant>,
     /// BuildTree's nodes, rebuilt when the parameter list changes
@@ -1139,8 +1154,9 @@ impl ParamEditor {
                     }
                 }
                 ParamFileAction::Compare => {
-                    self.compare = Some(values.into_iter()
-                        .filter_map(|(name, value)| params.get(&name).filter(|p| p.value != value).map(|p| (name, p.value, value, true))).collect());
+                    self.compare = Some(compare_rows(params, values));
+                    self.compare_presaved = false;
+                    self.compare_all = true;
                 }
             }
         }
@@ -1301,8 +1317,10 @@ impl ParamEditor {
                 self.paramfiles_requested = true;
                 let slot = self.paramfiles.clone();
                 let ctx = ui.ctx().clone();
+                // updatedefaultlist: QuadPlanes/ when Q_ENABLE >= 1
+                let subdir = if params.get("Q_ENABLE").is_some_and(|p| p.value >= 1.0) { "/QuadPlanes" } else { "" };
                 std::thread::spawn(move || {
-                    let r = crate::firmware_ui::get("https://api.github.com/repos/ardupilot/ardupilot/contents/Tools/Frame_params").and_then(|b| {
+                    let r = crate::firmware_ui::get(&format!("https://api.github.com/repos/ardupilot/ardupilot/contents/Tools/Frame_params{subdir}")).and_then(|b| {
                         let v: serde_json::Value = serde_json::from_slice(&b).map_err(|e| e.to_string())?;
                         Ok(v.as_array()
                             .map(|a| {
@@ -1337,20 +1355,26 @@ impl ParamEditor {
                 })
                 .inner
             });
-            ui.add_enabled_ui(is_connected, |ui| {
+            // BUT_paramfileload is enabled once the list has arrived
+            ui.add_enabled_ui(!files.is_empty(), |ui| {
                 if b(ui, r(228.0, 21.0), "Load Presaved") {
-                    if let Some((_, path)) = files.get(self.paramfile_sel).cloned() {
+                    if let Some((name, path)) = files.get(self.paramfile_sel).cloned() {
                         let slot = self.presaved.clone();
                         let ctx = ui.ctx().clone();
+                        // the file is kept in the user data directory under its name
+                        let save = crate::platform::data_dir().join(&name);
                         std::thread::spawn(move || {
-                            let r = crate::firmware_ui::get(&format!("https://raw.githubusercontent.com/ArduPilot/ardupilot/master/{path}")).map(|b| String::from_utf8_lossy(&b).into_owned());
+                            let r = crate::firmware_ui::get(&format!("https://raw.githubusercontent.com/ArduPilot/ardupilot/master/{path}")).and_then(|b| {
+                                std::fs::write(&save, &b).map_err(|e| e.to_string())?;
+                                Ok(String::from_utf8_lossy(&b).into_owned())
+                            });
                             *slot.lock().unwrap() = Some(r);
                             ctx.request_repaint();
                         });
-                    } else {
-                        app.toasts.error("Failed to load file.\nNo presaved parameter files are available");
                     }
                 }
+            });
+            ui.add_enabled_ui(is_connected, |ui| {
                 if b(ui, r(255.0, 21.0), "Reset to Default") {
                     self.confirm_reset = true;
                 }
@@ -1452,11 +1476,9 @@ impl ParamEditor {
         if let Some(r) = self.presaved.lock().unwrap().take() {
             match r.and_then(|text| paramfile::load(&text).map_err(|e| e.to_string())) {
                 Ok(values) => {
-                    let diffs: Vec<(String, f32, f32, bool)> = values
-                        .into_iter()
-                        .filter_map(|(k, v)| params.get(&k).filter(|p| p.value != v).map(|p| (k, p.value, v, true)))
-                        .collect();
-                    self.compare = Some(diffs);
+                    self.compare = Some(compare_rows(&params, values));
+                    self.compare_presaved = true;
+                    self.compare_all = true;
                 }
                 Err(e) => app.toasts.error(format!("Failed to load file.\n{e}")),
             }
@@ -1659,43 +1681,69 @@ impl ParamEditor {
         }
     }
 
+    /// ParamCompare (428x523, modal): Command | Value | New Value | Use (50) at 12,12 399x474,
+    /// Continue at 171,492, "Check/Uncheck All" at 306,496.
     fn compare_window(&mut self, ctx: &egui::Context, toasts: &mut Toasts, fw: Firmware) {
         let Some(diffs) = self.compare.as_mut() else { return };
-        let mut open = true;
-        let mut apply = false;
-        egui::Window::new(crate::i18n::t("Param Compare")).open(&mut open).collapsible(false).default_size(Vec2::new(480.0, 400.0)).show(ctx, |ui| {
-            if diffs.is_empty() {
-                theme::label(ui, "No differences");
-                return;
-            }
-            egui::Grid::new("cmp").num_columns(4).striped(true).show(ui, |ui| {
-                for h in ["Command", "Value", "New Value", "Use"] {
-                    ui.label(RichText::new(h).color(Color32::WHITE).strong());
-                }
-                ui.end_row();
+        let mut done: Option<bool> = None;
+        let mut toggle = None;
+        egui::Modal::new(egui::Id::new("param_compare")).show(ctx, |ui| {
+            ui.set_width(428.0);
+            ui.label(RichText::new("ParamCompare").strong());
+            let (area, _) = ui.allocate_exact_size(Vec2::new(428.0, 523.0), Sense::hover());
+            let at = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(area.min + Vec2::new(x, y), Vec2::new(w, h));
+            let grid = at(12.0, 12.0, 399.0, 474.0);
+            ui.painter().rect_filled(grid, 0.0, theme::control_bg());
+            let cols = [("Command", 133.0f32), ("Value", 108.0), ("New Value", 108.0), ("Use", 50.0)];
+            let mut gui = ui.new_child(egui::UiBuilder::new().max_rect(grid.shrink(1.0)));
+            egui::ScrollArea::vertical().show(&mut gui, |ui| {
+                ui.horizontal(|ui| {
+                    for (h, w) in cols {
+                        ui.add_sized([w - 4.0, 20.0], egui::Label::new(RichText::new(h).color(Color32::WHITE).strong()));
+                    }
+                });
                 for (n, cur, new, take) in diffs.iter_mut() {
-                    theme::label(ui, n.as_str());
-                    theme::label(ui, paramfile::format_value(*cur));
-                    theme::label(ui, paramfile::format_value(*new));
-                    ui.checkbox(take, "");
-                    ui.end_row();
+                    ui.horizontal(|ui| {
+                        ui.add_sized([cols[0].1 - 4.0, 20.0], egui::Label::new(n.as_str()).truncate());
+                        ui.add_sized([cols[1].1 - 4.0, 20.0], egui::Label::new(paramfile::format_value(*cur)).truncate());
+                        ui.add_sized([cols[2].1 - 4.0, 20.0], egui::Label::new(paramfile::format_value(*new)).truncate());
+                        ui.checkbox(take, "");
+                    });
                 }
             });
-            if theme::button(ui, "Continue").clicked() {
-                apply = true;
+            if ui.put(at(171.0, 492.0, 75.0, 23.0), |ui: &mut egui::Ui| theme::button_sized(ui, "Continue", Vec2::new(75.0, 23.0))).clicked() {
+                done = Some(true);
+            }
+            let mut all = self.compare_all;
+            if ui.put(at(306.0, 496.0, 120.0, 17.0), egui::Checkbox::new(&mut all, crate::i18n::t("Check/Uncheck All"))).changed() {
+                toggle = Some(all);
             }
         });
-        if apply {
-            // paramcompare's Continue sets each ticked row's Value cell
-            for (n, cur, new, take) in self.compare.take().unwrap_or_default() {
+        if let Some(all) = toggle {
+            // CHK_toggleall_CheckedChanged
+            self.compare_all = all;
+            for d in diffs.iter_mut() {
+                d.3 = all;
+            }
+        }
+        // closing the form is DialogResult.Cancel
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            done = Some(false);
+        }
+        let Some(ok) = done else { return };
+        let rows = self.compare.take().unwrap_or_default();
+        if ok {
+            // BUT_save_Click: each ticked row's New Value goes into the grid's Value cell
+            for (n, cur, new, take) in rows {
                 if take {
                     if let Some(nv) = cell_value(&n, &paramfile::format_value(new)) {
                         self.queue_value(&n, nv, cur, param_meta::get(fw, &n), toasts);
                     }
                 }
             }
-        } else if !open {
-            self.compare = None;
+            if self.compare_presaved {
+                toasts.message("Loaded parameters, please make sure you write them!", "Loaded");
+            }
         }
     }
 
@@ -2348,4 +2396,34 @@ fn planner(ui: &mut egui::Ui, app: &mut AppCtx, _fw: Firmware) {
             ui.ctx().open_url(egui::OpenUrl::new_tab(format!("file:///{}", dir.display())));
         }
     });
+}
+
+#[cfg(test)]
+mod compare_tests {
+    use super::*;
+
+    #[test]
+    fn param_compare_rows_and_continue() {
+        let params = BTreeMap::from([
+            ("B".to_string(), mp_core::link::Param { value: 1.0, ptype: 9, index: 0 }),
+            ("A".to_string(), mp_core::link::Param { value: 2.0, ptype: 9, index: 1 }),
+            ("C".to_string(), mp_core::link::Param { value: 3.0, ptype: 9, index: 2 }),
+        ]);
+        let rows = compare_rows(&params, vec![("C".to_string(), 3.0), ("B".to_string(), 5.0), ("A".to_string(), 7.0), ("Z".to_string(), 1.0)]);
+        assert_eq!(rows, vec![("A".to_string(), 2.0, 7.0, true), ("B".to_string(), 1.0, 5.0, true)], "differing text only, sorted, all ticked");
+        // Continue from Load Presaved queues the ticked values and says so
+        let mut editor = ParamEditor::default();
+        let mut toasts = Toasts::default();
+        editor.compare = Some(vec![("A".into(), 2.0, 7.0, true), ("B".into(), 1.0, 5.0, false)]);
+        editor.compare_presaved = true;
+        let ctx = egui::Context::default();
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| editor.compare_window(ui.ctx(), &mut toasts, Firmware::ArduCopter2));
+        out.textures_delta.clear();
+        assert!(editor.compare.is_some(), "waits for Continue");
+        editor.compare.as_ref().unwrap();
+        // pressing Escape closes it as Cancel
+        let esc = egui::RawInput { events: vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }], ..Default::default() };
+        let _ = ctx.run_ui(esc, |ui| editor.compare_window(ui.ctx(), &mut toasts, Firmware::ArduCopter2));
+        assert!(editor.compare.is_none() && editor.edits.is_empty() && toasts.0.is_empty());
+    }
 }
