@@ -1675,7 +1675,17 @@ impl FlightDataView {
         let zl = Rect::from_min_size(o + Vec2::new(w - 44.0, 22.0), Vec2::new(42.0, 20.0));
         ui.put(zl, egui::DragValue::new(&mut app.settings.fd_map.zoom).speed(0.1).range(2.0..=22.0).max_decimals(1));
         let trk = Rect::from_min_size(o + Vec2::new(w - 45.0, 40.0), Vec2::new(45.0, (h - 54.0).max(40.0)));
-        theme::vtrackbar(ui, trk, &mut app.settings.fd_map.zoom, 2.0, 22.0);
+        // TRK_zoom: MyTrackBar (designer 1..24, SmallChange / LargeChange 1)
+        let mut bar = crate::extlibs::controls::MyTrackBar::default();
+        bar.set_Maximum(24.0);
+        bar.set_Minimum(1.0);
+        bar.set_SmallChange(1.0);
+        bar.set_LargeChange(1.0);
+        bar.set_TickFrequency(1.0);
+        let _ = bar.set_Value(app.settings.fd_map.zoom as f32);
+        if bar.show_vertical(ui, trk).changed() {
+            app.settings.fd_map.zoom = bar.Value() as f64;
+        }
         let small = fonts::ui_id(fonts::UI_SIZE);
         p.text(o + Vec2::new(-1.0, h - 48.0), egui::Align2::LEFT_TOP, format!("hdop: {:.1}", cs.gpshdop), small.clone(), Color32::WHITE);
         p.text(o + Vec2::new(-1.0, h - 29.0), egui::Align2::LEFT_TOP, format!("Sats: {}", cs.satcount), small.clone(), Color32::WHITE);

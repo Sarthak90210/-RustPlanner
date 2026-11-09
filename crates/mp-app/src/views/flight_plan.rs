@@ -1636,7 +1636,18 @@ impl FlightPlanView {
             Rect::from_min_size(o + Vec2::new(w - 49.0, 25.0), Vec2::new(45.0, 20.0)),
             egui::DragValue::new(&mut app.settings.fp_map.zoom).speed(0.1).range(2.0..=22.0).max_decimals(1),
         );
-        theme::vtrackbar(ui, Rect::from_min_size(o + Vec2::new(w - 50.0, 42.0), Vec2::new(45.0, (h - 48.0).max(40.0))), &mut app.settings.fp_map.zoom, 2.0, 22.0);
+        // TRK_zoom: MyTrackBar (designer 1..24, SmallChange 0.001, LargeChange 0.005); its Value
+        // follows MainMap.Zoom (a value out of range is refused) and scrolling sets the zoom
+        let mut trk = crate::extlibs::controls::MyTrackBar::default();
+        trk.set_Maximum(24.0);
+        trk.set_Minimum(1.0);
+        trk.set_SmallChange(0.001);
+        trk.set_LargeChange(0.005);
+        trk.set_TickFrequency(1.0);
+        let _ = trk.set_Value(app.settings.fp_map.zoom as f32);
+        if trk.show_vertical(ui, Rect::from_min_size(o + Vec2::new(w - 50.0, 42.0), Vec2::new(45.0, (h - 48.0).max(40.0)))).changed() {
+            app.settings.fp_map.zoom = trk.Value() as f64;
+        }
     }
 
     /// pointlist's last point: the last located waypoint, else home.
