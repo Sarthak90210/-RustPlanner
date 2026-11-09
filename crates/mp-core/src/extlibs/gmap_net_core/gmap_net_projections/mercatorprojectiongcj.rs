@@ -4,6 +4,8 @@
 //! the GCJ transform before projecting, and the inverse subtracts the shift once.
 
 #![allow(non_snake_case)]
+// MercatorProjectionGCJ.cs spells PI as the literal 3.1415926535897931 throughout
+#![allow(clippy::approx_constant)]
 
 use std::sync::OnceLock;
 

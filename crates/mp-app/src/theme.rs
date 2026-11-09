@@ -3,7 +3,7 @@
 
 use egui::epaint::{Mesh, Vertex, WHITE_UV};
 use egui::{
-    Align, Color32, CornerRadius, FontId, Pos2, Rect, Response, Sense, Shape, Stroke, StrokeKind,
+    Align, Color32, CornerRadius, Pos2, Rect, Response, Sense, Shape, Stroke, StrokeKind,
     Ui, Vec2, Visuals,
 };
 
@@ -262,14 +262,6 @@ pub fn hgradient(painter: &egui::Painter, rect: Rect, left: Color32, right: Colo
     painter.add(Shape::mesh(m));
 }
 
-fn centered_text(painter: &egui::Painter, rect: Rect, text: &str, font: FontId, color: Color32) {
-    let mut job = egui::text::LayoutJob::simple(text.to_string(), font, color, (rect.width() - 4.0).max(10.0));
-    job.halign = Align::Center;
-    let galley = painter.layout_job(job);
-    let pos = rect.center() - galley.rect.center().to_vec2();
-    painter.galley(pos, galley, color);
-}
-
 // ------------------------------------------------------------------ MyButton
 
 /// `MissionPlanner.Controls.MyButton`: green vertical gradient, 1px outline, dark green text.
@@ -278,17 +270,19 @@ pub fn button_sized(ui: &mut Ui, text: &str, size: Vec2) -> Response {
     let text = &*crate::i18n::tr(text);
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
     if ui.is_rect_visible(rect) {
-        let p = ui.painter();
-        vgradient(p, rect, but_top(), but_bot());
-        p.rect_stroke(rect.shrink(0.5), CornerRadius::same(1), Stroke::new(1.0, but_outline()), StrokeKind::Inside);
-        if !ui.is_enabled() {
-            p.rect_filled(rect, 0.0, not_enabled());
-        } else if resp.is_pointer_button_down_on() {
-            p.rect_filled(rect, 0.0, mouse_down());
-        } else if resp.hovered() {
-            p.rect_filled(rect, 0.0, mouse_over());
-        }
-        centered_text(p, rect, text, fonts::ui_id(fonts::UI_SIZE), but_text());
+        // ExtLibs/Controls/MyButton.OnPaint with the ThemeManager colours
+        let b = crate::extlibs::controls::MyButton {
+            BGGradTop: but_top(),
+            BGGradBot: but_bot(),
+            TextColor: but_text(),
+            _TextColorNotEnabled: None,
+            Outline: but_outline(),
+            ColorNotEnabled: not_enabled(),
+            ColorMouseOver: mouse_over(),
+            ColorMouseDown: mouse_down(),
+        };
+        let state = crate::extlibs::controls::mybutton::ButtonState { mouseover: resp.hovered(), mousedown: resp.is_pointer_button_down_on(), enabled: ui.is_enabled() };
+        b.OnPaint(ui.painter(), rect, text, fonts::ui_id(fonts::UI_SIZE), state);
     }
     resp
 }
