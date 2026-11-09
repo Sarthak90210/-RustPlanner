@@ -1824,3 +1824,6 @@ mod decimal_tests {
         assert_eq!(decimal_to_double(Decimal::new(5, 1)), 0.5);
     }
 }
+
+pub mod convert;
+pub mod random;

@@ -16,11 +16,14 @@ static KNOWN_COLORS: &[(i16, &str, u32)] = &[
     (35, "Black", 0xFF00_0000),
     (37, "Blue", 0xFF00_00FF),
     (78, "Gray", 0xFF80_8080),
+    (74, "Gainsboro", 0xFFDC_DCDC),
     (79, "Green", 0xFF00_8000),
     (91, "LightBlue", 0xFFAD_D8E6),
+    (95, "LightGray", 0xFFD3_D3D3),
     (127, "Orange", 0xFFFF_A500),
     (137, "Pink", 0xFFFF_C0CB),
     (141, "Red", 0xFFFF_0000),
+    (150, "Silver", 0xFFC0_C0C0),
     (164, "White", 0xFFFF_FFFF),
     (166, "Yellow", 0xFFFF_FF00),
 ];
@@ -50,6 +53,12 @@ impl Color {
     pub const BLUE: Color = Color::known(37);
     /// `Color.Gray`
     pub const GRAY: Color = Color::known(78);
+    /// `Color.Gainsboro`
+    pub const GAINSBORO: Color = Color::known(74);
+    /// `Color.LightGray`
+    pub const LIGHT_GRAY: Color = Color::known(95);
+    /// `Color.Silver`
+    pub const SILVER: Color = Color::known(150);
     /// `Color.Green`
     pub const GREEN: Color = Color::known(79);
     /// `Color.LightBlue`
@@ -197,6 +206,50 @@ impl std::fmt::Display for PointF {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{X={}, Y={}}}", super::float_to_string(self.X), super::float_to_string(self.Y))
     }
+}
+
+/// `System.Drawing.Point`
+#[allow(non_snake_case)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct Point {
+    pub X: i32,
+    pub Y: i32,
+}
+
+/// `System.Drawing.Size`
+#[allow(non_snake_case)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct Size {
+    pub Width: i32,
+    pub Height: i32,
+}
+
+/// `System.Drawing.SizeF`
+#[allow(non_snake_case)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct SizeF {
+    pub Width: f32,
+    pub Height: f32,
+}
+
+/// `System.Drawing.Rectangle`
+#[allow(non_snake_case)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct Rectangle {
+    pub X: i32,
+    pub Y: i32,
+    pub Width: i32,
+    pub Height: i32,
+}
+
+/// `System.Drawing.RectangleF`
+#[allow(non_snake_case)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct RectangleF {
+    pub X: f32,
+    pub Y: f32,
+    pub Width: f32,
+    pub Height: f32,
 }
 
 #[cfg(test)]
