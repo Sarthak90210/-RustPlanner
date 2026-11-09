@@ -7,6 +7,8 @@ New-Item -ItemType Directory -Force -Path $captureRoot | Out-Null
 $desktopData = Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops'
 $env:MP_DESKTOP = ([Guid]::new([byte[]]$desktopData.VirtualDesktopIDs[0..15])).ToString()
 $env:MP_AUTOSIM = '1'
+# listeners on 127.0.0.1 only: no Windows Firewall prompt for each new build
+$env:MP_LOOPBACK_ONLY = '1'
 $env:MP_VIEW = 'config'
 $env:MP_CAPTURE_AFTER = '7'
 $env:MP_DATA_DIR = Join-Path $captureRoot 'vehicle-tuning-profile'

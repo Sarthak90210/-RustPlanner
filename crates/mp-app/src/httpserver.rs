@@ -206,7 +206,7 @@ static SERVER: LazyLock<Mutex<Option<HttpServer>>> = LazyLock::new(Default::defa
 pub fn start() {
     let mut s = SERVER.lock();
     if s.is_none() {
-        match HttpServer::bind(([0, 0, 0, 0], PORT).into(), Snapshot::default()) {
+        match HttpServer::bind((mp_core::comms::listen_ip(), PORT).into(), Snapshot::default()) {
             Ok(server) => *s = Some(server),
             Err(e) => log::error!("Exception starting listener. Possible multiple instances of planner? {e}"),
         }

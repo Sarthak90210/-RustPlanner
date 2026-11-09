@@ -767,7 +767,7 @@ impl Worker {
                 if let Some(t) = target {
                     use std::net::ToSocketAddrs;
                     let addr = t.to_socket_addrs().ok().and_then(|mut a| a.next()).ok_or_else(|| io::Error::other(format!("bad address {t}")));
-                    match addr.and_then(|a| std::net::UdpSocket::bind("0.0.0.0:0").map(|s| (s, a))) {
+                    match addr.and_then(|a| std::net::UdpSocket::bind((crate::comms::listen_ip(), 0)).map(|s| (s, a))) {
                         Ok((sock, a)) => {
                             let _ = sock.set_nonblocking(true);
                             self.mirror = Some((sock, a, write));

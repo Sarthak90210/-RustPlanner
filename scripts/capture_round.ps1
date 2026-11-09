@@ -86,6 +86,8 @@ for ($ci = $From - 1; $ci -le $last; $ci++) {
         Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
     }
     $env:MP_COORDS = 'GEO'
+    # listeners on 127.0.0.1 only: no Windows Firewall prompt for each new build
+    $env:MP_LOOPBACK_ONLY = '1'
     $env:MP_DESKTOP = $desktopOne
     $env:MP_DATA_DIR = Join-Path $captureRoot 'session-data'
     $env:MP_VIEW = $case[1]

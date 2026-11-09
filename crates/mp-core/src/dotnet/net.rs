@@ -477,9 +477,13 @@ impl Default for UdpClient {
     }
 }
 
+/// The family's any address (`IPAddress.Any` / `IPv6Any`), or loopback under
+/// `MP_LOOPBACK_ONLY` (see `crate::comms::listen_ip`).
 fn any_addr(family: AddressFamily) -> IpAddr {
+    let loopback = crate::comms::listen_ip().is_loopback();
     match family {
-        AddressFamily::InterNetwork => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        AddressFamily::InterNetwork => IpAddr::V4(crate::comms::listen_ip()),
+        AddressFamily::InterNetworkV6 if loopback => IpAddr::V6(std::net::Ipv6Addr::LOCALHOST),
         AddressFamily::InterNetworkV6 => IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED),
     }
 }

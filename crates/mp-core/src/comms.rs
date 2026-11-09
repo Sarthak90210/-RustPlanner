@@ -89,6 +89,18 @@ pub fn serial_ports() -> Vec<String> {
     }
 }
 
+/// The address local listeners bind to: every interface (`0.0.0.0`, as Mission Planner
+/// does), or only 127.0.0.1 when `MP_LOOPBACK_ONLY` is set to anything but "0". Builds, tests
+/// and screenshot captures set it (see .cargo/config.toml and scripts/capture_round.ps1) so the
+/// Windows Firewall never asks about each freshly built executable; loopback sockets are not
+/// firewalled.
+pub fn listen_ip() -> std::net::Ipv4Addr {
+    match std::env::var("MP_LOOPBACK_ONLY") {
+        Ok(v) if !v.is_empty() && v != "0" => std::net::Ipv4Addr::LOCALHOST,
+        _ => std::net::Ipv4Addr::UNSPECIFIED,
+    }
+}
+
 pub fn open(spec: &ConnectionSpec) -> io::Result<Box<dyn Transport>> {
     match spec {
         ConnectionSpec::Auto => {
@@ -105,13 +117,13 @@ pub fn open(spec: &ConnectionSpec) -> io::Result<Box<dyn Transport>> {
             Ok(Box::new(TcpTransport(s)))
         }
         ConnectionSpec::UdpListen { port } => {
-            let sock = UdpSocket::bind(("0.0.0.0", *port))?;
+            let sock = UdpSocket::bind((listen_ip(), *port))?;
             sock.set_read_timeout(Some(READ_TIMEOUT))?;
             Ok(Box::new(UdpTransport::new(sock, None)))
         }
         ConnectionSpec::UdpClient { host, port } => {
             let addr = resolve(host, *port)?;
-            let sock = UdpSocket::bind(("0.0.0.0", 0))?;
+            let sock = UdpSocket::bind((listen_ip(), 0))?;
             sock.set_read_timeout(Some(READ_TIMEOUT))?;
             Ok(Box::new(UdpTransport::new(sock, Some(addr))))
         }

@@ -954,7 +954,7 @@ impl Tools {
             if running {
                 self.outputs.retain(|o| o.kind != kind);
             } else {
-                let sock = UdpSocket::bind("0.0.0.0:0").ok();
+                let sock = UdpSocket::bind((mp_core::comms::listen_ip(), 0)).ok();
                 if let Some(s) = &sock {
                     let _ = s.set_broadcast(true);
                 }
@@ -1019,7 +1019,7 @@ impl Tools {
         if toggle {
             if running {
                 self.follow = None;
-            } else if let Ok(s) = UdpSocket::bind(format!("0.0.0.0:{}", self.follow_port.trim())) {
+            } else if let Ok(s) = UdpSocket::bind(format!("{}:{}", mp_core::comms::listen_ip(), self.follow_port.trim())) {
                 let _ = s.set_nonblocking(true);
                 self.follow = Some((s, Instant::now(), follow));
             }

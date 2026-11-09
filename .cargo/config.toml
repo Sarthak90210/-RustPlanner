@@ -1,0 +1,6 @@
+# Processes started by cargo (tests, `cargo run`) bind their listeners to 127.0.0.1 instead of
+# every interface, so the Windows Firewall does not ask about each freshly built executable.
+# Run the built missionplanner.exe directly for Mission Planner's normal all-interface
+# listeners (UDP 14550, the web server on 56781).
+[env]
+MP_LOOPBACK_ONLY = "1"

@@ -349,7 +349,7 @@ impl MoreTools {
             self.text = Some(("MAVSerial pass".into(), "Listening on TCP port 500 (GPS1 over SERIAL_CONTROL).\nConnect u-center or similar to this PC, port 500.".into()));
             return;
         }
-        let listener = match std::net::TcpListener::bind("0.0.0.0:500") {
+        let listener = match std::net::TcpListener::bind((mp_core::comms::listen_ip(), 500)) {
             Ok(s) => s,
             Err(e) => {
                 toasts.error(format!("Failed to listen on port 500\n{e}"));
