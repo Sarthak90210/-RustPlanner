@@ -1359,6 +1359,10 @@ pub trait Stream: Send {
     fn flush(&mut self) -> Result<(), Exception> {
         Ok(())
     }
+    /// `Seek(offset, origin)`
+    fn seek_to(&mut self, _offset: i64, _origin: SeekOrigin) -> Result<i64, Exception> {
+        Err(Exception::NotSupported("This stream does not support seek operations.".into()))
+    }
 }
 
 /// `System.IO.SeekOrigin`
@@ -1457,6 +1461,9 @@ impl Stream for MemoryStream {
     fn write(&mut self, buffer: &[u8]) -> Result<(), Exception> {
         self.write_from(buffer, 0, buffer.len());
         Ok(())
+    }
+    fn seek_to(&mut self, offset: i64, origin: SeekOrigin) -> Result<i64, Exception> {
+        self.seek(offset, origin)
     }
 }
 
@@ -1824,3 +1831,10 @@ mod decimal_tests {
         assert_eq!(decimal_to_double(Decimal::new(5, 1)), 0.5);
     }
 }
+
+// GMap.NET.Core shims
+pub mod guid;
+pub mod random;
+pub mod sha1;
+pub mod tripledes;
+pub mod serialization;

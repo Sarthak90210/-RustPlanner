@@ -2,4 +2,5 @@
 //! code base needs its types.
 
 pub mod gmap_net;
+pub mod gmap_net_internals;
 pub mod gmap_net_projections;
