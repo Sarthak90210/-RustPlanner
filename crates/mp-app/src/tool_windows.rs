@@ -172,16 +172,6 @@ struct Output {
     last: Instant,
 }
 
-/// The Warning Manager's new row: (field, condition, value, repeat seconds, text).
-#[derive(Clone)]
-struct Warning {
-    field: String,
-    op: mp_core::extlibs::utilities::warnings::Conditional,
-    value: f64,
-    text: String,
-    repeat: i32,
-}
-
 /// `CustomWarning.defaultsrc = comPort.MAV.cs`: the vehicle state as of the last frame.
 struct CsSource(std::sync::Arc<std::sync::RwLock<mp_core::state::CurrentState>>);
 
@@ -352,8 +342,9 @@ pub struct Tools {
     outputs: Vec<Output>,
     out_window: Option<OutKind>,
     out_target: String,
-    warn_open: bool,
-    warn_new: Option<Warning>,
+    /// `new WarningsManager().Show()`: each click opens another form
+    warning_managers: Vec<crate::mp::warnings::WarningsManager>,
+    warning_manager_count: u64,
     mirror_open: bool,
     mirror_target: String,
     mirror_write: bool,
@@ -381,7 +372,13 @@ impl Tools {
             true
         };
         match name {
-            "Warning Manager" => self.warn_open = true,
+            "Warning Manager" => {
+                self.warning_manager_count += 1;
+                match crate::mp::warnings::WarningsManager::new(self.warning_manager_count) {
+                    Ok(m) => self.warning_managers.push(m),
+                    Err(e) => toasts.error(e.to_string()),
+                }
+            }
             "NMEA" => self.open_output(OutKind::Nmea, "127.0.0.1:10110"),
             "CoT" => self.open_output(OutKind::Cot, "239.2.3.1:6969"),
             "MicroDrone" => self.open_output(OutKind::MicroDrone, "127.0.0.1:10111"),
@@ -969,96 +966,9 @@ impl Tools {
         }
     }
 
-    fn warn_ui(&mut self, ctx: &egui::Context, cs: &CurrentState, toasts: &mut Toasts) {
-        if !self.warn_open {
-            return;
-        }
-        let mut open = true;
-        let fields: Vec<&'static str> = cs.fields().into_iter().map(|(n, _)| n).collect();
-        let mut remove = None;
-        let mut add_error: Option<String> = None;
-        egui::Window::new(crate::i18n::t("Warning Manager")).open(&mut open).collapsible(false).default_size([520.0, 300.0]).show(ctx, |ui| {
-            egui::Grid::new("warnings").num_columns(6).striped(true).show(ui, |ui| {
-                for h in ["Field", "Op", "Value", "Repeat (s)", "Say", ""] {
-                    theme::label(ui, h);
-                }
-                ui.end_row();
-                use mp_core::extlibs::utilities::warnings::WarningEngine;
-                let rows: Vec<(String, String, f64, i32, String)> = WarningEngine::warnings(|w| {
-                    w.iter().map(|w| (w.Name().to_string(), w.ConditionType.to_string(), w.Warning, w.RepeatTime, w.Text().unwrap_or("").to_string())).collect()
-                });
-                for (i, (name, op, value, repeat, text)) in rows.iter().enumerate() {
-                    theme::label(ui, name);
-                    theme::label(ui, op);
-                    theme::label(ui, mp_core::dotnet::double_to_string(*value));
-                    theme::label(ui, repeat.to_string());
-                    theme::label(ui, text);
-                    if theme::button(ui, "Delete").clicked() {
-                        remove = Some(i);
-                    }
-                    ui.end_row();
-                }
-            });
-            ui.separator();
-            let nw = self.warn_new.get_or_insert_with(|| Warning {
-                field: "alt".into(),
-                op: mp_core::extlibs::utilities::warnings::Conditional::LT,
-                value: 10.0,
-                text: "WARNING: {name} is {value}".into(),
-                repeat: 10,
-            });
-            ui.horizontal(|ui| {
-                egui::ComboBox::from_id_salt("wm_field").width(110.0).selected_text(nw.field.as_str()).show_ui(ui, |ui| {
-                    for f in &fields {
-                        ui.selectable_value(&mut nw.field, f.to_string(), *f);
-                    }
-                });
-                egui::ComboBox::from_id_salt("wm_op").width(60.0).selected_text(nw.op.to_string()).show_ui(ui, |ui| {
-                    for o in mp_core::extlibs::utilities::warnings::Conditional::get_values() {
-                        ui.selectable_value(&mut nw.op, o, o.to_string());
-                    }
-                });
-                ui.add(egui::DragValue::new(&mut nw.value).speed(0.1));
-                ui.add(egui::DragValue::new(&mut nw.repeat).range(0..=3600));
-                ui.add(egui::TextEdit::singleline(&mut nw.text).desired_width(120.0));
-            });
-            if theme::button(ui, "Add").clicked() {
-                if let Some(w) = self.warn_new.clone() {
-                    use mp_core::extlibs::utilities::warnings::{CustomWarning, WarningEngine};
-                    let mut cw = CustomWarning::new();
-                    match cw.set_Name(&w.field) {
-                        Ok(()) => {
-                            cw.ConditionType = w.op;
-                            cw.Warning = w.value;
-                            cw.RepeatTime = w.repeat;
-                            cw.set_Text(Some(w.text.clone()));
-                            WarningEngine::warnings(|list| list.push(cw));
-                            if let Err(e) = WarningEngine::SaveConfig() {
-                                add_error = Some(e.to_string());
-                            }
-                        }
-                        Err(e) => add_error = Some(e.to_string()),
-                    }
-                }
-            }
-        });
-        if let Some(e) = add_error {
-            toasts.error(e);
-        }
-        if let Some(i) = remove {
-            use mp_core::extlibs::utilities::warnings::WarningEngine;
-            WarningEngine::warnings(|list| {
-                if i < list.len() {
-                    list.remove(i);
-                }
-            });
-            if let Err(e) = WarningEngine::SaveConfig() {
-                toasts.error(e.to_string());
-            }
-        }
-        if !open {
-            self.warn_open = false;
-        }
+    /// ConfigAdvanced's "Warning Manager": every open `WarningsManager` form.
+    fn warn_ui(&mut self, ctx: &egui::Context, _cs: &CurrentState, toasts: &mut Toasts) {
+        self.warning_managers.retain_mut(|m| m.show(ctx, toasts));
     }
 
     fn mirror_ui(&mut self, ctx: &egui::Context, link: Option<&Link>) {

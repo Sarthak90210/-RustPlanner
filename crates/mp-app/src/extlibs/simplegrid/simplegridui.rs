@@ -501,7 +501,6 @@ Parameter name: index".into()));
         let screen = ctx.content_rect();
         egui::Area::new(egui::Id::new("simplegrid_modal_block")).order(egui::Order::Middle).fixed_pos(screen.min).interactable(true).show(ctx, |ui| {
             ui.allocate_rect(screen, egui::Sense::click_and_drag());
-            ui.painter().rect_filled(screen, 0.0, Color32::from_black_alpha(60));
         });
         egui::Window::new(title)
             .id(egui::Id::new("simplegrid_gridui"))
@@ -510,6 +509,9 @@ Parameter name: index".into()));
             .collapsible(false)
             .resizable(true)
             .default_size(CLIENT_SIZE)
+            // StartPosition WindowsDefaultLocation under ShowDialog: placed on screen, here centred
+            .pivot(egui::Align2::CENTER_CENTER)
+            .default_pos(screen.center())
             .min_size(Vec2::new(TAB_WIDTH + 100.0, STATS_HEIGHT + 100.0))
             .frame(frame)
             .show(ctx, |ui| {

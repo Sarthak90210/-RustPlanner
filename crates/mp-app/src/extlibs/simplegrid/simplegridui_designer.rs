@@ -60,7 +60,7 @@ pub struct NumericUpDown {
 
 impl NumericUpDown {
     /// `new NumericUpDown()`: Minimum 0, Maximum 100, Increment 1, DecimalPlaces 0, Value 0.
-    fn new() -> Self {
+    pub fn new() -> Self {
         NumericUpDown { value: Decimal::ZERO, minimum: Decimal::ZERO, maximum: Decimal::from(100), increment: Decimal::ONE, decimal_places: 0 }
     }
 

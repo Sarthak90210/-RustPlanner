@@ -7,6 +7,7 @@ pub mod camera_settings;
 pub mod assets;
 pub mod display;
 pub mod extlibs;
+pub mod mp;
 mod capture;
 pub mod firmware_ui;
 pub mod fonts;

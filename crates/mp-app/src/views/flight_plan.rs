@@ -824,6 +824,25 @@ impl FlightPlanView {
             }
             self.grid_ui = Some(Box::new(g));
         }
+        // developer switch for screenshots: MP_SIMPLEGRID=1 runs SimpleGridPlugin.but_Click on a
+        // sample polygon
+        if self.polygon.is_empty() && self.simple_grid.is_none() && std::env::var_os("MP_SIMPLEGRID").is_some() {
+            let (lat, lng) = (-35.363261, 149.165230);
+            let mut polygon = vec![(lat + 0.0020, lng - 0.0030), (lat + 0.0024, lng + 0.0025), (lat - 0.0015, lng + 0.0032), (lat - 0.0022, lng - 0.0020)];
+            let mut config = std::mem::take(&mut app.settings.planner);
+            let mut host = crate::extlibs::simplegrid::PluginHost {
+                FPDrawnPolygon: &mut polygon,
+                PlannedHomeLocation: self.planned_home_location(),
+                config: &mut config,
+                FDMapType: app.settings.fd_map.provider,
+            };
+            let click = crate::extlibs::simplegrid::GridPlugin.but_Click(&mut host);
+            app.settings.planner = config;
+            self.polygon = polygon;
+            if let crate::extlibs::simplegrid::ButClick::Show(g) = click {
+                self.simple_grid = Some(g);
+            }
+        }
         if self.home.lat == 0.0 && self.home.lng == 0.0 {
             if let Some(h) = app.link.and_then(|l| l.shared.read().cs.home) {
                 self.home.lat = h.lat;

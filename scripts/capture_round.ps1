@@ -1,4 +1,4 @@
-param([int]$Round = 7, [int]$From = 1, [int]$Count = 50)
+﻿param([int]$Round = 7, [int]$From = 1, [int]$Count = 50)
 $ErrorActionPreference = 'Stop'
 $workspaceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $captureRoot = Join-Path $workspaceRoot ('target\judging\round{0:D2}' -f $Round)
@@ -75,12 +75,14 @@ $cases = @(
  @('63_plan_zh_hans','plan',1,1,0,0,12,'MP_LANGUAGE','zh-Hans'),
  @('64_data_gimbal_full','data',1,1,0,0,14,'MP_GIMBAL','full'),
  @('65_data_gimbal_mini','data',1,1,0,0,14,'MP_GIMBAL','mini'),
- @('66_data_gimbal_popout','data',1,1,0,0,14,'MP_GIMBAL','popout')
+ @('66_data_gimbal_popout','data',1,1,0,0,14,'MP_GIMBAL','popout'),
+ @('67_plan_simplegrid','plan',0,0,0,0,6,'MP_SIMPLEGRID','1'),
+ @('68_warning_manager','data',0,0,0,0,4,'MP_TOOL','Warning Manager')
 )
 $last = [Math]::Min($cases.Count, $From - 1 + $Count) - 1
 for ($ci = $From - 1; $ci -le $last; $ci++) {
     $case = $cases[$ci]
-    foreach ($name in @('MP_AUTOSIM','MP_DEMO','MP_SURVEY','MP_INSPECTOR','MP_TEMP','MP_SWARM','MP_COORDS','MP_TOOL','MP_STATUS_END','MP_LANGUAGE','MP_GSTREAMER','MP_GIMBAL')) {
+    foreach ($name in @('MP_AUTOSIM','MP_DEMO','MP_SURVEY','MP_INSPECTOR','MP_TEMP','MP_SWARM','MP_COORDS','MP_TOOL','MP_STATUS_END','MP_LANGUAGE','MP_GSTREAMER','MP_GIMBAL','MP_SIMPLEGRID')) {
         Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
     }
     $env:MP_COORDS = 'GEO'
