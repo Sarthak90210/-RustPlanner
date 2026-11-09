@@ -183,6 +183,8 @@ pub struct FlightDataView {
     quick_views: Vec<crate::extlibs::controls::QuickView>,
     /// windDir1 on the map (60x60 at 0,0, Microsoft Sans Serif 8.25pt bold)
     wind_dir: crate::extlibs::controls::WindDir,
+    /// coords1 in panel1 (its system choice lives for the session, as in FlightData)
+    coords1: crate::extlibs::controls::Coords,
     last_mode: String,
     mode_changed: Instant,
     last_armed: bool,
@@ -246,6 +248,7 @@ impl Default for FlightDataView {
             quick_edit: None,
             quick_views: Vec::new(),
             wind_dir: Default::default(),
+            coords1: Default::default(),
             last_mode: String::new(),
             mode_changed: Instant::now(),
             last_armed: false,
@@ -1324,16 +1327,12 @@ impl FlightDataView {
         // panel1 (25px) along the bottom: coords1, Tuning, Auto Pan
         egui::Panel::bottom("fd_panel1").exact_size(25.0).frame(egui::Frame::new().fill(theme::bg())).show(ui, |ui| {
             let o = ui.max_rect().min;
-            let coords = Rect::from_min_size(o + Vec2::new(7.0, 2.0), Vec2::new(247.0, 21.0));
-            ui.painter().rect_filled(coords, 0.0, theme::control_bg());
-            ui.painter().rect_stroke(coords, 0.0, Stroke::new(1.0, Color32::from_rgb(0x7a, 0x7a, 0x7a)), StrokeKind::Inside);
-            ui.painter().text(
-                coords.left_center() + Vec2::new(4.0, 0.0),
-                egui::Align2::LEFT_CENTER,
-                format!("{:.6} {:.6}  {:.2}  GEO", cs.lat, cs.lng, cs.alt),
-                fonts::ui_id(fonts::UI_SIZE),
-                Color32::WHITE,
-            );
+            // coords1: ExtLibs/Controls/Coords (247x21 at 7,2), bound to lat / lng / alt
+            self.coords1.Lat = cs.lat;
+            self.coords1.Lng = cs.lng;
+            self.coords1.Alt = cs.alt as f64;
+            self.coords1.AltUnit = crate::units::alt_unit().to_string();
+            self.coords1.show(ui, o + Vec2::new(7.0, 2.0), "fd_coords1", fonts::ui_id(fonts::UI_SIZE), theme::text());
             ui.put(Rect::from_min_size(o + Vec2::new(260.0, 3.0), Vec2::new(59.0, 17.0)), egui::Checkbox::new(&mut self.tuning, crate::i18n::t("Tuning")));
             ui.put(Rect::from_min_size(o + Vec2::new(325.0, 3.0), Vec2::new(75.0, 17.0)), egui::Checkbox::new(&mut self.auto_pan, crate::i18n::t("Auto Pan")));
         });

@@ -897,46 +897,22 @@ impl FlightPlanView {
 
         // panel4 (3,3 127x55): coords1 (Vertical), the mouse location in the chosen system
         let (mlat, mlng) = self.mouse.unwrap_or((0.0, 0.0));
-        let mut system = coord_system(app);
-        ui.put(r(3.0, 5.0, 64.0, 20.0), |ui: &mut egui::Ui| {
-            egui::ComboBox::from_id_salt("CMB_coordsystem")
-                .width(56.0)
-                .selected_text(system)
-                .show_ui(ui, |ui| {
-                    for c in COORD_SYSTEMS {
-                        ui.selectable_value(&mut system, c, c);
-                    }
-                })
-                .response
-        });
-        if system != coord_system(app) {
-            app.settings.planner.insert("fpcoordmouse".into(), system.into());
-        }
         let (alt, alt_source) = match self.mouse.and_then(|(la, ln)| crate::srtm::altitude(la, ln)) {
             Some(a) => (crate::units::alt(a as f32), "SRTM"),
             None => (0.0, if self.mouse.is_some() { "Invalid" } else { "" }),
         };
-        let alt = format!("{alt:.2}{}", crate::units::alt_unit());
-        let in_grid = (-80.0..=84.0).contains(&mlat) && mlng < 180.0 && mlng > -180.0;
-        let (text, text_at, source_at) = match system {
-            "UTM" => (
-                in_grid.then(|| mp_core::coords::geo_to_utm(mlat, mlng)).flatten().map(|u| {
-                    let s = mp_core::coords::utm_string(&u);
-                    format!("{}\n{alt}", s.split(' ').collect::<Vec<_>>().join("\n"))
-                }),
-                at(70.0, 6.0),
-                at(3.0, 33.0),
-            ),
-            "MGRS" => (
-                in_grid.then(|| mp_core::coords::geo_to_mgrs(mlat, mlng)).flatten().map(|m| format!("{m}\n{alt}")),
-                at(8.0, 30.0),
-                at(71.0, 5.0),
-            ),
-            _ => (Some(format!("{mlat:.7}\n{mlng:.7}\n{alt}")), at(70.0, 6.0), at(3.0, 33.0)),
+        // ExtLibs/Controls/Coords at panel4 (3,3), Vertical; SystemChanged saves "fpcoordmouse"
+        let mut coords1 = crate::extlibs::controls::Coords {
+            System: coord_system(app).to_string(),
+            Lat: mlat,
+            Lng: mlng,
+            Alt: alt as f64,
+            AltUnit: crate::units::alt_unit().to_string(),
+            AltSource: alt_source.to_string(),
+            Vertical: true,
         };
-        if let Some(text) = text {
-            p.text(text_at, egui::Align2::LEFT_TOP, text, f.clone(), white);
-            p.text(source_at, egui::Align2::LEFT_TOP, alt_source, f.clone(), white);
+        if coords1.show(ui, at(3.0, 3.0), "CMB_coordsystem", f.clone(), white) {
+            app.settings.planner.insert("fpcoordmouse".into(), coords1.System.clone());
         }
 
         // panel3 (3,64 123x127)
