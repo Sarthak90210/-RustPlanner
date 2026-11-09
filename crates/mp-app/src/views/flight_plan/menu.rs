@@ -767,28 +767,12 @@ impl FlightPlanView {
         let Some(chain) = self.input_chain.as_mut() else { return };
         let prompts = chain.tool.prompts(&self.utm_zone);
         let (title, prompt, _) = prompts[chain.step].clone();
-        let mut answer = None;
-        egui::Modal::new(egui::Id::new(("fp_inputbox", chain.step))).show(ctx, |ui| {
-            ui.set_min_width(300.0);
-            ui.label(egui::RichText::new(crate::i18n::t(title)).strong());
-            theme::label(ui, prompt);
-            let r = ui.text_edit_singleline(&mut chain.text);
-            r.request_focus();
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                if theme::button(ui, "Cancel").clicked() {
-                    answer = Some(false);
-                }
-                if theme::button(ui, "OK").clicked() {
-                    answer = Some(true);
-                }
-            });
-        });
-        if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
-            answer = Some(true);
-        } else if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            answer = Some(false);
-        }
-        let Some(ok) = answer else { return };
+        // InputBox.Show(title, prompt, ref value)
+        let mut ib = crate::extlibs::controls::InputBox::new(&app.settings.planner, &crate::i18n::t(title), &crate::i18n::t(prompt), &chain.text, false, false);
+        let answer = ib.show(ctx, &mut app.settings.planner);
+        chain.text = ib.text;
+        let Some(result) = answer else { return };
+        let ok = result == mp_core::extlibs::utilities::custommessagebox::DialogResult::OK;
         if !ok && chain.tool.cancel_ends() {
             self.input_chain = None;
             return;
