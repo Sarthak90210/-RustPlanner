@@ -2355,44 +2355,6 @@ fn agauge(p: &egui::Painter, r: Rect, face: egui::TextureId, cap: &str, cap_pos:
     p.circle_stroke(c, 5.0 * s, Stroke::new(1.0, Color32::from_gray(200)));
 }
 
-/// Controls/HSI: heading rose that turns under a fixed aircraft, with the nav bearing bug.
-fn hsi(p: &egui::Painter, r: Rect, heading: f32, nav: f32) {
-    let w = r.width();
-    let c = r.center();
-    let rin = w / 3.6;
-    let rout = w / 2.2;
-    let font = fonts::ui_id((w / 14.0) * 1.33);
-    let mut a = 0;
-    while a < 360 {
-        let ang = (a as f32 - heading - 90.0).to_radians();
-        let d = Vec2::new(ang.cos(), ang.sin());
-        let len = if a % 30 == 0 { 11.0 } else if a % 10 == 0 { 7.0 } else { 4.0 };
-        p.line_segment([c + d * rin, c + d * (rin + len)], Stroke::new(1.0, Color32::WHITE));
-        if a % 30 == 0 {
-            let t = match a {
-                0 => "N".to_string(),
-                90 => "E".to_string(),
-                180 => "S".to_string(),
-                270 => "W".to_string(),
-                _ => (a / 10).to_string(),
-            };
-            let g = p.layout_no_wrap(t, font.clone(), Color32::WHITE);
-            let pos = c + d * (rout - g.size().y * 0.4);
-            p.add(egui::epaint::TextShape::new(pos - Vec2::new(g.size().x / 2.0, 0.0), g, Color32::WHITE).with_angle(ang + std::f32::consts::FRAC_PI_2));
-        }
-        a += 5;
-    }
-    let or = Stroke::new(2.0, Color32::from_rgb(0xff, 0x8c, 0x00));
-    let k = w / 100.0;
-    p.line_segment([c + Vec2::new(0.0, 30.0 * k), c + Vec2::new(0.0, -10.0 * k)], or);
-    p.line_segment([c + Vec2::new(-30.0 * k, 0.0), c + Vec2::new(30.0 * k, 0.0)], or);
-    p.line_segment([c + Vec2::new(-10.0 * k, 25.0 * k), c + Vec2::new(10.0 * k, 25.0 * k)], or);
-    p.line_segment([c + Vec2::new(0.0, -rout), c + Vec2::new(0.0, -rin)], Stroke::new(2.0, Color32::WHITE));
-    let bug = (nav - heading).to_radians();
-    let rot = |x: f32, y: f32| c + Vec2::new(x * bug.cos() - y * bug.sin(), x * bug.sin() + y * bug.cos());
-    let pts = [(-5.0, -rout), (-5.0, -rout + 4.0), (-3.0, -rout + 4.0), (0.0, -rout + 8.0), (3.0, -rout + 4.0), (5.0, -rout + 4.0), (5.0, -rout)];
-    p.add(egui::Shape::line(pts.iter().map(|(x, y)| rot(*x, *y)).collect(), or));
-}
 
 /// tabGauges: VSI, Speed, Alt, Heading — 2x2 when square, one row when wide
 /// (FlightData.tabPage1_Resize).
@@ -2413,7 +2375,11 @@ fn gauges_ui(ui: &mut egui::Ui, cs: &CurrentState, assets: &crate::assets::Asset
     agauge(&p, rect(1), assets.gauge_gspeed.id(), "Speed", (58.0, 85.0), 0.0, 60.0, 135.0, 270.0, 10.0, 70.0, &[Needle(cs.airspeed, 50.0, Color32::WHITE), Needle(cs.groundspeed, 50.0, Color32::from_rgb(0xa5, 0x2a, 0x2a))]);
     let target = cs.alt - cs.alt_error;
     agauge(&p, rect(2), assets.gauge_galt.id(), "Alt", (68.0, 85.0), 0.0, 9.99, 270.0, 360.0, 1.0, 60.0, &[Needle((cs.alt / 100.0).rem_euclid(10.0), 50.0, Color32::WHITE), Needle((cs.alt / 1000.0).rem_euclid(10.0), 30.0, Color32::WHITE), Needle((target / 100.0).rem_euclid(10.0), 50.0, Color32::RED)]);
-    hsi(&p, rect(3), cs.yaw, cs.nav_bearing);
+    // Controls/HSI: Heading and NavHeading are int properties ((int) of the floats)
+    let mut hsi = crate::extlibs::controls::HSI::default();
+    hsi.set_Heading(cs.yaw as i32);
+    hsi.set_NavHeading(cs.nav_bearing as i32);
+    hsi.OnPaint(&p, rect(3));
     ui.allocate_rect(Rect::from_min_size(o, avail), Sense::hover());
 }
 
