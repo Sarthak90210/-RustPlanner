@@ -179,6 +179,8 @@ pub struct FlightDataView {
     change_alt: f32,
     loiter_rad: f32,
     quick_edit: Option<usize>,
+    /// the quick tiles' QuickView controls (their fitted font size persists between paints)
+    quick_views: Vec<crate::extlibs::controls::QuickView>,
     last_mode: String,
     mode_changed: Instant,
     last_armed: bool,
@@ -240,6 +242,7 @@ impl Default for FlightDataView {
             change_alt: 100.0,
             loiter_rad: 0.0,
             quick_edit: None,
+            quick_views: Vec::new(),
             last_mode: String::new(),
             mode_changed: Instant::now(),
             last_armed: false,
@@ -989,7 +992,14 @@ impl FlightDataView {
             let name = app.settings.quick_fields[i].clone();
             let val = crate::units::field(&name, cs.field(&name).unwrap_or(0.0)).0;
             let resp = ui.interact(r, ui.scope_id().with(("qv", i)), Sense::click());
-            quick_view(ui.painter(), r, &quick_label(&app.settings.planner, i, &name), val, QUICK_COLORS[i % QUICK_COLORS.len()]);
+            if self.quick_views.len() <= i {
+                self.quick_views.resize_with(i + 1, Default::default);
+            }
+            let qv = &mut self.quick_views[i];
+            qv.set_desc(&quick_label(&app.settings.planner, i, &name));
+            qv.set_number(val);
+            qv.numberColor = QUICK_COLORS[i % QUICK_COLORS.len()];
+            qv.OnPaintSurface(ui.painter(), r, fonts::UI_SIZE * 72.0 / 96.0, Color32::WHITE);
             if resp.double_clicked() {
                 if !crate::display::flag(&app.settings.planner, "lockQuickView") {
                     self.quick_edit = Some(i);
@@ -2230,26 +2240,6 @@ fn rfd_pick_tlog() -> Option<std::path::PathBuf> {
 }
 
 // ------------------------------------------------------------------ QuickView
-
-/// `ExtLibs/Controls/QuickView`: description centred at y=5, the number scaled to fill.
-fn quick_view(p: &egui::Painter, r: Rect, desc: &str, number: f64, color: Color32) {
-    let dg = p.layout_no_wrap(desc.to_string(), fonts::ui_id(fonts::UI_SIZE), Color32::WHITE);
-    let y = 5.0 + dg.size().y;
-    p.galley(Pos2::new(r.center().x - dg.size().x / 2.0, r.top() + 5.0), dg, Color32::WHITE);
-    let numb = format!("{number:.2}");
-    let avail_h = r.height() - y;
-    let probe = "0".repeat(numb.len() + 1);
-    let base = p.layout_no_wrap(probe, fonts::ui_id(100.0), color).size();
-    let ratio = (r.width() / base.x).min(avail_h / base.y);
-    let mut size = 100.0 * ratio;
-    size -= size % 5.0;
-    if size < 8.0 {
-        size = 8.0;
-    }
-    let ng = p.layout_no_wrap(numb, fonts::ui_id(size), color);
-    let pos = Pos2::new(r.center().x - ng.size().x / 2.0, r.top() + y + (avail_h - ng.size().y) / 2.0);
-    p.galley(pos, ng, color);
-}
 
 /// CurrentState.GetNameandUnit: the (L10NU-translated) DisplayText with its unit placeholder
 /// filled in, or the name itself.
