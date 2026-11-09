@@ -63,7 +63,7 @@ pub fn SetCursorPos(_X: i32, _Y: i32) -> Result<bool, Exception> {
 }
 
 /// `public static readonly Random random = new System.Random()`
-pub static random: LazyLock<Mutex<Random>> = LazyLock::new(|| Mutex::new(Random::new()));
+pub static random: LazyLock<Mutex<Random>> = LazyLock::new(|| Mutex::new(Random::new_default()));
 
 /// `Shuffle<T>(List<T> deck)`
 pub fn Shuffle<T>(deck: &mut [T]) {

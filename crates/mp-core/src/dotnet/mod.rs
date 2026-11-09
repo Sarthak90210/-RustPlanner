@@ -1832,9 +1832,10 @@ mod decimal_tests {
     }
 }
 
-// GMap.NET.Core shims
+// shims added by the GMap.NET.Core and Utilities/Core ports
+pub mod convert;
 pub mod guid;
 pub mod random;
+pub mod serialization;
 pub mod sha1;
 pub mod tripledes;
-pub mod serialization;

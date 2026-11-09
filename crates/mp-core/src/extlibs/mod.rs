@@ -3,6 +3,7 @@
 
 pub mod ardupilot;
 pub mod comms;
+pub mod core;
 pub mod geoutility;
 pub mod gmap_net_core;
 pub mod interfaces;
