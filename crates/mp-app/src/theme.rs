@@ -588,11 +588,19 @@ pub fn label(ui: &mut Ui, text: impl Into<String>) -> Response {
 pub fn progress(ui: &mut Ui, frac: f32, size: Vec2, text: &str) {
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
     let p = ui.painter();
-    p.rect_filled(rect, 0.0, bg());
-    let fill = Rect::from_min_size(rect.min, Vec2::new(rect.width() * frac.clamp(0.0, 1.0), rect.height()));
-    vgradient(p, fill, progress_top(), progress_bot());
-    p.rect_stroke(rect, 0.0, Stroke::new(1.0, progress_outline()), StrokeKind::Inside);
-    p.text(rect.center(), egui::Align2::CENTER_CENTER, text, fonts::ui_id(fonts::UI_SIZE), self::text());
+    // ExtLibs/Controls/MyProgressBar.OnPaint with the ThemeManager colours, 0..100
+    let bar = crate::extlibs::controls::MyProgressBar {
+        Value: (frac.clamp(0.0, 1.0) * 100.0) as i32,
+        BGGradTop: progress_top(),
+        BGGradBot: progress_bot(),
+        Outline: progress_outline(),
+        ..Default::default()
+    };
+    bar.OnPaint(p, rect, bg());
+    // the caller's own label (MyProgressBar itself draws no text)
+    if !text.is_empty() {
+        p.text(rect.center(), egui::Align2::CENTER_CENTER, text, fonts::ui_id(fonts::UI_SIZE), self::text());
+    }
 }
 
 #[cfg(test)]
