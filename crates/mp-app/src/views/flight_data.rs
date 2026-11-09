@@ -181,6 +181,8 @@ pub struct FlightDataView {
     quick_edit: Option<usize>,
     /// the quick tiles' QuickView controls (their fitted font size persists between paints)
     quick_views: Vec<crate::extlibs::controls::QuickView>,
+    /// windDir1 on the map (60x60 at 0,0, Microsoft Sans Serif 8.25pt bold)
+    wind_dir: crate::extlibs::controls::WindDir,
     last_mode: String,
     mode_changed: Instant,
     last_armed: bool,
@@ -243,6 +245,7 @@ impl Default for FlightDataView {
             loiter_rad: 0.0,
             quick_edit: None,
             quick_views: Vec::new(),
+            wind_dir: Default::default(),
             last_mode: String::new(),
             mode_changed: Instant::now(),
             last_armed: false,
@@ -1665,7 +1668,9 @@ impl FlightDataView {
         let p = ui.painter().with_clip_rect(mrect);
         let o = mrect.min;
         let (w, h) = (mrect.width(), mrect.height());
-        wind_dir(&p, Rect::from_min_size(o, Vec2::splat(60.0)), cs.wind_dir, cs.wind_vel);
+        self.wind_dir.set_Direction(cs.wind_dir as f64);
+        self.wind_dir.set_Speed(cs.wind_vel as f64);
+        self.wind_dir.OnPaint(&p, Rect::from_min_size(o, Vec2::splat(60.0)), fonts::bold_id(8.25 * 96.0 / 72.0));
         distance_bar(&p, Rect::from_min_size(o + Vec2::new(66.0, 0.0), Vec2::new((w - 131.0).max(10.0), 22.0)), cs, &mission);
         p.text(o + Vec2::new(w - 40.0, 3.0), egui::Align2::LEFT_TOP, crate::i18n::t("Zoom"), fonts::ui_id(fonts::UI_SIZE), Color32::BLACK);
         let zl = Rect::from_min_size(o + Vec2::new(w - 44.0, 22.0), Vec2::new(42.0, 20.0));
@@ -2277,17 +2282,6 @@ fn quick_label(planner: &std::collections::BTreeMap<String, String>, index: usiz
 }
 
 // ------------------------------------------------------------------ map overlays
-
-/// `Controls/WindDir`: circle with the wind arrow and speed.
-fn wind_dir(p: &egui::Painter, r: Rect, dir: f32, speed: f32) {
-    let c = r.center();
-    let rad = r.width() / 2.0 - 4.0;
-    p.circle_stroke(c, rad, Stroke::new(1.0, Color32::BLACK));
-    let a = (dir + 180.0 - 90.0).to_radians();
-    let d = Vec2::new(a.cos(), a.sin()) * rad;
-    p.arrow(c - d, d * 2.0, Stroke::new(2.0, Color32::BLACK));
-    p.text(r.center_bottom() - Vec2::new(0.0, 2.0), egui::Align2::CENTER_BOTTOM, format!("{speed:.1}"), fonts::ui_id(9.0), Color32::BLACK);
-}
 
 /// `Controls/DistanceBar`: route waypoints with the vehicle's progress marker.
 fn distance_bar(p: &egui::Painter, r: Rect, cs: &CurrentState, mission: &[Locationwp]) {
