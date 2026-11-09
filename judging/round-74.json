@@ -1,0 +1,486 @@
+{
+  "round": 74,
+  "date": "2026-11-09",
+  "reviewed_head": "5fa9806",
+  "commands_run": [
+    {
+      "command": "git rev-parse --short HEAD ; git log --oneline 3dceefc..HEAD ; git show --stat ed00e83 3e37979 87f7f92 884c929 5fa9806 9bdb645",
+      "result": "HEAD 5fa9806, working tree clean. Changes since round 73 (0eddbe4 + uncommitted): 9bdb645 (checkpoint of the round-73 working tree), ed00e83 (Warnings forms + round-73 fixes), 3e37979 (GMap.NET core types + dotnet shims), 87f7f92 (ExtLibs/Core), 884c929 (GMap.NET.Projections), the two merges and 5fa9806 (manifest regenerated)."
+    },
+    {
+      "command": "python -I <inline> scan of every crates/**/*.rs for bytes < 0x20 other than TAB/LF/CR",
+      "result": "No hits. The three raw NUL bytes of R73-06 are gone (dataflash.rs, dotnet/mod.rs)."
+    },
+    {
+      "command": "cargo build --workspace --all-targets",
+      "result": "exit 0, 'Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.45s', 0 warnings."
+    },
+    {
+      "command": "cargo test --workspace --no-fail-fast",
+      "result": "exit 0. mp_app lib 153 passed / 1 ignored (unchanged), missionplanner bin 0, mp_core lib 305 (246 last round, +59), altitude_change 7, camera_ftp 1, comms_hardware_bench 3, high_latency 3, link_sim 9 (guided_fly_to_switches_mode_and_moves_the_copter passed), maiden_flight 1, mavserial 4, proximity_wire 1, mp_plugin 0, mp_plugin_example 0, doc-tests 0. Total 487 passed, 0 failed, 1 ignored. No timing-sensitive test failed this run, so no isolated re-run was needed."
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets",
+      "result": "exit 101. error: could not compile `mp-core` (lib) due to 18 previous errors; 191 warnings emitted, and the same for (lib test) with 206 warnings (190 duplicates). All 18 errors are the deny-by-default clippy::approx_constant on the literal 3.1415926535897931 in crates/mp-core/src/extlibs/gmap_net_core/gmap_net_projections/mercatorprojectiongcj.rs (lines 53, 57, 58, 65 x2, 66 x2, 67 x2, 72 x2, 73 x2, 74 x2, 89, 106 x2). Because mp-core fails, mp-app was never linted (0 mp-app lines in the log). Warnings: mp-core lib 167 -> 191."
+    },
+    {
+      "command": "python scripts/port_manifest.py --check",
+      "result": "exit 0, no output."
+    },
+    {
+      "command": "python -I <inline> sum of lines by status in port/manifest.json; diff of ported rows against git show 9bdb645:port/manifest.json",
+      "result": "3,477 rows. ported 198 files / 45,801 lines; todo 1,220 / 430,260; generated 382 / 62,758; vendored 1,580 / 651,002; n/a 97 / 16,224. MANIFEST.md line 5 agrees: '198 / 1418 (45801 / 476061 C# lines)'. 45 newly ported rows, 6,044 lines: ExtLibs/Core 15 files (2,571), GMap.NET core/internals 17 files (1,592), GMap.NET.Projections 9 files (1,258), Warnings/ 3 files (612). Check: 39,757 + 6,044 = 45,801."
+    },
+    {
+      "command": "grep for callers of the new modules outside their own directories (extlibs::core::, gmap_net_projections::, gmap_net_internals::, grect, singleton, languagetype, maptype, placemark, gdirections, dotnet::tripledes, dotnet::guid)",
+      "result": "Only gmap_net_projections:: is used, by simplegridui.rs, and only MercatorProjection. ExtLibs/Core, GMap internals, GRect, Singleton, LanguageType, MapType, Placemark, GDirections and the new 3DES/Guid shims have no caller. About 5,400 of the 6,044 new lines are unreachable from the app."
+    },
+    {
+      "command": "tr -d '\\r' / sed / grep side by side: Warnings/WarningsManager.cs, WarningsManager.Designer.cs, WarningControl.cs; GMap.NET.Internals/Stuff.cs; GMap.NET/Singleton.cs, Extensions.cs, GPoint.cs; GMap.NET.Projections/MercatorProjectionGCJ.cs, PlateCarreeProjectionPergo.cs, PolarStereographicNorthProjection.cs; GMap.NET.Core.csproj DefineConstants; ExtLibs/Core/Utils/StringUtils.cs, ColorUtils.cs, FileHandling/LoadSave.cs; dotnet/random.rs against the .NET Framework Random reference; MAVLinkInterface.cs:5409-5462; FlightData.cs:4507-4519; FlightData.resx MainH; FlightPlanner.resx lbl_*dist; Grid/GridUI.cs:690-800; ConfigAdvanced.cs:24; SimpleGridUI.resx ClientSize",
+      "result": "Used for the checks below."
+    },
+    {
+      "command": "Read (image tool) of target/judging/round74/*.png",
+      "result": "66 of the 68 screenshots were inspected individually. 52 and 63, the MGRS and zh-Hans variants of 51 and 58/60, were judged by their siblings. See the 'visual' section."
+    }
+  ],
+  "commands_note": "Only the allowed commands were run. No app, no capture script, no state-changing git command, port_manifest.py only with --check. Logs are in the session scratchpad. The only file written is judging/round-74.json.",
+  "manifest_summary": {
+    "manifest_status": "port/MANIFEST.md and port/manifest.json agree with each other and --check passes. 45 files moved from todo to ported.",
+    "new_owned_files_ported": {
+      "ExtLibs/Core/** (15 files)": 2571,
+      "ExtLibs/GMap.NET.Core/GMap.NET/** (15 files) and GMap.NET.Internals/PureImage.cs, Stuff.cs": 1592,
+      "ExtLibs/GMap.NET.Core/GMap.NET.Projections/** (9 files)": 1258,
+      "Warnings/WarningControl.cs": 333,
+      "Warnings/WarningsManager.cs": 83,
+      "Warnings/WarningsManager.Designer.cs": 196
+    },
+    "new_owned_lines_ported": 6044,
+    "owned_files_ported": 198,
+    "ported_lines": 45801,
+    "ported_lines_derivation": "Sum of 'lines' over status == 'ported' in port/manifest.json = 45,801 (198 files). Cross-check: 39,757 (round 73) + 6,044 new = 45,801.",
+    "owned_lines_total_corrected": 479014,
+    "owned_lines_total_manifest": 476061,
+    "ported_fraction_corrected": 0.0956,
+    "conservatism_note": "Upper bound. PlateCarreeProjectionPergo.cs counts 100 lines, but its whole body sits in '#if OLD_PERGO', which GMap.NET.Core.csproj never defines (DefineConstants TRACE;DEBUG;MONO;NETSTANDARD2_0), so the Rust module is correctly empty but 100 lines of dead C# are credited. ExtLibs/Core/Xml (7 files, 659 lines) is still todo, although KMLib, the only real consumer of Core besides CameraProtocol, needs it. MapRoute's ISerializable region is still credited without being carried (R73-16c).",
+    "wiring": "New wiring: ConfigAdvanced 'Warning Manager' -> tool_windows.rs:377 opens a new crate::mp::warnings::WarningsManager per click (ConfigAdvanced.cs:24 'new WarningsManager().Show()'). Nothing else new is wired: ExtLibs/Core, the GMap core types, Internals and 8 of 9 new projections have no caller, and the map widget still uses its own projection (R74-15)."
+  },
+  "scores": {
+    "overall": 1.6,
+    "overall_cap": 2.0,
+    "overall_cap_derivation": "ceil1(45,801 / 479,014 * 10) = ceil1(0.956) = 1.0, plus at most +1.0 for the pre-manifest app = 2.0. With the manifest's own denominator, ceil1(45,801 / 476,061 * 10) = ceil1(0.962) = 1.0 as well. Awarded 0.8 for ported lines and 0.8 for the pre-manifest app = 1.6, unchanged. The ported-lines part holds back 0.2 because: 'cargo clippy --workspace --all-targets' now fails outright (18 deny errors in mercatorprojectiongcj.rs) and mp-app is not linted at all; about 5,400 of the 6,044 new lines have no caller; 100 credited lines are dead '#if OLD_PERGO' code; the new Warnings forms (the only new UI) have no tests; and the screenshot set cannot verify most connected screens because of the firmware dialog.",
+    "round_files_fidelity": 6.9,
+    "round_files_fidelity_rationale": "Up 0.1. The new files were compared against their C#. WarningsManager/WarningControl are a real port this time: the designer coordinates (BUT_Add 13,13 75x23, BUT_save 94,13, labels at y 39 including the C# overlap of 'Comparison' (258, 62 wide) and 'Trigger' (314), panel1 4,53 866x175 anchored on all sides, row controls at their designer rects), the reload()/addwarningcontrol recursion with x += 5 and the hidden message box on child rows, the constructor's DataSource sequence (first item selected while custwarning is null), updateDisplay's explicit CB_type_CheckedChanged call after the Checked setter, WinForms change-only event semantics, but_addchild replacing the whole chain, and removewarning's grandchild relink. Lost: rows hold an (index, depth) path instead of the CustomWarning reference (R74-05); defaultsrc is not re-pointed in BUT_Add_Click or the row constructor (R74-19); the combos are non-editable (R74-20); errors become toasts instead of unhandled exceptions. GMap.NET: MercatorProjectionGCJ is literal (outOfChina NaN behaviour, 32-bit (int)1 << zoom, every PI literal), PolarStereographicNorth uses the long shift with the 6-bit mask and the C# Clip order, PlateCarreeProjectionPergo is correctly empty, Stuff's RemoveInvalidPathSymbols uses the .NET Framework/Mono char lists and GString decrypts the real provider strings (googleapis.com, maps.yandex.net), Extensions' four helpers keep the null/unbox distinctions. Singleton.check_ctor does not reproduce C#'s 'Instance access runs the creator first' (R74-21). ExtLibs/Core: StringUtils keeps UTF-16 indices, SubstringBetween's one-char skip, ExtractNumber's 0 fallback and culture-aware CompareTo; ColorUtils keeps the integer 16/116 == 0, banker's rounding via Convert.ToInt32 and the 62-colour list; LoadSave keeps the unstripped Extension in the multi-extension ctor ('*..txt'). dotnet::random reproduces .NET Framework's Knuth generator exactly (new Random(0).Next() = 1559595546). R73-15 (NaN keys) and R73-16b (GPointComparer) are fixed. Not fixed: GPoint/GSize ToString culture, MapRoute.Tag/equality.",
+    "ui_ux": 2.9,
+    "ui_ux_rationale": "Up 0.1. The invented Warning Manager (R72-02/R73-02) is replaced by the real form, opened once per click like 'new WarningsManager().Show()'. SimpleGrid is now modal and sizable. Against an exact clone the UI still falls short, and the screenshots expose more: every dialog uses egui::Modal, which dims the whole app and fades in (R74-07), where ShowDialog does neither; the FlightData left panel grows with tab content from 300 px to 330 and 425 px (R74-08), where MainH is FixedPanel at 300; the Messages tab prints 'HH:MM:SS : text' where C# prints DateTime.ToString() (R74-09); form client areas come out about 19 px short because the egui title bar is inside default_size (R74-11); widespread text overlap and clipping (R74-13). The QuickPanel Coloring checkbox now creates Coloring warnings that do nothing, because QuickPanelColoring has no subscriber (R74-06). All earlier gaps (GridUI, WPOverlay/FlightData map, GMapControl behaviours, tooltips) remain.",
+    "features": 3.8,
+    "features_rationale": "Unchanged. The Warning Manager can now create, edit, chain, remove and save warnings. The STATUSTEXT 'severity' setting and the Tuning:/PreArm:/Arm: rule now reach messageHigh. None of the 5,400 lines of GMap/Core leaf code adds a user-visible feature yet. Coloring warnings do nothing (R74-06). Still missing: the compid copy of STATUSTEXT, CurrentState's other messageHigh writers, speechEnabled/IsReady, real CsSource values, LogBrowse over DFLogBuffer, MagCalib, the GMap tile engine behind the map, GridUI, FlightPlanner AddCommand/setfromMap, MAVLinkInterface/MAVState, FFT, param files and RTK."
+  },
+  "visual": {
+    "score": 4.5,
+    "method": "Each PNG (1280x800, rendered by the app at ed00e83) was read with the image tool and compared with the Designer/resx layouts and MP's dark theme (ThemeManager: BurntKermit, green MyButton gradient, black backstage menu). There are no C# screenshots, so absolute pixel positions were checked only where the Designer gives them (Warning Manager, SimpleGrid, FlightData MainH, FlightPlanner labels).",
+    "summary": "The overall look is recognisably Mission Planner: the top menu strip with icons, the ArduPilot logo, the black backstage menu with the green selected item, green gradient buttons, dark grey bodies, and the HUD with its tapes. It is not an exact copy. Three issues affect nearly every screen: egui window chrome (centred title, a single X, no icon or min/max) instead of WinForms captions; egui::Modal dimming and fading behind every message box; and widespread text clipping and overlap where WinForms would autosize or wrap. The capture set itself is weak evidence: about 35 connected screens are half-covered by the 'New Firmware' dialog, and 14, 38 and 61 do not show what their names claim (R74-10).",
+    "per_screen": {
+      "01_data_disconnected": "Close to MP. The HUD is squeezed into a 300 px panel and its bottom line is cramped. The map legend and wind indicator are present.",
+      "02_data_quick_flying": "The firmware dialog plus the egui::Modal backdrop darkens the whole app, which ShowDialog does not do. The dialog has no caption bar (its title is drawn as body text). The Quick tab is fine.",
+      "03_data_actions": "The left panel grew to 330 px (R74-08). Action button labels are clipped or overlapped ('Change Speed' under the NumericUpDown, 'Set Loiter Rad' cut off, 'Raw Sensor View' wraps outside the button). The HUD's 'Bat1 ... 100%EKF' text collides. Dimmed by the modal.",
+      "04_data_messages": "Lines read '19:12:32 : Arming motors'. FlightData.cs:4517 prints DateTime.ToString(), so en-US would show '11/9/2026 7:12:32 PM : ...' (R74-09). Dimmed.",
+      "05_data_status": "The third column's values are cut off at the panel edge ('ay3 ('), and there is no horizontal scroll. Dimmed.",
+      "06_data_tlogs": "Layout plausible. Speed buttons are cramped. Dimmed.",
+      "07_plan_mission": "FlightPlanner chrome matches the resx (Distance/Prev/Home labels, right panel, WP grid headers). 'Alt (m' and 'Grad %' headers are clipped. Dimmed by the modal.",
+      "08_plan_disconnected": "Good match for the disconnected planner.",
+      "09_setup_firmware": "Good. The firmware tiles, status bar and link labels match the InstallFirmware layout.",
+      "10_setup_accel": "Matches the layout. Covered and dimmed by the modal.",
+      "11_setup_radio": "Bars and reverse boxes are plausible. The Calibrate button area is hidden by the modal.",
+      "12_setup_flightmodes": "Plausible. The 'Simple and Super Simple description' link is justified oddly across two lines. 'Initial Tune Parameter' is clipped in the menu.",
+      "13_setup_rtk": "Good. The groupboxes and RTCM indicators are in place.",
+      "14_config_fullparams": "WRONG SCREEN: shows Basic Tuning, the same as 15. Full Parameter List cannot be judged (R74-10).",
+      "15_config_basictuning": "Plausible. Dimmed by the modal.",
+      "16_config_extendedtuning": "Dense groupbox layout close to ConfigArducopter. The 'Throttle Accel (Accel to motor' title is clipped. Half covered by the modal.",
+      "17_config_geofence": "Plausible. The label/control rows are misaligned (Max Radius / RTL Altitude spacing).",
+      "18_config_planner": "Close to ConfigPlanner. The log path box truncates without an ellipsis.",
+      "19_simulation": "Close to the SITL screen. Swarm button labels wrap and clip.",
+      "20_help": "Close. The change log has a fade overlay at the bottom and no visible scrollbar; the C# RichTextBox shows one.",
+      "21_plan_survey_simple": "The Survey (Grid) form is recognisable, and the stats and options panels match. It uses egui window chrome. A long yellow diagonal crosses the grid from the first to the last marker; GridUI.cs draws per-segment routes, so this may be a stray closing segment (low confidence; GridUI is still the shim, R74-03).",
+      "22_plan_survey_camera": "The Camera Config tab layout is plausible. Same chrome and diagonal remarks as 21.",
+      "23_setup_frametype": "Good. Covered by the modal.",
+      "24_setup_compass": "The priority grid is plausible. The BusType column is truncated to 'BUS_TYPE'. Covered by the modal.",
+      "25_setup_servo": "Good match.",
+      "26_setup_esc": "Good. A description is clipped behind the modal.",
+      "27_setup_failsafe": "Plausible. The large mode/arm/GPS labels match.",
+      "28_setup_hwid": "Columns collide ('COMPASS_PRIO1_ID 97539', 'BUS_TYPE_UAVCAN 0'). A DataGridView would autosize them.",
+      "29_setup_battery": "The firmware dialog is captured half-transparent (mid fade-in), which WinForms never shows. 'Compass/Motor Calib' is clipped and '>> Advanced' is cut off at the bottom of the menu with no scrolling.",
+      "30_setup_advanced": "Good match for the Advanced page (the 'configutation' typo is in the C# too).",
+      "31_mavlink_inspector": "The tree content is plausible. egui window chrome.",
+      "32_ctrl_f_temp": "Good match for the temp form's two-column button grid. egui chrome.",
+      "33_config_mavftp": "The tree and list are plausible. Tree labels are clipped ('@PARAM', '@ROMF'). Covered by the modal.",
+      "34_setup_sikradio": "Overlaps: 'Antenna Mode' is under its combo, and the 'Settings for Standard Mavlink' links overlap rows. Otherwise close to the 3DR radio form.",
+      "35_setup_camera_gimbal": "Close to ConfigMount. The menu has the same clipping/overflow as 29.",
+      "36_setup_initial_params": "Close to the Initial Parameters page. The menu entry text is clipped.",
+      "37_setup_joystick": "Close. The 'Auto Detect' labels are clipped into two lines.",
+      "38_data_swarm": "WRONG SCREEN: plain FlightData with the firmware dialog; no swarm UI is visible (R74-10).",
+      "39_data_transponder": "The transponder controls are plausible. The left panel grew to 425 px (R74-08), so the HUD is much larger than in 01.",
+      "40_data_payload": "The gimbal sliders are plausible. The firmware dialog is again captured mid fade (semi-transparent).",
+      "41_setup_secure": "Good.",
+      "42_script_repl": "Plausible. The dialog is semi-transparent (fade).",
+      "43_onboard_osd": "Close to OSD config. Half covered by the modal.",
+      "44_setup_serial": "Good match.",
+      "45_hardware_osd": "Plausible. The 'Enable Telemetry' button text is clipped.",
+      "46_gps_order": "Plausible.",
+      "47_adsb": "Parameter-driven layout is plausible, with large gaps between rows.",
+      "48_cubeid": "The 'SERIAL_PASSTIMO' label is clipped. The dialog is fading.",
+      "49_dronecan": "Good match.",
+      "50_antenna_tracker": "Good match.",
+      "51_plan_utm": "Good: the UTM columns (Zone/Easting/Northing) replace Lat/Long. Dimmed.",
+      "52_plan_mgrs": "Not opened separately; same composition as 51.",
+      "53_swarm_formation": "The 'Control' form grid is plausible. The firmware dialog is drawn over a separate window, and the app is dimmed.",
+      "54_swarm_sequence": "The Layout Editor is plausible. 'label1' is shown literally, as the C# designer default.",
+      "55_swarm_follow_leader": "Plausible small Control form.",
+      "56_swarm_follow_swarm": "WPControl is plausible, with its 'How to Use' text and altitude graph.",
+      "57_data_status_last_column": "Name/value columns overlap ('xpdr_board_temperature0', 'xpdr_es1090_tx_enabledFalse').",
+      "58_data_zh_hans": "Translated chrome. The HUD's 'GPS: 3D Fix' is clipped. The dialog body stays English (as in C#).",
+      "59_setup_rangefinder_zh_hans": "Good. CJK menu items render in a lighter weight than the bold Latin entries.",
+      "60_plan_ko_kr": "Good translation coverage. 'Alt (m' and '변화도' headers are clipped.",
+      "61_data_gstreamer_hud": "WRONG CONTENT: a 'Progress Downloading..' window and the firmware dialog; no GStreamer HUD is visible (R74-10).",
+      "62_plan_ar": "Arabic strings overlap in the WP Radius / Loiter Radius / Default Alt labels. MP does not mirror layouts either, but its labels do not collide.",
+      "63_plan_zh_hans": "Not opened separately; same composition as 58/60.",
+      "64_data_gimbal_full": "The no-video placeholder and mini map are plausible. Covered by the modal.",
+      "65_data_gimbal_mini": "The 'No Video' inset is plausible.",
+      "66_data_gimbal_popout": "The 'Gimbal Control' popout is plausible. egui chrome.",
+      "67_plan_simplegrid": "The SimpleGrid form ('Grid') is recognisable: map with green markers, the Stats box, the Simple Options and Display groups, Accept. It is placed at the top-left (0,0) although the change notes say it is centred, and its client is about 1007x518 against the resx ClientSize 1008x537 (R74-11). Unlike every other modal here, it has no backdrop dim.",
+      "68_warning_manager": "The '+'/'Save' buttons and the seven column labels are at the designer positions, including the genuine C# overlap of 'Comparison'/'Trigger'. The client is about 870x219 against 872x238, and the egui caption is centred. The capture has no warnings, so no WarningControl row is shown, and the row rendering is unverified (R74-10)."
+    }
+  },
+  "compile_check": {
+    "summary": "Build: 0 warnings. Tests: 487 passed, 0 failed, 1 ignored (428 last round; the +59 are all mp-core GMap/Core/dotnet unit tests). Clippy: FAILS with exit 101. There are 18 deny-level approx_constant errors in mercatorprojectiongcj.rs, and mp-app is not linted at all.",
+    "likely_errors": [
+      "cargo clippy --workspace --all-targets: 18 x error 'approximate value of `f{32, 64}::consts::PI` found' at mercatorprojectiongcj.rs:53:39, 57:80, 58:68, 65:39, 65:89, 66:31, 66:81, 67:41, 67:85, 72:39, 72:89, 73:31, 73:81, 74:41, 74:93, 89:28, 106:57, 106:93."
+    ],
+    "warnings": [
+      "clippy: mp-core lib warnings 167 -> 191 and lib test 182 -> 206, build.rs 3. The mp-app counts are unknown because linting stopped at mp-core.",
+      "mercatorprojectiongcj.rs also triggers excessive_precision on the same literals. 3.1415926535897931 parses to exactly std::f64::consts::PI, so using the constant is bit-identical.",
+      "displayview.rs:535 bool_assert_comparison (assert_eq!(..., false)).",
+      "Carried: clipper.rs file-wide #![allow(clippy::all)]; commsserialport.rs:785 extern allow without a comment; gpoint.rs/gsize.rs should_implement_trait; binarylog.rs:556 double_ended_iterator_last, which must not be 'fixed' with next_back()."
+    ],
+    "test_failures": [],
+    "test_expectations_checked": [
+      "random.rs matches_net_framework_sequence: new Random(0).Next() = 1559595546, 1755192844, 1649316166 are the .NET Framework 4.x values. The constructor, InternalSample, Sample, GetSampleForLargeRange (2*(uint)Int32.MaxValue - 1 = 4294967293) and both exception texts match the reference source.",
+      "stuff.rs gstring_decrypts_provider_servers: decrypting the real GMap provider strings with the 3DES-ECB/SHA-1-derived key validates the sha1 and tripledes shims end to end.",
+      "colorutils.rs color_math: 127.5 -> 128 (banker's rounding to even) and black's L = -16 (integer 16/116 == 0) are the C# results.",
+      "mercatorprojectiongcj.rs shifts_only_inside_china: asserts only inequality and a < 1000 px bound. There is no golden vector from the C#.",
+      "No test covers WarningsManager/WarningControl, SimpleGrid, STATUSTEXT messageHigh (the R73-08 request: 'Tuning: x' at severity 6 -> severity 0), or onFlightMode 'Loiter'."
+    ],
+    "low_confidence_risks": [
+      "warningcontrol.rs: egui ComboBox ids are salted with (index, depth) only, so two open WarningsManager forms share popup state.",
+      "stuff.rs DecryptStringWith: base64 STANDARD rejects whitespace, which Convert.FromBase64String skips. BouncyCastle's 'pad block corrupted' exception type is not modelled.",
+      "21/22 screenshots: the diagonal across the survey grid may be a closing segment that GridUI.cs (per-segment GMapRoute) never draws.",
+      "Carried: state.rs Instant-based 10 s expiry, pureprojection.rs lock release between lookup and insert, clipper.rs stale m_Scanbeam, grid.rs lane overflow, dataflash.rs eager decode."
+    ]
+  },
+  "findings": [
+    {
+      "id": "R74-01",
+      "severity": "P0",
+      "file": "port/MANIFEST.md, crates/mp-app/src/mp/ (only warnings/ exists)",
+      "line": 5,
+      "cs_reference": "reference/MissionPlanner/{MainV2.cs, GCSViews/FlightPlanner.cs, GCSViews/FlightData.cs, Log/LogBrowse.cs, MagCalib.cs, Grid/GridUI.cs, ExtLibs/GMap.NET.Core/GMap.NET.Internals/{Core,TileMatrix}.cs, ExtLibs/GMap.NET.WindowsForms/**, ExtLibs/ArduPilot/Mavlink/*, ExtLibs/Core/Xml/*, ...}",
+      "summary": "Carried from R73-01. 45,801 / 479,014 lines (9.6%, 198 files) are ported. 430,260 owned lines are still todo. This round added 6,044 lines, but about 5,400 of them (ExtLibs/Core, the GMap enums, interfaces and internals, 8 of 9 projections, the 3DES/Guid shims) have no caller. ExtLibs/Core was ported without Core/Xml, which its consumer KMLib needs. The front-ends of earlier back-ends (MagCalib, LogBrowse, GMapControl/Core/TileMatrix) are still missing.",
+      "required_fix": "Port top-down along call paths so that each new file is reachable: GMap.NET.Internals/Core.cs + TileMatrix.cs + GMapControl's projection path (so map.rs runs on PureProjection and the provider projections), MagCalib.cs, Log/LogBrowse.cs, Grid/GridUI.cs, then FlightPlanner/FlightData/MAVLinkInterface/MainV2. Finish ExtLibs/Core/Xml before claiming KMLib's dependencies."
+    },
+    {
+      "id": "R74-02",
+      "severity": "P1",
+      "file": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_projections/mercatorprojectiongcj.rs",
+      "line": 53,
+      "cs_reference": "ExtLibs/GMap.NET.Core/GMap.NET.Projections/MercatorProjectionGCJ.cs:26-108 (literal 3.1415926535897931)",
+      "summary": "New. 'cargo clippy --workspace --all-targets' fails with exit 101. There are 18 clippy::approx_constant errors (deny by default) on the 3.1415926535897931 literal at lines 53, 57, 58, 65-67, 72-74, 89 and 106. Because mp-core does not lint, mp-app is never linted. The round shipped a broken clippy run.",
+      "required_fix": "Replace the literal with std::f64::consts::PI, which is bit-identical (the literal rounds to the same f64), and leave a comment citing the C# literal. Alternatively add #[allow(clippy::approx_constant, clippy::excessive_precision)] with that reason. Re-run clippy for the whole workspace before reporting a round as clean."
+    },
+    {
+      "id": "R74-03",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/survey_ui.rs",
+      "line": 260,
+      "cs_reference": "Grid/GridUI.cs:578-645, 690-800, 1620-1800; ExtLibs/Utilities/Grid.cs",
+      "summary": "Carried from R73-03 unchanged. GridUI still runs on the survey::grid shim. Screenshots 21/22 also show a long diagonal from the first to the last grid point, which GridUI's per-segment GMapRoute drawing would not produce (low confidence).",
+      "required_fix": "As R71-02. Port GridUI.cs and its route drawing (segments built from prevpoint/item, GMapMarkerOverlap footprints)."
+    },
+    {
+      "id": "R74-04",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1321,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1408-1580; GCSViews/FlightData.cs:3956-4046",
+      "summary": "Carried from R73-05 unchanged: the WPOverlay markers, polygons, fence and rally overlays and the FlightData map are missing.",
+      "required_fix": "As R62-06."
+    },
+    {
+      "id": "R74-05",
+      "severity": "P2",
+      "file": "crates/mp-app/src/mp/warnings/warningcontrol.rs",
+      "line": 24,
+      "cs_reference": "Warnings/WarningControl.cs:59-65 (custwarning holds the CustomWarning reference), 252-284 (Remove(custwarning) and removewarning by reference); ConfigAdvanced.cs:24 (each click opens another form)",
+      "summary": "New. A row identifies its warning by WarningPath {index, depth} into WarningEngine.warnings, not by reference. Because each click opens another form (tool_windows.rs:377), a second form that removes or adds a warning shifts the indices. The first form's rows then edit, or with '-' remove, a different warning. In C# they keep editing their own (possibly detached) object. The combo popup ids are salted only with (index, depth), so open forms share popup state.",
+      "required_fix": "Hold a shared handle to the CustomWarning (for example Arc<Mutex<CustomWarning>> in WarningEngine.warnings and Child), and implement Remove/removewarning by pointer identity. Salt egui ids with the form instance as well."
+    },
+    {
+      "id": "R74-06",
+      "severity": "P2",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 216,
+      "cs_reference": "MainV2.cs:1036-1039 (WarningEngine.QuickPanelColoring += WarningEngine_QuickPanelColoring), 4799-4830, 2074 (WarningEngine.Stop); CurrentState.cs messageHighSeverity (auto-property, default 0)",
+      "summary": "R73-09, now visible in the UI. The new WarningControl lets the user tick 'QuickPanel Coloring' and pick a colour, but WarningEngine.QuickPanelColoring still has no subscriber, so a Coloring warning does nothing. WarningEngine::Stop is never called. message_high_severity still starts at 7 (state.rs:245), where C# starts at 0.",
+      "required_fix": "Port MainV2.WarningEngine_QuickPanelColoring (it recolours the matching QuickView) and subscribe it at start-up. Call WarningEngine.Stop on close. Initialise message_high_severity to 0."
+    },
+    {
+      "id": "R74-07",
+      "severity": "P2",
+      "file": "crates/mp-app/src/show_again.rs",
+      "line": 50,
+      "cs_reference": "ExtLibs/Controls/CustomMessageBox.cs (a Form shown with ShowDialog, caption in the title bar, no backdrop, no fade); Common.cs:260-294",
+      "summary": "New (visual). Every message box (show_again.rs:50, app.rs:1073 and 1317) is an egui::Modal. It dims the entire app (02-07, 10-17, 23-28, 33, 43-47, 51, 53-66) and fades in, so 29, 40, 42 and 48 caught the dialog semi-transparent. The caption ('New Firmware-Copter 4.7.2') is drawn as the first line of the body instead of in a title bar.",
+      "required_fix": "Render CustomMessageBox as a fixed-size window with a WinForms-style caption bar, block input to the app without painting a backdrop (as the SimpleGrid modal block already does), and disable the fade animation."
+    },
+    {
+      "id": "R74-08",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_data.rs",
+      "line": 488,
+      "cs_reference": "GCSViews/FlightData.resx:6088 (MainH.SplitterDistance), FlightData.Designer.cs (MainH FixedPanel = Panel1)",
+      "summary": "New (visual). MainH is an egui::Panel::left with default_size(self.left_w), and self.left_w is written back from the rendered width. egui side panels grow to fit wide content, so the left panel is 300 px in 01/02, 330 px after the Actions/Messages/Status tabs (03-06) and 425 px after Transponder (39, 40, 57). The width never shrinks back. In C# the splitter stays at SplitterDistance unless the user drags it, and wide tab content is clipped or scrolled.",
+      "required_fix": "Store the width only on a user drag, clip the tab contents to the panel (or give them a horizontal scroll as the C# controls do), and keep FixedPanel semantics on window resize."
+    },
+    {
+      "id": "R74-09",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_data.rs",
+      "line": 2329,
+      "cs_reference": "GCSViews/FlightData.cs:4507-4519 (message.Insert(0, x.Item1 + \" : \" + x.Item2 + \"\\r\\n\"), where Item1 is a DateTime -> DateTime.ToString() in the current culture; txt_messagebox is a RichTextBox)",
+      "summary": "New. The Messages tab prints '{m.time} : {m.text}' with a pre-formatted 'HH:MM:SS' string (screenshot 04: '19:12:32 : Arming motors'). C# prints the full DateTime in the current culture's 'G' format, '11/9/2026 7:12:32 PM : Arming motors' in en-US. The lines are separate labels, not one selectable, scrollable RichTextBox. The text is rebuilt every frame, not only when the last message's time changes (messagecount).",
+      "required_fix": "Keep the DateTime in StatusMessage and format it with the culture's general date/long time pattern. Render one read-only multiline text box. Update only when messages.Last().time changes."
+    },
+    {
+      "id": "R74-10",
+      "severity": "P2",
+      "file": "scripts/capture_round.ps1",
+      "line": 26,
+      "cs_reference": "n/a (evidence quality)",
+      "summary": "New. The screenshot set does not show what it claims: 14_config_fullparams shows Basic Tuning (identical to 15); 38_data_swarm shows plain FlightData; 61_data_gstreamer_hud shows a 'Progress Downloading..' window and no GStreamer HUD; 68_warning_manager has no warnings, so no WarningControl row is ever rendered. The 'New Firmware' dialog half-covers about 35 connected screens. The screenshots cannot verify most of the connected UI.",
+      "required_fix": "Fix the config index for case 14, open the swarm view for 38, wait for the GStreamer pipeline in 61, seed two warnings (one with a child, one Coloring) for 68, and pre-set the firmware-notice 'show again' setting to False in the capture profile. Add a check that compares each capture's manifest against the page that is actually active."
+    },
+    {
+      "id": "R74-11",
+      "severity": "P2",
+      "file": "crates/mp-app/src/mp/warnings/warningsmanager.rs",
+      "line": 82,
+      "cs_reference": "Warnings/WarningsManager.Designer.cs (ClientSize 872x238, Text 'Warning Manager'); ExtLibs/SimpleGrid/SimpleGridUI.resx:1047 (ClientSize 1008x537), StartPosition WindowsDefaultLocation",
+      "summary": "New (visual). default_size(CLIENT_SIZE) sizes the whole egui window, title bar included. The measured clients are about 870x219 (68) instead of 872x238, and about 1007x518 (67) instead of 1008x537. The caption is egui's centred title with one X, not a WinForms caption (icon, left-aligned text, min/max/close). The change notes say SimpleGrid is now centred (simplegridui.rs:513-514), but screenshot 67 shows it at (0,0). C#'s WindowsDefaultLocation is neither centred nor necessarily (0,0).",
+      "required_fix": "Size the content area to ClientSize (add the caption height to the outer size) and draw a WinForms-like caption. Either reproduce WindowsDefaultLocation (cascade from the top-left of the work area) or document the choice, and make the screenshot match the code."
+    },
+    {
+      "id": "R74-12",
+      "severity": "P2",
+      "file": "crates/mp-core/src/state.rs",
+      "line": 1008,
+      "cs_reference": "ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5409-5456; CurrentState.cs:2554-3052",
+      "summary": "R73-08, partly fixed. Fixed: the threshold now comes from the 'severity' setting (app.rs:1407, default 4), and 'Tuning:'/'PreArm:'/'Arm:' messages above it set messageHigh with severity EMERGENCY. Still open: (c) a STATUSTEXT from another component of the current sysid does not set 'compid : text' on the current component; (d) invalid UTF-8 still gives '' (to_str().unwrap_or); CurrentState's own messageHigh writers (EKF variance, SYS_STATUS health, InternalError, PERIPH, SAFETY) are missing. The setting is copied to an atomic once per frame and only while a link exists, where C# reads it per message (the (byte) cast is applied, which is right). The requested tests were not added.",
+      "required_fix": "As R73-08 (c)/(d) plus the CurrentState writers, and add the 'Tuning: x' at severity 6 -> severity 0 and WARNING -> severity 4 tests."
+    },
+    {
+      "id": "R74-13",
+      "severity": "P2",
+      "file": "crates/mp-app/src/theme.rs",
+      "line": 1,
+      "cs_reference": "WinForms AutoSize labels and buttons, DataGridView AutoSizeColumnsMode, MyButton text layout; BackstageView menu",
+      "summary": "New (visual), a catalogue: the HUD bottom line collides ('100%EKF', 03-06; 'GPS: 3' clipped, 58/61/64); Actions buttons are overlapped by NumericUpDowns or clipped (03); the Status grid columns overlap or are cut off (05, 57); the HW ID columns collide (28); Compass BusType is truncated (24); the Sik Radio 'Antenna Mode' label is under its combo (34); 'SERIAL_PASSTIMO' is clipped (48); setup menu items are clipped ('Initial Tune Parameter', 'Compass/Motor Calib') and '>> Advanced' falls off the bottom with no scroll (29, 35, 45, 59); the Arabic plan labels overlap (62); the MAVFtp tree labels are clipped (33); 'Enable Telemetry' and the joystick 'Auto Detect' labels are clipped (37, 45).",
+      "required_fix": "Measure the text with the WinForms font metrics (Tahoma/Segoe 8.25pt) and apply AutoSize/AutoEllipsis as each control's Designer says. Autosize DataGridView columns. Give the backstage menu its scrollbar."
+    },
+    {
+      "id": "R74-14",
+      "severity": "P2",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 498,
+      "cs_reference": "SimpleGridPlugin.cs:67-71 (ShowDialog); SimpleGridUI.resx (Sizable, Dock rules); GMapControl.cs:918-923 (lazySetZoomToFitRect)",
+      "summary": "R73-04, partly fixed. Fixed: an input-blocking modal layer (no dim, which is correct), a sizable form with docked panels, and GridUI_Resize re-fitting with the live map size. Still open: the placement (R74-11), the immediate rather than deferred ZoomAndCenterMarkers (R73-28), and GridUI_Load running before theming. simplegridui.rs still has no tests (R73-17/R73-34).",
+      "required_fix": "As R71-03 for placement, and as R71-12 for lazyEvents. Restore the SimpleGrid tests."
+    },
+    {
+      "id": "R74-15",
+      "severity": "P2",
+      "file": "crates/mp-app/src/map.rs",
+      "line": 165,
+      "cs_reference": "GMap.NET.Core/GMap.NET.Projections/*.cs; GMap.NET.Internals/Core.cs:549-576; GMapControl.cs:918-1050; SimpleGridUI.cs:37",
+      "summary": "Carried from R73-07. Now that all ten projections are ported, the map widget still projects with its own latlng_to_world/world_to_latlng and ignores the provider's projection (Yandex, GCJ, PlateCarree, polar). SimpleGrid still fits with Mercator and draws with map.rs's formula.",
+      "required_fix": "As R73-07: route map.rs through PureProjection and take the projection from the active provider."
+    },
+    {
+      "id": "R74-16",
+      "severity": "P2",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 205,
+      "cs_reference": "Utilities/Speech.cs:24-80; MainV2.cs:469-481",
+      "summary": "Carried from R73-10 unchanged.",
+      "required_fix": "As R72-09."
+    },
+    {
+      "id": "R74-17",
+      "severity": "P2",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 188,
+      "cs_reference": "CustomWarning.cs:57-90, 164-175; WarningEngine.cs:119-156",
+      "summary": "Carried from R73-11 unchanged. It matters more now: CMB_Source lists exactly CsSource's non-null properties, so the field list in the new Warning Manager is whatever CsSource models, not CurrentState's real property set.",
+      "required_fix": "As R72-10."
+    },
+    {
+      "id": "R74-18",
+      "severity": "P2",
+      "file": "crates/mp-core/src/dataflash.rs",
+      "line": 89,
+      "cs_reference": "Log/LogBrowse.cs; ExtLibs/Utilities/DFLogBuffer.cs",
+      "summary": "Carried from R73-12 unchanged.",
+      "required_fix": "As R72-11."
+    },
+    {
+      "id": "R74-19",
+      "severity": "P3",
+      "file": "crates/mp-app/src/mp/warnings/warningsmanager.rs",
+      "line": 62,
+      "cs_reference": "Warnings/WarningsManager.cs:66 and WarningControl.cs:20 (CustomWarning.defaultsrc = MainV2.comPort.MAV.cs before GetOptions/SetField)",
+      "summary": "New. BUT_Add_Click and WarningControl::new skip the 'CustomWarning.defaultsrc = MainV2.comPort.MAV.cs' assignment. defaultsrc is a snapshot handle set once in start_warning_engine (tool_windows.rs:222). After a MAV switch, C# re-points it to the newly selected MAV's state each time a row is built or '+' is clicked. A GetOptions() failure becomes a toast, where C# raises it unhandled.",
+      "required_fix": "Re-point defaultsrc to the current comPort.MAV.cs at both places, and track the selected MAV."
+    },
+    {
+      "id": "R74-20",
+      "severity": "P3",
+      "file": "crates/mp-app/src/mp/warnings/warningcontrol.rs",
+      "line": 331,
+      "cs_reference": "Warnings/WarningControl.cs:96-160 (ComboBox default DropDownStyle.DropDown, FormattingEnabled; SelectedIndexChanged fires on an index change, not on text)",
+      "summary": "New. The three combos are non-editable egui ComboBoxes. In C# they are editable DropDown boxes: typing sets Text without SelectedIndexChanged, and setting Text to a value not in the list moves SelectedIndex to -1 and raises the event. The port compares text instead of index, so re-selecting after a typed value, or Text set to an unlisted name, behaves differently. NUM_warning/NUM_repeattime reuse SimpleGrid's numeric_updown, which still lacks the wheel and key behaviour (R73-33).",
+      "required_fix": "Port ComboBox DropDown semantics (an editable text with an index model and SelectedIndexChanged on index change) as a shared control, and use it here and in SimpleGrid."
+    },
+    {
+      "id": "R74-21",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/singleton.rs",
+      "line": 36,
+      "cs_reference": "ExtLibs/GMap.NET.Core/GMap.NET/Singleton.cs:14-31",
+      "summary": "New. check_ctor only peeks at the cell. In C# the protected constructor reads Instance, which runs SingletonCreator's static constructor first. So the first stand-alone 'new T()' creates the singleton (whose inner Instance read sees null) and then throws 'You have tried to create a new singleton...'. If the creator stored an exception, Instance rethrows it from the constructor. The port accepts the first stand-alone construction and ignores a stored exception.",
+      "required_fix": "In check_ctor, call Instance() when the cell is empty and not being initialised by this thread (track re-entrancy), and return the stored exception if there is one."
+    },
+    {
+      "id": "R74-22",
+      "severity": "P3",
+      "file": "port/manifest.json",
+      "line": 1,
+      "cs_reference": "ExtLibs/GMap.NET.Core/GMap.NET.Projections/PlateCarreeProjectionPergo.cs (#if OLD_PERGO); GMap.NET.Core.csproj:15-18",
+      "summary": "New. The empty Pergo module is credited with 100 ported lines of code that is never compiled. The port is right; the accounting is generous.",
+      "required_fix": "Give conditionally-dead files a manifest note (or status n/a) so that the cap reflects compiled code."
+    },
+    {
+      "id": "R74-23",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/gpoint.rs",
+      "line": 94,
+      "cs_reference": "GMap.NET/GPoint.cs:130-133; GSize.cs:111-114; MapRoute.cs:14-32, 108-158",
+      "summary": "R73-16, partly fixed. GPointComparer is ported. GPoint/GSize ToString still ignore the culture's NegativeSign. MapRoute.Tag is still Option<String> with derived value equality, and ISerializable is not carried.",
+      "required_fix": "As R73-16 (a) and (c)."
+    },
+    {
+      "id": "R74-24",
+      "severity": "P3",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 368,
+      "cs_reference": "Behaviour of SimpleGridUI.cs, WarningsManager.cs/WarningControl.cs, CurrentState.messageHigh, BinaryLog.onFlightMode",
+      "summary": "R73-17, partly fixed: 59 new mp-core unit tests cover the GMap/Core/dotnet leaves. Still untested: SimpleGrid (the module deleted in round 73 was not restored), the new Warnings forms (constructor event order, child chain, removewarning), STATUSTEXT messageHigh, onFlightMode 'Loiter' and ConvertBin output. The GCJ test has no golden vector.",
+      "required_fix": "Add these tests, with golden values computed from the C# where possible."
+    },
+    {
+      "id": "R74-25",
+      "severity": "P3",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 296,
+      "cs_reference": "MainV2.cs:3407-3430; BinaryLog.cs:85-87, 557-562; Common.cs:88-200",
+      "summary": "Carried from R73-14 unchanged: getFlightMode is a fn pointer with no remove, ArduSub maps to a table where C# returns null, and the clippy allow and the Loiter test are missing.",
+      "required_fix": "As R73-14."
+    },
+    {
+      "id": "R74-26",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_data.rs",
+      "line": 2000,
+      "cs_reference": "GCSViews/FlightData.cs:1090-1106",
+      "summary": "Carried from R73-13 unchanged.",
+      "required_fix": "As R73-13."
+    },
+    {
+      "id": "R74-27",
+      "severity": "P3",
+      "file": "crates/mp-core/tests/altitude_change.rs",
+      "line": 219,
+      "cs_reference": "n/a (test reliability)",
+      "summary": "Carried from R73-18. It did not fail this round, but nothing was changed, so it remains a known timing-sensitive test.",
+      "required_fix": "As R73-18."
+    },
+    {
+      "id": "R74-28",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 9,
+      "cs_reference": "ExtLibs/Utilities/clipper.cs",
+      "summary": "Carried from R73-27, and worse: mp-core lib warnings 167 -> 191, plus the R74-02 errors.",
+      "required_fix": "As R73-27."
+    },
+    {
+      "id": "R74-29",
+      "severity": "P3",
+      "file": "various",
+      "line": 0,
+      "cs_reference": "See each referenced round-73 finding",
+      "summary": "Carried unchanged: R73-19 (customwarning.rs:231 XmlSerializer), R73-20 (warningengine.rs:115), R73-21 (compasscalibrator.rs:88, MagCalib unwired), R73-22 (dflog.rs:608), R73-23 (binarylog.rs:273 ASCII output), R73-24 (dflogbuffer.rs:832), R73-25 (units.rs:27 'kn' vs 'kts'), R73-26 (dotnet/mod.rs:162 decimal), R73-28 (simplegridui.rs:175), R73-29 (simplegridui.rs:530 GMapControl pan/zoom), R73-30 (flight_plan.rs:687), R73-31 (simplegridui.rs:622 tooltips), R73-32 (simplegridui.rs:342), R73-33 (simplegridui_designer.rs:110 NumericUpDown), R73-35 (menu.rs:525 plugins), R73-36/37 (grid.rs), R73-38 (menu.rs:873), R73-39/40/61 (clipper.rs), R73-41 (enumtranslator.rs:118), R73-42 (flight_plan.rs:1701), R73-43 (app.rs:592), R73-44 (ltm.rs:174), R73-45 (link.rs:1196), R73-46 (show_again.rs:15), R73-47 (app.rs:1500), R73-48 (tool_windows.rs:133 FFT), R73-49 (paramfile.rs:36), R73-50 (flight_plan.rs:1718), R73-51 (mission.rs:227), R73-52 (flight_plan.rs:1727), R73-53 (rtk.rs:42), R73-54 (dotnet/version.rs:18), R73-55 (swarm.rs:159), R73-56 (menu.rs:815), R73-57 (flight_plan.rs:1887, which can now use the ported MapRoute.Distance), R73-58 (wpoverlay.rs:87), R73-59 (coords.rs:36), R73-60 (dotnet/io.rs:22).",
+      "required_fix": "As listed in round 73."
+    }
+  ],
+  "round_73_status": {
+    "fixed": [
+      "R73-02: the invented Warning Manager is replaced by ports of WarningsManager.cs, WarningsManager.Designer.cs and WarningControl.cs, opened per click as in ConfigAdvanced.cs:24. Residue: R74-05, R74-19, R74-20, R74-11.",
+      "R73-06: no byte below 0x20 other than TAB/LF/CR remains in crates/**/*.rs (verified by scan).",
+      "R73-15: PointLatLng keys with a NaN coordinate are never found (key() returns None), matching Dictionary + PointLatLng.Equals."
+    ],
+    "partly_fixed": [
+      "R73-08: the 'severity' setting and the Tuning:/PreArm:/Arm: rule are in. compid, UTF-8, the CurrentState writers and the tests remain (R74-12).",
+      "R73-04: modal, sizable and docked with Resize zoom. Placement, lazy zoom and the tests remain (R74-14, R74-11).",
+      "R73-16: GPointComparer ported; ToString culture and MapRoute.Tag remain (R74-23).",
+      "R73-17: 59 leaf unit tests added; SimpleGrid, Warnings forms, messageHigh and onFlightMode remain untested (R74-24).",
+      "R73-01: +6,044 lines (45 files), mostly without callers (R74-01)."
+    ],
+    "regressed": [
+      "Clippy: round 73 exited 0, round 74 exits 101 (R74-02)."
+    ],
+    "still_open": [
+      "R73-03 -> R74-03, R73-05 -> R74-04, R73-07 -> R74-15, R73-09 -> R74-06, R73-10 -> R74-16, R73-11 -> R74-17, R73-12 -> R74-18, R73-13 -> R74-26, R73-14 -> R74-25, R73-18 -> R74-27, R73-27 -> R74-28, R73-19..R73-26, R73-28..R73-61 -> R74-29."
+    ],
+    "new_ports_verified": [
+      "warningsmanager.rs / warningsmanager_designer.rs: designer geometry, labels (including the C# Comparison/Trigger overlap), the panel anchoring and the reload/addwarningcontrol recursion match. defaultsrc is missing (R74-19).",
+      "warningcontrol.rs: the InitializeComponent values, the DataSource ordering, updateDisplay with the explicit CheckedChanged call, the change-only events, but_addchild and removewarning semantics all match. Identity by path (R74-05) and the combo style (R74-20) are wrong.",
+      "mercatorprojectiongcj.rs: literal, including outOfChina's NaN result and the 32-bit shift. Clippy fails on its PI literals (R74-02).",
+      "polarstereographicnorthprojection.rs: literal, including the long shift masking and the 15-step inverse iteration.",
+      "platecarreeprojectionpergo.rs: correctly empty (OLD_PERGO undefined). Accounting note R74-22.",
+      "stuff.rs: faithful, including the IsRunningOnWin7orLater Minor > 0 quirk and the 32-byte-buffer-then-resize-to-16 3DES key. Verified against real GMap ciphertexts.",
+      "singleton.rs: correct per-type laziness and stored exception. The constructor guard differs (R74-21).",
+      "extensions.rs: faithful null/unbox distinctions.",
+      "stringutils.rs, colorutils.rs, loadsave.rs: faithful, including culture-sensitive compare, integer 16/116 and the unstripped Extension.",
+      "dotnet/random.rs: an exact .NET Framework System.Random."
+    ]
+  },
+  "next_steps": [
+    "R74-02: make 'cargo clippy --workspace --all-targets' pass again (use f64::consts::PI, which is bit-identical, with a comment citing the C# literal), then lint mp-app.",
+    "R74-10: fix the capture cases (14, 38, 61, 68 with seeded warnings) and suppress the firmware notice in the capture profile, so that the screenshots can serve as evidence.",
+    "R74-07 / R74-11 / R74-08 / R74-13: WinForms-style dialogs (no backdrop, no fade, a caption bar, content sized to ClientSize), a fixed MainH splitter, and AutoSize-faithful text layout.",
+    "R74-05 / R74-06 / R74-19: give WarningControl reference identity, wire QuickPanelColoring and Stop, start messageHighSeverity at 0, and re-point defaultsrc.",
+    "R74-01 / R74-15: stop adding leaf code without callers. Port GMap.NET.Internals/Core.cs + TileMatrix.cs + the GMapControl projection path so that the ten ported projections and the GMap core types are used, then MagCalib.cs and Log/LogBrowse.cs.",
+    "R74-12 / R74-24: finish MAVLinkInterface's STATUSTEXT block (compid copy, UTF-8) and add the requested messageHigh, SimpleGrid, Warnings-form and onFlightMode tests.",
+    "R74-03 / R74-04 and the R74-29 backlog: GridUI, the WPOverlay/FlightData map, FlightPlanner AddCommand/setfromMap, and the long-standing MainV2/MAVLink/FlightPlanner/FlightData gaps."
+  ],
+  "verdict": "Build passes with 0 warnings and tests pass (487 passed, 1 ignored), but 'cargo clippy --workspace --all-targets' now fails: 18 deny-level approx_constant errors on MercatorProjectionGCJ's PI literal stop mp-core, so mp-app is not linted. Ported lines rose to 45,801 / 479,014 (9.6%, 198 files), which raises the cap to 2.0. The ports are careful. The Warning Manager is a real copy of WarningsManager/WarningControl down to the designer's overlapping labels and the constructor's event order. The GCJ and polar projections, Stuff (verified against real GMap ciphertexts), StringUtils/ColorUtils/LoadSave and an exact System.Random are literal. Three claimed fixes are confirmed: NUL bytes, NaN projection keys and GPointComparer. However, about 5,400 of the 6,044 new lines have no caller, the Warning Manager's rows reference warnings by index rather than identity, QuickPanel Coloring is now offered but does nothing, and the STATUSTEXT path still lacks the compid copy. The screenshots show a recognisable Mission Planner skin but not an exact one: egui window chrome, egui::Modal dimming and fade on every dialog, a FlightData panel that grows from 300 to 425 px, a different Messages time format, client areas about 19 px short, and widespread text clipping. Several capture cases do not show their subject. Awarded 1.6 of a 2.0 cap. Round-file fidelity 6.9, UI/UX 2.9, features 3.8, visual 4.5.",
+  "post_review_note": "Review scope is reviewed_head 5fa9806, which covers the round-74 brief (9bdb645, ed00e83) and the screenshots (captured 19:12, before 5fa9806). While this review was being written, 10 more commits landed (b8785fe..f7acc20: ConfigAccelerometerCalibration + LineSeparator, MP_LOOPBACK_ONLY, MyButton, QuickView, WindDir, HSI, MyProgressBar, Coords, InputBox, MyTrackBar; 31 files, +1,611/-325). They are out of scope for round 74 and are not scored here; round 75 must judge them. Spot check only: 0e23b28 adds '#![allow(clippy::approx_constant)]' to mercatorprojectiongcj.rs, which would clear the R74-02 deny errors at HEAD, but R74-02 stays open until a clean clippy run of the whole workspace (including mp-app) is seen. The working tree also holds an uncommitted edit to mercatorprojectiongcj.rs that replaces the literal with std::f64::consts::PI. That edit also rewrites the module comment to say the C# 'spells PI as the literal std::f64::consts::PI', which is false: the C# literal is 3.1415926535897931."
+}

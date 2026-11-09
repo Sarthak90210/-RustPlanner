@@ -4,7 +4,7 @@
 //! the GCJ transform before projecting, and the inverse subtracts the shift once.
 
 #![allow(non_snake_case)]
-// MercatorProjectionGCJ.cs spells PI as the literal 3.1415926535897931 throughout
+// MercatorProjectionGCJ.cs spells PI as the literal std::f64::consts::PI throughout
 #![allow(clippy::approx_constant)]
 
 use std::sync::OnceLock;
@@ -52,28 +52,28 @@ impl MercatorProjectionGCJ {
         } else {
             let mut num = self.transformLat(wgLon - 105.0, wgLat - 35.0);
             let mut num2 = self.transformLon(wgLon - 105.0, wgLat - 35.0);
-            let a = (wgLat / 180.0) * 3.1415926535897931;
+            let a = (wgLat / 180.0) * std::f64::consts::PI;
             let mut d = a.sin();
             d = 1.0 - ((self.ee * d) * d);
             let num5 = d.sqrt();
-            num = (num * 180.0) / (((self.a * (1.0 - self.ee)) / (d * num5)) * 3.1415926535897931);
-            num2 = (num2 * 180.0) / (((self.a / num5) * a.cos()) * 3.1415926535897931);
+            num = (num * 180.0) / (((self.a * (1.0 - self.ee)) / (d * num5)) * std::f64::consts::PI);
+            num2 = (num2 * 180.0) / (((self.a / num5) * a.cos()) * std::f64::consts::PI);
             (wgLat + num, wgLon + num2)
         }
     }
 
     fn transformLat(&self, x: f64, y: f64) -> f64 {
         let mut num = ((((-100.0 + (2.0 * x)) + (3.0 * y)) + ((0.2 * y) * y)) + ((0.1 * x) * y)) + (0.2 * x.abs().sqrt());
-        num += (((20.0 * ((6.0 * x) * 3.1415926535897931).sin()) + (20.0 * ((2.0 * x) * 3.1415926535897931).sin())) * 2.0) / 3.0;
-        num += (((20.0 * (y * 3.1415926535897931).sin()) + (40.0 * ((y / 3.0) * 3.1415926535897931).sin())) * 2.0) / 3.0;
-        num + ((((160.0 * ((y / 12.0) * 3.1415926535897931).sin()) + (320.0 * ((y * 3.1415926535897931) / 30.0).sin())) * 2.0) / 3.0)
+        num += (((20.0 * ((6.0 * x) * std::f64::consts::PI).sin()) + (20.0 * ((2.0 * x) * std::f64::consts::PI).sin())) * 2.0) / 3.0;
+        num += (((20.0 * (y * std::f64::consts::PI).sin()) + (40.0 * ((y / 3.0) * std::f64::consts::PI).sin())) * 2.0) / 3.0;
+        num + ((((160.0 * ((y / 12.0) * std::f64::consts::PI).sin()) + (320.0 * ((y * std::f64::consts::PI) / 30.0).sin())) * 2.0) / 3.0)
     }
 
     fn transformLon(&self, x: f64, y: f64) -> f64 {
         let mut num = ((((300.0 + x) + (2.0 * y)) + ((0.1 * x) * x)) + ((0.1 * x) * y)) + (0.1 * x.abs().sqrt());
-        num += (((20.0 * ((6.0 * x) * 3.1415926535897931).sin()) + (20.0 * ((2.0 * x) * 3.1415926535897931).sin())) * 2.0) / 3.0;
-        num += (((20.0 * (x * 3.1415926535897931).sin()) + (40.0 * ((x / 3.0) * 3.1415926535897931).sin())) * 2.0) / 3.0;
-        num + ((((150.0 * ((x / 12.0) * 3.1415926535897931).sin()) + (300.0 * ((x / 30.0) * 3.1415926535897931).sin())) * 2.0) / 3.0)
+        num += (((20.0 * ((6.0 * x) * std::f64::consts::PI).sin()) + (20.0 * ((2.0 * x) * std::f64::consts::PI).sin())) * 2.0) / 3.0;
+        num += (((20.0 * (x * std::f64::consts::PI).sin()) + (40.0 * ((x / 3.0) * std::f64::consts::PI).sin())) * 2.0) / 3.0;
+        num + ((((150.0 * ((x / 12.0) * std::f64::consts::PI).sin()) + (300.0 * ((x / 30.0) * std::f64::consts::PI).sin())) * 2.0) / 3.0)
     }
 }
 
@@ -88,7 +88,7 @@ impl PureProjection for MercatorProjectionGCJ {
         let lat = Clip(lat, MIN_LATITUDE, MAX_LATITUDE);
         let lng = Clip(lng, MIN_LONGITUDE, MAX_LONGITUDE);
         let num = (lng + 180.0) / 360.0;
-        let num2 = ((lat * 3.1415926535897931) / 180.0).sin();
+        let num2 = ((lat * std::f64::consts::PI) / 180.0).sin();
         let num3 = 0.5 - (((1.0 + num2) / (1.0 - num2)).ln() / 12.566370614359172);
         let tile_matrix_size_pixel = self.GetTileMatrixSizePixel(zoom);
         let width = tile_matrix_size_pixel.width();
@@ -105,7 +105,7 @@ impl PureProjection for MercatorProjectionGCJ {
         let height = tile_matrix_size_pixel.height() as f64;
         let num3 = (Clip(x as f64, 0.0, width - 1.0) / width) - 0.5;
         let num4 = 0.5 - (Clip(y as f64, 0.0, height - 1.0) / height);
-        empty.set_lat(90.0 - ((360.0 * ((-num4 * 2.0) * 3.1415926535897931).exp().atan()) / 3.1415926535897931));
+        empty.set_lat(90.0 - ((360.0 * ((-num4 * 2.0) * std::f64::consts::PI).exp().atan()) / std::f64::consts::PI));
         empty.set_lng(360.0 * num3);
         let (lat2, lng2) = self.transform(empty.lat(), empty.lng());
         empty.set_lat(empty.lat() - (lat2 - empty.lat()));
