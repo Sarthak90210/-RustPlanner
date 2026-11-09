@@ -132,37 +132,50 @@ fn set_mode(l: &Link, m: &Mav, name: &str) {
     }
 }
 
-/// UTM in the leader's zone, as FormationControl builds it with ProjNet.
-fn to_utm(zone: i32, lat: f64, lng: f64) -> (f64, f64) {
-    let (_, e, n) = mp_core::coords::to_utm_in_zone(zone, lat, lng);
-    (e, n)
-}
-
-fn leader_zone(lat: f64, lng: f64) -> i32 {
-    let zone = ((lng + 186.0) / 6.0) as i32;
-    if lat < 0.0 { -zone } else { zone }
+/// Formation / FormationControl: `ctfac.CreateFromCoordinateSystems(wgs84,
+/// WGS84_UTM((int)((lng - -186.0) / 6.0), lat >= 0))` from the leader's position, built on
+/// every call (no cache) and used for the leader and the follower alike.
+fn leader_transform(lat: f64, lng: f64) -> Result<mp_core::extlibs::projnet::coordinatesystems::projections::transversemercator::TransverseMercator, mp_core::dotnet::Exception> {
+    use mp_core::extlibs::projnet::coordinatesystems::projectedcoordinatesystem::ProjectedCoordinateSystem;
+    use mp_core::extlibs::projnet::coordinatesystems::transformations::coordinatetransformationfactory;
+    let utmzone = mp_core::dotnet::cast_i32((lng - -186.0) / 6.0);
+    let utm = ProjectedCoordinateSystem::wgs84_utm(utmzone, !(lat < 0.0));
+    coordinatetransformationfactory::create_from_wgs84_to_projected(&utm)
 }
 
 /// getOffsetFromLeader: the follower's position in the leader's frame (x forward, y right).
-pub fn offset_from_leader(leader: &Mav, mav: &Mav) -> (f64, f64, f64) {
-    let zone = leader_zone(leader.lat, leader.lng);
-    let (me, mn) = to_utm(zone, leader.lat, leader.lng);
-    let (ve, vn) = to_utm(zone, mav.lat, mav.lng);
-    let heading = (-leader.yaw).to_radians();
-    let (nx, ny) = (-(mn - vn), -(me - ve));
-    (nx * heading.cos() - ny * heading.sin(), nx * heading.sin() + ny * heading.cos(), 0.0)
+/// A ProjNet exception escapes getOffsetFromLeader (and the Update Pos click): None.
+pub fn offset_from_leader(leader: &Mav, mav: &Mav) -> Option<(f64, f64, f64)> {
+    use mp_core::extlibs::projnet::coordinatesystems::transformations::mathtransform::MathTransform;
+    let r = (|| -> Result<(f64, f64, f64), mp_core::dotnet::Exception> {
+        let trans = leader_transform(leader.lat, leader.lng)?;
+        let masterutm = trans.transform(&[leader.lng, leader.lat])?;
+        let mavutm = trans.transform(&[mav.lng, mav.lat])?;
+        let heading = -leader.yaw;
+        let d2r = mp_core::extlibs::utilities::MathHelper::DEG2RAD;
+        let (nx, ny) = (-(masterutm[1] - mavutm[1]), -(masterutm[0] - mavutm[0]));
+        Ok((nx * (heading * d2r).cos() - ny * (heading * d2r).sin(), nx * (heading * d2r).sin() + ny * (heading * d2r).cos(), 0.0))
+    })();
+    r.map_err(|e| log::error!("{e}")).ok()
 }
 
-/// Formation.SendCommand's target: the leader position plus the rotated offset.
-pub fn target_for(leader: &Mav, offset: (f64, f64, f64)) -> (f64, f64, f64) {
-    let zone = leader_zone(leader.lat, leader.lng);
-    let (mut e, mut n) = to_utm(zone, leader.lat, leader.lng);
-    let heading = (-leader.yaw).to_radians();
-    let (x, y) = (offset.0, offset.1);
-    e += x * heading.cos() - y * heading.sin();
-    n += x * heading.sin() + y * heading.cos();
-    let (lat, lng) = mp_core::coords::utm_signed_to_geo(zone, e, n);
-    (lat, lng, leader.alt + offset.2)
+/// Formation.SendCommand's target: the leader position plus the rotated offset, converted
+/// back through the same transform's inverse. On an exception the C# catch skips the rest of
+/// that follower's try block, so no command is sent: None.
+pub fn target_for(leader: &Mav, offset: (f64, f64, f64)) -> Option<(f64, f64, f64)> {
+    use mp_core::extlibs::projnet::coordinatesystems::transformations::mathtransform::MathTransform;
+    let r = (|| -> Result<(f64, f64, f64), mp_core::dotnet::Exception> {
+        let trans = leader_transform(leader.lat, leader.lng)?;
+        let mut p1 = trans.transform(&[leader.lng, leader.lat])?;
+        let heading = -leader.yaw;
+        let d2r = mp_core::extlibs::utilities::MathHelper::DEG2RAD;
+        let (x, y) = (offset.0, offset.1);
+        p1[0] += x * (heading * d2r).cos() - y * (heading * d2r).sin();
+        p1[1] += x * (heading * d2r).sin() + y * (heading * d2r).cos();
+        let point = trans.inverse()?.transform(&p1)?;
+        Ok((point[1], point[0], leader.alt + offset.2))
+    })();
+    r.map_err(|e| log::error!("{e}")).ok()
 }
 
 fn wrap_180(v: f64) -> f64 {
@@ -249,25 +262,8 @@ impl Pid {
 
 /// Quaternion.from_euler312 (Matrix3.from_euler312 then from_rotation_matrix): [q1..q4].
 pub fn quaternion_euler312(roll: f64, pitch: f64, yaw: f64) -> [f64; 4] {
-    let (cp, sp, sr, cr, sy, cy) = (pitch.cos(), pitch.sin(), roll.sin(), roll.cos(), yaw.sin(), yaw.cos());
-    let (m00, m11, m22) = (cy * cp - sy * sr * sp, cy * cr, cp * cr);
-    let (m01, m02) = (-cr * sy, sp * cy + cp * sr * sy);
-    let (m10, m12) = (cp * sy + sp * sr * cy, sy * sp - sr * cy * cp);
-    let (m20, m21) = (-sp * cr, sr);
-    let tr = m00 + m11 + m22;
-    if tr > 0.0 {
-        let s = (tr + 1.0).sqrt() * 2.0;
-        [0.25 * s, (m21 - m12) / s, (m02 - m20) / s, (m10 - m01) / s]
-    } else if m00 > m11 && m00 > m22 {
-        let s = (1.0 + m00 - m11 - m22).sqrt() * 2.0;
-        [(m21 - m12) / s, 0.25 * s, (m01 + m10) / s, (m02 + m20) / s]
-    } else if m11 > m22 {
-        let s = (1.0 + m11 - m00 - m22).sqrt() * 2.0;
-        [(m02 - m20) / s, (m01 + m10) / s, 0.25 * s, (m12 + m21) / s]
-    } else {
-        let s = (1.0 + m22 - m00 - m11).sqrt() * 2.0;
-        [(m10 - m01) / s, (m02 + m20) / s, (m12 + m21) / s, 0.25 * s]
-    }
+    let q = mp_core::extlibs::utilities::Quaternion::from_euler312(roll, pitch, yaw);
+    [q.q1, q.q2, q.q3, q.q4]
 }
 
 /// One follower command from Formation.SendCommand.
@@ -564,7 +560,8 @@ impl FormationControl {
     fn update_positions(&mut self, mavs: &[Mav]) {
         let Some(leader) = self.leader.and_then(|k| mavs.iter().find(|m| m.key == k)).cloned() else { return };
         for m in mavs.iter().filter(|m| m.key != leader.key) {
-            let o = offset_from_leader(&leader, m);
+            // the exception aborts the whole click
+            let Some(o) = offset_from_leader(&leader, m) else { return };
             if o.0.abs() < 200.0 && o.1.abs() < 200.0 {
                 self.grid.update_icon(m.key, m.key.1.to_string(), o.1 as f32, o.0 as f32, o.2 as f32, true);
                 self.set_offsets(m.key, o.1, o.0, o.2);
@@ -575,7 +572,7 @@ impl FormationControl {
     /// Formation.SendCommand for one follower.
     pub fn follower_command(&mut self, leader: &Mav, mav: &Mav) -> Option<FollowerCommand> {
         let offset = *self.offsets.get(&mav.key)?;
-        let (lat, lng, alt) = target_for(leader, offset);
+        let (lat, lng, alt) = target_for(leader, offset)?;
         self.guided.insert(mav.key, (lat, lng, alt));
         if mav.firmware != Firmware::ArduPlane {
             let yaw = ((mav.yaw - leader.yaw).abs() > 3.0).then_some(leader.yaw);
@@ -901,15 +898,15 @@ mod tests {
         for yaw in [0.0, 37.0, 90.0, 251.0] {
             let leader = mav((0, 1, 1), -35.363261, 149.165230, yaw);
             let follower = mav((0, 2, 1), -35.36310, 149.16540, 0.0);
-            let o = offset_from_leader(&leader, &follower);
+            let o = offset_from_leader(&leader, &follower).unwrap();
             // Update Pos stores (y, x) as the formation offset
-            let (lat, lng, alt) = target_for(&leader, (o.1, o.0, 5.0));
+            let (lat, lng, alt) = target_for(&leader, (o.1, o.0, 5.0)).unwrap();
             assert!((lat - follower.lat).abs() < 1e-7 && (lng - follower.lng).abs() < 1e-7, "yaw {yaw}: {lat} {lng}");
             assert_eq!(alt, 25.0);
         }
         // with north up, an offset of x metres moves the target x metres east
         let leader = mav((0, 1, 1), -35.0, 149.0, 0.0);
-        let (lat, lng, _) = target_for(&leader, (10.0, 0.0, 0.0));
+        let (lat, lng, _) = target_for(&leader, (10.0, 0.0, 0.0)).unwrap();
         assert!((distance((lat, lng), (-35.0, 149.0)) - 10.0).abs() < 0.05);
         // grid east: UTM convergence 2 degrees from the zone meridian at 35S is about 1.15 degrees
         assert!((bearing((-35.0, 149.0), (lat, lng)) - 90.0).abs() < 1.5);
@@ -945,7 +942,9 @@ mod tests {
             FollowerCommand::Attitude { q, thrust, type_mask } => {
                 assert_eq!(type_mask, 0b0011_1000);
                 assert!((0.1..=1.0).contains(&thrust));
-                assert!(((q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]) - 1.0).abs() < 1e-9);
+                // Matrix3.from_euler312 takes Utils.sinf/cosf (single precision), so the
+                // quaternion is a unit one only to float accuracy
+                assert!(((q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]) - 1.0).abs() < 1e-6);
             }
             other => panic!("{other:?}"),
         }
@@ -1026,7 +1025,7 @@ mod sim_tests {
                 .iter()
                 .filter(|m| m.key != leader)
                 .map(|m| {
-                    let (lat, lng, alt) = target_for(&lead, f.offsets[&m.key]);
+                    let (lat, lng, alt) = target_for(&lead, f.offsets[&m.key]).unwrap();
                     distance((lat, lng), (m.lat, m.lng)).hypot(alt - m.alt)
                 })
                 .collect();

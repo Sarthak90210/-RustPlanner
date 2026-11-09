@@ -1129,7 +1129,7 @@
  {
   "cs": "ExtLibs/ArduPilot/ap_product.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/ap_product.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 46,
   "note": ""
  },
@@ -1171,35 +1171,35 @@
  {
   "cs": "ExtLibs/ArduPilot/DeviceInfo.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/deviceinfo.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 22,
   "note": ""
  },
  {
   "cs": "ExtLibs/ArduPilot/Fence.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/fence.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 153,
   "note": ""
  },
  {
   "cs": "ExtLibs/ArduPilot/FenceCircle.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/fencecircle.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 20,
   "note": ""
  },
  {
   "cs": "ExtLibs/ArduPilot/FencePolygon.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/fencepolygon.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 17,
   "note": ""
  },
  {
   "cs": "ExtLibs/ArduPilot/FenceReturn.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/fencereturn.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 7,
   "note": ""
  },
@@ -1213,14 +1213,14 @@
  {
   "cs": "ExtLibs/ArduPilot/Firmwares.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/firmwares.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 19,
   "note": ""
  },
  {
   "cs": "ExtLibs/ArduPilot/Frame.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/frame.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 14,
   "note": ""
  },
@@ -1234,14 +1234,14 @@
  {
   "cs": "ExtLibs/ArduPilot/hal_ins_i2c.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/hal_ins_i2c.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 75,
   "note": ""
  },
  {
   "cs": "ExtLibs/ArduPilot/hal_ins_spi.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/hal_ins_spi.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 25,
   "note": ""
  },
@@ -1325,7 +1325,7 @@
  {
   "cs": "ExtLibs/ArduPilot/Linux.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/linux.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 50,
   "note": ""
  },
@@ -1381,7 +1381,7 @@
  {
   "cs": "ExtLibs/ArduPilot/Mavlink/Extension.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/mavlink/extension.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 49,
   "note": ""
  },
@@ -1402,7 +1402,7 @@
  {
   "cs": "ExtLibs/ArduPilot/Mavlink/MAVAuthKeys.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/mavlink/mavauthkeys.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 95,
   "note": ""
  },
@@ -1444,28 +1444,28 @@
  {
   "cs": "ExtLibs/ArduPilot/Mavlink/ProgressEventHandler.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/mavlink/progresseventhandler.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 4,
   "note": ""
  },
  {
   "cs": "ExtLibs/ArduPilot/missionpck.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/missionpck.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 94,
   "note": ""
  },
  {
   "cs": "ExtLibs/ArduPilot/motor_frame_class.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/motor_frame_class.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 23,
   "note": ""
  },
  {
   "cs": "ExtLibs/ArduPilot/motor_frame_type.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/motor_frame_type.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 25,
   "note": ""
  },
@@ -1493,14 +1493,14 @@
  {
   "cs": "ExtLibs/ArduPilot/parampck.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/parampck.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 145,
   "note": ""
  },
  {
   "cs": "ExtLibs/ArduPilot/PolygonTools.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/polygontools.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 156,
   "note": ""
  },
@@ -1521,14 +1521,14 @@
  {
   "cs": "ExtLibs/ArduPilot/PX4_CUSTOM_MAIN_MODE.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/px4_custom_main_mode.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 14,
   "note": ""
  },
  {
   "cs": "ExtLibs/ArduPilot/PX4_CUSTOM_SUB_MODE_AUTO.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/px4_custom_sub_mode_auto.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 13,
   "note": ""
  },
@@ -1542,14 +1542,14 @@
  {
   "cs": "ExtLibs/ArduPilot/RetryTimeout.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/retrytimeout.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 87,
   "note": ""
  },
  {
   "cs": "ExtLibs/ArduPilot/Serial.cs",
   "rust": "crates/mp-core/src/extlibs/ardupilot/serial.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 23,
   "note": ""
  },
@@ -2004,14 +2004,14 @@
  {
   "cs": "ExtLibs/Comms/CircularBuffer.cs",
   "rust": "crates/mp-core/src/extlibs/comms/circularbuffer.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 49,
   "note": ""
  },
  {
   "cs": "ExtLibs/Comms/CommsBase.cs",
   "rust": "crates/mp-core/src/extlibs/comms/commsbase.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 69,
   "note": ""
  },
@@ -2025,70 +2025,70 @@
  {
   "cs": "ExtLibs/Comms/CommsFile.cs",
   "rust": "crates/mp-core/src/extlibs/comms/commsfile.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 213,
   "note": ""
  },
  {
   "cs": "ExtLibs/Comms/CommsInjection.cs",
   "rust": "crates/mp-core/src/extlibs/comms/commsinjection.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 193,
   "note": ""
  },
  {
   "cs": "ExtLibs/Comms/CommsNTRIP.cs",
   "rust": "crates/mp-core/src/extlibs/comms/commsntrip.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 542,
   "note": ""
  },
  {
   "cs": "ExtLibs/Comms/CommsSerialPipe.cs",
   "rust": "crates/mp-core/src/extlibs/comms/commsserialpipe.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 446,
   "note": ""
  },
  {
   "cs": "ExtLibs/Comms/CommsSerialPort.cs",
   "rust": "crates/mp-core/src/extlibs/comms/commsserialport.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 773,
   "note": ""
  },
  {
   "cs": "ExtLibs/Comms/CommsStream.cs",
   "rust": "crates/mp-core/src/extlibs/comms/commsstream.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 51,
   "note": ""
  },
  {
   "cs": "ExtLibs/Comms/CommsTCPSerial.cs",
   "rust": "crates/mp-core/src/extlibs/comms/commstcpserial.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 400,
   "note": ""
  },
  {
   "cs": "ExtLibs/Comms/CommsUdpSerial.cs",
   "rust": "crates/mp-core/src/extlibs/comms/commsudpserial.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 357,
   "note": ""
  },
  {
   "cs": "ExtLibs/Comms/CommsUDPSerialConnect.cs",
   "rust": "crates/mp-core/src/extlibs/comms/commsudpserialconnect.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 366,
   "note": ""
  },
  {
   "cs": "ExtLibs/Comms/CommsWebSocket.cs",
   "rust": "crates/mp-core/src/extlibs/comms/commswebsocket.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 381,
   "note": ""
  },
@@ -2102,119 +2102,119 @@
  {
   "cs": "ExtLibs/Comms/SerialTest.cs",
   "rust": "crates/mp-core/src/extlibs/comms/serialtest.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 43,
   "note": ""
  },
  {
   "cs": "ExtLibs/Comms/System.IO.Ports/Handshake.cs",
   "rust": "crates/mp-core/src/extlibs/comms/system_io_ports/handshake.rs",
-  "status": "todo",
+  "status": "vendored",
   "lines": 21,
-  "note": ""
+  "note": "Mono's System.IO.Ports (BCL source); the Rust build uses the serialport crate"
  },
  {
   "cs": "ExtLibs/Comms/System.IO.Ports/ISerialStream.cs",
   "rust": "crates/mp-core/src/extlibs/comms/system_io_ports/iserialstream.rs",
-  "status": "todo",
+  "status": "vendored",
   "lines": 33,
-  "note": ""
+  "note": "Mono's System.IO.Ports (BCL source); the Rust build uses the serialport crate"
  },
  {
   "cs": "ExtLibs/Comms/System.IO.Ports/MonoTODOAttribute.cs",
   "rust": "crates/mp-core/src/extlibs/comms/system_io_ports/monotodoattribute.rs",
-  "status": "todo",
+  "status": "vendored",
   "lines": 28,
-  "note": ""
+  "note": "Mono's System.IO.Ports (BCL source); the Rust build uses the serialport crate"
  },
  {
   "cs": "ExtLibs/Comms/System.IO.Ports/Parity.cs",
   "rust": "crates/mp-core/src/extlibs/comms/system_io_ports/parity.rs",
-  "status": "todo",
+  "status": "vendored",
   "lines": 22,
-  "note": ""
+  "note": "Mono's System.IO.Ports (BCL source); the Rust build uses the serialport crate"
  },
  {
   "cs": "ExtLibs/Comms/System.IO.Ports/SerialData.cs",
   "rust": "crates/mp-core/src/extlibs/comms/system_io_ports/serialdata.rs",
-  "status": "todo",
+  "status": "vendored",
   "lines": 18,
-  "note": ""
+  "note": "Mono's System.IO.Ports (BCL source); the Rust build uses the serialport crate"
  },
  {
   "cs": "ExtLibs/Comms/System.IO.Ports/SerialError.cs",
   "rust": "crates/mp-core/src/extlibs/comms/system_io_ports/serialerror.rs",
-  "status": "todo",
+  "status": "vendored",
   "lines": 22,
-  "note": ""
+  "note": "Mono's System.IO.Ports (BCL source); the Rust build uses the serialport crate"
  },
  {
   "cs": "ExtLibs/Comms/System.IO.Ports/SerialErrorEventArgs.cs",
   "rust": "crates/mp-core/src/extlibs/comms/system_io_ports/serialerroreventargs.rs",
-  "status": "todo",
+  "status": "vendored",
   "lines": 24,
-  "note": ""
+  "note": "Mono's System.IO.Ports (BCL source); the Rust build uses the serialport crate"
  },
  {
   "cs": "ExtLibs/Comms/System.IO.Ports/SerialPinChange.cs",
   "rust": "crates/mp-core/src/extlibs/comms/system_io_ports/serialpinchange.rs",
-  "status": "todo",
+  "status": "vendored",
   "lines": 22,
-  "note": ""
+  "note": "Mono's System.IO.Ports (BCL source); the Rust build uses the serialport crate"
  },
  {
   "cs": "ExtLibs/Comms/System.IO.Ports/SerialPinChangedEventArgs.cs",
   "rust": "crates/mp-core/src/extlibs/comms/system_io_ports/serialpinchangedeventargs.rs",
-  "status": "todo",
+  "status": "vendored",
   "lines": 23,
-  "note": ""
+  "note": "Mono's System.IO.Ports (BCL source); the Rust build uses the serialport crate"
  },
  {
   "cs": "ExtLibs/Comms/System.IO.Ports/SerialPort.cs",
   "rust": "crates/mp-core/src/extlibs/comms/system_io_ports/serialport.rs",
-  "status": "todo",
+  "status": "vendored",
   "lines": 848,
-  "note": ""
+  "note": "Mono's System.IO.Ports (BCL source); the Rust build uses the serialport crate"
  },
  {
   "cs": "ExtLibs/Comms/System.IO.Ports/SerialPortStream.cs",
   "rust": "crates/mp-core/src/extlibs/comms/system_io_ports/serialportstream.rs",
-  "status": "todo",
+  "status": "vendored",
   "lines": 335,
-  "note": ""
+  "note": "Mono's System.IO.Ports (BCL source); the Rust build uses the serialport crate"
  },
  {
   "cs": "ExtLibs/Comms/System.IO.Ports/SerialReceivedEventArgs.cs",
   "rust": "crates/mp-core/src/extlibs/comms/system_io_ports/serialreceivedeventargs.rs",
-  "status": "todo",
+  "status": "vendored",
   "lines": 22,
-  "note": ""
+  "note": "Mono's System.IO.Ports (BCL source); the Rust build uses the serialport crate"
  },
  {
   "cs": "ExtLibs/Comms/System.IO.Ports/SerialSignal.cs",
   "rust": "crates/mp-core/src/extlibs/comms/system_io_ports/serialsignal.rs",
-  "status": "todo",
+  "status": "vendored",
   "lines": 21,
-  "note": ""
+  "note": "Mono's System.IO.Ports (BCL source); the Rust build uses the serialport crate"
  },
  {
   "cs": "ExtLibs/Comms/System.IO.Ports/StopBits.cs",
   "rust": "crates/mp-core/src/extlibs/comms/system_io_ports/stopbits.rs",
-  "status": "todo",
+  "status": "vendored",
   "lines": 20,
-  "note": ""
+  "note": "Mono's System.IO.Ports (BCL source); the Rust build uses the serialport crate"
  },
  {
   "cs": "ExtLibs/Comms/System.IO.Ports/WinSerialStream.cs",
   "rust": "crates/mp-core/src/extlibs/comms/system_io_ports/winserialstream.rs",
-  "status": "todo",
+  "status": "vendored",
   "lines": 579,
-  "note": ""
+  "note": "Mono's System.IO.Ports (BCL source); the Rust build uses the serialport crate"
  },
  {
   "cs": "ExtLibs/Comms/UDPStream.cs",
   "rust": "crates/mp-core/src/extlibs/comms/udpstream.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 49,
   "note": ""
  },
@@ -6414,240 +6414,240 @@
  {
   "cs": "ExtLibs/GeoUtility/ErrorProvider/ErrorProvider.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/errorprovider/errorprovider.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 122,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/GeoSystem/Base/BaseSystem.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/geosystem/base/basesystem.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 45,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/GeoSystem/Base/Geocentric.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/geosystem/base/geocentric.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 282,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/GeoSystem/GaussKrueger.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/geosystem/gausskrueger.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 533,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/GeoSystem/Geographic.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/geosystem/geographic.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 551,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/GeoSystem/Helper/GeoDatum.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/geosystem/helper/geodatum.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 58,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/GeoSystem/Helper/GeoPoint.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/geosystem/helper/geopoint.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 91,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/GeoSystem/Helper/GeoRect.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/geosystem/helper/georect.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 119,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/GeoSystem/Helper/Sexagesimal.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/geosystem/helper/sexagesimal.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 124,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/GeoSystem/MapService/Cache.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/geosystem/mapservice/cache.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 346,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/GeoSystem/MapService/Images.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/geosystem/mapservice/images.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 564,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/GeoSystem/MapService/Info.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/geosystem/mapservice/info.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 349,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/GeoSystem/MapService.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/geosystem/mapservice.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 1004,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/GeoSystem/MGRS.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/geosystem/mgrs.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 624,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/GeoSystem/UTM.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/geosystem/utm.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 544,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/GeoUtility.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/geoutility.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 162,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/Localizer/Localizer.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/localizer/localizer.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 69,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/Properties/AssemblyInfo.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/properties/assemblyinfo.rs",
-  "status": "vendored",
+  "status": "n/a",
   "lines": 65,
-  "note": "utm / proj4rs"
+  "note": "build/packaging glue"
  },
  {
   "cs": "ExtLibs/GeoUtility/Properties/Resources.Designer.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/properties/resources_designer.rs",
-  "status": "vendored",
+  "status": "n/a",
   "lines": 503,
-  "note": "utm / proj4rs"
+  "note": "build/packaging glue; Rust counterpart present"
  },
  {
   "cs": "ExtLibs/GeoUtility/Transformation/Conversion.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/transformation/conversion.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 113,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/Transformation/Definition.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/transformation/definition.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 118,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/Transformation/GKPOD.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/transformation/gkpod.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 115,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/Transformation/MapDimension.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/transformation/mapdimension.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 103,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/Transformation/MapInternal.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/transformation/mapinternal.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 248,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/Transformation/MapMove.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/transformation/mapmove.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 240,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/Transformation/MGRUTM.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/transformation/mgrutm.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 111,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/Transformation/PODWGS.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/transformation/podwgs.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 83,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/Transformation/UTMMGR.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/transformation/utmmgr.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 108,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/Transformation/UTMWGS.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/transformation/utmwgs.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 116,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/Transformation/WGSGK.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/transformation/wgsgk.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 104,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/Transformation/WGSIMAP.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/transformation/wgsimap.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 96,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/Transformation/WGSPixel.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/transformation/wgspixel.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 70,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/Transformation/WGSPOD.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/transformation/wgspod.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 88,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GeoUtility/Transformation/WGSUTM.cs",
   "rust": "crates/mp-core/src/extlibs/geoutility/transformation/wgsutm.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 138,
-  "note": "utm / proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GLControl/Agl.cs",
@@ -6750,1003 +6750,1003 @@
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/AccessMode.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/accessmode.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 24,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/Delegates.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/delegates.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 20,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/DirectionsProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/directionsprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 47,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/Extensions.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/extensions.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 92,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/GDirections.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/gdirections.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 121,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/GeocodingProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/geocodingprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 25,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/GMaps.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/gmaps.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 874,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/GPoint.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/gpoint.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 160,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/GpsLog.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/gpslog.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 44,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/gpx.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/gpx.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 1442,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/GRect.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/grect.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 324,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/GSize.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/gsize.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 121,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/Interface.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/interface.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 72,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/LanguageType.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/languagetype.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 179,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/MapRoute.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/maproute.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 160,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/MapType.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/maptype.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 127,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/MouseWheelZoomType.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/mousewheelzoomtype.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 25,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/Placemark.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/placemark.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 63,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/PointLatLng.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/pointlatlng.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 124,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/PureImageCache.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/pureimagecache.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 48,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/PureProjection.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/pureprojection.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 522,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/RectLatLng.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/rectlatlng.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 319,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/RenderMode.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/rendermode.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 19,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/RoutingProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/routingprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 19,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/Singleton.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/singleton.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 60,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/SizeLatLng.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/sizelatlng.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 138,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET/StatusCodes.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/statuscodes.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 125,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.CacheProviders/MemoryCache.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_cacheproviders/memorycache.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 168,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.CacheProviders/MSSQLCEPureImageCache.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_cacheproviders/mssqlcepureimagecache.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 255,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.CacheProviders/MSSQLPureImageCache.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_cacheproviders/mssqlpureimagecache.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 255,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.CacheProviders/MySQLPureImageCache.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_cacheproviders/mysqlpureimagecache.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 260,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.CacheProviders/PostgreSQLPureImageCache.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_cacheproviders/postgresqlpureimagecache.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 275,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.CacheProviders/SQLitePureImageCache.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_cacheproviders/sqlitepureimagecache.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 786,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/Cache.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/cache.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 267,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/CacheQueueItem.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/cachequeueitem.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 40,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/Core.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/core.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 1329,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/DrawTile.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/drawtile.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 37,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/FastReaderWriterLock.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/fastreaderwriterlock.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 194,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/FastResourceLock.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/fastresourcelock.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 976,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/KiberTileCache.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/kibertilecache.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 91,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/LoadTask.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/loadtask.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 47,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/PureImage.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/pureimage.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 52,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/RawTile.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/rawtile.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 42,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/SocksProxySocket/AuthMethod.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/socksproxysocket/authmethod.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 113,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/SocksProxySocket/AuthNone.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/socksproxysocket/authnone.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 60,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/SocksProxySocket/AuthUserPass.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/socksproxysocket/authuserpass.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 157,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/SocksProxySocket/IAsyncProxyResult.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/socksproxysocket/iasyncproxyresult.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 96,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/SocksProxySocket/ProxyException.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/socksproxysocket/proxyexception.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 82,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/SocksProxySocket/ProxySocket.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/socksproxysocket/proxysocket.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 467,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/SocksProxySocket/Socks4Handler.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/socksproxysocket/socks4handler.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 234,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/SocksProxySocket/Socks5Handler.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/socksproxysocket/socks5handler.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 420,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/SocksProxySocket/SocksHandler.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/socksproxysocket/sockshandler.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 192,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/SocksProxySocket/SocksHttpWebRequest.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/socksproxysocket/sockshttpwebrequest.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 413,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/Stuff.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/stuff.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 214,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/Tile.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/tile.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 147,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/TileHttpHost.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/tilehttphost.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 157,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Internals/TileMatrix.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_internals/tilematrix.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 246,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/AMap/AMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/amap/amapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 76,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/AMap/AMapSateliteProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/amap/amapsateliteprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 43,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/ArcGIS/ArcGIS_DarbAE_Q2_2011_NAVTQ_Eng_V5_MapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/arcgis/arcgis_darbae_q2_2011_navtq_eng_v5_mapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 86,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/ArcGIS/ArcGIS_Imagery_World_2D_MapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/arcgis/arcgis_imagery_world_2d_mapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 60,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/ArcGIS/ArcGIS_ShadedRelief_World_2D_MapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/arcgis/arcgis_shadedrelief_world_2d_mapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 60,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/ArcGIS/ArcGIS_StreetMap_World_2D_MapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/arcgis/arcgis_streetmap_world_2d_mapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 166,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/ArcGIS/ArcGIS_Topo_US_2D_MapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/arcgis/arcgis_topo_us_2d_mapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 60,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/ArcGIS/ArcGIS_World_Physical_MapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/arcgis/arcgis_world_physical_mapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 60,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/ArcGIS/ArcGIS_World_Shaded_Relief_MapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/arcgis/arcgis_world_shaded_relief_mapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 60,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/ArcGIS/ArcGIS_World_Street_MapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/arcgis/arcgis_world_street_mapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 60,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/ArcGIS/ArcGIS_World_Terrain_Base_MapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/arcgis/arcgis_world_terrain_base_mapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 60,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/ArcGIS/ArcGIS_World_Topo_MapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/arcgis/arcgis_world_topo_mapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 60,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Bing/BingHybridMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/bing/binghybridmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 61,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Bing/BingMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/bing/bingmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 630,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Bing/BingSatelliteMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/bing/bingsatellitemapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 61,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Czech/CzechGeographicMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/czech/czechgeographicmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 51,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Czech/CzechHistoryMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/czech/czechhistorymapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 67,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Czech/CzechHybridMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/czech/czechhybridmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 67,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Czech/CzechMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/czech/czechmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 111,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Czech/CzechSatelliteMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/czech/czechsatellitemapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 52,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Czech/CzechTuristMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/czech/czechturistmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 51,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Czech/CzechTuristWinterMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/czech/czechturistwintermapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 51,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Etc/CloudMadeMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/etc/cloudmademapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 561,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Etc/LatviaMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/etc/latviamapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 117,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Etc/MapBenderWMSProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/etc/mapbenderwmsprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 92,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Etc/SpainMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/etc/spainmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 105,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Etc/TurkeyMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/etc/turkeymapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 99,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Etc/WikiMapiaMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/etc/wikimapiamapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 127,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/GMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/gmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 576,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Google/China/GoogleChinaHybridMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/google/china/googlechinahybridmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 90,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Google/China/GoogleChinaMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/google/china/googlechinamapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 77,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Google/China/GoogleChinaSatelliteMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/google/china/googlechinasatellitemapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 76,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Google/China/GoogleChinaTerrainMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/google/china/googlechinaterrainmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 77,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Google/GoogleHybridMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/google/googlehybridmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 79,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Google/GoogleMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/google/googlemapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 2141,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Google/GoogleSatelliteMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/google/googlesatellitemapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 66,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Google/GoogleTerrainMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/google/googleterrainmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 66,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Google/Korea/GoogleKoreaHybridMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/google/korea/googlekoreahybridmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 79,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Google/Korea/GoogleKoreaMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/google/korea/googlekoreamapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 67,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Google/Korea/GoogleKoreaSatelliteMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/google/korea/googlekoreasatellitemapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 66,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Lithuania/Lithuania3dMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/lithuania/lithuania3dmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 65,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Lithuania/LithuaniaHybridMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/lithuania/lithuaniahybridmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 75,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Lithuania/LithuaniaHybridOldMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/lithuania/lithuaniahybridoldmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 57,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Lithuania/LithuaniaMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/lithuania/lithuaniamapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 123,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Lithuania/LithuaniaOrtoFotoMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/lithuania/lithuaniaortofotomapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 66,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Lithuania/LithuaniaOrtoFotoOldMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/lithuania/lithuaniaortofotooldmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 58,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Lithuania/LithuaniaTOP50.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/lithuania/lithuaniatop50.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 67,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/NearMap/NearHybridMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/nearmap/nearhybridmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 74,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/NearMap/NearMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/nearmap/nearmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 170,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/NearMap/NearSatelliteMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/nearmap/nearsatellitemapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 63,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenCycleLandscapeMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/openstreetmap/opencyclelandscapemapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 74,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenCycleMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/openstreetmap/opencyclemapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 73,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenCycleTransportMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/openstreetmap/opencycletransportmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 73,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenSeaMapHybridProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/openstreetmap/openseamaphybridprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 72,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreet4UMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/openstreetmap/openstreet4umapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 79,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreetMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/openstreetmap/openstreetmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 549,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreetMapQuestHybridProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/openstreetmap/openstreetmapquesthybridprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 72,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreetMapQuestProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/openstreetmap/openstreetmapquestprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 72,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreetMapQuestSatteliteProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/openstreetmap/openstreetmapquestsatteliteprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 72,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreetMapSurferProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/openstreetmap/openstreetmapsurferprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 78,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreetMapSurferTerrainProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/openstreetmap/openstreetmapsurferterrainprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 74,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreetOsmProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/openstreetmap/openstreetosmprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 80,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Ovi/OviHybridMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/ovi/ovihybridmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 60,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Ovi/OviMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/ovi/ovimapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 117,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Ovi/OviSatelliteMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/ovi/ovisatellitemapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 60,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Ovi/OviTerrainMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/ovi/oviterrainmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 60,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Yandex/YandexHybridMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/yandex/yandexhybridmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 72,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Yandex/YandexMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/yandex/yandexmapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 115,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/Yandex/YandexSatelliteMapProvider.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_mapproviders/yandex/yandexsatellitemapprovider.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 61,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.ObjectModel/ObservableCollection.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_objectmodel/observablecollection.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 544,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.ObjectModel/ObservableCollectionThreadSafe.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_objectmodel/observablecollectionthreadsafe.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 47,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Projections/EPSG3995Projection.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_projections/epsg3995projection.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 179,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Projections/EPSG5936Projection.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_projections/epsg5936projection.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 182,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Projections/MapsLTProjection.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_projections/mapsltprojection.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 748,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Projections/MapsLVProjection.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_projections/mapslvprojection.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 727,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Projections/MapyCZProjection.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_projections/mapyczprojection.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 259,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Projections/MercatorProjection.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_projections/mercatorprojection.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 101,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Projections/MercatorProjectionGCJ.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_projections/mercatorprojectiongcj.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 148,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Projections/MercatorProjectionYandex.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_projections/mercatorprojectionyandex.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 113,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Projections/NoProjection.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_projections/noprojection.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 64,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Projections/PlateCarreeProjection.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_projections/platecarreeprojection.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 98,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Projections/PlateCarreeProjectionDarbAe.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_projections/platecarreeprojectiondarbae.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 230,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Projections/PlateCarreeProjectionPergo.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_projections/platecarreeprojectionpergo.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 100,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Projections/PolarStereographicNorthProjection.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_projections/polarstereographicnorthprojection.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 182,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/GMap.NET.Projections/PolarStereographicSouthProjection.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net_projections/polarstereographicsouthprojection.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 192,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Core/Resources/Strings.Designer.cs",
   "rust": "crates/mp-core/src/extlibs/gmap_net_core/resources/strings_designer.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 180,
-  "note": "walkers-style tile engine in mp-app/src/map.rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/ColorMatrixs.cs",
@@ -8528,30 +8528,30 @@
  {
   "cs": "ExtLibs/Interfaces/IActivate.cs",
   "rust": "crates/mp-core/src/extlibs/interfaces/iactivate.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 27,
-  "note": "eframe"
+  "note": ""
  },
  {
   "cs": "ExtLibs/Interfaces/ICommsSerial.cs",
   "rust": "crates/mp-core/src/extlibs/interfaces/icommsserial.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 75,
-  "note": "eframe"
+  "note": ""
  },
  {
   "cs": "ExtLibs/Interfaces/IGraphics.cs",
   "rust": "crates/mp-core/src/extlibs/interfaces/igraphics.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 367,
-  "note": "eframe"
+  "note": ""
  },
  {
   "cs": "ExtLibs/Interfaces/ServiceLocator.cs",
   "rust": "crates/mp-core/src/extlibs/interfaces/servicelocator.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 35,
-  "note": "eframe"
+  "note": ""
  },
  {
   "cs": "ExtLibs/KMLib/Abstract/AColorStyle.cs",
@@ -9507,8 +9507,8 @@
  },
  {
   "cs": "ExtLibs/Maps/WPOverlay.cs",
-  "rust": "crates/mp-app/src/extlibs/maps/wpoverlay.rs",
-  "status": "todo",
+  "rust": "crates/mp-core/src/extlibs/maps/wpoverlay.rs",
+  "status": "ported",
   "lines": 611,
   "note": ""
  },
@@ -13533,324 +13533,324 @@
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/AngularUnit.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/angularunit.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 157,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/CoordinateSystem.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/coordinatesystem.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 116,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/CoordinateSystemFactory.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/coordinatesystemfactory.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 321,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Datum.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/datum.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 87,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Ellipsoid.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/ellipsoid.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 262,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/FittedCoordinateSystem.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/fittedcoordinatesystem.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 165,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/GeocentricCoordinateSystem.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/geocentriccoordinatesystem.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 174,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/GeographicCoordinateSystem.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/geographiccoordinatesystem.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 213,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/GeographicTransform.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/geographictransform.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 143,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/HorizontalCoordinateSystem.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/horizontalcoordinatesystem.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 69,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/HorizontalDatum.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/horizontaldatum.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 223,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Info.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/info.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 189,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/LinearUnit.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/linearunit.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 151,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/ParameterInfo.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/parameterinfo.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 88,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/PrimeMeridian.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/primemeridian.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 221,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/ProjectedCoordinateSystem.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/projectedcoordinatesystem.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 255,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Projection.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/projection.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 166,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Projections/AlbersProjection.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/projections/albersprojection.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 250,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Projections/CassiniSoldnerProjection.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/projections/cassinisoldnerprojection.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 114,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Projections/HotineObliqueMercatorProjection.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/projections/hotineobliquemercatorprojection.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 225,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Projections/KrovakProjection.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/projections/krovakprojection.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 270,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Projections/LambertConformalConic.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/projections/lambertconformalconic.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 263,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Projections/MapProjection.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/projections/mapprojection.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 875,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Projections/Mercator.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/projections/mercator.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 229,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Projections/ObliqueStereographicProjection.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/projections/obliquestereographicprojection.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 223,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Projections/PolyconicProjection.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/projections/polyconicprojection.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 164,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Projections/ProjectionParameterSet.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/projections/projectionparameterset.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 164,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Projections/ProjectionsRegistry.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/projections/projectionsregistry.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 126,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Projections/TransverseMercator.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/projections/transversemercator.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 354,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Transformations/AffineTransform.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/transformations/affinetransform.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 453,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Transformations/ConcatenatedTransform.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/transformations/concatenatedtransform.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 175,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Transformations/CoordinateTransformation.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/transformations/coordinatetransformation.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 152,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Transformations/CoordinateTransformationFactory.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/transformations/coordinatetransformationfactory.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 432,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Transformations/DatumTransform.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/transformations/datumtransform.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 176,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Transformations/GeocentricTransform.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/transformations/geocentrictransform.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 298,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Transformations/GeographicTransform.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/transformations/geographictransform.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 168,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Transformations/MathTransform.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/transformations/mathtransform.rs",
-  "status": "vendored",
+  "status": "ported",
   "lines": 258,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Transformations/PrimeMeridianTransform.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/transformations/primemeridiantransform.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 130,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/CoordinateSystems/Unit.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/coordinatesystems/unit.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 113,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/IO/CoordinateSystems/CoordinateSystemWktReader.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/io/coordinatesystems/coordinatesystemwktreader.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 555,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/IO/CoordinateSystems/MathTransformWktReader.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/io/coordinatesystems/mathtransformwktreader.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 257,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/IO/CoordinateSystems/StreamTokenizer.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/io/coordinatesystems/streamtokenizer.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 273,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/IO/CoordinateSystems/TokenType.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/io/coordinatesystems/tokentype.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 76,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/IO/CoordinateSystems/WKTStreamTokenizer.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/io/coordinatesystems/wktstreamtokenizer.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 116,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/ProjNetCoordinateSystemServices.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/projnetcoordinatesystemservices.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 307,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/ProjNet/TypeExtensions.cs",
   "rust": "crates/mp-core/src/extlibs/projnet/typeextensions.rs",
-  "status": "vendored",
+  "status": "todo",
   "lines": 23,
-  "note": "proj4rs"
+  "note": ""
  },
  {
   "cs": "ExtLibs/px4uploader/FastJSON/dynamic.cs",
@@ -15556,21 +15556,21 @@
  {
   "cs": "ExtLibs/SimpleGrid/SimpleGridPlugin.cs",
   "rust": "crates/mp-app/src/extlibs/simplegrid/simplegridplugin.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 84,
   "note": ""
  },
  {
   "cs": "ExtLibs/SimpleGrid/SimpleGridUI.cs",
   "rust": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 475,
   "note": ""
  },
  {
   "cs": "ExtLibs/SimpleGrid/SimpleGridUI.Designer.cs",
   "rust": "crates/mp-app/src/extlibs/simplegrid/simplegridui_designer.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 483,
   "note": ""
  },
@@ -17341,21 +17341,21 @@
  {
   "cs": "ExtLibs/Utilities/altitudes.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/altitudes.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 8,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/AP_GeodesicGrid.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/ap_geodesicgrid.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 607,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/AP_HAL.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/ap_hal.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 14,
   "note": ""
  },
@@ -17369,21 +17369,21 @@
  {
   "cs": "ExtLibs/Utilities/Attributes/DisplayFieldNameAttribute.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/attributes/displayfieldnameattribute.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 28,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/Attributes/DisplayTextAttribute.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/attributes/displaytextattribute.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 53,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/Attributes/PrivateAttribute.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/attributes/privateattribute.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 35,
   "note": ""
  },
@@ -17404,7 +17404,7 @@
  {
   "cs": "ExtLibs/Utilities/BinaryLog.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/binarylog.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 603,
   "note": ""
  },
@@ -17418,14 +17418,14 @@
  {
   "cs": "ExtLibs/Utilities/CircularBuffer.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/circularbuffer.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 309,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/CircularStream.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/circularstream.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 98,
   "note": ""
  },
@@ -17439,7 +17439,7 @@
  {
   "cs": "ExtLibs/Utilities/clipper.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/clipper.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 4930,
   "note": ""
  },
@@ -17453,7 +17453,7 @@
  {
   "cs": "ExtLibs/Utilities/CollectionExtensions.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/collectionextensions.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 47,
   "note": ""
  },
@@ -17467,7 +17467,7 @@
  {
   "cs": "ExtLibs/Utilities/CompassCalibrator.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/compasscalibrator.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 905,
   "note": ""
  },
@@ -17530,14 +17530,14 @@
  {
   "cs": "ExtLibs/Utilities/Crypto.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/crypto.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 186,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/CustomMessageBox.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/custommessagebox.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 104,
   "note": ""
  },
@@ -17565,14 +17565,14 @@
  {
   "cs": "ExtLibs/Utilities/DFLog.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/dflog.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 755,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/DFLogBuffer.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/dflogbuffer.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 902,
   "note": ""
  },
@@ -17600,14 +17600,14 @@
  {
   "cs": "ExtLibs/Utilities/DisplayView.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/displayview.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 457,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/distances.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/distances.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 8,
   "note": ""
  },
@@ -17635,14 +17635,14 @@
  {
   "cs": "ExtLibs/Utilities/EnumTranslator.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/enumtranslator.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 140,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/ExpireType.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/expiretype.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 73,
   "note": ""
  },
@@ -17656,7 +17656,7 @@
  {
   "cs": "ExtLibs/Utilities/fft.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/fft.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 294,
   "note": ""
  },
@@ -17670,7 +17670,7 @@
  {
   "cs": "ExtLibs/Utilities/fitCurve.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/fitcurve.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 148,
   "note": ""
  },
@@ -17705,7 +17705,7 @@
  {
   "cs": "ExtLibs/Utilities/Grid.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/grid.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 1014,
   "note": ""
  },
@@ -17719,35 +17719,35 @@
  {
   "cs": "ExtLibs/Utilities/Half/Half.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/half/half.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 888,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/Half/HalfHelper.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/half/halfhelper.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 223,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/hires.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/hires.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 51,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/IBrowserOpen.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/ibrowseropen.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 9,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/ICorrections.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/icorrections.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 24,
   "note": ""
  },
@@ -17768,21 +17768,21 @@
  {
   "cs": "ExtLibs/Utilities/IProgressReporterDialogue.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/iprogressreporterdialogue.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 53,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/ISpeech.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/ispeech.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 10,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/Kalman3D.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/kalman3d.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 277,
   "note": ""
  },
@@ -17796,35 +17796,35 @@
  {
   "cs": "ExtLibs/Utilities/L10NU.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/l10nu.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 65,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/LineOffset.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/lineoffset.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 51,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/ListExtension.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/listextension.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 30,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/LocationProjection.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/locationprojection.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 19,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/locationwp.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/locationwp.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 212,
   "note": ""
  },
@@ -17852,14 +17852,14 @@
  {
   "cs": "ExtLibs/Utilities/LTM.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/ltm.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 364,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/Math.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/math.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 47,
   "note": ""
  },
@@ -17873,14 +17873,14 @@
  {
   "cs": "ExtLibs/Utilities/Matrix.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/matrix.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 507,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/Matrix3.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/matrix3.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 299,
   "note": ""
  },
@@ -17894,14 +17894,14 @@
  {
   "cs": "ExtLibs/Utilities/minifloat.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/minifloat.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 252,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/MissionFile.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/missionfile.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 287,
   "note": ""
  },
@@ -17936,7 +17936,7 @@
  {
   "cs": "ExtLibs/Utilities/nmea.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/nmea.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 124,
   "note": ""
  },
@@ -17950,7 +17950,7 @@
  {
   "cs": "ExtLibs/Utilities/ParameterMetaDataConstants.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/parametermetadataconstants.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 39,
   "note": ""
  },
@@ -17992,7 +17992,7 @@
  {
   "cs": "ExtLibs/Utilities/ParamFile.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/paramfile.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 110,
   "note": ""
  },
@@ -18006,7 +18006,7 @@
  {
   "cs": "ExtLibs/Utilities/Pelco.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/pelco.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 116,
   "note": ""
  },
@@ -18020,14 +18020,14 @@
  {
   "cs": "ExtLibs/Utilities/PointLatLngAlt.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/pointlatlngalt.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 476,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/PollDelay.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/polldelay.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 32,
   "note": ""
  },
@@ -18048,56 +18048,56 @@
  {
   "cs": "ExtLibs/Utilities/Quaternion.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/quaternion.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 419,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/Rational.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/rational.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 46,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/Rect.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/rect.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 37,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/RLE.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/rle.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 297,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/rtcm3.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/rtcm3.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 2118,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/sbp.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/sbp.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 201,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/Septentrio.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/septentrio.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 235,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/Settings.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/settings.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 561,
   "note": ""
  },
@@ -18118,7 +18118,7 @@
  {
   "cs": "ExtLibs/Utilities/SingleLocation.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/singlelocation.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 102,
   "note": ""
  },
@@ -18132,14 +18132,14 @@
  {
   "cs": "ExtLibs/Utilities/speeds.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/speeds.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 11,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/Spline2.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/spline2.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 409,
   "note": ""
  },
@@ -18188,7 +18188,7 @@
  {
   "cs": "ExtLibs/Utilities/ubx_m8p.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/ubx_m8p.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 642,
   "note": ""
  },
@@ -18202,49 +18202,49 @@
  {
   "cs": "ExtLibs/Utilities/Unicore.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/unicore.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 53,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/Utils.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/utils.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 701,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/utmpos.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/utmpos.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 145,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/Vario.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/vario.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 80,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/Vector3.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/vector3.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 547,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/VehicleLocation.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/vehiclelocation.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 11,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/VersionDetection.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/versiondetection.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 60,
   "note": ""
  },
@@ -18258,14 +18258,14 @@
  {
   "cs": "ExtLibs/Utilities/Warnings/CustomWarning.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/warnings/customwarning.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 251,
   "note": ""
  },
  {
   "cs": "ExtLibs/Utilities/Warnings/WarningEngine.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/warnings/warningengine.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 152,
   "note": ""
  },
@@ -18279,7 +18279,7 @@
  {
   "cs": "ExtLibs/Utilities/YPRtoOPK.cs",
   "rust": "crates/mp-core/src/extlibs/utilities/yprtoopk.rs",
-  "status": "todo",
+  "status": "ported",
   "lines": 47,
   "note": ""
  },

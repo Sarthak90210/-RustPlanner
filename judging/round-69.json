@@ -1,0 +1,345 @@
+{
+  "round": 69,
+  "date": "2026-11-08",
+  "reviewed_head": "0eddbe4 + uncommitted",
+  "commands_run": [],
+  "commands_note": "No commands were allowed this round (no shell, cargo, git, python or scripts). Everything below comes from reading files with Read/Grep/Glob. Nothing was compiled, so the judge also acted as the compiler.",
+  "manifest_summary": {
+    "manifest_status": "port/MANIFEST.md is still stale. clipper.cs (line 2563), EnumTranslator.cs (2591) and LTM.cs (2622) are all marked todo although each now has a port at its manifest path. The older stale entries (VersionDetection.cs, APFirmware.cs, MAVState.cs, WPOverlay.cs, fft.cs, Pelco.cs, AP_GeodesicGrid.cs, CircularStream.cs, ParamFile.cs, RLE.cs, Spline2.cs, ubx_m8p.cs) are unchanged. Grid.cs (1,014 lines, the other ClipperOffset caller) is todo and has no grid.rs.",
+    "new_owned_files_ported": {
+      "ExtLibs/Utilities/clipper.cs": 4930
+    },
+    "new_owned_lines_ported": 4930,
+    "owned_files_ported_corrected": 136,
+    "ported_lines_corrected": 32736,
+    "ported_lines_derivation": "27,806 (round 68) + 4,930 (clipper.cs -> extlibs/utilities/clipper.rs) = 32,736. Clipper 6.4.2 is ported whole with use_lines and 64-bit cInt. Every algorithmic method matches clipper.cs statement by statement: AddPath/ProcessBound/FindNextLocMin, the LocalMinima/Scanbeam/Maxima lists, InsertLocalMinimaIntoAEL, SetWindingCount, IsContributing, IntersectEdges with the open-path branch, ProcessHorizontal, BuildIntersectList/FixupIntersectionOrder, ProcessEdgesAtTopOfScanbeam, DoMaxima, AppendPolygon, JoinPoints/JoinHorz, JoinCommonEdges, the FixupFirstLefts, DoSimplePolygons, FixupOutPolygon/Polyline, BuildResult/BuildResult2, CleanPolygon, Minkowski, and ClipperOffset (AddPath, FixOrientations, DoOffset, OffsetPoint, DoSquare/DoMiter/DoRound, both Executes with the outer-rectangle removal). The gaps (R69-03..R69-06) are at the edges: the public API, aliasing, the sort's backing length, and exception types. They are not in the algorithm.",
+    "owned_lines_total_corrected": 479014,
+    "ported_fraction_corrected": 0.068,
+    "conservatism_note": "Still an upper bound, and this round it is generous: clipper.cs has two C# callers, GCSViews/FlightPlanner.cs:3683-3702 (offset polygon) and ExtLibs/Utilities/Grid.cs:248-264 (survey lanes), and the port is wired to neither. The FlightPlanner caller has a Rust counterpart, menu.rs:94-131 offset_polygon. That function is a hand-rolled miter offset and still does not call ClipperOffset (R69-02). The lines are counted because the file is ported whole. The missing wiring is penalised in fidelity and features.",
+    "wiring": "New wiring this round: none for Clipper. grep 'clipper::|ClipperOffset|Clipper::' over crates/ matches only clipper.rs itself and a comment in menu.rs:93/121. Round-68 rewiring: enumtranslator::GetDisplayText now looks the field up by EnumFieldInfo.name, which mission.rs:79 fills from AltMode::label(). flight_plan.rs:1701-1710 (processToScreen) falls back to list[0] = Relative for a frame outside EnumToList. flight_plan.rs:991-996 (CMB_altmode) normalises an out-of-list alt_frame to list[0]. Still unwired: everything listed in round 68 (STATUSTEXT branches, title bar, GetMetaDataVersioned, APFirmware manifest, WPOverlay markers/polygons, fence/rally overlays, FlightData map, MAVLinkInterface/MAVState/CurrentState, every GCSView), plus ClipperOffset in FlightPlanner's offset-polygon menu and Grid.cs."
+  },
+  "scores": {
+    "overall": 1.4,
+    "overall_cap": 1.7,
+    "overall_cap_derivation": "ceil1(32,736 / 479,014 * 10) = ceil1(0.683) = 0.7, plus at most +1.0 for the pre-manifest app = 1.7. Awarded 0.6 for ported lines + 0.8 for the pre-manifest app = 1.4. The 4,930 clipper lines move ceil1 from 0.6 to 0.7. There is no definite compile error, and the round-68 test failure is fixed. The 0.1 held back inside the cap reflects that the new port is unwired at both C# call sites. One of those sites, FlightPlanner's offset polygon, still runs a non-Clipper approximation.",
+    "round_files_fidelity": 6.3,
+    "round_files_fidelity_rationale": "Up 0.2. Gained: clipper.rs is the most faithful large port so far. I walked every method against clipper.cs. The arena translation keeps reference identity everywhere it matters: OutRec index == m_PolyOuts index because both are pushed and cleared together, GetOutRec compares indices the way C# compares references, and JoinPoints writes through m_Joins[j] so the OutPt1/OutPt2 updates persist as they do on the C# Join object. JoinCommonEdges re-reads the join after JoinPoints. AppendPolygon, DoSimplePolygons and FixupFirstLefts1/2/3 read live fields wherever C# does. Int128Mul, the explicit double operator and neg match bit for bit with wrapping u64 arithmetic, including C#'s overflow in c. Round() and IntPoint(double,double) use cast_i64 (cvttsd2si semantics). TopX, IntersectPoint, GetDx, Area(OutPt) ((double)(long+long)), PointInPolygon ((double)(long-long)) and DistanceFromLineSqrd convert to double at the same points as C#. IsMaxima/IsIntermediate compare Top.Y as a double, as C#'s double parameter does. ProcessIntersections returns without clearing m_SortedEdges on the early returns, as C#'s return inside try does. ClipperOffset's outer-rectangle removal keeps m_AllPolys, so Total still drops the hidden outer node. EnumTranslator.GetDisplayText now finds the field by name. Lost: (a) the port is unwired, and FlightPlanner's offset polygon (menu.rs:94-131) is still an equirectangular miter approximation with no clipping (R69-02). (b) PolyTreeToPaths copies contours, so Grid.cs:264's in-place ReversePaths(PolyTreeToPaths(tree)) cannot be reproduced (R69-03). (c) The List.Sort port passes count instead of the List's capacity (R69-04). (d) A stale m_Scanbeam index after a failed Execute can panic on reuse. Panics replace exceptions in several places, and the exception types differ (R69-05). (e) The public API has gaps (R69-06). (f) GetDisplayText still takes an i64, there is no alias test, and culture_compare is still an approximation (R69-07).",
+    "ui_ux": 2.5,
+    "ui_ux_rationale": "Up 0.1. CMB_altmode can no longer show blank: an out-of-list alt_frame is normalised to list[0] (Relative), and processToScreen falls back to Relative for a frame outside EnumToList, as CMB_altmode_SelectedIndexChanged does in C#. Still wrong: 'Offset Polygon' in the FlightPlanner map menu produces different geometry from C#. C# offsets in UTM metres scaled by 1000, truncates the offset to Int64 millimetres, clips self-intersections through the ClipperOffset union, returns without change when the tree is empty, and concatenates every child contour. Rust offsets in a local equirectangular frame and never clips, so a negative offset past a narrow neck shows crossed edges instead of disappearing or splitting. The title, markers, rally warning and GCSView items from round 68 are unchanged.",
+    "features": 3.4,
+    "features_rationale": "Flat. Clipper adds no user-visible feature, because nothing calls it: the offset-polygon menu still uses the approximation, and Grid.cs (survey grids with clockwise_laps spirals) is not ported. The altmode fallback is a fidelity fix to an existing feature. Every round-68 feature gap is still open: skip_params with cache/Params_BG, the PERIPHERAL check, flags surviving SetTarget, the geofence download, RALLY_LIMIT_KM, f32 integer params, FFT, and setWPParams units."
+  },
+  "compile_check": {
+    "summary": "I checked clipper.rs (4,797 lines) as the compiler, plus the round-68 changes. Types and derives: TEdge, IntersectNode, LocalMinima, Scanbeam, Maxima, OutRec, OutPt and Join all derive Copy, so the many 'let x = self.arena[i];' copies type-check. IntersectNode derives Default + Clone (usize, IntPoint: Default), which satisfies introspective_sort's T: Default + Clone. PolyNode derives Default, and that holds because JoinType and EndType derive Default with #[default] variants and m_Parent is Option<usize>. EdgeSide/Direction derive PartialEq for ==. Int128 derives PartialEq, and its unused operators sit under #[allow(dead_code)]. Paths: crate::dotnet::{cast_i64, math_max, math_min, index_out_of_range, Exception::Custom/IndexOutOfRange} exist (mod.rs:715/727/764/1517/850). collections::introspective_sort(&mut [T], usize, F) (collections.rs:126) accepts &mut self.m_IntersectList through deref coercion to &mut [IntersectNode]. The closure's Ok(..) error type comes from the F bound. Borrow checking: the immediately invoked closures in AddPath (926, captures only ufr/pg/highI, not self), Execute_paths (1466), Execute_tree_fill (1490), ExecuteInternal (1520) and ProcessIntersections (2847) capture self (and solution/polytree) uniquely. Each is a temporary dropped at the end of its let, before the following self.DisposeAllPolyPts()/self.m_Joins.clear()/self.m_SortedEdges = NIL. JoinHorz's nx = |s: &Self, o| and JoinPoints's o = |s: &Self, p| capture nothing, and calls with the &mut self receiver coerce &mut Clipper to &Clipper at the closure call (the signature is annotated). They hold no borrow across self.DupOutPt(..). IsContributing's zero_side/inside closures borrow e: &TEdge alongside shared reads of self. PointInPolygon's d closures borrow ip/ipNext (poly0x/poly1x) and are dead before those are reassigned. CleanPolygon's exclude takes pts as a parameter and captures nothing. Statements like self.edges[e].Curr.X = Self::TopX(&self.edges[e], topY) evaluate the right-hand side first, so the shared borrow ends before IndexMut. self.m_destPolys.push(std::mem::take(&mut self.m_destPoly)) borrows disjoint fields. In DoOffset's zero-delta loop, node = &self.m_polyNodes.nodes[*c] is disjoint from self.m_destPolys. Deferred init: 'let (lb, rb);' (1062), 'let result; let e; let prevE;' (2045) and 'let mut EStart;' (810) are each assigned on every path before use. Name resolution: parameters named Direction (2798), Dir, Pt and X/Y are value-namespace bindings, and Direction::dLeftToRight still resolves the enum through the type namespace. lowercase consts (horizontal, Skip) are allowed by #![allow(non_upper_case_globals)]. Visibility: ClipperOffset and Clipper touch PolyTree's private nodes/m_AllPolys/m_Childs and call the private new_node/AddChild from the same module, which is allowed. The tests use only pub API (ChildCount, Childs, Contour, IsHole, Area, PointInPolygon, CleanPolygon, Orientation, Execute*, AddPath). Test expectations, checked by hand: the square tests give intersection 2500, union 17500, difference 7500 and xor 15000 (the sum of two L-shapes). The -100 jtMiter offset puts winding +1 inside x,y in [100,900] against the -1 outer rectangle, so pftNegative leaves an 800x800 hole that the outer-node removal promotes, and it is not a hole after promotion. At -600 the self-intersecting offset ring has winding <= 0 everywhere (for example -3 at (500,500), 0 just outside the square), so only the outer rectangle remains and Clear() empties the tree. At +100, the miter limit is 0.5 and r = 1, so DoMiter puts the corners at (-100,-100)..(1100,1100), giving 1200x1200. PointInPolygon gives (5,5) = 1, (0,5) = -1 (d == 0 on the x=0 edge) and (15,5) = 0. CleanPolygon removes (5,0) (DistanceFromLineSqrd 0 < 2.002), and the other vertices give 20 and 50, so 4 points remain. The open-path Execute errs, and AddPath(open, ptClip) errs. Round-68 changes: EnumFieldInfo gained name: String. Both constructors (mission.rs:78-83 and the test, 157-159) supply it, and Debug/Clone still derive. GetDisplayText's fields.iter().find(|f| f.name == name) compares String == String. The flight_plan.rs fallback reads altmode_list() -> Vec<(i32, String)>, and list.first().map(|(k, _)| *k as u8) is an Option<u8>. In the CMB_altmode closure, the normalisation assigns app.settings.alt_frame before cur is read, through the same capture the existing click handler already uses. No definite compile error.",
+    "likely_errors": [],
+    "warnings": [
+      "crates/mp-core/src/extlibs/utilities/clipper.rs:610, 624, 642: dead_code. PointIsVertex and PointOnPolygon are never called (C# never calls them either), and PointOnLineSegment is reachable only from PointOnPolygon. The module allow list does not include dead_code, so rustc warns 'associated functions PointIsVertex, PointOnLineSegment and PointOnPolygon are never used'. Fix: #[allow(dead_code)] on the three, as already done for IsMinima/DistanceSqrd."
+    ],
+    "test_failures": [],
+    "low_confidence_risks": [
+      "crates/mp-core/src/extlibs/utilities/clipper.rs:3392-3440, 3522-3545 (compile, low): nx(self, op1) / o(self, ..) rely on &mut Clipper -> &Clipper coercion at a closure call whose parameter is annotated &Self. rustc checks closure-call arguments against the closure signature with coercion, so this should compile. If it does not, write nx(&*self, op1).",
+      "crates/mp-core/src/extlibs/utilities/clipper.rs:4772-4773 (test, runtime, low): the -600 'no children' expectation depends on the whole sweep reproducing Clipper's merge of the inverted ring with the outer rectangle. The hand winding analysis says yes, but no golden output from the C# build confirms it.",
+      "crates/mp-core/src/extlibs/utilities/clipper.rs:1527 / 1183-1208 (runtime): after an Execute that returned false or Err, m_Scanbeam/m_ActiveEdges keep stale indices into arenas that DisposeAllPolyPts emptied. A later Execute after Clear() (no minima, so ResetBase returns early) indexes sbs and panics. C# keeps running on the old objects.",
+      "carried: app.rs ver(f) deref coercion; dotnet/mod.rs:573 LCIDToLocaleName slice form; versiondetection.rs:79 regex group-4 retention; ap_geodesicgrid.rs:403 2000 points reach 80 sections; flight_plan.rs:172 NaN WpOverlayKey; altmode_list() rebuilt per grid row per frame (flight_plan.rs:991, 1227, 1704)."
+    ]
+  },
+  "findings": [
+    {
+      "id": "R69-01",
+      "severity": "P0",
+      "file": "crates/mp-app/src/mp/ (missing), crates/mp-app/src/extlibs/ (missing)",
+      "line": 0,
+      "cs_reference": "reference/MissionPlanner/{MainV2.cs,Program.cs,GCSViews/*,Controls/*,ExtLibs/Maps/*,ExtLibs/ArduPilot/APFirmware.cs,ExtLibs/ArduPilot/Mavlink/*,ExtLibs/Utilities/Grid.cs,...}",
+      "summary": "Carried from R68-01. One large leaf library (clipper.cs, 4,930 lines) was ported, but about 93.2% of owned C# lines are still missing. That includes MainV2.cs, MAVLinkInterface.cs, MAVState.cs, APFirmware.cs, Grid.cs and every GCSView, FlightPlanner.cs among them, which owns both the altmode enum and the Clipper call site. MANIFEST.md still marks clipper.cs, EnumTranslator.cs and LTM.cs as todo.",
+      "required_fix": "Regenerate MANIFEST.md (mark clipper.cs, EnumTranslator.cs and LTM.cs ported). Port Grid.cs next, since it is the main Clipper consumer and feeds the survey tools. Then port APFirmware.cs, MAVState.cs/MAVLinkInterface.cs, GCSViews/FlightPlanner.cs, ConfigRawParams.cs, fftui.cs, CompassCalibrator.cs and MainV2.cs file by file."
+    },
+    {
+      "id": "R69-02",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/flight_plan/menu.rs",
+      "line": 94,
+      "cs_reference": "GCSViews/FlightPlanner.cs:3655-3702 (offset polygon via ClipperOffset); ExtLibs/Utilities/clipper.cs:4467-4832",
+      "summary": "New. ClipperOffset is ported but unwired. FlightPlanner's offset-polygon handler still calls the hand-rolled offset_polygon (menu.rs:94-131). That function projects equirectangularly around the first vertex, not through PointLatLngAlt.ToUTM/utmpos with a closing point. It works in f64 metres instead of IntPoint(x*1000, y*1000) with the offset truncated to (Int64)(intmeter*1000). It never clips: there is no union with pftPositive/pftNegative and no outer rectangle, so a negative offset past a neck keeps crossing edges instead of vanishing or splitting. It does not return when tree.ChildCount == 0, does not concatenate every child contour, and does not tag the points 'S' for redrawPolygonSurvey. Its orientation fix-up (reverse when the shoelace area < 0) is not FixOrientations, and its miter fallback squares corners with two points instead of DoSquare's tan(atan2(..)/4) construction.",
+      "required_fix": "Replace offset_polygon with the C# flow: UTM zone of list[0], utmpos list closed with list[0], ClipperOffset::new(2.0, 0.25).AddPath(IntPoint::from_f64(x*1000, y*1000), jtMiter, etClosedPolygon), Execute_tree(&mut tree, cast_i64(intmeter*1000) as f64). Return if ChildCount(ROOT) == 0, otherwise concatenate every child's Contour/1000 back to LLA with Tag 'S'. Add a test that a -600 m offset of a 1 km square leaves the polygon unchanged."
+    },
+    {
+      "id": "R69-03",
+      "severity": "P2",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 4205,
+      "cs_reference": "ExtLibs/Utilities/clipper.cs:4400-4444 (paths.Add(polynode.m_polygon) shares the node's List), 3336-3340 (ReversePaths reverses in place); ExtLibs/Utilities/Grid.cs:264",
+      "summary": "New. PolyTreeToPaths, ClosedPathsFromPolyTree and OpenPathsFromPolyTree clone each contour. C# adds the node's own m_polygon List, so a Paths built from the tree aliases the tree. Grid.cs:264 depends on that: ClipperLib.Clipper.ReversePaths(ClipperLib.Clipper.PolyTreeToPaths(tree)) reverses tree.Childs[i].Contour in place, and the following loop reads those contours to build clockwise laps. With this API, the same call reverses a temporary copy, so a Grid port would silently lose the lap direction. Separately, PolyTree::Contour returns &Path, so C# code that mutates Contour cannot be expressed at all.",
+      "required_fix": "Give the tree an aliasing-equivalent operation, for example PolyTree::ReverseAllContours(nt) or a Contour_mut, and have the Grid port use it. Document the deviation in PolyTreeToPaths. Add a test that ReversePaths(PolyTreeToPaths(tree)) as Grid uses it leaves tree.Contour reversed."
+    },
+    {
+      "id": "R69-04",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 2927,
+      "cs_reference": "ExtLibs/Utilities/clipper.cs:3050 (m_IntersectList.Sort(m_IntersectNodeComparer)), 1389, 3083 (List.Clear keeps capacity); .NET 4.x ArraySortHelper.IntrospectiveSort depth = 2 * FloorLog2(keys.Length)",
+      "summary": "New. FixupIntersectionOrder passes backing_len = m_IntersectList.len(). List<T>.Sort sorts _items, whose Length is the List's capacity. m_IntersectList is created once per Clipper and cleared, not reallocated, after each scanbeam (ProcessIntersectList), so its capacity is the high-water mark of 4/8/16/... growth. The depth limit, and so the point where intro_sort switches to heapsort, differs. Since the sort is unstable, intersect nodes with equal Pt.Y can end up in a different order. That changes the order FixupIntersectionOrder swaps edges and ProcessIntersectList calls IntersectEdges. dotnet/collections.rs:118-125 documents this parameter, and clipper.rs ignores it.",
+      "required_fix": "Track the C# List capacity of m_IntersectList (grow with list_capacity_for_count on push, never shrink on clear) and pass that as backing_len."
+    },
+    {
+      "id": "R69-05",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 1578,
+      "cs_reference": "ExtLibs/Utilities/clipper.cs:1137-1163 (Reset), 1586-1590 (DisposeAllPolyPts only clears m_PolyOuts), 2958-2978 (catch-all -> ClipperException), 1804/1930/2523/2593/4201 (Math.Abs throws OverflowException), 4378 (pattern[0] -> ArgumentOutOfRangeException)",
+      "summary": "New. (1) DisposeAllPolyPts also empties the sbs/maxs/outrecs/outpts arenas, but m_Scanbeam/m_ActiveEdges are reset only inside ResetBase when a minima list exists. After an Execute that returns false (FixupIntersectionOrder) or Errs, then Clear(), the next Execute indexes the emptied sbs and panics, where C# continues on the old Scanbeam objects. (2) ProcessIntersections' C# catch converts any exception (NullReference, ArgumentOutOfRange) into ClipperException('ProcessIntersections error'). Rust index panics escape it. (3) Math.Abs(int.MinValue/long.MinValue) throws OverflowException in IsContributing, SetWindingCount, IntersectEdges and SlopesNearCollinear. Rust uses wrapping_abs. (4) MinkowskiSum(pattern, paths, true) with an empty pattern throws ArgumentOutOfRangeException from the List indexer in C#, but Rust returns IndexOutOfRange (4186).",
+      "required_fix": "Keep a stale-safe reset (set m_Scanbeam/m_ActiveEdges to NIL in DisposeAllPolyPts, or keep the arenas the way C# keeps its objects). Map out-of-range accesses inside ProcessIntersections to the ClipperException. Use checked_abs and return Overflow where C# throws. Use the List indexer's ArgumentOutOfRange message for pattern[0]."
+    },
+    {
+      "id": "R69-06",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 141,
+      "cs_reference": "ExtLibs/Utilities/clipper.cs:130-203 (PolyNode public members, IsOpen get; set), 581-586 (public Swap), 389/79 (copy constructors), 480-496 (public IntersectNode, MyIntersectNodeSort), 101-107 (PolyTree.Clear)",
+      "summary": "New. Public API gaps. ClipperBase.Swap(ref cInt, ref cInt) is missing. PolyNode.IsOpen's public setter is unreachable because nodes are private to the tree. PolyNode references became usize indices (GetFirst/GetNext/Parent return Option<usize>), and every accessor needs the tree. IntersectNode and MyIntersectNodeSort are private. PolyTree::Clear leaves the old nodes in the arena (BuildResult2 truncates, Clear alone does not). PointIsVertex, PointOnLineSegment and PointOnPolygon trigger dead_code warnings.",
+      "required_fix": "Add Swap, a node IsOpen setter, and #[allow(dead_code)] on the three unused internals. Document the index model in one place, and make PolyTree::Clear truncate nodes the way BuildResult2 does."
+    },
+    {
+      "id": "R69-07",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/enumtranslator.rs",
+      "line": 118,
+      "cs_reference": "ExtLibs/Utilities/EnumTranslator.cs:107-123 (GetDisplayText<T>(T value)), 92 (OrderBy(x => x.Value))",
+      "summary": "R68-02 is partly fixed. Fixed: the test now expects the private member hidden ([(3, Relative), (0, Absolute)]), the doc comment is corrected, EnumFieldInfo has name, and GetDisplayText finds the field named by ToString(), with type.ToString() of that field as the fallback text. Open: GetDisplayText still takes an i64, not a T. There is no alias-member test (two names, one value, different [DisplayText]). OrderBy still goes through culture_compare, an approximation of NLS word sort.",
+      "required_fix": "Make GetDisplayText generic over a value of T (EnumReflect gains an into-i64). Add an alias test. Keep culture_compare's known gaps listed in a test."
+    },
+    {
+      "id": "R69-08",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1701,
+      "cs_reference": "GCSViews/FlightPlanner.cs:5606-5609, 2145-2155, 233-238",
+      "summary": "R68-04 is mostly fixed. processToScreen maps a frame outside EnumToList to list[0] (Relative), and CMB_altmode normalises an out-of-list alt_frame to list[0] instead of showing blank. Open: the normalisation runs inside the per-frame draw closure, not on a SelectedIndexChanged equivalent. altmode_list() is still rebuilt per frame (and per grid row). The altmode enum still lives in mp-core/mission.rs, not in a FlightPlanner port. There is no test for the fallback.",
+      "required_fix": "Build the data source once per view, run the fallback from a single setter (SelectedValue -> SelectedIndexChanged), and add a test that frame 6 gives Relative and saves FPaltmode."
+    },
+    {
+      "id": "R69-09",
+      "severity": "P2",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 592,
+      "cs_reference": "MainV2.cs:1665-1735, 1758-1809; ExtLibs/Mavlink/MAVLinkParam.cs:219-224",
+      "summary": "Carried from R68-03 unchanged: a skip_params connect still loads the cache and sends RequestParams with Params_BG, there is no MAV_COMP_ID_PERIPHERAL check, no firmware task without getparams, flags survive SetTarget, the awaiting_read is stale, there is no request id, no Activate, '== \"True\"' instead of bool.TryParse, and no tests.",
+      "required_fix": "As R68-03."
+    },
+    {
+      "id": "R69-10",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/ltm.rs",
+      "line": 174,
+      "cs_reference": "ExtLibs/Utilities/LTM.cs:240-242, 341-349",
+      "summary": "Carried from R68-05 unchanged (no '-=', Send-only handlers, sender dropped).",
+      "required_fix": "As R68-05."
+    },
+    {
+      "id": "R69-11",
+      "severity": "P2",
+      "file": "crates/mp-core/src/link.rs",
+      "line": 1196,
+      "cs_reference": "ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2005-2041, 1847-1885; MAVState.cs:102-128; MainV2.cs:1665-1747; APFirmware.cs",
+      "summary": "Carried from R68-06 unchanged.",
+      "required_fix": "As R67-03."
+    },
+    {
+      "id": "R69-12",
+      "severity": "P3",
+      "file": "crates/mp-app/src/show_again.rs",
+      "line": 15,
+      "cs_reference": "Common.cs:260-294; ExtLibs/Utilities/Settings.cs:223-232",
+      "summary": "Carried from R68-07 unchanged (GetBoolean semantics, per-piece translation, title in the caption).",
+      "required_fix": "As R68-07."
+    },
+    {
+      "id": "R69-13",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1321,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1408-1580; GCSViews/FlightData.cs:3956-4046",
+      "summary": "Carried from R68-08 unchanged: WPOverlay markers, polygons, fence/rally overlays and the FlightData map are missing.",
+      "required_fix": "As R62-06."
+    },
+    {
+      "id": "R69-14",
+      "severity": "P2",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 1500,
+      "cs_reference": "MainV2.cs:1737-1832",
+      "summary": "Carried from R68-09 unchanged (title bar, RALLY_LIMIT_KM, FENCE_TOTAL download, HW/SWConfig refresh).",
+      "required_fix": "As R67-06."
+    },
+    {
+      "id": "R69-15",
+      "severity": "P2",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 133,
+      "cs_reference": "Controls/fftui.cs; ExtLibs/Utilities/Spectrogram.cs:119-244",
+      "summary": "Carried from R68-10 unchanged.",
+      "required_fix": "As R65-05."
+    },
+    {
+      "id": "R69-16",
+      "severity": "P2",
+      "file": "crates/mp-core/src/paramfile.rs",
+      "line": 36,
+      "cs_reference": "ExtLibs/Mavlink/MAVLinkParam.cs:219-224; ConfigRawParams.cs:237-252",
+      "summary": "Carried from R68-11 unchanged (Param.value is f32).",
+      "required_fix": "As R64-02."
+    },
+    {
+      "id": "R69-17",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1718,
+      "cs_reference": "GCSViews/FlightPlanner.cs:6706-6764, 322, 1864",
+      "summary": "Carried from R68-12 unchanged.",
+      "required_fix": "As R65-07."
+    },
+    {
+      "id": "R69-18",
+      "severity": "P2",
+      "file": "crates/mp-core/src/mission.rs",
+      "line": 227,
+      "cs_reference": "GCSViews/FlightPlanner.cs:5613-5635, 1138-1145, 6141-6181",
+      "summary": "Carried from R68-13 unchanged.",
+      "required_fix": "As R62-03."
+    },
+    {
+      "id": "R69-19",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1727,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1385-1400, 1413-1425, 5659",
+      "summary": "Carried from R68-14 unchanged.",
+      "required_fix": "As R62-05."
+    },
+    {
+      "id": "R69-20",
+      "severity": "P2",
+      "file": "crates/mp-core/src/rtk.rs",
+      "line": 42,
+      "cs_reference": "ConfigSerialInjectGPS.cs:757-834, 908-925; ubx_m8p.cs:440-472",
+      "summary": "Carried from R68-15 unchanged.",
+      "required_fix": "As R61-10."
+    },
+    {
+      "id": "R69-21",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/version.rs",
+      "line": 18,
+      "cs_reference": "System.Version; CircularBuffer.cs; fft.cs:84-89; Pelco.cs",
+      "summary": "Carried from R68-16 unchanged.",
+      "required_fix": "As R65-12."
+    },
+    {
+      "id": "R69-22",
+      "severity": "P3",
+      "file": "crates/mp-app/src/swarm.rs",
+      "line": 159,
+      "cs_reference": "Swarm/Formation.cs:321-324; Swarm/FormationControl.cs:273-293",
+      "summary": "Carried from R68-17 unchanged.",
+      "required_fix": "As R63-08."
+    },
+    {
+      "id": "R69-23",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan/menu.rs",
+      "line": 815,
+      "cs_reference": "GCSViews/FlightPlanner.cs:3272-3299, 1096-1223, 1038-1063",
+      "summary": "Carried from R68-18 unchanged.",
+      "required_fix": "As R63-09."
+    },
+    {
+      "id": "R69-24",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1887,
+      "cs_reference": "GMap.NET.WindowsForms/GMapRoute.cs:131-148",
+      "summary": "Carried from R68-19 unchanged.",
+      "required_fix": "As R62-09."
+    },
+    {
+      "id": "R69-25",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/maps/wpoverlay.rs",
+      "line": 87,
+      "cs_reference": "GMapPolygon.cs; WPOverlay.cs:30, 46-48, 403-457",
+      "summary": "Carried from R68-20 unchanged.",
+      "required_fix": "As R62-10."
+    },
+    {
+      "id": "R69-26",
+      "severity": "P3",
+      "file": "crates/mp-core/src/coords.rs",
+      "line": 36,
+      "cs_reference": "GCSViews/FlightPlanner.cs:2731-2763; ExtLibs/Controls/Coords.cs",
+      "summary": "Carried from R68-21 unchanged.",
+      "required_fix": "As R62-11."
+    },
+    {
+      "id": "R69-27",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/io.rs",
+      "line": 22,
+      "cs_reference": "System.Console.Out; ExtLibs/ArduPilot/Linux.cs",
+      "summary": "Carried from R68-22 unchanged.",
+      "required_fix": "As R62-12."
+    },
+    {
+      "id": "R69-28",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 4728,
+      "cs_reference": "No C# tests; behaviour is the spec",
+      "summary": "Carried and widened from R68-23. The clipper tests check only areas, counts and PointInPolygon/CleanPolygon values. They do not check vertex order, start vertex or orientation, all of which C# fixes exactly (BuildResult walks from Pts.Prev, and Grid.cs rotates contours by start point). Nothing covers open-path clipping in a PolyTree, StrictlySimple/DoSimplePolygons, PreserveCollinear, JoinCommonEdges splits, ReverseSolution, the hiRange Int128 path, Minkowski, etType open ends (butt/square/round), jtRound/jtSquare, or ArcTolerance. The round-68 gaps (prompt gate, flags, skip_params, REAL32 RALLY_TOTAL, vehicle change, the altmode fallback) still have no tests.",
+      "required_fix": "Add golden vectors from the reference build for each case above (exact IntPoint sequences), plus the tests listed in R68-23."
+    }
+  ],
+  "round_68_status": {
+    "fixed": [
+      "R68-02 (test part): translate_orders_and_hides now expects EnumToList to hide the [Private(true)] member. The line-61 doc comment (now 63-64) is corrected, so 'cargo test' should be green again for enumtranslator."
+    ],
+    "partly_fixed": [
+      "R68-02: GetDisplayText looks the field up by the ToString() name through the new EnumFieldInfo.name, which mission.rs fills. It still takes an i64, there is no alias test, and culture_compare is still an approximation (now R69-07).",
+      "R68-04: processToScreen falls back to Relative for a frame outside the list, and CMB_altmode no longer shows blank. The fallback runs in the draw closure, the list is rebuilt per frame, altmode is still in mission.rs, and there is no test (now R69-08)."
+    ],
+    "still_open": [
+      "R68-01 (now R69-01; clipper.cs ported, MANIFEST still stale).",
+      "R68-03 (now R69-09).",
+      "R68-05 (now R69-10).",
+      "R68-06 (now R69-11).",
+      "R68-07 (now R69-12).",
+      "R68-08 (now R69-13).",
+      "R68-09 (now R69-14).",
+      "R68-10 (now R69-15).",
+      "R68-11 (now R69-16).",
+      "R68-12 (now R69-17).",
+      "R68-13 (now R69-18).",
+      "R68-14 (now R69-19).",
+      "R68-15 (now R69-20).",
+      "R68-16 (now R69-21).",
+      "R68-17 (now R69-22).",
+      "R68-18 (now R69-23).",
+      "R68-19 (now R69-24).",
+      "R68-20 (now R69-25).",
+      "R68-21 (now R69-26).",
+      "R68-22 (now R69-27).",
+      "R68-23 (now R69-28, widened to Clipper golden vectors).",
+      "Older items still open as listed in rounds 61-68."
+    ]
+  },
+  "next_steps": [
+    "R69-02: wire ClipperOffset into FlightPlanner's offset-polygon menu exactly as FlightPlanner.cs:3655-3702 does (UTM, x1000 IntPoints, Int64 offset, Execute_tree, empty-tree return, all child contours, Tag 'S'), and delete the offset_polygon approximation.",
+    "R69-01: regenerate MANIFEST.md (clipper.cs, EnumTranslator.cs and LTM.cs are ported). Then port ExtLibs/Utilities/Grid.cs (1,014 lines), the main Clipper consumer, with R69-03's aliasing-equivalent reverse so clockwise_laps works.",
+    "R69-03 / R69-04 / R69-05: add an in-place contour reverse for PolyTree, pass m_IntersectList's capacity to introspective_sort, reset m_Scanbeam/m_ActiveEdges in DisposeAllPolyPts, and map Math.Abs overflow and pattern[0] to the C# exceptions.",
+    "R69-28: add Clipper golden vectors from the reference build (exact vertex sequences for union/difference/xor, open paths in a PolyTree, StrictlySimple, jtRound/jtSquare, open ends, Minkowski, hiRange). Areas alone cannot catch an order or orientation bug.",
+    "R69-09: gate the cache load and Params_BG on !skip_params && compid != 158, clear the connect flags on SetTarget, and start the firmware task on every showui connect, with tests.",
+    "R69-06 / R69-07 / R69-08: Swap, IsOpen setter, dead_code allows; generic GetDisplayText plus an alias test; build the altmode list once and move the fallback into a single setter.",
+    "R69-11, R69-14: the four-branch STATUSTEXT subscription per MAVState; set the title once from VersionString + ' on ' + SerialString; RALLY_LIMIT_KM and the FENCE_TOTAL download.",
+    "R69-13, R69-15..R69-20: WPOverlay markers and the FlightData map, fftui/Spectrogram, integer parameter saving, setWPParams/Activate, the Commands cells, the RTK inject loop.",
+    "R69-10, R69-12, R69-21..R69-27: LTM '-=' and sender, show_again GetBoolean, and the small .NET fidelity gaps."
+  ],
+  "verdict": "No definite compile error. clipper.rs type-checks: every arena record derives Copy, IntersectNode meets introspective_sort's Default + Clone, the immediately invoked closures that capture self are dropped before the 'finally' statements, the |s: &Self, ..| helper closures capture nothing, and the cross-type private access stays inside one module. The only compiler output expected is a dead_code warning for PointIsVertex/PointOnLineSegment/PointOnPolygon. The four Clipper tests check out by hand (2500/17500/7500/15000, 800x800 hole promoted, -600 empty, 1200x1200 miter, PointInPolygon 1/-1/0, CleanPolygon 4 points). The round-68 enumtranslator test failure is fixed. The Clipper port is a faithful statement-level translation: the arena indices preserve C#'s reference identity, joins mutate through m_Joins[j], Int128 and the long-to-double conversions are bit-exact, and ClipperOffset's outer-node removal keeps m_AllPolys. But nothing calls it. FlightPlanner's offset polygon still runs a hand-rolled, unclipped equirectangular approximation, and Grid.cs is unported. The API also cannot reproduce the aliasing Grid.cs relies on (ReversePaths(PolyTreeToPaths(tree))), and the List.Sort port ignores the List capacity. R68-04's altmode fallback is in. R68-02 is mostly fixed. R68-03 and every older gap are unchanged. Ported lines rise to 32,736 / 479,014 (6.8%), and the cap rises to 1.7. Awarded 1.4; round-file fidelity 6.3; UI/UX 2.5; features 3.4."
+}

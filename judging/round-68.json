@@ -1,0 +1,298 @@
+{
+  "round": 68,
+  "date": "2026-11-08",
+  "reviewed_head": "0eddbe4 + uncommitted",
+  "commands_run": [],
+  "commands_note": "No commands were allowed this round (no shell, cargo, git, python or scripts). Everything below comes from reading files with Read/Grep/Glob. Nothing was compiled, so the judge also acted as the compiler.",
+  "manifest_summary": {
+    "manifest_status": "port/MANIFEST.md is still stale. EnumTranslator.cs (line 2591) and LTM.cs (line 2622) are still marked todo although both now have ports at their manifest paths. VersionDetection.cs, APFirmware.cs, MAVState.cs, WPOverlay.cs, fft.cs, Pelco.cs, AP_GeodesicGrid.cs, CircularStream.cs, ParamFile.cs, RLE.cs, Spline2.cs and ubx_m8p.cs are also still todo. wpoverlay.rs is still in mp-core, not at its manifest path.",
+    "new_owned_files_ported": {
+      "ExtLibs/Utilities/EnumTranslator.cs": 140,
+      "ExtLibs/Utilities/LTM.cs": 364
+    },
+    "new_owned_lines_ported": 504,
+    "owned_files_ported_corrected": 135,
+    "ported_lines_corrected": 27806,
+    "ported_lines_derivation": "27,302 (round 67) + 140 (EnumTranslator.cs -> extlibs/utilities/enumtranslator.rs) + 364 (LTM.cs -> extlibs/utilities/ltm.rs) = 27,806. Both files are ported whole: every public member is present, and the logic matches statement by statement apart from the points in R68-02 and R68-05. The app.rs changes are more rewiring inside MainV2.doConnect (still todo) and do not count.",
+    "owned_lines_total_corrected": 479014,
+    "ported_fraction_corrected": 0.058,
+    "conservatism_note": "Still an upper bound. EnumTranslator is wired the way C# uses it (FlightPlanner.cs:235/261 are its only callers in the reference tree). LTM has no caller anywhere in the C# tree (grep 'new LTM(' finds nothing), so leaving it unwired matches C#.",
+    "wiring": "New wiring this round: (1) mission.rs:74-88 implements EnumReflect for AltMode, with fields in C#'s declaration order (Relative=3, Absolute=0, Terrain=10), no attributes, and to_cs_string giving the member name or the number. (2) flight_plan.rs:988-1003 (CMB_altmode) and 1219-1234 (the grid's Frame column) build their items from EnumTranslator::EnumToList::<AltMode>() through altmode_list() (1943-1946), Key/Value as in FlightPlanner.cs:233-235/259-261. A value that is not in the list shows blank, which matches the DataGridView DataError path (Commands_DataError, FlightPlanner.cs:2325-2331). (3) drain_events:524-531 tests should_show once, when the prompt is created. (4) Connected (575-590) reads link.shared.skip_params. When it is set, the WP read runs straight away and no firmware check is armed. (5) Disconnected (623-627) clears the three connect flags. (6) RALLY_TOTAL (651-666) formats as MAVLinkParam.ToString: float G7 for ptype 9, double otherwise, then int.TryParse. Still unwired: flight_plan.rs:1696 (processToScreen's CMB_altmode.SelectedValue) still uses AltMode::ALL instead of the list, and the other STATUSTEXT branches, the title bar from VersionString/SerialString, GetMetaDataVersioned, the APFirmware static Manifest, AP_GeodesicGrid, Pelco, CircularStream, FFT2/FreqTable, ConfigArducopter 4.7, setWPParams from Activate, ZoomAndCenterMarkers, the WPOverlay markers and polygons, the fence/rally overlays, the FlightData map, the .fen and rally loaders, the doConnect fence download and RALLY_LIMIT_KM warning, the inject loop, Septentrio/Unicore, RLE, MAVLinkInterface/MAVState/CurrentState and every GCSView are all still missing."
+  },
+  "scores": {
+    "overall": 1.3,
+    "overall_cap": 1.6,
+    "overall_cap_derivation": "ceil1(27,806 / 479,014 * 10) = ceil1(0.580) = 0.6, plus at most +1.0 for the pre-manifest app = 1.6, unchanged. Awarded 0.5 for ported lines + 0.8 for the pre-manifest app = 1.3, unchanged. The 504 new lines do not move ceil1 past 0.6. There is no definite compile error, so there is no build-break deduction. The new enumtranslator unit test fails, though (R68-02), so 'cargo test' is red. That cancels the small credit the two ports and the R67-04/R67-05 fixes would otherwise earn inside the cap.",
+    "round_files_fidelity": 6.1,
+    "round_files_fidelity_rationale": "Flat. Gained: EnumTranslator is a close statement-level port. Translate's four overloads, the -1 default entry, the Private check, Dictionary.Add duplicate-key throws, the Convert.ToInt32 overflow, sorted versus unsorted insertion and GetValue's first-match-else-(-1) all match. EnumToList correctly passes checkPrivate=true, as EnumTranslator.cs:27 does. LTM's NewByte reproduces C#'s quirks exactly: the checksum byte is stored first, the length test is state+1+payload, state is reset twice, and crc^=data and payload++ still run after a completed frame. The G/A/S payloads decode little-endian from offset 3. The member order of the Json.NET-style output (fields, then get-only properties, enum as a number) matches DefaultContractResolver. I checked the recorded stream's first G, A and S checksums by hand (0xAF, 0x5B, 0x6D): all are accepted. R67-04's per-frame gate is gone. RALLY_TOTAL now uses float G7 for REAL32. Lost: (a) enumtranslator.rs:170-171 asserts that EnumToList includes the [Private(true)] member 10, but the code (correctly) hides it, so translate_orders_and_hides fails. The doc comment at line 61 ('private ones included') contradicts both the code and C#. (b) GetDisplayText (115-127) takes the first field with the value, not the field named by ToString(), so for alias members with different [DisplayText] it can pick the wrong attribute. Its parameter is an i64, not a T. (c) OrderBy(x => x.Value) goes through culture_compare, an approximation of NLS word sort (hyphen and apostrophe weights are missing). (d) LTM handlers must be Send, there is no '-=', and the sender argument is dropped. (e) The skip_params connect still loads the param cache and still sends RequestParams for Params_BG (app.rs:592-621). C# guards both with 'getparams && compid != MAV_COMP_ID_PERIPHERAL' (MainV2.cs:1665), and that compid check is missing entirely. (f) With getparams=false, C# still runs the showui firmware Task: it downloads the manifest and calls GetMetaDataVersioned, while VersionString is '' so no prompt appears. Rust arms nothing. (g) The flags are still not cleared on SetTarget (app.rs:919).",
+    "ui_ux": 2.4,
+    "ui_ux_rationale": "Flat. Fixed: unticking 'Show me again?' no longer closes the new-firmware box. It stays until OK, as Common.MessageShowAgain's form does. The altmode combo and the grid's Frame column now come from EnumToList. They show the same three items as before, in C#'s order, and a grid frame outside the list shows blank, as the DataError path does in C#. Still wrong: CMB_altmode can show blank (flight_plan.rs:994), but in C# it never does. A SelectedValue that is not in the list gives SelectedIndex -1, and CMB_altmode_SelectedIndexChanged (FlightPlanner.cs:2145-2150) then forces index 0 (Relative). processToScreen (flight_plan.rs:1696) ignores a WP frame outside the list instead of falling back to Relative and saving FPaltmode. The prompt title is a bold label, not the caption, and the composed text goes through i18n::t as one string. The title bar still ignores cs.version_string (app.rs:1500-1509). There are still no markers, no ZoomAndCenterMarkers, no rally-distance warning, no geofence download and no GCSView ports.",
+    "features": 3.4,
+    "features_rationale": "Up 0.1. With the parameter download skipped, 'Load Waypoints on connect' now runs the WP read on connect, as doConnect does when getparams is false. A later Refresh Params no longer switches view, reads waypoints, fetches rally points or checks firmware, and Disconnected clears the flags. A REAL32 RALLY_TOTAL near an integer now parses as C# does. Still wrong: skip_params still loads the param cache and, with Params_BG, still downloads the parameters (C# does neither). There is no MAV_COMP_ID_PERIPHERAL check. The flags survive a vehicle change (SetTarget). With a fresh cache the link still downloads again, and with Params_BG everything still waits for the download. A stale awaiting_read still blocks the deferred rally fetch, and mission reads have no request id. The geofence download and RALLY_LIMIT_KM warning are missing. Integer parameters of 1e7 or more lose digits (Param.value is f32). FFT output is not fftui's. setWPParams ignores the distance unit. LTM and EnumTranslator add no user-visible feature beyond the combo source."
+  },
+  "compile_check": {
+    "summary": "I checked every new and changed region against its definitions. enumtranslator.rs: super::attributes::{displaytextattribute::DisplayTextAttribute, privateattribute::PrivateAttribute} exist (utilities/mod.rs:5, attributes/mod.rs:3-5). Both derive Clone + Debug, so EnumFieldInfo's derive holds. DisplayTextAttribute::text() -> String and PrivateAttribute::is_private() -> bool exist. crate::dotnet::collections::Dictionary has new/contains_key/insert/iter (iter yields (&K, &V)), and dotnet/mod.rs:11 makes collections pub. culture_compare(&str, &str) -> Ordering (mod.rs:204) and Exception::Argument/Overflow (mod.rs:816/830) exist. Dictionary::new() infers <i32, String> from add(). Result<Vec<_>, Exception>::unwrap_or_default needs only Vec: Default. ltm.rs: crate::cs_enum! is #[macro_export] (mod.rs:236). Its pattern '$(#[$m:meta])* $vis $name : $t { .. }' accepts '/// doc pub mode: i32 { .. }'. It emits a pub tuple newtype, so mode(x as i32) and .0 work, along with associated consts (mode::Horizon), Debug and PartialEq for assert_eq!, and #[allow(non_camel_case_types)]. dotnet::json::J has Int/Bool/Obj and to_indented (json.rs:67-107). dotnet::io::console_write_line(&str) exists (io.rs:13). type Handler<T> = Box<dyn FnMut(&T) + Send> is implicitly 'static, and the add_* methods take impl FnMut(&X) + Send + 'static, so Box::new coerces. 'for h in v.iter_mut() { h(&g) }' calls through &mut Box<dyn FnMut>, which is FnMut. 'let line = self.packet;' copies the [u8; 100] (Copy) before the &mut self call, and &[u8; 100] unsizes to &[u8]. In Some(18) etc., the integer is inferred as i32 from state + 1 + payload. static TEST_DATA: &[u8] iterates as &u8. In the tests, the Arc<Mutex<Vec<G>>>/<i32>/<Vec<S>> closures are Send + 'static, and '*a2.lock().unwrap() += 1' is a () expression. mission.rs:74-88: the full path crate::extlibs::utilities::enumtranslator::{EnumReflect, EnumFieldInfo} is public (lib.rs:8, extlibs/mod.rs:12, utilities/mod.rs:13). '*m as i64' / '**m as i64' cast a Copy fieldless enum. flight_plan.rs: the mp_core::extlibs::utilities::enumtranslator path is public, and AltMode is already imported (used at 470). In the combo closures, find(|(k, _)| *k == cur) peels &&(i32, String) through match ergonomics. map(|(_, v)| v.as_str()) borrows list, which outlives selected_text. For (k, v) in &list, k is &i32 and v is &String. ComboBox::show_ui(..).response is a Response, so the closure is a Widget. app.settings.alt_frame / w.frame are mutated through disjoint closure captures, the same pattern as the code they replace. app.rs: Param { value: f32, ptype: u8 } (link.rs:43-46), so p.ptype == 9 is u8 == integer and float_to_string(f32) (mod.rs:680) takes p.value. double_to_string(p.value as f64) and int_parse(&String) -> Result<i32, _> then .ok() / unwrap_or(0) give i32. SharedState::skip_params: bool (link.rs:97) is set at construction (304), before Connected is emitted (1235). params_skipped is declared at 580 inside the Connected arm and used at 581 and 590 in the same arm. self.load_wps_after_params / self.firmware_check_after_params / self.toasts are disjoint from pl (&mut self.settings.planner, still live until 594) and from link (&self.link). drain_events:528 should_show(&BTreeMap, &String -> &str) borrows self.settings immutably before self.firmware_prompt is assigned. App::ui:1492-1495 now only calls p.ui. No definite compile error.",
+    "likely_errors": [],
+    "test_failures": [
+      "crates/mp-core/src/extlibs/utilities/enumtranslator.rs:170-171 (definite runtime failure): EnumToList::<Sample>() calls Translate_full(\"\", true, false). check_private is true, as in EnumTranslator.cs:27, so member 10 (Private(true)) is skipped and the list is [(3, \"Relative\"), (0, \"Absolute\")]. The assertion expects a third entry (10, \"Terrain\"), so translate_orders_and_hides panics. Fix: change the expectation to vec![(3, \"Relative\".to_string()), (0, \"Absolute\".into())] and correct the doc comment at line 61 ('private members hidden, declaration order')."
+    ],
+    "low_confidence_risks": [
+      "crates/mp-app/src/app.rs (carried, ver closure): ver(f) with &&&FirmwareInfo relies on deref coercion at a closure call through the annotated parameter. If rustc rejects it, write ver(**f) / ver(***f).",
+      "crates/mp-core/src/dotnet/mod.rs:573 (carried): LCIDToLocaleName(langid as u32, Some(&mut buf), 0) assumes windows 0.62's slice form.",
+      "crates/mp-core/src/extlibs/utilities/versiondetection.rs:79 (test, runtime, carried): '4.5.0-rc2' -> '4.5.0.2' relies on regex keeping an earlier iteration's group-4 capture.",
+      "crates/mp-core/src/extlibs/utilities/ap_geodesicgrid.rs:403 (test, runtime, carried): 2000 spiral points reaching all 80 sections is likely but not proven.",
+      "crates/mp-app/src/views/flight_plan.rs:172 (carried runtime risk): NaN in a Locationwp makes WpOverlayKey unequal to itself, so the overlay is rebuilt every frame.",
+      "crates/mp-app/src/views/flight_plan.rs:1221 (performance): altmode_list() rebuilds the Vec<(i32, String)> through the generic translator once per grid row per frame. C# binds the DataSource once in the constructor."
+    ]
+  },
+  "findings": [
+    {
+      "id": "R68-01",
+      "severity": "P0",
+      "file": "crates/mp-app/src/mp/ (missing), crates/mp-app/src/extlibs/ (missing)",
+      "line": 0,
+      "cs_reference": "reference/MissionPlanner/{MainV2.cs,Program.cs,GCSViews/*,Controls/*,ExtLibs/Maps/*,ExtLibs/ArduPilot/APFirmware.cs,ExtLibs/ArduPilot/Mavlink/*,...}",
+      "summary": "Carried from R67-01. Two small leaf files (EnumTranslator.cs, LTM.cs; 504 lines) were ported, but MainV2.doConnect is still patched piecemeal into app.rs instead of being ported as MainV2.cs. MAVLinkInterface.cs, MAVState.cs, APFirmware.cs and every GCSView, including FlightPlanner.cs, which owns the altmode enum now sitting in mp-core/mission.rs, are still missing. About 94.2% of owned C# lines remain. MANIFEST.md is stale and still lists EnumTranslator.cs and LTM.cs as todo.",
+      "required_fix": "Port ExtLibs/ArduPilot/APFirmware.cs, MAVState.cs and the getParamList parts of MAVLinkInterface.cs, then GCSViews/FlightPlanner.cs (with altmode as its nested enum), ConfigRawParams.cs, Controls/fftui.cs, CompassCalibrator.cs and MainV2.cs file by file. Regenerate MANIFEST.md (mark EnumTranslator.cs and LTM.cs ported) and move wpoverlay.rs."
+    },
+    {
+      "id": "R68-02",
+      "severity": "P2",
+      "file": "crates/mp-core/src/extlibs/utilities/enumtranslator.rs",
+      "line": 171,
+      "cs_reference": "ExtLibs/Utilities/EnumTranslator.cs:25-30 (EnumToList passes checkPrivate=true), 107-123 (GetDisplayText uses GetField(value.ToString())), 92 (OrderBy(x => x.Value), current culture)",
+      "summary": "New. (1) The unit test asserts that EnumToList includes a [Private(true)] member. The code correctly hides it, as C# does, so the test fails and 'cargo test' is red. The doc comment at line 61 says 'private ones included', which is wrong. (2) GetDisplayText picks the first field whose value matches. The check T::to_cs_string(f.value) == name is always true once f.value == value, so for alias members (two names, one value) with different [DisplayText] it can return the wrong text, where C# uses the field named by Enum.ToString(). It also takes an i64 instead of a T. (3) Sorting uses culture_compare, a partial model of NLS word sort.",
+      "required_fix": "Fix the test expectation to [(3, Relative), (0, Absolute)] and the doc comment. Make GetDisplayText find the field by the name ToString gives (add the member name to EnumFieldInfo), and make it generic over a T value. Add an alias-member test."
+    },
+    {
+      "id": "R68-03",
+      "severity": "P2",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 592,
+      "cs_reference": "MainV2.cs:1665-1695 (cache and Params_BG only when getparams && compid != MAV_COMP_ID_PERIPHERAL), 1697-1735 (firmware Task runs whenever showui, with or without getparams), 1758-1809; ExtLibs/Mavlink/MAVLinkParam.cs:219-224",
+      "summary": "R67-05 is partly fixed. The flags are cleared on Disconnected. A skip_params connect runs the WP read on Connected, and a later Refresh Params no longer runs the post-connect block. RALLY_TOTAL formats REAL32 as float G7. Remaining and new: (1) when params_skipped, the Connected arm still loads the param cache (593-617) and, with Params_BG, still sends RequestParams (618-621). C# does neither when getparams is false. (2) The MAV_COMP_ID_PERIPHERAL (158) exclusion is missing. (3) With getparams false, C# still starts the showui firmware Task: it fetches the manifest, finds no match on an empty VersionString, and calls GetMetaDataVersioned(GetVersion('')). Rust arms nothing. (4) The flags are not cleared on SetTarget (app.rs:919), so after a vehicle switch before the first download finishes, the block runs for the other vehicle. (5) The cache and Params_BG paths still wait for a link download that C# never does. (6) A stale awaiting_read still blocks the deferred rally fetch, and mission reads have no request id. (7) No FlightPlanner Activate on the switch. (8) '== \"True\"' instead of bool.TryParse for loadwpsonconnect. (9) No tests for any of these paths.",
+      "required_fix": "Gate the cache load and Params_BG on !params_skipped && compid != 158. Clear the flags on SetTarget. Run doConnect's post-parameter block from one function reached on every connect path, starting the firmware task even when getparams is false. Use Settings.GetBoolean semantics. Add tests: 'skip_params then Refresh Params does not switch view or fetch rally', 'skip_params does not load the cache or request params', 'REAL32 RALLY_TOTAL 2.9999999 fetches'."
+    },
+    {
+      "id": "R68-04",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1696,
+      "cs_reference": "GCSViews/FlightPlanner.cs:5606-5609 (CMB_altmode.SelectedValue = (int)temp.frame), 2145-2155 (SelectedValue null -> SelectedIndex = 0; else save FPaltmode), 233-238, 101",
+      "summary": "New, around the code wired this round. processToScreen still tests AltMode::ALL instead of the EnumToList data source. For a frame outside the list it keeps the previous CMB_altmode value. In C#, SelectedValue = 6 gives SelectedIndex -1, and CMB_altmode_SelectedIndexChanged then forces index 0 (Relative) and saves FPaltmode='3'. The CMB_altmode combo (994) can show blank for an alt_frame outside the list, which C# never does. The altmode enum lives in mp-core/mission.rs rather than in the FlightPlanner port.",
+      "required_fix": "Port CMB_altmode as a bound list: setting a value outside the list falls back to index 0 (Relative) and saves FPaltmode. Drive processToScreen through the same setter. Build the data source once per view, not per row per frame."
+    },
+    {
+      "id": "R68-05",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/ltm.rs",
+      "line": 174,
+      "cs_reference": "ExtLibs/Utilities/LTM.cs:240-242, 341-349",
+      "summary": "New, minor. The events are Vec<Box<dyn FnMut(&T) + Send>> with add-only methods. There is no '-=', handlers must be Send, and the EventHandler sender (this) is dropped. Otherwise the port is faithful, including the state-machine quirks, and test() writes Json.NET-indented output with fields before get-only properties and the enum as a number.",
+      "required_fix": "Add remove_* (by handle) for '-=', and pass a sender reference or document the deviation in a test."
+    },
+    {
+      "id": "R68-06",
+      "severity": "P2",
+      "file": "crates/mp-core/src/link.rs",
+      "line": 1196,
+      "cs_reference": "ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2005-2041, 1847-1885, 5336; ExtLibs/ArduPilot/Mavlink/MAVState.cs:102-128; MainV2.cs:1665-1735, 1747; ExtLibs/ArduPilot/APFirmware.cs:22-26, 103-182, 274-298",
+      "summary": "Carried from R67-03 unchanged: no compid filter on the STATUSTEXT subscription, one branch of four, version_string kept in CurrentState and wiped on a vehicle change, no showui, the cache/Params_BG paths, the APFirmware gaps, GetMetaDataVersioned, ConfigArducopter 4.7, and no link-level test.",
+      "required_fix": "As R67-03."
+    },
+    {
+      "id": "R68-07",
+      "severity": "P3",
+      "file": "crates/mp-app/src/show_again.rs",
+      "line": 15,
+      "cs_reference": "Common.cs:260-294; ExtLibs/Utilities/Settings.cs:223-232; ExtLibs/Strings/Strings.resx:283-292",
+      "summary": "R67-04 is fixed for the per-frame gate: should_show is now tested once in drain_events (app.rs:528), and App::ui only draws. Still open: should_show and ui treat any value except 'false' as true, where GetBoolean (bool.TryParse, default false) hides the box for '0', 'no' or ''. The composed text goes through i18n::t as one string instead of translating NewFirmware, NewFirmwareA and Pleaseup separately. The title is a bold label, not the form caption.",
+      "required_fix": "Use bool.TryParse semantics. Translate the Strings pieces before composing. Put the title in the window caption."
+    },
+    {
+      "id": "R68-08",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1321,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1408-1580; GCSViews/FlightData.cs:3956-4046",
+      "summary": "Carried from R67-02 unchanged: only routes come from WPOverlay. Markers, polygons, the pointlist, the distance sum, the fence/rally overlays and the FlightData map are missing.",
+      "required_fix": "As R62-06."
+    },
+    {
+      "id": "R68-09",
+      "severity": "P2",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 1500,
+      "cs_reference": "MainV2.cs:1737-1832",
+      "summary": "Carried from R67-06 unchanged. The title bar is rebuilt every frame from message guesses instead of being set once from VersionString + ' on ' + SerialString. The RALLY_LIMIT_KM warning, the FENCE_TOTAL geofence download and the HWConfig/SWConfig refresh are missing.",
+      "required_fix": "As R67-06."
+    },
+    {
+      "id": "R68-10",
+      "severity": "P2",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 133,
+      "cs_reference": "Controls/fftui.cs; ExtLibs/Utilities/Spectrogram.cs:119-244",
+      "summary": "Carried from R67-07 unchanged.",
+      "required_fix": "As R65-05."
+    },
+    {
+      "id": "R68-11",
+      "severity": "P2",
+      "file": "crates/mp-core/src/paramfile.rs",
+      "line": 36,
+      "cs_reference": "ExtLibs/Mavlink/MAVLinkParam.cs:219-224, 109-133; GCSViews/ConfigurationView/ConfigRawParams.cs:237-252; ExtLibs/Utilities/ParamFile.cs:85-108",
+      "summary": "Carried from R67-08 unchanged (link Param.value is still f32).",
+      "required_fix": "As R64-02."
+    },
+    {
+      "id": "R68-12",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1699,
+      "cs_reference": "GCSViews/FlightPlanner.cs:6706-6764, 322, 1864",
+      "summary": "Carried from R67-09 unchanged.",
+      "required_fix": "As R65-07."
+    },
+    {
+      "id": "R68-13",
+      "severity": "P2",
+      "file": "crates/mp-core/src/mission.rs",
+      "line": 227,
+      "cs_reference": "GCSViews/FlightPlanner.cs:5613-5635, 1138-1145, 6141-6181",
+      "summary": "Carried from R67-10 unchanged.",
+      "required_fix": "As R62-03."
+    },
+    {
+      "id": "R68-14",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1727,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1385-1400, 1413-1425, 5659",
+      "summary": "Carried from R67-11 unchanged.",
+      "required_fix": "As R62-05."
+    },
+    {
+      "id": "R68-15",
+      "severity": "P2",
+      "file": "crates/mp-core/src/rtk.rs",
+      "line": 42,
+      "cs_reference": "GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:757-834, 908-925; ExtLibs/Utilities/ubx_m8p.cs:440-472",
+      "summary": "Carried from R67-12 unchanged.",
+      "required_fix": "As R61-10."
+    },
+    {
+      "id": "R68-16",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/version.rs",
+      "line": 18,
+      "cs_reference": "System.Version; ExtLibs/Utilities/CircularBuffer.cs; ExtLibs/Utilities/fft.cs:84-89; ExtLibs/Utilities/Pelco.cs",
+      "summary": "Carried from R67-13 unchanged, including the cs_enum [Flags] Display note.",
+      "required_fix": "As R65-12, plus a [Flags] Display for cs_enum."
+    },
+    {
+      "id": "R68-17",
+      "severity": "P3",
+      "file": "crates/mp-app/src/swarm.rs",
+      "line": 159,
+      "cs_reference": "Swarm/Formation.cs:321-324; Swarm/FormationControl.cs:273-293",
+      "summary": "Carried from R67-14 unchanged.",
+      "required_fix": "As R63-08."
+    },
+    {
+      "id": "R68-18",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan/menu.rs",
+      "line": 815,
+      "cs_reference": "GCSViews/FlightPlanner.cs:3272-3299, 1096-1223, 1038-1063",
+      "summary": "Carried from R67-15 unchanged.",
+      "required_fix": "As R63-09."
+    },
+    {
+      "id": "R68-19",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1887,
+      "cs_reference": "ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapRoute.cs:131-148",
+      "summary": "Carried from R67-16 unchanged.",
+      "required_fix": "As R62-09."
+    },
+    {
+      "id": "R68-20",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/maps/wpoverlay.rs",
+      "line": 87,
+      "cs_reference": "ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapPolygon.cs; WPOverlay.cs:30, 46-48, 403-457",
+      "summary": "Carried from R67-17 unchanged.",
+      "required_fix": "As R62-10."
+    },
+    {
+      "id": "R68-21",
+      "severity": "P3",
+      "file": "crates/mp-core/src/coords.rs",
+      "line": 36,
+      "cs_reference": "GCSViews/FlightPlanner.cs:2731-2763; ExtLibs/Controls/Coords.cs",
+      "summary": "Carried from R67-18 unchanged.",
+      "required_fix": "As R62-11."
+    },
+    {
+      "id": "R68-22",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/io.rs",
+      "line": 22,
+      "cs_reference": "System.Console.Out; ExtLibs/ArduPilot/Linux.cs",
+      "summary": "Carried from R67-19 unchanged.",
+      "required_fix": "As R62-12."
+    },
+    {
+      "id": "R68-23",
+      "severity": "P3",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 1627,
+      "cs_reference": "No C# tests; behaviour is the spec",
+      "summary": "Carried from R67-20. No test covers the once-only prompt gate, the cleared flags, the skip_params WP read, the REAL32 RALLY_TOTAL, a vehicle change or the altmode combo source. LTM's test only spot-checks the first G and S frames. There are no golden vectors from the reference build (for example, LTM.test()'s console output).",
+      "required_fix": "Add the R68-02/R68-03/R68-07 tests, an LTM golden test against C# test() output, and the golden vectors listed in R65-19."
+    }
+  ],
+  "round_67_status": {
+    "fixed": [
+      "R67-04 (per-frame part): should_show is tested once in drain_events (app.rs:528), and App::ui (1492-1495) only draws, so unticking 'Show me again?' no longer closes the box before OK. The remaining GetBoolean, translation and caption items move to R68-07."
+    ],
+    "partly_fixed": [
+      "R67-05: the flags are cleared on Disconnected (623-627). A skip_params connect runs the WP read on Connected and arms no firmware check. A later Refresh Params no longer runs the post-connect block. RALLY_TOTAL uses float G7 for REAL32 (659-663). Open: skip_params still loads the cache and requests params with Params_BG, no PERIPHERAL check, the firmware Task is not started without getparams, flags survive SetTarget, the cache/Params_BG paths, stale awaiting_read, request id, Activate, GetBoolean, tests (R68-03)."
+    ],
+    "still_open": [
+      "R67-01 (now R68-01; two leaf files ported).",
+      "R67-02 (now R68-08).",
+      "R67-03 (now R68-06).",
+      "R67-06 (now R68-09).",
+      "R67-07 (now R68-10).",
+      "R67-08 (now R68-11).",
+      "R67-09 (now R68-12).",
+      "R67-10 (now R68-13).",
+      "R67-11 (now R68-14).",
+      "R67-12 (now R68-15).",
+      "R67-13 (now R68-16).",
+      "R67-14 (now R68-17).",
+      "R67-15 (now R68-18).",
+      "R67-16 (now R68-19).",
+      "R67-17 (now R68-20).",
+      "R67-18 (now R68-21).",
+      "R67-19 (now R68-22).",
+      "R67-20 (now R68-23).",
+      "Older items still open as listed in rounds 61-67."
+    ]
+  },
+  "next_steps": [
+    "R68-02: fix the failing enumtranslator test (EnumToList hides [Private(true)] members) and the line-61 doc comment. One-line change that makes 'cargo test' green again.",
+    "R68-03: gate the cache load and Params_BG RequestParams on !skip_params && compid != 158. Clear the connect flags on SetTarget. Start the firmware task on every showui connect. Then move doConnect's post-parameter block into one function reached on every connect path, with tests.",
+    "R68-04: make CMB_altmode a bound list that falls back to Relative (and saves FPaltmode) for a value outside the list. Use it from processToScreen. Build the list once.",
+    "R68-01: regenerate MANIFEST.md (EnumTranslator.cs and LTM.cs are ported). Then port APFirmware.cs, MAVState.cs/MAVLinkInterface.cs, GCSViews/FlightPlanner.cs (moving altmode into it), ConfigRawParams.cs, fftui.cs, CompassCalibrator.cs and MainV2.cs file by file. Move wpoverlay.rs. Only large files will move the cap.",
+    "R68-06: port the four-branch STATUSTEXT subscription with the compid filter into per-MAVState strings, and add a link-level banner test.",
+    "R68-09: set the title bar once from VersionString + ' on ' + SerialString. Port the RALLY_LIMIT_KM warning and the FENCE_TOTAL geofence download.",
+    "R68-07: bool.TryParse semantics and per-piece translation in show_again.rs.",
+    "R68-08, R68-10..R68-15: WPOverlay markers and the FlightData map, fftui/Spectrogram, integer parameter saving, setWPParams/Activate, the Commands cells, the RTK inject loop.",
+    "R68-05, R68-16..R68-23: LTM '-=' and sender, the small .NET fidelity gaps, the tests above and golden vectors from the reference build."
+  ],
+  "verdict": "No definite compile error. The two new ports type-check against their definitions: EnumReflect/EnumFieldInfo, Dictionary, culture_compare, the cs_enum newtype, J, console_write_line, and the Box<dyn FnMut + Send> handlers with array copy before NewLine. The AltMode impl in mission.rs, the egui combo closures, p.ptype (u8) with float_to_string(f32), and params_skipped's scope in the Connected arm also check. The new enumtranslator test fails, though: it expects EnumToList to include a [Private(true)] member, which the code (correctly, as C#) hides. EnumTranslator.cs and LTM.cs are faithful statement-level ports. LTM keeps every quirk of the state machine, and the recorded stream's checksums verify by hand. EnumTranslator is wired into CMB_altmode and the Frame column exactly where FlightPlanner.cs uses it. R67-04's per-frame gate is fixed. R67-05 is partly fixed: the flags are cleared on disconnect, the skip_params WP read works, and REAL32 RALLY_TOTAL uses G7. But the skip_params connect still loads the cache and downloads parameters with Params_BG, there is no PERIPHERAL check, the flags survive SetTarget, and processToScreen does not fall back to Relative as the C# combo does. Ported lines rise to 27,806 / 479,014 (5.8%). The cap stays 1.6. Awarded 1.3; round-file fidelity 6.1; UI/UX 2.4; features 3.4."
+}

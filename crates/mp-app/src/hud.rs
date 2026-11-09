@@ -540,7 +540,8 @@ fn draw(g: &Hud, cs: &CurrentState, input: &HudInput) {
         let tw = g.text_width(s, fontsize + 20.0);
         g.text(c0, s, fontsize + 20.0, RED, -tw / 2.0, -halfheight / 3.0);
     }
-    if !cs.message_high.is_empty() {
+    let message_high = cs.message_high();
+    if !message_high.is_empty() {
         let col = if cs.message_high_severity <= 3 {
             RED
         } else if cs.message_high_severity <= 4 {
@@ -550,11 +551,11 @@ fn draw(g: &Hud, cs: &CurrentState, input: &HudInput) {
         };
         // calcfontsize: shrink until it fits Width - 100
         let mut fs = fontsize + 10.0;
-        while fs > 6.0 && g.text_width(&cs.message_high, fs) > wf - 100.0 {
+        while fs > 6.0 && g.text_width(&message_high, fs) > wf - 100.0 {
             fs -= 1.0;
         }
-        let tw = g.text_width(&cs.message_high, fs);
-        g.text(c0, &cs.message_high, fs, col, -tw / 2.0, halfheight / 3.0);
+        let tw = g.text_width(&message_high, fs);
+        g.text(c0, &message_high, fs, col, -tw / 2.0, halfheight / 3.0);
     }
 
     // vibe / ekf / prearm

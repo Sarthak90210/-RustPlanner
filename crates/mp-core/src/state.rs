@@ -125,7 +125,10 @@ pub struct CurrentState {
     pub time_in_air: f32,
     pub dist_traveled: f32,
     pub time_since_boot: f32,
-    pub message_high: String,
+    /// `_messagehigh`: read through `message_high()`, written through `set_message_high`
+    message_high_text: String,
+    /// `_messageHighTime`
+    message_high_time: Option<Instant>,
     pub message_high_severity: u8,
     pub linkqualitygcs: f32,
     pub packets_received: u64,
@@ -237,7 +240,8 @@ impl Default for CurrentState {
             time_in_air: 0.0,
             dist_traveled: 0.0,
             time_since_boot: 0.0,
-            message_high: String::new(),
+            message_high_text: String::new(),
+            message_high_time: None,
             message_high_severity: 7,
             linkqualitygcs: 0.0,
             packets_received: 0,
@@ -257,8 +261,12 @@ impl Default for CurrentState {
     }
 }
 
+/// `(byte)Settings.Instance.GetInt32("severity", 4)`: the highest STATUSTEXT severity shown
+/// as `messageHigh`; the app keeps it in step with the setting.
+pub static STATUSTEXT_SEVERITY: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(4);
+
 #[path = "state_properties.rs"]
-mod properties;
+pub mod properties;
 
 /// The [DisplayText] of a CurrentState property, untranslated ("Altitude (alt)").
 pub fn display_text(name: &str) -> Option<&'static str> {
@@ -279,6 +287,32 @@ fn default_extra() -> std::collections::BTreeMap<String, f64> {
 }
 
 impl CurrentState {
+    /// `messageHigh` getter: "" once 10 s have passed since it was set; characters outside
+    /// 0x20..0x7E are removed (`TrimUnPrintable`).
+    pub fn message_high(&self) -> String {
+        match self.message_high_time {
+            Some(t) if t.elapsed().as_secs_f64() <= 10.0 => self.message_high_text.chars().filter(|c| (' '..='~').contains(c)).collect(),
+            _ => String::new(),
+        }
+    }
+
+    /// `messageHigh` setter: ignores null/"" and the text already showing; otherwise stamps
+    /// the time and sets the severity to EMERGENCY.
+    pub fn set_message_high(&mut self, value: &str) {
+        if value.is_empty() {
+            return;
+        }
+        // check against get
+        if self.message_high() == value {
+            return;
+        }
+        log::info!("messageHigh {value}");
+        self.message_high_time = Some(Instant::now());
+        self.message_high_text = value.to_string();
+        // MAVLink.MAV_SEVERITY.EMERGENCY
+        self.message_high_severity = 0;
+    }
+
     pub fn location(&self) -> PointLatLngAlt {
         PointLatLngAlt::new(self.lat, self.lng, self.alt as f64)
     }
@@ -340,7 +374,7 @@ impl CurrentState {
         match name {
             "mode" => json!(self.mode),
             "armed" => json!(self.armed),
-            "messageHigh" => json!(self.message_high),
+            "messageHigh" => json!(self.message_high()),
             "HomeLocation" => self.home.map(|h| json!({"Lat":h.lat,"Lng":h.lng,"Alt":h.alt})).unwrap_or(json!({"Lat":0,"Lng":0,"Alt":0})),
             _ => match self.field(name) {
                 Some(v) if PROPERTIES.iter().any(|(n,k)| *n == name && *k == PropertyKind::Bool) => json!(v != 0.0),
@@ -586,7 +620,7 @@ impl CurrentState {
                 self.wp_dist = h.target_distance as f32 * 10.0;
                 self.wpno = h.wp_num;
                 // Preserve CurrentState's currentbit == 1 check: only GPS adds text.
-                if h.failure_flags.bits() & 1 == 1 { self.message_high = "ERROR GPS ".into(); }
+                if h.failure_flags.bits() & 1 == 1 { self.set_message_high("ERROR GPS "); }
                 self.yaw = h.heading as f32 * 2.0;
                 self.target_bearing = h.target_heading as f32 * 2.0;
                 self.extra.insert("ch3percent".into(), h.throttle as f64);
@@ -872,7 +906,7 @@ impl CurrentState {
                 self.extra.insert("fenceb_count".into(), f.breach_count as f64);
                 self.extra.insert("fenceb_status".into(), f.breach_status as f64);
                 self.extra.insert("fenceb_type".into(), f.breach_type as u8 as f64);
-                if f.breach_status != 0 { self.message_high = format!("Fence Breach {}", format!("{:?}", f.breach_type).trim_start_matches("FENCE_BREACH_")); }
+                if f.breach_status != 0 { self.set_message_high(&format!("Fence Breach {}", format!("{:?}", f.breach_type).trim_start_matches("FENCE_BREACH_"))); }
             }
             MavMessage::EFI_STATUS(e) if e.ecu_index == 0.0 => {
                 for (n,v) in [("efi_baro", e.barometric_pressure), ("efi_headtemp", e.cylinder_head_temperature), ("efi_load", e.engine_load), ("efi_health", e.health as f32), ("efi_exhasttemp", e.exhaust_gas_temperature), ("efi_intaketemp", e.intake_manifold_temperature), ("efi_rpm", e.rpm), ("efi_fuelflow", e.fuel_flow), ("efi_fuelconsumed", e.fuel_consumed), ("efi_fuelpressure", if e.fuel_pressure == 0.0 { -1.0 } else { e.fuel_pressure })] { self.extra.insert(n.into(), v as f64); }
@@ -968,15 +1002,26 @@ impl CurrentState {
                 self.extra.insert("opt_m_y".into(), o.flow_comp_m_y as f64);
             }
             MavMessage::STATUSTEXT(s) => {
+                // MAVLinkInterface: printit when sev <= (byte)Settings.GetInt32("severity", 4)
+                // (mavsev = sev) or for Tuning:/PreArm:/Arm: text (mavsev stays EMERGENCY)
                 let sev = s.severity as u8;
-                if sev <= 4 {
-                    self.message_high = s
-                        .text
-                        .to_str()
-                        .unwrap_or("")
-                        .trim_end_matches('\0')
-                        .to_string();
-                    self.message_high_severity = sev;
+                let text = s.text.to_str().unwrap_or("");
+                let text = match text.find('\0') {
+                    Some(i) => &text[..i],
+                    None => text,
+                };
+                let mut printit = false;
+                let mut mavsev = 0u8;
+                if sev <= STATUSTEXT_SEVERITY.load(std::sync::atomic::Ordering::Relaxed) {
+                    printit = true;
+                    mavsev = sev;
+                }
+                if text.starts_with("Tuning:") || text.starts_with("PreArm:") || text.starts_with("Arm:") {
+                    printit = true;
+                }
+                if printit {
+                    self.set_message_high(text);
+                    self.message_high_severity = mavsev;
                 }
             }
             MavMessage::CAMERA_FEEDBACK(c) => {

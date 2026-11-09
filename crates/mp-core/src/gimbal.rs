@@ -67,58 +67,9 @@ pub const ZOOM_TYPE_CONTINUOUS: f32 = 1.0;
 
 pub type Cmd = (u16, [f32; 7]);
 
-/// MissionPlanner.Utilities.Quaternion (q1 = w).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Quaternion(pub [f64; 4]);
-
-impl Default for Quaternion {
-    fn default() -> Self {
-        Self([1.0, 0.0, 0.0, 0.0])
-    }
-}
-
-impl Quaternion {
-    pub fn from_euler(roll: f64, pitch: f64, yaw: f64) -> Self {
-        let (cr, sr) = ((roll / 2.0).cos(), (roll / 2.0).sin());
-        let (cp, sp) = ((pitch / 2.0).cos(), (pitch / 2.0).sin());
-        let (cy, sy) = ((yaw / 2.0).cos(), (yaw / 2.0).sin());
-        Self([
-            cr * cp * cy + sr * sp * sy,
-            sr * cp * cy - cr * sp * sy,
-            cr * sp * cy + sr * cp * sy,
-            cr * cp * sy - sr * sp * cy,
-        ])
-    }
-    pub fn from_axis_angle(axis: [f64; 3], theta: f64) -> Self {
-        if theta == 0.0 {
-            return Self::default();
-        }
-        let s = (theta / 2.0).sin();
-        Self([(theta / 2.0).cos(), axis[0] * s, axis[1] * s, axis[2] * s])
-    }
-    pub fn mul(&self, o: &Self) -> Self {
-        let [w1, x1, y1, z1] = self.0;
-        let [w2, x2, y2, z2] = o.0;
-        Self([
-            w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
-            w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
-            w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
-            w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
-        ])
-    }
-    pub fn euler_pitch(&self) -> f64 {
-        let [q1, q2, q3, q4] = self.0;
-        (2.0 * (q1 * q3 - q4 * q2)).clamp(-1.0, 1.0).asin()
-    }
-    pub fn euler_yaw(&self) -> f64 {
-        let [q1, q2, q3, q4] = self.0;
-        (2.0 * (q1 * q4 + q2 * q3)).atan2(1.0 - 2.0 * (q3 * q3 + q4 * q4))
-    }
-    pub fn euler_roll(&self) -> f64 {
-        let [q1, q2, q3, q4] = self.0;
-        (2.0 * (q1 * q2 + q3 * q4)).atan2(1.0 - 2.0 * (q2 * q2 + q3 * q3))
-    }
-}
+/// `MissionPlanner.Utilities.Quaternion` (q1 = w), the file-by-file port of Quaternion.cs.
+pub use crate::extlibs::utilities::quaternion::Quaternion;
+use crate::extlibs::utilities::vector3::Vector3;
 
 fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
     [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
@@ -185,8 +136,8 @@ impl GimbalManager {
     /// GetAttitude: earth-frame attitude (vehicle yaw added when the gimbal reports body yaw).
     pub fn attitude(&self, id: u8, vehicle_yaw_deg: f64) -> Option<Quaternion> {
         let q = self.attitude.get(&id)?;
-        let q = Quaternion(q.map(|v| v as f64));
-        Some(if self.yaw_in_vehicle_frame(id) { Quaternion::from_euler(0.0, 0.0, vehicle_yaw_deg.to_radians()).mul(&q) } else { q })
+        let q = Quaternion::new(q[0] as f64, q[1] as f64, q[2] as f64, q[3] as f64);
+        Some(if self.yaw_in_vehicle_frame(id) { Quaternion::from_euler(0.0, 0.0, vehicle_yaw_deg.to_radians()) * q } else { q })
     }
 
     /// Discover: REQUEST_MESSAGE GIMBAL_MANAGER_INFORMATION (broadcast)
@@ -213,8 +164,8 @@ impl GimbalManager {
     }
     /// SetAttitudeAsync: an earth-frame attitude as pitch/yaw angles.
     pub fn set_attitude(&self, q: &Quaternion, yaw_lock: bool, vehicle_yaw_deg: f64, id: u8) -> Option<Cmd> {
-        let pitch = q.euler_pitch().to_degrees();
-        let mut yaw = q.euler_yaw().to_degrees();
+        let pitch = q.get_euler_pitch().to_degrees();
+        let mut yaw = q.get_euler_yaw().to_degrees();
         if !yaw_lock {
             yaw -= vehicle_yaw_deg;
         }
@@ -540,14 +491,15 @@ impl Camera {
         let v1 = self.image_vector_camera_frame(0.0, 0.0);
         let v2 = self.image_vector_camera_frame(x, y);
         if v1 == v2.map(|c| -c) {
-            return Quaternion::from_axis_angle([0.0, 0.0, 1.0], std::f64::consts::PI);
+            return Quaternion::from_axis_angle_theta(&Vector3::new(0.0, 0.0, 1.0), std::f64::consts::PI);
         }
         let axis = cross(v1, v2);
         let len = dot(axis, axis).sqrt();
         if len == 0.0 {
             return Quaternion::default();
         }
-        Quaternion::from_axis_angle(axis.map(|c| c / len), dot(v1, v2).clamp(-1.0, 1.0).acos())
+        let [x, y, z] = axis.map(|c| c / len);
+        Quaternion::from_axis_angle_theta(&Vector3::new(x, y, z), dot(v1, v2).clamp(-1.0, 1.0).acos())
     }
 }
 
@@ -619,7 +571,7 @@ mod tests {
         g.status_flags.insert(0, 0);
         g.attitude.insert(0, [1.0, 0.0, 0.0, 0.0]);
         let q = g.attitude(0, 90.0).unwrap();
-        assert!((q.euler_yaw().to_degrees() - 90.0).abs() < 1e-6);
+        assert!((q.get_euler_yaw().to_degrees() - 90.0).abs() < 1e-6);
     }
 
     #[test]
@@ -671,7 +623,7 @@ mod tests {
         let right = c.image_point_location(0.5, 0.0).unwrap();
         assert!(right.lng > 0.0, "right of a north-looking camera is east");
         let q = c.image_point_rotation(0.5, 0.5);
-        assert!(q.euler_yaw() > 0.0 && q.euler_pitch() < 0.0);
+        assert!(q.get_euler_yaw() > 0.0 && q.get_euler_pitch() < 0.0);
         assert_eq!(c.image_point_rotation(0.0, 0.0), Quaternion::default());
     }
 }

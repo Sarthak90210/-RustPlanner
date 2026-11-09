@@ -1,0 +1,205 @@
+{
+  "round": 62,
+  "date": "2026-11-08",
+  "reviewed_head": "0eddbe4 + uncommitted",
+  "commands_run": [],
+  "commands_note": "No commands were allowed this round (no shell, cargo, git, python or scripts). Everything below comes from reading files with Read/Grep/Glob. Nothing was compiled, so the judge also acted as the compiler.",
+  "manifest_summary": {
+    "manifest_status": "port/MANIFEST.md is still stale. WPOverlay.cs (line 1430, target crates/mp-app/src/extlibs/maps/wpoverlay.rs), ParamFile.cs (2642), RLE.cs (2653), Spline2.cs (2663) and ubx_m8p.cs (2670) are all still listed as todo, and wpoverlay.rs still lives in mp-core rather than the manifest path.",
+    "new_owned_files_ported": {},
+    "new_owned_lines_ported": 0,
+    "owned_files_ported_corrected": 128,
+    "ported_lines_corrected": 26127,
+    "ported_lines_derivation": "Unchanged from round 61 (26,127). This round's new code is either wiring in pre-manifest app files (flight_plan.rs load_text/read_qgc110wpfile/process_to_screen/draw_gmap_route, swarm.rs, menu.rs) or text/Option variants of already-counted ports (ParamFile.save_text/write_param_lines, SetupBasePos). FlightPlanner.cs processToScreen/readQGC110wpfile/LoadWPFile and GMapRoute.cs OnRender are reimplemented as functions inside non-manifest files, not ported file by file, so they add no owned lines.",
+    "owned_lines_total_corrected": 479014,
+    "ported_fraction_corrected": 0.0545,
+    "conservatism_note": "Still an upper bound: WPOverlay is counted whole although its GMap.NET types are plain data and its polygon points keep PointLatLngAlt.",
+    "wiring": "New wiring this round: (1) the wp route is drawn by draw_gmap_route, a port of GMapRoute.UpdateGraphicsPath/OnRender (Custom arrows, 99000 px solid fallback); (2) the overlay home is PointLatLngAlt.Zero for an unset (0,0) home, else Tag 'H' and Tag2 = alt-mode name; the overlay is cached by WpOverlayKey; (3) waypoint file loads go through LoadWPFile's '{' dispatch to MissionFile (read_mission_json now has callers) and readQGC110wpfile, then a processToScreen port; MISSION downloads also go through processToScreen; (4) paramfile::save routes through ParamFile.save_text/write_param_lines; (5) savewaypoints' WPL writer is in mission.rs; (6) Formation's uncached UTM transform drives swarm offsets/targets; (7) SetupBasePos takes Option. Still not wired: WPOverlay markers/polygons/pointlist, fence/rally WPOverlay instances, FlightData map, the fence .fen and rally loaders, the context-menu Save WP File (bypasses savewaypoints), FENCE/RALLY downloads (bypass processToScreen), setWPParams, ZoomAndCenterMarkers, the inject loop, Septentrio/Unicore, RLE, MAVLinkInterface/MAVState/CurrentState and every GCSView."
+  },
+  "scores": {
+    "overall": 1.3,
+    "overall_cap": 1.6,
+    "overall_cap_derivation": "ceil1(26,127 / 479,014 * 10) = ceil1(0.545) = 0.6, plus at most +1.0 for the pre-manifest app = 1.6. Awarded 0.5 for ported lines (up from 0.45: processToScreen, the GMapRoute arrows, the Zero home, MissionFile loading and ParamFile saving now run real C# logic) + 0.8 for the pre-manifest app = 1.3. Held below the cap because the param save corrupts fractional values in comma-decimal cultures (R62-02), the WPL writer applies one numeric model to cells whose C# text depends on how the row was filled (R62-03), the swarm transform's exception path now sends followers to the leader's own position (R62-08), and the markers/pointlist/fence/rally/FlightData overlay wiring is still pre-manifest (R62-06).",
+    "round_files_fidelity": 6.2,
+    "round_files_fidelity_rationale": "Good: process_to_screen_type follows processToScreen's control flow exactly (i/cmdidx counters, the id 0/255 break evaluated before the append home skip, so an appended file whose home line has id 0 adds nothing as in C#; Spline2 rates from WPNAV_ACCEL/WP_ACC*100/100 and WPNAV_SPEED/WP_SPD*100/600 for WAYPOINT/SPLINE/TAKEOFF/DO_SET_HOME rows including home; alt mode only for i != 0; home row compared through double.ToString() against TXT_homelat ('' when unset) and '0'; Yes writes ToString(\"0.00\") back through double.Parse; row 0 removed only for MISSION and !append). read_qgc110wpfile has RemoveAt(0) on FENCE/RALLY with the ArgumentOutOfRange text. draw_gmap_route matches OnRender's arrow loop (PointF.Empty sentinel, r <= 20 skip without advancing last, NaN skip, +/-210 degrees, 15 px, Custom -> Solid, 99000 px -> Solid). The spline list is now List<PointLatLng> with from_point back, and the default polygon fill is FromArgb(155, AliceBlue). write_waypoint_file has NEW_LINE, the fallback home line, format_fixed 7/7/6 for home and 8/6 for rows, and .NET half-away rounding. write_mission_json writes doJumpId 0. ParamFile.write_param_lines is SortedList order + double.Parse + invariant ToString. Formation builds its own uncached WGS84_UTM((int)((lng+186)/6), lat >= 0) from the leader and uses it forward and inverse. SetupBasePos models null != Zero and the NullReference after both sleeps. Lost: paramfile::save feeds invariant '.' text from format_value into current-culture double.Parse (0.135 -> 135 in de-DE); the WPL writer treats every float cell as G7 text although processToScreen stores float*double doubles (G15 of the widened float, so C# writes 45.29999924) and setfromMap stores lat/lng as \"0.0000000\" strings; swarm exceptions now send to the leader position (C# skips the send) and zero the offset (C# throws); enter-UTM uses utmpos/ProjNet where C# uses GeoUtility UTM(zone, e, n, South); home 'set' is still inferred from (0,0); multipliers are 1.0; setWPParams, writeKML-after-load zoom (ZoomAndCenterMarkers) and the CustomMessageBox modals are missing; FENCE/RALLY downloads and the context Save WP File bypass the new ports; the 99000 px Solid switch is per frame, where C# mutates the route's Stroke permanently.",
+    "ui_ux": 2.2,
+    "ui_ux_rationale": "Stays very low until MainV2 and the GCSViews are ported file by file. Gains: the mission route now shows Mission Planner's direction arrows at every segment midpoint; the solid home leg to Null Island is gone for an unset home (the loop now closes through wp1 as in C#); .plan files can be opened; loading a mission asks 'Reset Home to loaded coords'. Still not C#: markers are the app's uniform pins plus white radius circles (no LightBlue loiter rects, ROI, spline or fence markers from the overlay); error and line-invalid messages are toasts, not CustomMessageBox modals; the map does not zoom to the loaded mission; the context-menu Save WP File writes a fixed 'mission.waypoints' without the .mission option or 'Saved' label.",
+    "features": 3.0,
+    "features_rationale": "Up from 2.8. Real C# behaviour newly running: LoadWPFile's JSON/WPL dispatch with MissionFile.ReadFile/ConvertToLocationwps; readQGC110wpfile's FENCE/RALLY home removal; processToScreen for file loads, Load and Append and MISSION downloads (break rules, append home skip, Spline2 rates, alt mode, Reset Home prompt); savewaypoints' WPL text; ParamFile.SaveParamFile ordering and number formatting; Formation's transform. Held down by: the comma-culture param save corruption; the fence/rally file loaders still home-made; FENCE/RALLY downloads still raw; empty MISSION downloads show an error instead of clearing; setWPParams not applied on load; WPL values diverge from the C# grid's cell text; the RTK inject loop and Septentrio/Unicore unchanged."
+  },
+  "compile_check": {
+    "summary": "Checked every changed region against its definitions. flight_plan.rs: the three new fields are initialised in Default (241-243); WpOverlayKey derives Clone+PartialEq and Locationwp derives Copy+PartialEq (mission.rs:13), so the matches!(.. if *k == key) guard and the later move of key compile; settings.wp_radius/loiter_radius are f32 and alt_frame u8 (app.rs:41-44). PointLatLngAlt { Tag2, ..new_tagged(..) } uses pub fields through the utilities re-export; overlay.overlay.routes is a partial move after a call whose Result<(), Exception> holds no borrow, and WPOverlay has no Drop. GMapRoute.points is Vec<PointLatLng>, which has lat()/lng() and a manual PartialEq (pointlatlng.rs:79), so GMapRoute's derived PartialEq holds. draw_gmap_route: Pen.width is f32, Color::r/g/b/a return u8, DashStyle is Copy+Eq, Shape::dashed_line(&[Pos2], Stroke, f32, f32) -> Vec<Shape> goes into painter.extend, Stroke is Copy for the repeated line_segment calls, and the f64 angle arithmetic is cast before mixing with f32. read_qgc110wpfile: '&mut |m| app.toasts.error(m)' captures *app.toasts uniquely only for the call; the later app.toasts uses are after it. process_to_screen_type: list_for(mt).clone() autoderefs to Vec::clone; the params closure collects into the BTreeMap fixed by the let annotation; Spline2::set_wp_accel_cms/set_wp_speed_cms exist (spline2.rs:90/99); mavcmd::SPLINE_WAYPOINT/TAKEOFF exist; '*m as u8 == temp.frame' parses as intended; dotnet::double_to_string exists (mod.rs:669). load_text is a private method of the parent module, which menu.rs (a child module) can call; read_qgc110wpfile/process_to_screen are pub(super). write_prompts_ui copies the Copy Option<Locationwp>. mission.rs: format_general(f64, usize, &CultureInfo), format_fixed and INVARIANT_CULTURE exist; write!(s, \"..{nl}\") captures the local. paramfile: StreamWriter::create/write_line/close(self), culture_compare, double_to_string_culture exist; the save_text closure's &mut out borrow ends before Ok(out); the (item, text) pattern binds &String. swarm.rs: wgs84_utm(i32, bool) -> Self, create_from_wgs84_to_projected(&PCS) -> Result<TransverseMercator>, the MathTransform trait is imported where transform is called, inverse() is inherent and &Vec<f64> coerces to &[f64]; Mav.yaw/lat/alt are f64; MathHelper::DEG2RAD is re-exported. coords.rs/menu.rs: utm_signed_to_geo returns Option and all three callers (flight_plan.rs:94, 2416 with unwrap, menu.rs:825 with let-else) handle it. ubx_m8p: SetupBasePos(Option<&PointLatLngAlt>) has no callers that pass a bare reference (rtk_page.rs:255 is a comment). serial.rs uses console_write (io.rs:22). wpoverlay.rs:176 now reborrows '&mut *srtm_get_altitude', removing the round-61 FnOnce risk; no other use of srtm_get_altitude conflicts with the closure's borrow. No definite compile error was found.",
+    "likely_errors": [],
+    "low_confidence_risks": [
+      "crates/mp-core/src/paramfile.rs:59 (test roundtrip) and crates/mp-app/src/views/config.rs:393: save() now re-parses '0.135' with current-culture double.Parse. On a machine whose culture uses ',' as the decimal separator and '.' as the group separator the value becomes 135 and the assert at paramfile.rs:66 fails. Fixing R62-02 fixes this.",
+      "crates/mp-app/src/views/flight_plan.rs:2415 (test): the cell text is written with invariant '{:.3}' but coords_from_cells now parses with current-culture double_parse; on a comma-decimal machine the edit is read as a much larger easting (or rejected) and the lat/lng assert fails. Use format_fixed(.., current_culture()) in the test.",
+      "crates/mp-core/src/dotnet/mod.rs:573 (carried over): LCIDToLocaleName(langid as u32, Some(&mut buf), 0) assumes windows 0.62 folds lpName/cchName into Option<&mut [u16]>. If the binding takes (u32, PWSTR, i32, u32), write: LCIDToLocaleName(langid as u32, windows::core::PWSTR(buf.as_mut_ptr()), buf.len() as i32, 0).",
+      "crates/mp-app/src/views/flight_plan.rs:1272: not a compile risk but a runtime one: a NaN anywhere in a Locationwp or the radii makes WpOverlayKey != itself, so CreateOverlay (and every Spline2 run) is rebuilt every frame again."
+    ]
+  },
+  "findings": [
+    {
+      "id": "R62-01",
+      "severity": "P0",
+      "file": "crates/mp-app/src/mp/ (missing), crates/mp-app/src/extlibs/ (missing)",
+      "line": 0,
+      "cs_reference": "reference/MissionPlanner/{MainV2.cs,Program.cs,GCSViews/*,Controls/*,ExtLibs/Maps/*,ExtLibs/GMap.NET.Drawing/*,...}",
+      "summary": "Carried over from R61-01. No Mission Planner project file is ported. processToScreen, readQGC110wpfile, LoadWPFile, savewaypoints and GMapRoute.OnRender were reimplemented this round as functions inside the pre-manifest flight_plan.rs and mission.rs, not as file-by-file ports of FlightPlanner.cs and GMapRoute.cs, so none of it counts toward owned lines. About 94.5% of owned C# lines are still todo, and MANIFEST.md still lists ported files (WPOverlay, ParamFile, RLE, Spline2, ubx_m8p) as todo.",
+      "required_fix": "Start crates/mp-app/src/gcsviews/flightplanner.rs as a real port of FlightPlanner.cs (move processToScreen, readQGC110wpfile, BUT_loadwpfile_Click, savewaypoints, writeKML into it with the C# names and the grid modelled as cells), and port GMapRoute.cs/GMapPolygon.cs/GMapMarker*.cs into crates/mp-app/src/extlibs/gmap.net.drawing. Regenerate MANIFEST.md and move wpoverlay.rs to its manifest path."
+    },
+    {
+      "id": "R62-02",
+      "severity": "P2",
+      "file": "crates/mp-core/src/paramfile.rs",
+      "line": 37,
+      "cs_reference": "GCSViews/ConfigurationView/ConfigRawParams.cs:237-252 (data[name] = double.Parse(cell text) in the current culture); ExtLibs/Utilities/ParamFile.cs:85-107 (double.Parse(paramlist[item].ToString()) in the current culture, so the Hashtable's double round-trips through the same culture)",
+      "summary": "paramfile::save passes format_value(v) as the C# 'ToString()' text. format_value always uses '.', but write_param_lines re-parses it with current-culture double.Parse (AllowThousands). In a culture such as de-DE, normalize_number treats '.' as a group separator, so 0.135 is saved as 135 and 1.5 as 15. Every fractional parameter in the file is corrupted silently. The C# never has this problem because the Hashtable holds a double whose ToString and Parse use the same culture. An exception (e.g. an unparsable value) makes save() log and return an empty string, which the callers then write as an empty file; the C# StreamWriter would have written the lines before the bad one. format_value ({:.7} trimmed, not the grid cell's text) is still also the displayed value everywhere.",
+      "required_fix": "Give write_param_lines the double the C# Hashtable holds (change the list to (String, f64) and drop the re-parse, or format with double_to_string() in the current culture before calling it). Keep the partial text on an exception, as the C# file would. Model the ConfigRawParams cell text (the value's ToString) instead of format_value, and add a test under a ',' culture."
+    },
+    {
+      "id": "R62-03",
+      "severity": "P2",
+      "file": "crates/mp-core/src/mission.rs",
+      "line": 227,
+      "cs_reference": "GCSViews/FlightPlanner.cs:5613-5635 (processToScreen: cell.Value = temp.p1 * multipliers[0] with multipliers a double[], so float params and alt become doubles whose ToString() is G15 of the widened float), 1138-1145 (setfromMap: Lat/Lon cells = lat.ToString(\"0.0000000\")), 6141-6181 (savewaypoints re-parses each cell's ToString())",
+      "summary": "write_waypoint_file applies one model to every row: float fields go through G7 text and lat/lng through G15. In C# the cell text depends on how the row was filled. Rows from a loaded file or a download are processToScreen doubles, so p1 = 45.3f saves as 45.29999924 and alt 45.3f as 45.299999 (the R61-08 'expected' 45.30000000 only holds for typed cells). Rows added on the map hold lat/lng as 7-decimal strings, so C# saves -35.36326120 where Rust saves -35.36326123. The home fallback line is chosen from (0,0) instead of an empty TXT_homelat, so a home at exactly 0,0 writes the fallback instead of the 16 line. The same cell model also affects what the C# uploads (7-decimal lat/lng for map-added points).",
+      "required_fix": "Model the Commands grid as cell values with their C# types (string for typed and setfromMap cells, double for processToScreen cells, int for setfromMap alt) and have savewaypoints and the upload paths read the cell's ToString(). Until then, record per row whether it came from processToScreen or setfromMap and format accordingly. Track 'home text empty' explicitly. Add golden-text tests for each source."
+    },
+    {
+      "id": "R62-04",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 281,
+      "cs_reference": "GCSViews/FlightPlanner.cs:3992-4047 (getWPs -> WPtoScreen -> processToScreen for every mission type, including an empty list), 1336-1363, 5644 (setWPParams), 5689-5691 (writeKML, MainMap_OnMapZoomChanged), 991 and 1864 (MainMap.ZoomAndCenterMarkers(\"WPOverlay\")), 1805-1875 (BUT_loadwpfile_Click: .shp and .kml in the same filter; an exception in the '{' branch is unhandled, so lbl_wpfile is not updated), 4359-4420 (fence Load from File reads .fen into drawnpolygon), 6195-6198 (saveWPFileToolStripMenuItem_Click -> SaveFile_Click -> savewaypoints)",
+      "summary": "R61-07 is only partly fixed; several load and save paths still bypass the new ports. (1) FENCE/RALLY downloads still assign items directly and toast 'Got N items'; C# runs processToScreen (break rules) and shows nothing. (2) An empty MISSION download shows 'No waypoints received' and keeps the old grid; C# clears it. (3) process_to_screen never runs setWPParams (TXT_WPRad/TXT_loiterrad from WP_RADIUS, WPNAV_RADIUS/100, WP_RADIUS_M, LOITER_RADIUS/WP_LOITER_RAD) and never zooms to the loaded mission. (4) load_text sets 'Loaded <name>' even when read_mission_json fails, and wpfilename gets the bare name where C# stores the full path. (5) The Load WP File filters accept txt/waypoints/plan only; the C# dialog also dispatches .shp and .kml. (6) load_list (menu.rs:689) is unchanged: WaypointFile for fence/rally without RemoveAt(0), plus the home-made .fen fallback. (7) The context-menu Save WP File (menu.rs:578) writes 'mission.waypoints' directly, without savewaypoints' dialog, .mission option, WPFileDirectory or 'Saved' label. (8) Error and line-invalid messages are toasts, not CustomMessageBox modals; 'Can't open file! ' + ex lacks the exception's ToString stack text.",
+      "required_fix": "Route every download through processToScreen (WPtoScreen) for all three types, including the empty list. Port setWPParams and call it there; call fit_points on the overlay after loads (ZoomAndCenterMarkers). Leave lbl_wpfile unchanged when the JSON branch throws, and keep the full path in wpfilename. Port loadFromFileToolStripMenuItem_Click (.fen -> drawnpolygon/return marker) and the rally loader. Make the context Save WP File call savewaypoints. Show CustomMessageBox-style modals."
+    },
+    {
+      "id": "R62-05",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1274,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1385-1400 (home is Zero unless all three TXT_home boxes are non-empty; a parse failure shows Strings.Invalid_home_location), 1413-1425 (TXT_WPRad/TXT_loiterrad defaults, / CurrentState.multiplierdist, multiplieralt; only FormatException is caught)",
+      "summary": "R61-02's visible bug is fixed: an unset home is passed as Zero and the leg to Null Island is gone. But 'unset' is still inferred from lat == 0 && lng == 0, which round 61 asked not to do: a typed home of 0,0 is treated as empty, and a home with lat 0, lng 5 is treated as set. home.alt is not divided by multiplieralt; wp_radius/loiter_radius are not divided by multiplierdist; altunitmultiplier is 1.0; the empty-TXT_WPRad default (startupWPradius) and '30' are not applied; the Invalid_home_location path does not exist. On a non-Format exception the C# keeps the previous overlay; Rust caches an empty route list. There is no test that an unset home yields [last, wp1, first].",
+      "required_fix": "Hold the three home boxes as text (or an explicit 'set' flag) and build home exactly as writeKML does. Pass the unit multipliers from the units settings. Keep the previous routes on a non-FormatException. Add the unset-home homeroute test."
+    },
+    {
+      "id": "R62-06",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1321,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1408-1580 (wpOverlay markers inserted, lbl_distance from overlay.Routes, setgradanddistandaz(wpOverlay.pointlist, home), fence/rally through WPOverlay); GCSViews/FlightData.cs:3956-4046",
+      "summary": "Carried over from R61-03 unchanged. Only routes are taken from the overlay. Markers and polygons are dropped (the app draws uniform pins and white wp_radius circles); the pointlist comes from the pre-manifest overlay_points; lbl_distance is total_distance (home -> items) rather than the sum over overlay.Routes; fence and rally use draw_fence/pins rather than their own WPOverlay instances; the FlightData map does not use WPOverlay. The cache now avoids recomputing every frame, which closes item (7) of R61-03.",
+      "required_fix": "Render overlay.markers and overlay.polygons through ported GMapMarker/GMapPolygon renderers, feed setgradanddistandaz from WPOverlay.pointlist, compute lbl_distance from overlay.routes, draw fence and rally via WPOverlay with the C# arguments, and wire the FlightData map."
+    },
+    {
+      "id": "R62-07",
+      "severity": "P2",
+      "file": "crates/mp-app/src/swarm.rs",
+      "line": 168,
+      "cs_reference": "Swarm/Formation.cs:84-324 (the try covers the transform and the send; the catch prints 'Failed to send command' and nothing is sent to that follower); Swarm/FormationControl.cs getOffsetFromLeader (no catch: the exception leaves the handler)",
+      "summary": "R61-11's transform is fixed, but the error paths are new divergences that matter for safety. target_for returns the leader's own lat/lng/alt when ProjNet throws, and follower_command then sends a position target at the leader's position. C# sends nothing for that follower. offset_from_leader returns (0, 0, 0) on an exception; update_positions accepts it (|x|, |y| < 200) and overwrites the follower's stored offset with zero, so later targets also coincide with the leader. In C# the exception escapes and no offset is stored. The doc comment at swarm.rs:166-167 states the C# behaviour wrongly.",
+      "required_fix": "Return Result/Option from target_for and offset_from_leader; skip the follower's command on Err (log 'Failed to send command ...'), and do not update the offset on Err. Fix the doc comments."
+    },
+    {
+      "id": "R62-08",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan/menu.rs",
+      "line": 820,
+      "cs_reference": "GCSViews/FlightPlanner.cs:3272-3299 (enterUTMCoordToolStripMenuItem_Click: int.Parse/double.Parse in the current culture, new UTM(zoneint, e, n, Hemisphere.South) from GeoUtility, (Geographic)utm, Commands.Rows.Add, updateUndoBuffer(false), setfromMap(lat, lng, (int)ans.Alt))",
+      "summary": "Enter UTM Coord converts with utmpos.ToLLA (ProjNet) through utm_to_latlng, where the C# uses GeoUtility's UTM->Geographic series. The parsers are Rust str::parse (invariant, no AllowThousands), and a bad entry returns silently where int.Parse/double.Parse throw. setfromMap is called with alt (int)ans.Alt = 0 in C#; Rust uses new_wp's default altitude.",
+      "required_fix": "Use GeoUtility UTM::new(zone, e, n, Hemisphere::South) and to_geographic(), parse with dotnet::int_parse/double_parse, surface the exception, and pass alt 0 to the setfromMap equivalent."
+    },
+    {
+      "id": "R62-09",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1887,
+      "cs_reference": "ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapRoute.cs:131-139 (Stroke.DashStyle = Solid mutates the route's own pen, so the switch persists until the route is rebuilt), 143-148 (GPoint local points are integers)",
+      "summary": "R61-04 is fixed in substance. Remaining differences: the 99000 px solid switch is recomputed every frame, where C# changes the route's Stroke permanently (a dashed home leg or arrowed route that once went far off-screen stays solid in C# until writeKML rebuilds it); the arrows and the r <= 20 test use float screen coordinates where GMap uses integer GPoint local positions, so arrows near the 20 px threshold can differ.",
+      "required_fix": "Keep a per-route mutable stroke in the cache and apply the Solid switch to it; round local points to integers (GMap's FromLatLngToLocal) before the path/arrow maths."
+    },
+    {
+      "id": "R62-10",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/maps/wpoverlay.rs",
+      "line": 87,
+      "cs_reference": "ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapPolygon.cs (Points is List<PointLatLng>); WPOverlay.cs:30, 46-48, 403-457",
+      "summary": "R61-05 is fixed (List<PointLatLng>, from_point back) and the default polygon fill is now FromArgb(155, AliceBlue). Still open from R61-06: fence polygon points are PointLatLngAlt with Tag; home/fencehome cannot be null; the unsupported-mission-type comment at :481 says 'nothing is added' where round 61 traced Collection.Add storing the null before the handler throws; marker classes are still an enum. No test asserts that a spline route point has Alt 0 and an empty Tag, which R61-05 asked for.",
+      "required_fix": "Store GMapPolygon.points as Vec<PointLatLng>; take home as Option<&mut PointLatLngAlt>; resolve and document the null-marker path; add the spline Alt/Tag test."
+    },
+    {
+      "id": "R62-11",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 77,
+      "cs_reference": "GCSViews/FlightPlanner.cs:2731-2763 (an exception leaves the previous cell text; MGRS failure likewise); ExtLibs/Controls/Coords.cs",
+      "summary": "R61-12 is partly fixed: format_fixed in the current culture, int_parse/double_parse, and utm_signed_to_geo returning Option are in. Still different: a ProjNet or GeoUtility failure blanks the cells (unwrap_or_default / empty string) where C# keeps the old text; coords::utm_to_geo still returns (NaN, NaN); the doc comments still show values the functions do not produce (coords.rs:36 '55H 694420.123 6083869.456', coords.rs:81 '55HFA9442083869', where the reference test gives 55HFA9671984520 for Canberra).",
+      "required_fix": "Store the cell texts per row and update them only on success; make utm_to_geo return Option; correct the doc examples."
+    },
+    {
+      "id": "R62-12",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/io.rs",
+      "line": 22,
+      "cs_reference": "System.Console.Out (Console.OutputEncoding); ExtLibs/ArduPilot/Linux.cs (Console.WriteLine(ex) prints ex.ToString())",
+      "summary": "R61-13 is partly fixed: Serial.print now uses console_write. The helpers still write UTF-8 rather than Console.OutputEncoding, and Linux.cs's exception output is still the message only.",
+      "required_fix": "Encode with the console output code page and print exceptions in .NET ToString() form."
+    },
+    {
+      "id": "R62-13",
+      "severity": "P2",
+      "file": "crates/mp-core/src/rtk.rs",
+      "line": 42,
+      "cs_reference": "GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:757-834, 908-925; ExtLibs/Utilities/ubx_m8p.cs:440-472",
+      "summary": "Carried over from R61-10 unchanged: no parser cross-resets, '>= 0' instead of '> 0', per-byte exception recovery instead of dropping the read buffer, no sbp/nmea/CAN parsers, NAV-SVIN valid/active != 0 and None on a short payload, SetupM8P without baud hunt/CFG-PRT/pacing, Septentrio/Unicore inline in rtk_page.rs. SetupBasePos's null semantics (R61-14) are now correct but the method still has no caller.",
+      "required_fix": "As R61-10."
+    },
+    {
+      "id": "R62-14",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 2188,
+      "cs_reference": "No C# tests; behaviour is the spec",
+      "summary": "None of this round's ports has a test: process_to_screen (break on id 0/255, append home skip, home removal and the Reset Home prompt condition, Spline2 rates), read_qgc110wpfile (RemoveAt(0) and the empty-list message), load_text's '{' dispatch, draw_gmap_route's arrow positions, the Zero-home overlay, write_waypoint_file golden text (CRLF, fallback home line, half-away rounding), write_param_lines ordering and culture. R61-15's WPOverlay branch coverage and golden data are also still missing.",
+      "required_fix": "Add unit tests for each listed behaviour, and golden outputs recorded from the reference build for WPOverlay, savewaypoints and SaveParamFile."
+    }
+  ],
+  "round_61_status": {
+    "fixed": [
+      "R61-04: draw_gmap_route ports OnRender's Custom arrows and the 99000 px Solid fallback (residual per-frame/integer-coordinate differences in R62-09).",
+      "R61-05: RegenerateWPRoute's spline list is Vec<PointLatLng> and enters wproute through PointLatLngAlt::from_point (Alt 0, empty Tag/Tag2, White); route and homeroute points are PointLatLng (the requested test is missing, R62-10).",
+      "R61-11: Formation's uncached WGS84_UTM transform from the leader's zone and hemisphere is used forward and inverse for both points (its exception paths are a new divergence, R62-07).",
+      "R61-14: SetupBasePos takes Option<&PointLatLngAlt>; None != Zero, then NullReference after both 100 ms sleeps."
+    ],
+    "partly_fixed": [
+      "R61-02: Zero home for (0,0), Tag 'H' with Tag2 = alt-mode name, cached overlay. Still inferred from 0,0, no unit multipliers, no test (R62-05).",
+      "R61-06: default fill FromArgb(155, AliceBlue). Polygon points, null home, null marker and marker defaults still open (R62-10).",
+      "R61-07: LoadWPFile dispatch, readQGC110wpfile and processToScreen ported and used for file loads and MISSION downloads. FENCE/RALLY downloads, empty downloads, setWPParams, zoom, .fen/rally loaders and the context Save WP File still diverge (R62-04).",
+      "R61-08: NEW_LINE, format_fixed, fallback home line and doJumpId 0 are in. The cell model is wrong for processToScreen and setfromMap rows, and the fallback is chosen from 0,0 (R62-03).",
+      "R61-09: saves go through ParamFile.write_param_lines with SortedList order and no header, but the invariant format_value text is re-parsed in the current culture (R62-02).",
+      "R61-12: current-culture formatting/parsing and Option return are in; cells are still blanked on failure, utm_to_geo still NaN, doc examples still wrong (R62-11).",
+      "R61-13: Serial.print uses console_write; encoding and exception ToString still open (R62-12)."
+    ],
+    "still_open": [
+      "R61-01 (now R62-01).",
+      "R61-03 (now R62-06), except the per-frame recomputation, which the cache fixes.",
+      "R61-10 (now R62-13).",
+      "R61-15 (folded into R62-14).",
+      "Older items still open as listed in round 61 (R60-03, R60-05, R60-06/07, R60-08/09, R60-11, R59-03/04/05 items 2-4, R59-07..15, R58-06 items 2-9, R58-09, R58-14, R58-15, R58-18, R57-04/05/06/07/09/11/13/14/15/16/17)."
+    ]
+  },
+  "next_steps": [
+    "R62-02: stop re-parsing invariant text in the current culture in paramfile::save (pass doubles, or current-culture ToString text); add a ',' culture test. This is silent data corruption for non-English users.",
+    "R62-07: make target_for/offset_from_leader fallible and skip the follower command / keep the old offset on Err, as Formation's catch does.",
+    "R62-04: send FENCE/RALLY and empty downloads through processToScreen, port setWPParams and ZoomAndCenterMarkers, make the context Save WP File call savewaypoints, port the .fen and rally loaders, and use modal message boxes.",
+    "R62-03/R62-05: model the Commands grid cells and the TXT_home boxes as C# text/values so savewaypoints, uploads and writeKML read the same strings; pass the unit multipliers.",
+    "R62-06: draw WPOverlay markers and polygons through ported GMap renderers, use pointlist for setgradanddistandaz and routes for lbl_distance, draw fence/rally via WPOverlay, wire FlightData's map.",
+    "R62-08/R62-11: GeoUtility for Enter UTM Coord with .NET parsers; keep coords cells on failure; Option from utm_to_geo; correct doc examples.",
+    "R62-13: port ConfigSerialInjectGPS's read loop and run SetupM8P/SetupBasePos on the port.",
+    "R62-09/R62-10/R62-12: sticky Stroke mutation and integer local points; PointLatLng polygon points and null home; console encoding.",
+    "R62-14: tests for every function added this round, plus golden data from the reference build.",
+    "Then port GCSViews/FlightPlanner.cs file by file (move this round's functions into it under their C# names), followed by MAVLinkInterface/MAVState/CurrentState and MainV2. Regenerate port/MANIFEST.md and move wpoverlay.rs to its manifest path."
+  ],
+  "verdict": "A solid fix round for the map and file paths, with no definite compile errors. The wp route now has Mission Planner's direction arrows, an unset home no longer draws a leg to 0,0, spline points lose Alt/Tag as in C#, and .plan/.waypoints loading follows LoadWPFile, readQGC110wpfile and a close processToScreen port with the Reset Home prompt. ParamFile saving and Formation's transform are wired. New problems: the param save re-parses '.' text in the current culture and corrupts fractional values in comma-decimal locales; the WPL writer's single numeric model does not match the C# grid's per-source cell text; swarm's exception paths now command followers to the leader's position; and FENCE/RALLY downloads, the context Save WP File, the fence/rally loaders and setWPParams still bypass the C# code. No new owned files were ported, so progress stays at about 5.5% (26,127 / 479,014) and the cap stays 1.6. Awarded 1.3; round-file fidelity 6.2; UI/UX 2.2; features 3.0."
+}

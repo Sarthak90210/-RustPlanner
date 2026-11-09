@@ -13,7 +13,8 @@ struct Units {
 
 static UNITS: RwLock<Units> = RwLock::new(Units { dist: (1.0, "m"), alt: (1.0, "m"), speed: (1.0, "m/s") });
 
-const FEET: f32 = 3.280_84;
+/// MainV2: 3.2808399f
+const FEET: f32 = 3.280_839_9;
 
 /// MainV2 / ConfigPlanner: apply the unit choices.
 pub fn set_from(planner: &BTreeMap<String, String>) {
@@ -22,8 +23,8 @@ pub fn set_from(planner: &BTreeMap<String, String>) {
     let speed = match get("speedunits") {
         "fps" => (FEET, "fps"),
         "kph" => (3.6, "kph"),
-        "mph" => (2.236_936, "mph"),
-        "knots" => (1.943_844, "kn"),
+        "mph" => (2.236_936_29, "mph"),
+        "knots" => (1.943_844_49, "kn"),
         _ => (1.0, "m/s"),
     };
     *UNITS.write().unwrap() = Units { dist: len(get("distunits")), alt: len(get("altunits")), speed };

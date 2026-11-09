@@ -1,0 +1,551 @@
+{
+  "round": 71,
+  "date": "2026-11-09",
+  "reviewed_head": "0eddbe4 + uncommitted",
+  "commands_run": [
+    {
+      "command": "git status --short",
+      "result": "25 tracked files modified (including crates/mp-app/src/views/flight_plan.rs, flight_plan/menu.rs, lib.rs, swarm.rs and the dotnet.rs -> dotnet/mod.rs rename). Untracked: crates/mp-app/src/extlibs/ (the new SimpleGrid port), crates/mp-core/src/extlibs/{ardupilot,comms,geoutility,gmap_net_core,interfaces,maps,projnet,utilities}/, the dotnet/*.rs submodules and judging/round-57..70.json."
+    },
+    {
+      "command": "git diff --stat",
+      "result": "25 files changed, 2450 insertions(+), 1156 deletions(-). This counts tracked files only. Most of the ported code is untracked, so the diff does not show it."
+    },
+    {
+      "command": "cargo build --workspace --all-targets",
+      "result": "exit 0. 'Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.26s'. The artifacts were already fresh and cargo replayed no cached warnings, so the build is warning-free."
+    },
+    {
+      "command": "cargo test --workspace",
+      "result": "exit 0, run twice. mp_app lib: 155 passed, 1 ignored (gstreamer::tests::real_runtime_plays_the_default_test_pipeline). missionplanner bin: 0. mp_core lib: 233 passed. Integration tests: altitude_change 7, camera_ftp 1, comms_hardware_bench 3, high_latency 3, link_sim 9, maiden_flight 1, mavserial 4, proximity_wire 1. mp_plugin 0, mp_plugin_example 0, all doc-tests 0. Total: 417 passed, 0 failed, 1 ignored."
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets",
+      "result": "FAILS. 'error: could not compile `mp-core` (lib) due to 3 previous errors; 147 warnings emitted', and the same for lib test (161 warnings, 146 duplicates). The three deny-by-default errors are clippy::while_immutable_condition at extlibs/utilities/missionfile.rs:93 ('while !error', a faithful copy of the C# loop) and clippy::approx_constant at extlibs/utilities/rtcm3.rs:28 (SC2RAD 3.1415926535898) and extlibs/utilities/vector3.rs:91 (HALF_SQRT_2). The build script adds 3 warnings. mp-app is never linted because mp-core aborts first."
+    },
+    {
+      "command": "cargo test -p mp-core --lib -- --list",
+      "result": "233 tests. None covers decimal_parse, decimal_from_double, decimal_to_double, decimal_to_string, decimal_format_fixed or decimal_format_fixed_optional."
+    },
+    {
+      "command": "wc -l reference/MissionPlanner/ExtLibs/SimpleGrid/* ; awk 'END{print NR}' SimpleGridUI.Designer.cs",
+      "result": "SimpleGridUI.cs 475, SimpleGridPlugin.cs 84. SimpleGridUI.Designer.cs has 482 newlines but 483 lines, because the last line has no trailing newline (awk NR = 483, matching the manifest). SimpleGridUI.resx 1058, SimpleGridUI.ko-KR.resx 1058."
+    },
+    {
+      "command": "wc -l crates/mp-app/src/extlibs/mod.rs crates/mp-app/src/extlibs/simplegrid/*.rs",
+      "result": "extlibs/mod.rs 4, simplegrid/mod.rs 8, simplegridplugin.rs 82, simplegridui.rs 672, simplegridui_designer.rs 360."
+    },
+    {
+      "command": "grep -n -i simplegrid port/MANIFEST.md",
+      "result": "44: '| ExtLibs/SimpleGrid | 0 | 3 |'. Lines 2294-2296 still mark SimpleGridPlugin.cs, SimpleGridUI.cs and SimpleGridUI.Designer.cs as todo, although all three Rust files exist at those paths."
+    },
+    {
+      "command": "grep/sed on the resx, GMapControl.cs, GMarkerGoogle.cs, GMapToolTip.cs, GMapRoundedToolTip.cs, GMapPolygon.cs, Core.cs, FlightPlanner.cs, Plugin.cs, CircularBuffer.cs, CommsNTRIP.cs, YPRToOPK.cs, Matrix3.cs, Utils.cs, MainV2.cs:4314-4337 and rust_decimal-1.43.0/src/decimal.rs (as_f64)",
+      "result": "Used for the side-by-side checks below."
+    },
+    {
+      "command": "find crates -name '*.rs' -newer judging/round-70.json",
+      "result": "Changed since the round-70 verdict: survey.rs, dotnet/mod.rs, the 5 extlibs/simplegrid files, lib.rs, flight_plan.rs, flight_plan/menu.rs, commsntrip.rs, swarm.rs, circularbuffer.rs, yprtoopk.rs, and allow-attribute-only edits in commsserialport.rs, geographic.rs, definition.rs, mapprojection.rs, clipper.rs, grid.rs, locationwp.rs and sbp.rs."
+    },
+    {
+      "command": "python -c (struct f32 round-trip of 3.28084/3.2808399, 2.236936/2.23693629, 1.943844/1.94384449; numpy int(v/mult) for v in 0..360)",
+      "result": "fps matches C# (3.2808399200439453 both). mph gives 2.236936092376709 vs C# 2.236936330795288, and knots gives 1.943843960762024 vs 1.9438444375991821, so both differ as f32. For integer speeds 0..360, (int)(v/mult) is the same either way."
+    }
+  ],
+  "commands_note": "Commands were allowed again this round. No GUI was launched and no source file was touched. The build and the tests are clean. Clippy fails on three deny-level lints that predate this round.",
+  "manifest_summary": {
+    "manifest_status": "port/MANIFEST.md is still stale. The three SimpleGrid files are now ported but still marked todo (2294-2296), and so are Grid.cs, clipper.cs, EnumTranslator.cs and LTM.cs from round 70.",
+    "new_owned_files_ported": {
+      "ExtLibs/SimpleGrid/SimpleGridUI.cs": 475,
+      "ExtLibs/SimpleGrid/SimpleGridUI.Designer.cs": 483,
+      "ExtLibs/SimpleGrid/SimpleGridPlugin.cs": 84
+    },
+    "new_owned_lines_ported": 1042,
+    "owned_files_ported_corrected": 140,
+    "ported_lines_corrected": 34792,
+    "ported_lines_derivation": "33,750 (round 70) + 475 (SimpleGridUI.cs) + 483 (SimpleGridUI.Designer.cs, 483 lines by awk because the last line lacks a newline) + 84 (SimpleGridPlugin.cs) = 34,792. All three are owned files in manifest.json. The dotnet decimal helpers are BCL shims and add nothing. FlightPlanView::add_wp_to_list/set_from_map are partial re-implementations inside the unported FlightPlanner.cs, so they add nothing either.",
+    "owned_lines_total_corrected": 479014,
+    "ported_fraction_corrected": 0.0726,
+    "conservatism_note": "This is an upper bound. All 1,042 lines count in full, but parts are emulated rather than ported. The modal ShowDialog is a modeless egui window. The Sizable form is fixed-size, with no Resize handler. GMapControl's own right-drag pan and integer wheel zoom are replaced by map::show. GMapRoundedToolTip, the shared GMapPolygon.DefaultStroke and HoldInvalidation are not modelled. SimpleGridPlugin.Loaded() is a no-op, and the menu entry is hard-coded in menu.rs.",
+    "wiring": "New wiring. menu.rs:525-543 appends 'SimpleGrid' to Auto WP after 'Survey (Grid)', as Loaded() does with autoWPToolStripMenuItem.DropDownItems.Add. FaceMap and Gridv2, which C# also appends there, are not ported. The click builds a PluginHost over self.polygon (FPDrawnPolygon.Points, mutable, so calcpolygonarea's close/unclose shows through), planned_home_location(), app.settings.planner (the Settings.Instance stand-in) and app.settings.fd_map.provider (FDMapType), then calls GridPlugin.but_Click. flight_plan.rs:1880-1903 shows the form every frame and feeds each Accept tuple through add_wp_to_list (FlightPlanner.AddCommand -> FillCommand -> setfromMap). The old 4-field SimpleGrid dialog is gone, and survey::grid is now only used by survey_ui.rs:260 (R70-02). Grid::CreateGrid is now reached with SimpleGrid's exact arguments: altitude, distance, spacing, angle, overshoot1, overshoot2, Enum.Parse(CMB_startfrom.Text), false, 0, 0, 0, PlannedHomeLocation, true. That fixes R70-03. Still unwired: CreateCorridor, CreateRotary, StartPosition.Point/crossgrid, GridUI.cs."
+  },
+  "scores": {
+    "overall": 1.5,
+    "overall_cap": 1.8,
+    "overall_cap_derivation": "ceil1(34,792 / 479,014 * 10) = ceil1(0.726) = 0.8, plus at most +1.0 for the pre-manifest app = 1.8. Awarded 0.7 for ported lines + 0.8 for the pre-manifest app = 1.5. The build and all 417 tests pass, and that is now verified rather than hand-checked. The 0.1 held back from the ported-lines part covers the following. The SimpleGrid form is modeless and fixed-size where C# is a modal, Sizable ShowDialog. Its map uses the app's generic pan and zoom, not GMapControl's. Its message boxes lose the 'Error' caption. add_wp_to_list/set_from_map skip setfromMap's home-alt check and both InputBox prompts. CreateCorridor and CreateRotary still have no caller. MANIFEST.md is stale for seven ported files.",
+    "round_files_fidelity": 6.6,
+    "round_files_fidelity_rationale": "Up 0.1. I compared the three SimpleGrid files line by line with the C# and the resx. They are mostly faithful. Constructor order: InitializeComponent, then the DataSource bind raising SelectedIndexChanged on an empty list (CreateGrid returns empty, AddDrawPolygon adds an empty polygon, ZoomAndCenterMarkers does nothing), then list from FPDrawnPolygon, calcpolygonarea, NUM_Distance and NUM_spacing set to (int)sqrt(area)/10 with one ValueChanged each, then NUM_angle = (decimal)((angle+360)%360), then Load -> loadsettings gated on 'simplegrid_camera'. NumericUpDown keeps C#'s rules: Value equality before the range check, no event on an equal value, the scale kept (50 vs 50.00), Constrain on parse, UpButton/DownButton clamping with the overflow fallback, and 'F'+DecimalPlaces text. domainUpDown1_ValueChanged keeps the empty-grid early return before the labels, the M/S/E marker and counter logic (a++ for M only with internals, always for S/E), the 'Grid' polygon only when chk_grid, 'Poly Dist ' + double G15 on the console, '#' for the area (an empty string for 0), '0.##' for km and for the decimal distance, and (int)(strips/2). calcpolygonarea matches: the message box on an empty polygon, closing with != and unclosing with == (so a single-point polygon empties FPDrawnPolygon, as in C#), the (int)((lng+186)/6) zone, lat<0 ? south : north, and the shoelace in UTM. getAngleOfLongestSide keeps the double GetDistance and the List-indexer exception text. ZoomAndCenterMarkers matches GetRectOfAllMarkers (markers only, as the MP fork does), GetMaxZoomToFitRect (minZoom start, the Width+10/Height+10 test, maxZoom/2 for a degenerate rect) and SetZoomToFitRect. BUT_Accept_Click keeps the DO_CHANGE_SPEED row with (int)((float)decimal / multiplierspeed), the M rows gated on internals, the duplicate S/E suppression through lastpnt starting at PointLatLngAlt.Zero, and 'Bad Grid'. The resx layout is exact: 1008x537 client, map 755x457, Stats 755x80 at 0,457, tab control 253x537 at 755,0, the page at 4,22, groupBox6 236x262 at 6,6, groupBox4 230x87 at 9,334, and every label, NumericUpDown, combo, button and checkbox location, size and text. The designer defaults match (altitude 100/5..9999/inc 10, Distance and spacing 50/0.1..99999/2dp, angle 0..360, overshoots 0..9999, speed 5/0..360, every checkbox on). Lost: the NumericUpDown ArgumentOutOfRange text says 'minimum'/'maximum' where .NET says 'Minimum'/'Maximum' (R71-05). Wheel and step events collapse into one ValueChanged (R71-11). savesettings runs before the AddWPtoList calls (R71-12). The decimal helpers drift from VarDecFromR8/VarR8FromDec (R71-06). The list-indexer error type is wrong (R71-12). The GMap behaviours listed in the conservatism note are missing (R71-03, R71-04, R71-09, R71-10). The four compile fixes are correct against the C#. CircularBuffer.Put(T) now returns IndexOutOfRange when Put(T[]) leaves tail == capacity, which is what buffer[tail] throws in C#, but Get() and Skip() still panic in the same situation (R71-15). The NTRIP request is written then std::io::Write::flush(st), as sw.Flush() does. The YPRtoOPK expectation of phi = -90 at 0,0 is what the C# gives: xnp = (0,0,1) against znp = (0,0,-1), so ynp = 0 and CEB[0,2] = -1. The swarm tolerance of 1e-6 is justified because Matrix3.from_euler312 really does use float Utils.sinf/cosf.",
+    "ui_ux": 2.7,
+    "ui_ux_rationale": "Up 0.1. Auto WP > SimpleGrid now opens the real form, with the exact resx layout and texts, the 'Simple' tab, both group boxes, red boundary markers, numbered green markers with hover tooltips, the yellow width-4 grid polygon, the stats labels and marker dragging that regenerates the grid. Still wrong. (1) The form is modeless and fixed-size. C# ShowDialog blocks the planner, and the Sizable form re-docks and re-zooms on Resize (R71-03). (2) The map pans and zooms the app's way. There is no right-drag pan (GMap DragButton = Right), Alt+left-drag pans when C# does nothing, the wheel zoom is smooth and fractional, and zoom is clamped at provider max + 2 instead of MaxZoom 24 (R71-04). (3) Tooltips are drawn as GMapToolTip-like boxes in the wrong place, not as GMapRoundedToolTip (R71-09). (4) 'Bad Grid' and 'Please define a polygon.' lose their 'Error' caption (R71-05). (5) The CMB_startfrom combo is not editable, the NumericUpDowns accept any key, and the arrows do not auto-repeat (R71-11). Every round-70 UI gap is unchanged: the GridUI heuristics, the WPOverlay markers, the FlightData map and the title bar.",
+    "features": 3.6,
+    "features_rationale": "Up 0.1. SimpleGrid now offers start position (Home/BottomLeft/TopLeft/BottomRight/TopRight/Point), in-line trigger spacing (M points), separate overshoots, an estimated speed written as DO_CHANGE_SPEED, the internals/markers/boundary/grid toggles, persisted settings and marker editing. Accept goes through an AddCommand-shaped path with spline substitution, setfromMap's cell rounding and the alt rules. Missing: setfromMap's 'You must have a home altitude' check and both InputBox prompts, the 'Invalid Home or wp Alt' path, selectedrow tracking, ChangeColumnHeader and convertFromGeographic (R71-07). The mph and knots multipliers are not C#'s f32 values (R71-08). Spiral and corridor surveys, crossgrid and GridUI's real lanes are still unreachable (R71-02). All round-68..70 feature gaps remain."
+  },
+  "compile_check": {
+    "summary": "This round was compiled for real. cargo build --workspace --all-targets succeeds with no warnings, and cargo test --workspace passes 417 tests (1 ignored, 0 failed). It is the first verified compile in three rounds. The fixes it forced (an ambiguous flush, CircularBuffer.Put(T), the yprtoopk expectation, the swarm tolerance) show that rounds 68-70's hand compile checks missed real errors. cargo clippy --workspace --all-targets fails in mp-core on three deny-by-default lints (missionfile.rs:93, rtcm3.rs:28, vector3.rs:91). Each one copies the C# exactly, but they stop clippy before it reaches mp-app (R71-14).",
+    "likely_errors": [],
+    "warnings": [
+      "clippy: 3 deny-level errors plus 147 (lib) / 161 (lib test) warnings in mp-core and 3 in build.rs. mp-app is not linted.",
+      "clipper.rs:9 now carries a file-wide #![allow(..., clippy::all)], which hides every clippy finding in a 4,700-line file.",
+      "commsserialport.rs:785 #[allow(clashing_extern_declarations)]: CreateFileW is declared with u32 flags here and i32 in commsserialpipe.rs:122. The ABI is identical and mirrors the two C# DllImports, so this is acceptable, but the allow needs a comment saying why."
+    ],
+    "test_failures": [],
+    "test_expectations_checked": [
+      "circularbuffer.rs put_get_wrap_and_overflow: cap 3, Put([1,2,3]) leaves tail = 3. Put(4) gives InvalidOperation 'Buffer Overflow' because size == capacity. Get() returns 1. Put(4) then reaches buffer[3], which is IndexOutOfRange in C# and now in the port. to_array is [2,3]. Correct.",
+      "yprtoopk.rs level_north_facing_camera: CEn rows (0,0,1), (0,0,0), (0,0,-1). Row 0 times CBb gives (0,0,-1), so phi = asin(-1) = -90. omega = atan2(-0, 1) and kappa = atan2(-0, 0) are both -0. Correct, but omega and kappa are only checked for being finite.",
+      "swarm.rs quaternion norm within 1e-6: Utils.sinf/cosf round to f32, so the rotation matrix is orthonormal only to about 1e-7. Correct.",
+      "simplegridui.rs gmap_distance_is_haversine_km: 6378.137 * pi / 180 = 111.31949079 km, which is PureProjection.GetDistance. pixel_projection_matches_gmap: (0,0) at zoom 2 gives 512,512. These are the only SimpleGrid tests (R71-13)."
+    ],
+    "low_confidence_risks": [
+      "simplegridui_designer.rs:141 (focus): typing in a NumericUpDown and then clicking Accept depends on egui reporting lost_focus no later than the button click. Since numeric_updown runs first, ValueChanged would be queued before AcceptClick, which matches WinForms' Validating-before-Click order. I did not test this.",
+      "dotnet/mod.rs:134 decimal_try_parse relies on rust_decimal's FromStr to round more than 28 fractional digits the way decimal.Parse does. I did not verify this.",
+      "simplegridui.rs:552 clones the whole layer every frame, and flight_plan.rs:1883 moves self.polygon and app.settings.planner out and back every frame. That is wasteful but harmless.",
+      "carried: clipper.rs stale m_Scanbeam after a failed Execute (R71-21); grid.rs:163 lane += 1 can overflow (R71-17); dotnet/mod.rs LCIDToLocaleName; versiondetection.rs:79; ap_geodesicgrid.rs:403; flight_plan.rs NaN WpOverlayKey."
+    ]
+  },
+  "findings": [
+    {
+      "id": "R71-01",
+      "severity": "P0",
+      "file": "port/MANIFEST.md, crates/mp-app/src/mp/ (missing)",
+      "line": 2294,
+      "cs_reference": "reference/MissionPlanner/{MainV2.cs, GCSViews/FlightPlanner.cs, GCSViews/*, Grid/GridUI.cs, ExtLibs/ArduPilot/Mavlink/*, ExtLibs/ArduPilot/APFirmware.cs, Plugins/FaceMap, ExtLibs/MissionPlanner.Gridv2, ...}",
+      "summary": "Carried from R70-01. SimpleGrid (1,042 lines) is ported, but about 92.7% of owned C# lines are still missing, including FlightPlanner.cs, whose AddCommand/FillCommand/setfromMap the SimpleGrid accept path now imitates in flight_plan.rs. MANIFEST.md marks SimpleGridPlugin.cs, SimpleGridUI.cs and SimpleGridUI.Designer.cs (2294-2296) todo, and Grid.cs, clipper.cs, EnumTranslator.cs and LTM.cs too, although each has a port.",
+      "required_fix": "Regenerate MANIFEST.md (scripts/port_manifest.py should detect existing Rust paths). Port Grid/GridUI.cs on top of grid.rs, then GCSViews/FlightPlanner.cs (so AddCommand/setfromMap are real), APFirmware.cs, MAVState.cs/MAVLinkInterface.cs and MainV2.cs."
+    },
+    {
+      "id": "R71-02",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/survey_ui.rs",
+      "line": 260,
+      "cs_reference": "Grid/GridUI.cs:578-645 (domainUpDown1_ValueChanged), 1620-1800 (accept); ExtLibs/Utilities/Grid.cs:46-53, 190-194, 327-334",
+      "summary": "Carried from R70-02 unchanged. survey_ui still calls the survey::grid shim for S/E endpoints only, then reorders, extends and places triggers with local heuristics. Corridor, Spiral and lane_dist feed nothing. Crossgrid does not use StartPosition.Point. SimpleGrid now shows that calling Grid::CreateGrid with the form's own arguments works, so this has no excuse left.",
+      "required_fix": "As R70-02: port GridUI.cs's domainUpDown1_ValueChanged and accept path, call CreateCorridor/CreateRotary/CreateGrid with GridUI's exact arguments, do crossgrid via StartPointLatLngAlt + StartPosition::Point, and delete lanes()/extend()/the trigger interpolation and survey::grid."
+    },
+    {
+      "id": "R71-03",
+      "severity": "P1",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 515,
+      "cs_reference": "ExtLibs/SimpleGrid/SimpleGridPlugin.cs:67-71 (using (Form gridui = new GridUI(this)) { ThemeManager.ApplyThemeTo(gridui); gridui.ShowDialog(); }); SimpleGridUI.resx (no FormBorderStyle, so Sizable; map Dock Fill, groupBox5 Dock Bottom, tabControl1 Dock Right); SimpleGridUI.Designer.cs:425 (this.Resize += GridUI_Resize); SimpleGridUI.cs:459-462",
+      "summary": "New. The form is a modeless egui::Window with .resizable(false).fixed_size(1008x537). In C# ShowDialog is modal. While SimpleGrid is open the Flight Planner gets no input, so FPDrawnPolygon, the mission list, the home location and the active screen cannot change under the form. In the port the planner keeps running. The user can edit or clear self.polygon (calcpolygonarea then reads a different polygon from the form's list), right-click Auto WP > SimpleGrid again (menu.rs:539 silently replaces the open form), switch lists, or leave the screen. The C# form is also Sizable: the map fills the space left of the 253 px tab control and above the 80 px Stats box, and every resize, including maximise, calls GridUI_Resize -> map.ZoomAndCenterMarkers('polygons'). The port cannot be resized and has no Resize handler. MAP_RECT and GetMaxZoomToFitRect's Width/Height are constants.",
+      "required_fix": "Show the form as an app-level modal: block planner input and context menus while simple_grid is Some, or route it through the app's modal stack. Make the window resizable, lay out map/Stats/tab by their Dock rules from the current client size, pass the live map size to ZoomAndCenterMarkers, and call GridUI_Resize whenever the client size changes."
+    },
+    {
+      "id": "R71-04",
+      "severity": "P2",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 549,
+      "cs_reference": "SimpleGridUI.Designer.cs:83-103 (CanDragMap true, MaxZoom 24, MinZoom 2, MouseWheelZoomType.MousePositionWithoutCenter, ScaleMode Fractional); GMapControl.cs:320 (DragButton = MouseButtons.Right), 2132-2175 (marker enter/leave only when Core.mouseDown.IsEmpty); SimpleGridUI.cs:187 (Control.ModifierKeys != Keys.Alt), 212 (e.Button == MouseButtons.Left), 298/307-311 (HoldInvalidation = true, never reset on the empty-grid return)",
+      "summary": "New. The map's own behaviour is map::show's, not GMapControl's. (a) Right-drag panning, which is GMap's DragButton with CanDragMap = true, is missing, because map::show pans only on a primary drag. (b) Alt+left-drag: C# sets no isMouseDown and GMap does not drag on Left, so nothing moves. In the port, consume = isMouseDown is false, so map::show pans. (c) map_MouseDown tests !alt, where C# tests ModifierKeys != Keys.Alt exactly. Alt+Shift counts as a normal press in C#. (d) map_MouseMove uses primary_down, where C# requires e.Button == Left exactly (Left+Right held does not drag). (e) Wheel zoom is smooth and fractional (scroll/200) and clamped at provider max + 2, not integer steps around the cursor up to MaxZoom 24. (f) Marker enter/leave runs during a right-drag, where C# skips it while Core.mouseDown is set. (g) The empty-grid return leaves map.HoldInvalidation = true in C#, so the map stops repainting until the next non-empty grid. The port keeps painting. (h) MouseUp fires whenever the release is over the map, ignoring which control captured the press.",
+      "required_fix": "Give map::show a GMapControl mode: a configurable DragButton (Right here), integer wheel zoom at the mouse position bounded by MinZoom/MaxZoom, and no primary pan when the host handles the mouse. Use exact modifier and button equality in the handlers, skip enter/leave while a drag-button press is active, model HoldInvalidation (freeze the last frame), and track press capture for MouseUp."
+    },
+    {
+      "id": "R71-05",
+      "severity": "P2",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 539,
+      "cs_reference": "SimpleGridUI.cs:455 (CustomMessageBox.Show(\"Bad Grid\", \"Error\")); SimpleGridPlugin.cs:75 (CustomMessageBox.Show(\"Please define a polygon.\", \"Error\")); NumericUpDown.Value setter (SR.InvalidBoundArgument, \"Value\", value.ToString(CurrentCulture), \"'Minimum'\", \"'Maximum'\"); Program.cs Application_ThreadException",
+      "summary": "New. Every message goes through app.toasts.error(text), which is CustomMessageBox.Show(text, \"\"). 'Bad Grid' and 'Please define a polygon.' (menu.rs:540 via ButClick::Error) lose their 'Error' caption, although Toasts::message(text, caption) exists. Exceptions from the constructor (NUM_*.Value out of range, ProjNet), from Load (decimal.Parse FormatException in loadsetting) and from any ValueChanged become a plain box with e.to_string(). In C# they escape the event handler to MP's unhandled-exception dialog. simplegridui_designer.rs:57 builds the ArgumentOutOfRange text as \"...should be between 'minimum' and 'maximum'.\". .NET Framework passes \"'Minimum'\" and \"'Maximum'\".",
+      "required_fix": "Use app.toasts.message(\"Bad Grid\", \"Error\") and message(\"Please define a polygon.\", \"Error\"). Send exceptions through the app's port of Program's unhandled-exception handler. Capitalise 'Minimum'/'Maximum' and format the value with the current culture. Add tests for the three message paths."
+    },
+    {
+      "id": "R71-06",
+      "severity": "P2",
+      "file": "crates/mp-core/src/dotnet/mod.rs",
+      "line": 147,
+      "cs_reference": ".NET Framework decimal.cpp VarDecFromR8 / VarR8FromDec; Number.ParseDecimal with NumberStyles.Number; Decimal.ToString() (NumberFormatInfo.NegativeSign)",
+      "summary": "New. The System.Decimal helpers are approximations and have no tests. (1) decimal_from_double formats {:.14e} and calls Decimal::from_scientific. For |x| < ~1e-14 this needs a scale above 28, from_scientific fails, and unwrap_or returns 0. VarDecFromR8 caps the scale at 28 and keeps the digits, so (decimal)1e-15 = 0.000000000000001. It also rounds the exact decimal expansion half-to-even, where VarDecFromR8 scales with dbl * 10^p in double arithmetic and rounds the residual (> 0.5, or == 0.5 with an odd mantissa), so the 15th digit can differ. (2) decimal_to_double uses rust_decimal's as_f64: integral + frac, then round(value * 10^s) / 10^s. VarR8FromDec computes ((double)lo64 + (double)hi32 * 2^64) / 10^scale. The two agree for mantissas below about 2^52 and diverge above that, for example a parsed 20-digit value. (3) decimal_parse maps overflow to FormatException ('Input string was not in a correct format.') where C# throws OverflowException ('Value was either too large or too small for a Decimal.'). It rejects a trailing sign ('5-'), which NumberStyles.Number allows. (4) decimal_to_string replaces only '.' and ignores the culture's NegativeSign.",
+      "required_fix": "Port VarDecFromR8 and VarR8FromDec bit for bit on the 96-bit mantissa and scale. Make decimal_parse follow ParseNumber for NumberStyles.Number: trailing sign, overflow as OverflowException, more than 28 digits rounded. Use NegativeSign. Add golden tests: (decimal)1e-15, (decimal)0.1, (decimal)123.456789012345678, (double)79228162514264337593543950335m, decimal.Parse('5-'), '1,000.50', and 'F2'/'0.##' of 2.345m and -0.001m."
+    },
+    {
+      "id": "R71-07",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 687,
+      "cs_reference": "GCSViews/FlightPlanner.cs:538-548 (AddCommand: selectedrow = Commands.Rows.Add(); FillCommand; writeKML), 3390-3428 (FillCommand: Command/TagData cells, ChangeColumnHeader), 1096-1244 (setfromMap), 2395-2425 (Commands_RowsAdded)",
+      "summary": "New. add_wp_to_list/set_from_map is a shim of the unported FlightPlanner, not a port. Missing pieces: the 'selectedrow > Commands.RowCount' guard; double.TryParse(TXT_homealt.Text), which fails with 'You must have a home altitude' plus InputBox('Home Alt', 'Home Altitude', '100') and returns on Cancel; int.TryParse(TXT_DefaultAlt.Text), replaced by an f32 fract() test, so a text like '100.0' that fails in C# passes here; the results1 == 0 InputBox('Default Alt', 'Default Altitude', '100'), replaced by a silent switch to 100 with no Cancel path; the 'Invalid Home or wp Alt' branch with its red cell; ChangeColumnHeader and the header-text guards ('Lat', 'Long', 'Alt*', 'Delay'); convertFromGeographic for the UTM/MGRS columns; selectedrow = the new row; TagData. The verify-height values are computed in f64 and cast to f32. C# computes int * float multiplieralt in float (relative) or double (absolute) and round-trips through the cell's ToString().",
+      "required_fix": "Port FlightPlanner.AddCommand, FillCommand, setfromMap and Commands_RowsAdded with the grid cells as strings (TXT_homealt and TXT_DefaultAlt as text), including both InputBox prompts and their Cancel returns, selectedrow and the header checks. Add tests for an invalid default alt, a zero default alt (cancel and accept) and verify-height in each alt mode."
+    },
+    {
+      "id": "R71-08",
+      "severity": "P3",
+      "file": "crates/mp-app/src/units.rs",
+      "line": 25,
+      "cs_reference": "MainV2.cs:4318-4330 (multiplierspeed = 3.2808399f / 3.6f / 2.23693629f / 1.94384449f)",
+      "summary": "New, found through BUT_Accept_Click's (float)NUM_UpDownFlySpeed.Value / CurrentState.multiplierspeed. mph is 2.236_936 (f32 2.236936092) and knots is 1.943_844 (f32 1.943843961). C# has 2.23693629f (2.236936331) and 1.94384449f (1.943844438). For integer speeds 0..360 the DO_CHANGE_SPEED parameter comes out the same, but every displayed speed in those units is off by about 1e-7 relative, and fractional NumericUpDown entries can truncate differently.",
+      "required_fix": "Use the C# literals 3.2808399f, 3.6f, 2.23693629f and 1.94384449f, and check the alt/dist multipliers against MainV2.cs in the same way."
+    },
+    {
+      "id": "R71-09",
+      "severity": "P3",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 641,
+      "cs_reference": "GMapMarker.cs:175-190 (ToolTipText setter creates GMapRoundedToolTip); ToolTips/GMapRoundedToolTip.cs:44-64; GMapToolTip.cs:44-110 (Font GenericSansSerif 14px Bold, Stroke MidnightBlue alpha 140 width 2 round join, Fill AliceBlue alpha 222, Foreground Navy, TextPadding 10x10, Offset 14,-44, centred text)",
+      "summary": "New. draw_tooltip claims to be GMapToolTip.OnRender, but these markers get a GMapRoundedToolTip. C# draws rect = (tp.x+14, tp.y-44-st.Height, st.Width+20, st.Height+10), a line to (rect.X+Radius/2, rect.Bottom-Radius/2), a rounded rectangle and centred bold text. The port puts the box top at tp.y-44 (one text height too low), makes it st.Height+20 tall, draws the line to the left-middle, uses an opaque stroke and draws regular-weight text.",
+      "required_fix": "Port GMapRoundedToolTip.OnRender with its Radius, DrawRoundRectangle, Stroke alpha 140, bold 14px font and centred StringFormat."
+    },
+    {
+      "id": "R71-10",
+      "severity": "P3",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 373,
+      "cs_reference": "SimpleGridUI.cs:345-348 (wppoly.Stroke.Color = Color.Yellow; wppoly.Stroke.Width = 4); GMapPolygon.cs:231-262 (public static readonly Pen DefaultStroke; Stroke = DefaultStroke; LineJoin.Round, Width 5)",
+      "summary": "New. wppoly.Stroke is the shared static GMapPolygon.DefaultStroke. Setting its Color and Width turns every GMapPolygon in the process that still uses the default pen yellow and 4 px wide, from the first SimpleGrid run until restart. The port draws a private yellow stroke and leaves other polygons alone. It also drops the round line join of DefaultStroke.",
+      "required_fix": "Model GMapPolygon.DefaultStroke as shared mutable state in the map overlay port. Have SimpleGrid mutate it as C# does and draw default-pen polygons from it. Use round joins."
+    },
+    {
+      "id": "R71-11",
+      "severity": "P3",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui_designer.rs",
+      "line": 110,
+      "cs_reference": "UpDownBase.OnMouseWheel (wheelDelta accumulation / WHEEL_DELTA * MouseWheelScrollLines, ignored with Shift/Alt or a mouse button down, one UpButton per line); NumericUpDown.UpButton/DownButton (Value setter raises ValueChanged each time), OnTextBoxKeyPress (digit/separator/sign filter), UpDownButtons auto-repeat timer; ComboBox default DropDownStyle.DropDown; SimpleGridUI.resx TabIndex values",
+      "summary": "New. numeric_updown works only while focused. It takes 3 steps per raw wheel event whatever the delta, ignores the Shift/Alt and button-down suppression, and folds the 3 UpButton calls into one ValueChanged. C# raises domainUpDown1_ValueChanged three times, so CreateGrid runs three times and 'Poly Dist' is printed three times. The text box accepts any character, where OnTextBoxKeyPress beeps and rejects them. Holding an arrow steps once instead of auto-repeating. CMB_startfrom is an editable DropDown in C#, so typed text reaches Enum.Parse on the next ValueChanged and can throw 'Requested value 'x' was not found.'. The egui ComboBox cannot be typed into. Tab order (TabIndex) is not modelled.",
+      "required_fix": "Port UpDownBase.OnMouseWheel with hover delivery and wheelDelta accumulation, raise one ValueChanged per UpButton/DownButton, add the key filter and auto-repeat, make the combo editable with Text separate from SelectedIndex, and follow the resx TabIndex order."
+    },
+    {
+      "id": "R71-12",
+      "severity": "P3",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 505,
+      "cs_reference": "SimpleGridUI.cs:421-451 (quickadd, AddWPtoList..., quickadd = false, writeKML(), savesettings(), Close()), 228 (list[i] = ..., List<T> indexer), 464-467; GMapControl.cs:918-923 (lazyEvents), RectLatLng.LocationRightBottom; SimpleGridPlugin.cs:69 (ApplyThemeTo before ShowDialog/Load)",
+      "summary": "New. These are order and exception-path details. (1) savesettings runs before the AddWPtoList calls. In C# it runs after them and after writeKML, so an exception in AddCommand leaves the settings unsaved. (2) GridUI_Load runs inside new(), before the caller's equivalent of ThemeManager.ApplyThemeTo. (3) ZoomAndCenterMarkers passes the raw bottom/right to FromLatLngToPixel. C# uses rect.LocationRightBottom = (top - (top - bottom), left + (right - left)), which can differ in the last bit. It also applies at once where C# defers through lazyEvents until the control loads. (4) map_MouseMove returns IndexOutOfRange ('Index was outside the bounds of the array.') for a bad CurrentGMapMarkerIndex. List<T>'s indexer setter throws ArgumentOutOfRange ('Index was out of range. Must be non-negative and less than the size of the collection.\\r\\nParameter name: index'). (5) map.HoldInvalidation true/false around the rebuild is not modelled (see R71-04 g).",
+      "required_fix": "Move savesettings after the adds (return it as part of the Accept result, applied after add_wp_to_list and writeKML). Run Load after theming, in the frame the window first shows. Compute LocationRightBottom as C# does. Use the List indexer exception."
+    },
+    {
+      "id": "R71-13",
+      "severity": "P3",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 655,
+      "cs_reference": "No C# tests. SimpleGridUI.cs behaviour is the spec.",
+      "summary": "New. The only SimpleGrid tests are a haversine constant and one pixel projection. Nothing tests constructor event order (the DataSource-triggered empty run, the two ValueChanged from Distance/spacing, the angle), calcpolygonarea on open, closed and single-point polygons and the mutation of FPDrawnPolygon, getAngleOfLongestSide, the '#' area text (empty for 0), '0.##', (int)(strips/2), Accept's duplicate S/E suppression and M gating, the DO_CHANGE_SPEED value under each speed unit, settings round-trips that keep the decimal scale ('50.00'), loadsettings' 'simplegrid_camera' gate, NumericUpDown range errors, or Enum.Parse failures.",
+      "required_fix": "Add headless tests that build GridUI::new over a fixed polygon and settings map and assert the layer, labels, grid and Accept tuples against values captured from the C# build."
+    },
+    {
+      "id": "R71-14",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/missionfile.rs",
+      "line": 93,
+      "cs_reference": "ExtLibs/Utilities/MissionFile.cs (bool error = false; while (!error)); rtcm3.cs (SC2RAD 3.1415926535898); Vector3.cs (HALF_SQRT_2 0.70710678118654757)",
+      "summary": "New. cargo clippy --workspace --all-targets fails in mp-core on three deny-by-default lints: while_immutable_condition at missionfile.rs:93, and approx_constant at rtcm3.rs:28 and vector3.rs:91. All three copy the C# exactly, which is right, but clippy aborts before mp-app, so none of the new SimpleGrid code is linted. There are also 147 warnings, and clipper.rs now hides everything with clippy::all.",
+      "required_fix": "Add item-level #[allow(clippy::while_immutable_condition)] and #[allow(clippy::approx_constant)], each with a comment citing the C# line. Get clippy to run across the workspace, and replace clipper.rs's clippy::all with the specific lints it needs."
+    },
+    {
+      "id": "R71-15",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/circularbuffer.rs",
+      "line": 163,
+      "cs_reference": "ExtLibs/Utilities/CircularBuffer.cs:150-163 (Get(T[],..) can leave head == capacity), 133-141 (Skip leaves head >= capacity when count > capacity), 166-178 (Get(): var item = buffer[head] throws IndexOutOfRangeException)",
+      "summary": "New, the other half of this round's Put(T) fix. get_range leaves head == capacity after reading the last slot, and skip(count) can leave head >= capacity. C#'s Get() then reads buffer[head] and throws IndexOutOfRangeException, while the port indexes self.buffer[self.head as usize] and panics. Repro: cap 3, put_all([1,2,3]), get_count(3), put_all([4]) (tail wraps, size 1), get(). C# throws IndexOutOfRange, the port panics.",
+      "required_fix": "In get(), return crate::dotnet::index_out_of_range() when head is out of bounds, as put() now does. Add the repro above as a test."
+    },
+    {
+      "id": "R71-16",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan/menu.rs",
+      "line": 525,
+      "cs_reference": "ExtLibs/SimpleGrid/SimpleGridPlugin.cs:36-61 (Loaded: find autoWPToolStripMenuItem, else col.Add(but)); Plugins/FaceMap/FaceMapPlugin.cs:45; ExtLibs/MissionPlanner.Gridv2/GridPluginv2.cs:52; Plugin/PluginLoader.cs (load order)",
+      "summary": "New. SimpleGridPlugin.Loaded() is a no-op, and menu.rs hard-codes the item after 'Survey (Grid)'. In C# the item is added at runtime, so its position follows plugin load order, next to FaceMap's and Gridv2's entries in the same drop-down, and it can be disabled through the plugin manager. FaceMap and Gridv2 are not ported, so their Auto WP entries are missing. PluginHost.FPMenuMap is not a real menu model, so the 'hit == false -> col.Add(but)' fallback cannot happen.",
+      "required_fix": "Give FlightPlanView an FPMenuMap item model that plugins append to in Loaded(), drive the context menu from it, register plugins in PluginLoader order, and port FaceMap and Gridv2 or list them as missing in MANIFEST.md."
+    },
+    {
+      "id": "R71-17",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/grid.rs",
+      "line": 163,
+      "cs_reference": "ExtLibs/Utilities/Grid.cs:34, 46-53, 190-194, 275-277, 295-302, 327-334; List<T>.GetRange",
+      "summary": "Carried from R70-04 unchanged (grid.rs only gained allow attributes): no async wrappers, StartPointLatLngAlt aliasing, the GetRange message for IndexOf -1, the dead ans.Count() > 2 block, and lane += 1 overflow.",
+      "required_fix": "As R70-04."
+    },
+    {
+      "id": "R71-18",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/grid.rs",
+      "line": 956,
+      "cs_reference": "No C# tests. Grid.cs behaviour is the spec.",
+      "summary": "Carried from R70-05 unchanged: shape-only grid tests and no ReversePolyTreePaths test. SimpleGrid now exercises spacing (M points) and every StartPosition through the UI, and none of these paths is tested.",
+      "required_fix": "As R70-05."
+    },
+    {
+      "id": "R71-19",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan/menu.rs",
+      "line": 873,
+      "cs_reference": "GCSViews/FlightPlanner.cs:3661-3666, 3702, 999-1035",
+      "summary": "Carried from R70-06 unchanged: the offset menu still maps a double.Parse failure to 0 and runs.",
+      "required_fix": "As R70-06."
+    },
+    {
+      "id": "R71-20",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 4215,
+      "cs_reference": "ExtLibs/Utilities/clipper.cs:4400-4444, 3336-3340, 130-203",
+      "summary": "Carried from R70-07 unchanged: PolyTreeToPaths copies, no Contour_mut, Swap or IsOpen setter, and Clear does not truncate.",
+      "required_fix": "As R70-07."
+    },
+    {
+      "id": "R71-21",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 1585,
+      "cs_reference": "ExtLibs/Utilities/clipper.cs:1137-1163, 1586-1590, 2958-2978, 4378",
+      "summary": "Carried from R70-08 unchanged.",
+      "required_fix": "As R69-05."
+    },
+    {
+      "id": "R71-22",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/enumtranslator.rs",
+      "line": 118,
+      "cs_reference": "ExtLibs/Utilities/EnumTranslator.cs:92, 107-123",
+      "summary": "Carried from R70-09 unchanged.",
+      "required_fix": "As R69-07."
+    },
+    {
+      "id": "R71-23",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1701,
+      "cs_reference": "GCSViews/FlightPlanner.cs:5606-5609, 2145-2155, 233-238",
+      "summary": "Carried from R70-10 unchanged.",
+      "required_fix": "As R69-08."
+    },
+    {
+      "id": "R71-24",
+      "severity": "P2",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 592,
+      "cs_reference": "MainV2.cs:1665-1735, 1758-1809; ExtLibs/Mavlink/MAVLinkParam.cs:219-224",
+      "summary": "Carried from R70-11 unchanged.",
+      "required_fix": "As R68-03."
+    },
+    {
+      "id": "R71-25",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/ltm.rs",
+      "line": 174,
+      "cs_reference": "ExtLibs/Utilities/LTM.cs:240-242, 341-349",
+      "summary": "Carried from R70-12 unchanged.",
+      "required_fix": "As R68-05."
+    },
+    {
+      "id": "R71-26",
+      "severity": "P2",
+      "file": "crates/mp-core/src/link.rs",
+      "line": 1196,
+      "cs_reference": "ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2005-2041, 1847-1885; MAVState.cs:102-128; MainV2.cs:1665-1747; APFirmware.cs",
+      "summary": "Carried from R70-13 unchanged.",
+      "required_fix": "As R67-03."
+    },
+    {
+      "id": "R71-27",
+      "severity": "P3",
+      "file": "crates/mp-app/src/show_again.rs",
+      "line": 15,
+      "cs_reference": "Common.cs:260-294; ExtLibs/Utilities/Settings.cs:223-232",
+      "summary": "Carried from R70-14 unchanged.",
+      "required_fix": "As R68-07."
+    },
+    {
+      "id": "R71-28",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1321,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1408-1580; GCSViews/FlightData.cs:3956-4046",
+      "summary": "Carried from R70-15 unchanged: the WPOverlay markers, polygons, fence/rally overlays and the FlightData map are missing.",
+      "required_fix": "As R62-06."
+    },
+    {
+      "id": "R71-29",
+      "severity": "P2",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 1500,
+      "cs_reference": "MainV2.cs:1737-1832",
+      "summary": "Carried from R70-16 unchanged.",
+      "required_fix": "As R67-06."
+    },
+    {
+      "id": "R71-30",
+      "severity": "P2",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 133,
+      "cs_reference": "Controls/fftui.cs; ExtLibs/Utilities/Spectrogram.cs:119-244",
+      "summary": "Carried from R70-17 unchanged.",
+      "required_fix": "As R65-05."
+    },
+    {
+      "id": "R71-31",
+      "severity": "P2",
+      "file": "crates/mp-core/src/paramfile.rs",
+      "line": 36,
+      "cs_reference": "ExtLibs/Mavlink/MAVLinkParam.cs:219-224; ConfigRawParams.cs:237-252",
+      "summary": "Carried from R70-18 unchanged.",
+      "required_fix": "As R64-02."
+    },
+    {
+      "id": "R71-32",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1718,
+      "cs_reference": "GCSViews/FlightPlanner.cs:6706-6764, 322, 1864",
+      "summary": "Carried from R70-19 unchanged.",
+      "required_fix": "As R65-07."
+    },
+    {
+      "id": "R71-33",
+      "severity": "P2",
+      "file": "crates/mp-core/src/mission.rs",
+      "line": 227,
+      "cs_reference": "GCSViews/FlightPlanner.cs:5613-5635, 1138-1145, 6141-6181",
+      "summary": "Carried from R70-20 unchanged.",
+      "required_fix": "As R62-03."
+    },
+    {
+      "id": "R71-34",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1727,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1385-1400, 1413-1425, 5659",
+      "summary": "Carried from R70-21 unchanged.",
+      "required_fix": "As R62-05."
+    },
+    {
+      "id": "R71-35",
+      "severity": "P2",
+      "file": "crates/mp-core/src/rtk.rs",
+      "line": 42,
+      "cs_reference": "ConfigSerialInjectGPS.cs:757-834, 908-925; ubx_m8p.cs:440-472",
+      "summary": "Carried from R70-22 unchanged.",
+      "required_fix": "As R61-10."
+    },
+    {
+      "id": "R71-36",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/version.rs",
+      "line": 18,
+      "cs_reference": "System.Version; CircularBuffer.cs; fft.cs:84-89; Pelco.cs",
+      "summary": "Carried from R70-23 unchanged.",
+      "required_fix": "As R65-12."
+    },
+    {
+      "id": "R71-37",
+      "severity": "P3",
+      "file": "crates/mp-app/src/swarm.rs",
+      "line": 159,
+      "cs_reference": "Swarm/Formation.cs:321-324; Swarm/FormationControl.cs:273-293",
+      "summary": "Carried from R70-24. This round only changed the test tolerance. offset_from_leader and target_for still log through log::error and return None instead of printing 'Failed to send command ...' at Formation's catch and surfacing the Update Pos exception.",
+      "required_fix": "As R63-08."
+    },
+    {
+      "id": "R71-38",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan/menu.rs",
+      "line": 815,
+      "cs_reference": "GCSViews/FlightPlanner.cs:3272-3299, 1096-1223, 1038-1063",
+      "summary": "Carried from R70-25 unchanged.",
+      "required_fix": "As R63-09."
+    },
+    {
+      "id": "R71-39",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1887,
+      "cs_reference": "GMap.NET.WindowsForms/GMapRoute.cs:131-148",
+      "summary": "Carried from R70-26 unchanged.",
+      "required_fix": "As R62-09."
+    },
+    {
+      "id": "R71-40",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/maps/wpoverlay.rs",
+      "line": 87,
+      "cs_reference": "GMapPolygon.cs; WPOverlay.cs:30, 46-48, 403-457",
+      "summary": "Carried from R70-27 unchanged.",
+      "required_fix": "As R62-10."
+    },
+    {
+      "id": "R71-41",
+      "severity": "P3",
+      "file": "crates/mp-core/src/coords.rs",
+      "line": 36,
+      "cs_reference": "GCSViews/FlightPlanner.cs:2731-2763; ExtLibs/Controls/Coords.cs",
+      "summary": "Carried from R70-28 unchanged.",
+      "required_fix": "As R62-11."
+    },
+    {
+      "id": "R71-42",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/io.rs",
+      "line": 22,
+      "cs_reference": "System.Console.Out; ExtLibs/ArduPilot/Linux.cs",
+      "summary": "Carried from R70-29 unchanged. SimpleGrid's 'Poly Dist' line now goes through console_write_line as well.",
+      "required_fix": "As R62-12."
+    },
+    {
+      "id": "R71-43",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 4762,
+      "cs_reference": "No C# tests. Behaviour is the spec.",
+      "summary": "Carried from R70-30 unchanged: no Clipper golden vectors.",
+      "required_fix": "As R69-28."
+    }
+  ],
+  "round_70_status": {
+    "fixed": [
+      "R70-03: the SimpleGrid dialog is now a port of SimpleGridUI.cs and calls Grid::CreateGrid with the form's own arguments (lead-in 0, 0, separate overshoots, CMB_startfrom, spacing, PlannedHomeLocation, the selected altitude). It recomputes only on ValueChanged, not every frame. The remaining SimpleGrid divergences are new findings R71-03..R71-13."
+    ],
+    "partly_fixed": [
+      "R70-01: three more owned files ported (now 34,792 lines). MANIFEST.md is still stale and now wrong for seven files (R71-01)."
+    ],
+    "still_open": [
+      "R70-02 (now R71-02).",
+      "R70-04 (now R71-17).",
+      "R70-05 (now R71-18).",
+      "R70-06 (now R71-19).",
+      "R70-07 (now R71-20).",
+      "R70-08 (now R71-21).",
+      "R70-09 (now R71-22).",
+      "R70-10 (now R71-23).",
+      "R70-11 (now R71-24).",
+      "R70-12 (now R71-25).",
+      "R70-13 (now R71-26).",
+      "R70-14 (now R71-27).",
+      "R70-15 (now R71-28).",
+      "R70-16 (now R71-29).",
+      "R70-17 (now R71-30).",
+      "R70-18 (now R71-31).",
+      "R70-19 (now R71-32).",
+      "R70-20 (now R71-33).",
+      "R70-21 (now R71-34).",
+      "R70-22 (now R71-35).",
+      "R70-23 (now R71-36).",
+      "R70-24 (now R71-37).",
+      "R70-25 (now R71-38).",
+      "R70-26 (now R71-39).",
+      "R70-27 (now R71-40).",
+      "R70-28 (now R71-41).",
+      "R70-29 (now R71-42).",
+      "R70-30 (now R71-43).",
+      "Older items still open as listed in rounds 61-70."
+    ],
+    "compile_fixes_verified": [
+      "commsntrip.rs:318 std::io::Write::flush(st) after the request write matches sw.Write(line); sw.Flush() (CommsNTRIP.cs:384-394).",
+      "circularbuffer.rs:104-118 Put(T): IndexOutOfRange when tail == capacity matches buffer[tail] in C#. Get()/Skip() still panic in the same situation (R71-15).",
+      "yprtoopk.rs:58 phi = -90 at 0,0 matches YPRtoOPK.Convert. The test checks omega and kappa only for being finite (both are -0 in C#).",
+      "swarm.rs:945 1e-6 norm tolerance: Matrix3.from_euler312 uses (float)Math.Sin/Cos (Utils.cs:68-76), and matrix3.rs:128-145 does the same.",
+      "Allow-attribute cleanups: harmless, except clipper.rs's file-wide clippy::all and the undocumented clashing_extern_declarations allow (compile_check.warnings)."
+    ]
+  },
+  "next_steps": [
+    "R71-03 / R71-04: make SimpleGrid modal and resizable with Dock layout and GridUI_Resize, and give map::show a GMapControl mode (DragButton Right, integer wheel zoom bounded by MinZoom/MaxZoom, HoldInvalidation, exact modifier and button checks).",
+    "R71-07 / R71-01: port FlightPlanner.AddCommand/FillCommand/setfromMap/Commands_RowsAdded for real (text cells, both InputBox prompts, selectedrow, ChangeColumnHeader), as the first slice of FlightPlanner.cs. Regenerate MANIFEST.md.",
+    "R71-02: port Grid/GridUI.cs on top of grid.rs, the way SimpleGrid now calls CreateGrid, and delete survey::grid and survey_ui's heuristics.",
+    "R71-06: port VarDecFromR8/VarR8FromDec and NumberStyles.Number parsing for System.Decimal, with golden tests.",
+    "R71-05 / R71-09 / R71-10 / R71-11 / R71-12: 'Error' captions and the unhandled-exception dialog, GMapRoundedToolTip, the shared DefaultStroke, NumericUpDown wheel/key/auto-repeat, the editable combo, savesettings order and the List indexer exception.",
+    "R71-14 / R71-15 / R71-08: get clippy passing workspace-wide, return IndexOutOfRange from CircularBuffer.Get(), and use the C# f32 unit multipliers.",
+    "R71-13 / R71-18 / R71-43: headless SimpleGrid tests and Grid/Clipper golden vectors from the C# build.",
+    "R71-24, R71-26, R71-28..R71-35: the long-standing MainV2/MAVLink/FlightPlanner/FlightData gaps carried from earlier rounds."
+  ],
+  "verdict": "The build is clean and all 417 tests pass, verified by running them, which rounds 68-70 could not do. The four compile fixes match the C#. ExtLibs/SimpleGrid is a real file-by-file port: the resx layout is exact to the pixel, the constructor and Load order matches (including the DataSource-triggered empty run), NumericUpDown keeps its decimal semantics, and domainUpDown1_ValueChanged, calcpolygonarea (including the FPDrawnPolygon mutation), getAngleOfLongestSide, ZoomAndCenterMarkers and BUT_Accept_Click follow the C# statement by statement. The plugin's but_Click is wired into Auto WP. That fixes R70-03 and lifts ported lines to 34,792 / 479,014 (7.3%). The cap stays at 1.8 because ceil1(0.726) is still 0.8. Against an exact clone, the form still falls short in ways a user would notice. It is modeless and fixed-size where C# is a modal, Sizable ShowDialog. Its map pans and zooms the app's way instead of GMapControl's. Its tooltips and the shared yellow DefaultStroke are wrong. Its error boxes lose the 'Error' caption. The accept path goes through a shim of the unported FlightPlanner.setfromMap without the home-alt and default-alt prompts. The new System.Decimal helpers approximate VarDecFromR8/VarR8FromDec and have no tests. Clippy fails on three deny lints. MANIFEST.md is stale for seven ported files. GridUI (R71-02) still uses heuristics, and about 92.7% of owned C# is unported. Awarded 1.5 of a 1.8 cap. Round-file fidelity 6.6, UI/UX 2.7, features 3.6."
+}

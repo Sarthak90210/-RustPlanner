@@ -1,0 +1,716 @@
+{
+  "round": 73,
+  "date": "2026-11-09",
+  "reviewed_head": "0eddbe4 + uncommitted",
+  "commands_run": [
+    {
+      "command": "git status --short ; git diff --stat -- crates/mp-core/src/dataflash.rs",
+      "result": "Read-only. The six GMap.NET.Core files are untracked under crates/mp-core/src/extlibs/gmap_net_core/. 'git diff --stat' still reports 'crates/mp-core/src/dataflash.rs | Bin 27084 -> 25689 bytes', so git still treats the file as binary."
+    },
+    {
+      "command": "python -I <scratchpad> scan of every crates/**/*.rs for bytes < 0x20 other than TAB/LF/CR",
+      "result": "crates/mp-core/src/dataflash.rs lines 81 and 209 and crates/mp-core/src/dotnet/mod.rs line 146 still hold raw 0x00 bytes (sed | cat -v shows trim_matches('^@'), format!(\"{}^@\", ...), ch == '^@'). R72-19 is reported as fixed but is not."
+    },
+    {
+      "command": "cargo build --workspace --all-targets",
+      "result": "exit 0, 'Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.34s'. No warnings."
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets",
+      "result": "exit 0. Warnings: mp-core build script 3, mp-core lib 167 (164 last round), lib test 182 (166 duplicates), tests maiden_flight 1 / comms_hardware_bench 2 / mavserial 1, mp-app lib 74, mp-app lib test 91 (74 duplicates). New ones: should_implement_trait on GPoint::add (gpoint.rs:49) and GSize::add (gsize.rs:49), and double_ended_iterator_last on the onFlightMode invoke (binarylog.rs:556). Clippy suggests next_back() there, which would call only the last handler and break the multicast semantics."
+    },
+    {
+      "command": "touch crates/mp-core/src/lib.rs ; cargo clippy -p mp-core --lib (filtered to gmap_net_core, binarylog.rs, state.rs)",
+      "result": "Changed the file's modification time only, not its content, so that clippy would re-lint mp-core and print per-file locations. The new GMap files add four should_implement_trait warnings: gpoint.rs:49, gsize.rs:49, and pointlatlng.rs:51 / sizelatlng.rs:51 from earlier rounds."
+    },
+    {
+      "command": "cargo test --workspace",
+      "result": "exit 101 on the first full run. altitude_change::parameter_clear_then_reassign_waits_for_each_readback_and_cancels_on_target_change panicked at crates/mp-core/tests/altitude_change.rs:219:5 'assertion failed: result()'. cargo stopped there, so the later integration binaries did not run. mp_app lib 153 passed, 1 ignored (155 last round); mp_core lib 246 passed (245 last round)."
+    },
+    {
+      "command": "cargo test -p mp-core --test altitude_change (x3)",
+      "result": "7 passed, 0 failed, three times in a row (6.6 s each). The failure is timing-dependent, like link_sim's known case, but it is not the test the brief names (R73-18)."
+    },
+    {
+      "command": "cargo test --workspace --no-fail-fast",
+      "result": "exit 0. mp_app lib 153 passed / 1 ignored, missionplanner bin 0, mp_core lib 246, altitude_change 7, camera_ftp 1, comms_hardware_bench 3, high_latency 3, link_sim 9 (guided_fly_to_switches_mode_and_moves_the_copter passed), maiden_flight 1, mavserial 4, proximity_wire 1, mp_plugin 0, mp_plugin_example 0, doc-tests 0. Total: 428 passed, 0 failed, 1 ignored (429 last round). The only new test is mercatorprojection::tests::pixels_round_trip. The 2 lost mp-app tests are SimpleGrid's whole #[cfg(test)] module, which was cut off when the local projection code was deleted."
+    },
+    {
+      "command": "python scripts/port_manifest.py --check",
+      "result": "exit 0, no output: every Rust file at a manifest path starts with exactly '//! Port of `<C# path>`'."
+    },
+    {
+      "command": "python -I <scratchpad>/verify_manifest.py (imports scripts/port_manifest.py, re-runs classify/header_ok in memory, writes nothing)",
+      "result": "rows equal: True (3,477 rows, 0 differences against port/manifest.json), bad headers []. MANIFEST.md line 5: 'Mission Planner-owned files ported: **153 / 1418** (39757 / 476061 C# lines)'."
+    },
+    {
+      "command": "python (sum of lines by status in port/manifest.json; list GMap.NET.Core rows marked ported)",
+      "result": "ported 153 files / 39,757 lines; todo 1,265 / 436,304; generated 382 / 62,758; vendored 1,580 / 651,002; n/a 97 / 16,224. New rows marked ported: GPoint.cs 160, GSize.cs 121, MapRoute.cs 160, PureProjection.cs 522, RectLatLng.cs 319, MercatorProjection.cs 101 = 1,383. Check: 38,374 + 1,383 = 39,757, an exact match."
+    },
+    {
+      "command": "tr -d '\\r' / sed / grep on GPoint.cs, GSize.cs, RectLatLng.cs, PointLatLng.cs, PureProjection.cs, MapRoute.cs, MercatorProjection.cs, GMapProvider.cs:520-530, GMap.NET.Internals/Core.cs:549-576, GMap.NET.WindowsForms/GMapControl.cs:918-1080, SimpleGridUI.cs:25-40 and 284-366, SimpleGridUI.Designer.cs:92-93, CurrentState.cs:1265-1300 and 2420-2560, MAVLinkInterface.cs:5395-5462, Extensions.cs:549-552, HUD.cs:872-875 and 3185-3200, FlightData.cs:1090-1106, FlightData.Designer.cs:375-376, MainV2.cs:3400-3432, BinaryLog.cs:121-200 and 553-565, Common.cs:86-200, Firmwares.cs",
+      "result": "Used for the side-by-side checks below."
+    }
+  ],
+  "commands_note": "Commands were allowed. No GUI or window was opened, port_manifest.py ran only with --check, and the manifest was re-derived in memory. One deviation: 'touch crates/mp-core/src/lib.rs' updated a timestamp so that clippy would re-run. The file content is unchanged and git does not see it. The only file written is judging/round-73.json, plus logs and the verify script in the scratchpad.",
+  "manifest_summary": {
+    "manifest_status": "port/MANIFEST.md and port/manifest.json are accurate. An in-memory re-run of classify/header_ok reproduces manifest.json row for row (3,477 rows, 0 differences), and --check finds no bad header. Six GMap.NET.Core files moved from todo to ported.",
+    "new_owned_files_ported": {
+      "ExtLibs/GMap.NET.Core/GMap.NET/GPoint.cs": 160,
+      "ExtLibs/GMap.NET.Core/GMap.NET/GSize.cs": 121,
+      "ExtLibs/GMap.NET.Core/GMap.NET/RectLatLng.cs": 319,
+      "ExtLibs/GMap.NET.Core/GMap.NET/PureProjection.cs": 522,
+      "ExtLibs/GMap.NET.Core/GMap.NET/MapRoute.cs": 160,
+      "ExtLibs/GMap.NET.Core/GMap.NET.Projections/MercatorProjection.cs": 101
+    },
+    "new_owned_lines_ported": 1383,
+    "owned_files_ported_corrected": 153,
+    "ported_lines_corrected": 39757,
+    "ported_lines_derivation": "Sum of 'lines' over status == 'ported' in port/manifest.json = 39,757 (153 files). Cross-check: 38,374 (round 72) + 160 + 121 + 319 + 522 + 160 + 101 = 39,757, an exact match.",
+    "owned_lines_total_corrected": 479014,
+    "owned_lines_total_manifest": 476061,
+    "ported_fraction_corrected": 0.083,
+    "conservatism_note": "This is an upper bound. All 1,383 lines count in full, but MapRoute's ISerializable region (lines 108-158, about 50 lines) is not carried, and GPoint.cs's internal GPointComparer is missing. The only callers of the new code are SimpleGrid's distance label and zoom-to-fit. The main map widget (crates/mp-app/src/map.rs) still projects with its own formula, so PureProjection's caches, GetAreaTileList, GetTileMatrix* and AdjustLongitude have no caller.",
+    "wiring": "New wiring. (1) simplegridui.rs:345 builds a MapRoute from wppoly's points and uses MapRoute.Distance (MercatorProjection.Instance.GetDistance, as GMapProviders.EmptyProvider.Projection does). (2) simplegridui.rs:368 ZoomAndCenterMarkers uses RectLatLng.FromLTRB, LocationTopLeft/LocationRightBottom and MercatorProjection.FromLatLngToPixel in a copy of Core.GetMaxZoomToFitRect. (3) app.rs:296 subscribes MainV2's onFlightMode handler. (4) flight_data.rs:2000 'Convert .Bin to .Log' calls BinaryLog::ConvertBin. (5) state.rs:288-310 ports messageHigh, and STATUSTEXT, fence breach, the HIGH_LATENCY2 GPS error, the HUD and the WarningEngine handler now use it. Still unwired: QuickPanelColoring, WarningEngine.Stop, CompassCalibrator (MagCalib.cs), the map widget's projection, and GPointComparer/TileMatrix."
+  },
+  "scores": {
+    "overall": 1.6,
+    "overall_cap": 1.9,
+    "overall_cap_derivation": "ceil1(39,757 / 479,014 * 10) = ceil1(0.830) = 0.9, plus at most +1.0 for the pre-manifest app = 1.9. With the manifest's own denominator, ceil1(39,757 / 476,061 * 10) = ceil1(0.835) = 0.9 as well. Awarded 0.8 for ported lines and 0.8 for the pre-manifest app, 1.6 in total, unchanged. The ported-lines part still holds back 0.1, for these reasons. R72-19 was reported fixed but the NUL bytes are still in the source. The Warning Manager is still invented. CompassCalibrator still has no caller. QuickPanelColoring and Stop are still unwired. The new projection runs only for SimpleGrid's zoom-fit while the map draws with a different projection. SimpleGrid's tests were deleted and not replaced.",
+    "round_files_fidelity": 6.8,
+    "round_files_fidelity_rationale": "Up 0.1. The six GMap files were compared line by line, and they are close copies. GPoint/GSize: long fields with wrapping (unchecked) arithmetic, GetHashCode as (int)(x ^ y) and Int64.GetHashCode's low^high halves, IsEmpty, explicit conversions, Offset/OffsetNegative and the '{X=..,Y=..}' / '{Width=.., Height=..}' text. RectLatLng: the NotEmpty flag set by both constructors, operator== ignoring the flag, FromLTRB argument order, LocationRightBottom/LocationMiddle through PointLatLng.Offset (lat -= height), Contains with the half-open < and >, Intersect keeping C#'s Lat + HeightLat (unlike Bottom) and returning Empty, Union through FromLTRB, the instance Intersect keeping the flag, double.GetHashCode (0 for both zeros) and G15 culture ToString. PureProjection: 33 per-zoom dictionaries, ArgumentOutOfRange with List's exact message for zoom outside 0..32, the reverse-cache ContainsKey/Add, long division in FromPixelToTileXY, padding unused in GetAreaTileNumber, GetGroundResolution's evaluation order, Haversine on Axis/1000, GetBearing's (deg + 360) % 360, and AdjustLongitude with cvttsd2si casts (NaN -> long.MinValue) and the long-vs-double comparisons. Mercator: Clip through Math.Min/Max with NaN propagation, (lat*PI)/180, +0.5 then (long) truncation, (1 << zoom) as a 32-bit shift with the count masked to 5 bits, then widened, and the 85.05112878 clip. MapRoute: To requires two points, Distance through Mercator (GMapProvider.cs:524 confirms EmptyProvider uses MercatorProjection.Instance), and Clear nulls Name and Tag. Lost: the projection cache treats NaN keys as equal where PointLatLng.Equals uses == (R73-15). GPoint/GSize ToString ignore the culture's NegativeSign. GPointComparer is missing. MapRoute.Tag is narrowed to Option<String>, and MapRoute gains value equality (R73-16). The fixes are faithful: messageHigh's getter/setter (10 s expiry, TrimUnPrintable over [^ -~], equality against the getter, EMERGENCY), the multicast onFlightMode that runs every handler and keeps the last result, MainV2's handler (null on ''/unknown, getModesList with Plane's INITIALISING), and ConvertBin's <dir><sep><stem>.log path, which matches Path.GetDirectoryName even for a root path.",
+    "ui_ux": 2.8,
+    "ui_ux_rationale": "Up 0.1. Custom and STATUSTEXT warnings now show on the HUD in EMERGENCY red and disappear after 10 s, as hud1's messageHigh/messageHighSeverity bindings do. Log MODE fields show names ('Loiter'). 'Convert .Bin to .Log' writes MP's text format with no success toast. Remaining and new gaps: the convert picker is a single-select 'Load a Log' dialog that opens in the logs directory, where C# shows an untitled multiselect OpenFileDialog with 'Binary Log|*.bin;*.BIN'. A conversion error becomes a toast where C# raises an unhandled exception (R73-13). STATUSTEXT 'Tuning:', 'PreArm:' and 'Arm:' messages above the severity threshold never reach the HUD, and the threshold ignores the 'severity' setting (R73-08). SimpleGrid fits its zoom with GMap's integer-pixel Mercator but draws with map.rs's own projection, and ignores the FlightData map provider (R73-07). Every round-72 UI gap remains: the invented Warning Manager, the modeless fixed-size SimpleGrid, the GMapControl behaviours, the tooltips, GridUI, the WPOverlay markers and the FlightData map.",
+    "features": 3.8,
+    "features_rationale": "Up 0.1. .bin -> .log conversion now produces MP's output format. Mode names reach logs and the log browser, and messageHigh expires and dedupes. Missing: QuickPanelColoring and WarningEngine.Stop (R73-09), speechEnabled()/IsReady (R73-10), real CsSource values (R73-11), LogBrowse over DFLogBuffer (R73-12), MagCalib, the GMap tile engine (TileMatrix, GetAreaTileList and the providers) behind the map, the remaining CurrentState messageHigh sources (EKF variance, SYS_STATUS health, InternalError, PERIPH, SAFETY), and every round-68..72 feature gap (GridUI, FlightPlanner AddCommand/setfromMap, MAVLinkInterface/MAVState, FFT, param files, RTK)."
+  },
+  "compile_check": {
+    "summary": "cargo build --workspace --all-targets: 0 warnings. cargo test --workspace: the first full run failed on altitude_change.rs:219 (timing). That test passed three times alone, and a --no-fail-fast full run gave 428 passed, 0 failed, 1 ignored (one fewer than round 72: SimpleGrid's test module was deleted and one Mercator test added). cargo clippy --workspace --all-targets: exit 0, mp-core lib warnings 164 -> 167.",
+    "likely_errors": [],
+    "warnings": [
+      "clippy: mp-core lib 167 / lib test 182, mp-app lib 74 / lib test 91, build.rs 3, integration tests 4. New: gpoint.rs:49 and gsize.rs:49 should_implement_trait, and binarylog.rs:556 double_ended_iterator_last. The last one must not be 'fixed' with next_back(), because C#'s multicast invoke runs every handler. Add an allow that cites BinaryLog.cs:558.",
+      "clipper.rs:9 still has a file-wide #![allow(..., clippy::all)]. commsserialport.rs:785's extern allow still has no comment.",
+      "dataflash.rs:81 and :209 and dotnet/mod.rs:146 still embed raw U+0000 bytes inside literals. 'git diff --stat' still prints 'Bin 27084 -> 25689 bytes' (R73-06)."
+    ],
+    "test_failures": [
+      "altitude_change::parameter_clear_then_reassign_waits_for_each_readback_and_cancels_on_target_change failed once in a full parallel run (altitude_change.rs:219 'assertion failed: result()'). It passed in 3 isolated runs and in the --no-fail-fast full run, so it is not counted as a failure, but it is flaky (R73-18)."
+    ],
+    "test_expectations_checked": [
+      "mercatorprojection.rs pixels_round_trip: (0,0) at zoom 2 gives x = (long)Clip(0.5*1024+0.5, 0, 1023) = 512, and y = 512 because sin(0) = 0 gives 0.5. (90,-180) clips the latitude to 85.05112878, so y*1024+0.5 < 1 truncates to 0, and x = 0.5 -> 0. FromPixelToLatLng(512,512,2): xx = 512/1024 - 0.5 = 0, yy = 0, lat = 90 - 360*atan(1)/PI = 0. GetTileMatrixSizePixel(3) = 8*256 = 2048. GetDistance((0,0),(0,1)) = 6378.137 * PI/180 = 111.3194908 km. Zoom 33 with useCache gives ArgumentOutOfRange. Correct, but this single test covers 6 files and 1,383 lines.",
+      "pointlatlng.rs empty_and_equality (earlier round): still passes."
+    ],
+    "low_confidence_risks": [
+      "state.rs:290 measures the 10 s expiry with Instant (monotonic). C# compares against DateTime.Now, so a wall-clock change hides or prolongs a message in MP but not in the port.",
+      "state.rs:1003 decodes STATUSTEXT with s.text.to_str().unwrap_or(\"\"). C# uses Encoding.UTF8.GetString (invalid bytes become U+FFFD, which TrimUnPrintable later strips) and cuts at the first NUL. Invalid UTF-8 gives an empty string in the port, and the setter then ignores it.",
+      "pureprojection.rs:73-83 releases the to_pixel lock between the lookup and the insert. C# Dictionary is not thread-safe either, so this is not a behavioural difference.",
+      "carried: clipper.rs stale m_Scanbeam, grid.rs lane overflow, dotnet LCIDToLocaleName, versiondetection.rs:79, ap_geodesicgrid.rs:403, flight_plan.rs NaN WpOverlayKey, warningengine.rs holding the WARNINGS mutex across handlers, dataflash.rs eager decode on 300 MB+ logs."
+    ]
+  },
+  "findings": [
+    {
+      "id": "R73-01",
+      "severity": "P0",
+      "file": "port/MANIFEST.md, crates/mp-app/src/mp/ (missing)",
+      "line": 5,
+      "cs_reference": "reference/MissionPlanner/{MainV2.cs, GCSViews/FlightPlanner.cs, GCSViews/FlightData.cs, Log/LogBrowse.cs, MagCalib.cs, Warnings/WarningsManager.cs, Warnings/WarningControl.cs, Grid/GridUI.cs, ExtLibs/GMap.NET.Core/**, ExtLibs/GMap.NET.WindowsForms/**, ExtLibs/ArduPilot/Mavlink/*, ...}",
+      "summary": "Carried from R72-01. The manifest is exact, and 6 more files are ported (39,757 lines, 153 files). But 436,304 owned lines (91.6%) are still todo. Several of the newest back-ends still sit behind unported front-ends: CompassCalibrator without MagCalib.cs, WarningEngine without WarningsManager/WarningControl, DFLogBuffer without LogBrowse.cs. The new projection has no GMapControl/Core/TileMatrix to drive.",
+      "required_fix": "Port the front-ends of what is already ported: Warnings/WarningsManager.cs + .Designer.cs + WarningControl.cs, MagCalib.cs, Log/LogBrowse.cs, and GMap.NET.Internals/Core.cs + TileMatrix.cs + GMapControl.cs so that the map widget runs on PureProjection. Then GridUI.cs, FlightPlanner.cs, MAVLinkInterface.cs/MAVState.cs and MainV2.cs."
+    },
+    {
+      "id": "R73-02",
+      "severity": "P1",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 972,
+      "cs_reference": "Warnings/WarningsManager.cs:9-81; WarningsManager.Designer.cs (872x238, '+' 13,13, 'Save' 94,13, panel1 866x175 at 4,53); Warnings/WarningControl.cs:15-330; ConfigAdvanced.cs:22-25",
+      "summary": "Carried from R72-02 unchanged. warn_ui is still an invented read-only grid with a one-line editor (defaults alt/LT/10). It auto-saves on Add and Delete, and has no QuickPanel Coloring, colour, '+' child or in-place editing.",
+      "required_fix": "As R72-02."
+    },
+    {
+      "id": "R73-03",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/survey_ui.rs",
+      "line": 260,
+      "cs_reference": "Grid/GridUI.cs:578-645, 1620-1800; ExtLibs/Utilities/Grid.cs:46-53, 190-194, 327-334",
+      "summary": "Carried from R72-04 unchanged: GridUI still uses the survey::grid shim and local heuristics.",
+      "required_fix": "As R71-02."
+    },
+    {
+      "id": "R73-04",
+      "severity": "P1",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 491,
+      "cs_reference": "SimpleGridPlugin.cs:67-71 (ShowDialog); SimpleGridUI.resx (Sizable, Dock rules); SimpleGridUI.Designer.cs:425; SimpleGridUI.cs:459-462",
+      "summary": "Carried from R72-05 unchanged: the SimpleGrid form is a modeless, fixed-size egui::Window. Because the form is fixed, GetMaxZoomToFitRect now always uses the constant 755x457 (MAP_RECT), where C# uses the docked map's current Width/Height.",
+      "required_fix": "As R71-03."
+    },
+    {
+      "id": "R73-05",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1321,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1408-1580; GCSViews/FlightData.cs:3956-4046",
+      "summary": "Carried from R72-06 unchanged: the WPOverlay markers, polygons, fence and rally overlays and the FlightData map are missing.",
+      "required_fix": "As R62-06."
+    },
+    {
+      "id": "R73-06",
+      "severity": "P2",
+      "file": "crates/mp-core/src/dataflash.rs",
+      "line": 81,
+      "cs_reference": "n/a (source hygiene); carried from R72-19",
+      "summary": "R72-19 is reported fixed but is not. dataflash.rs:81 (trim_matches('<U+0000>')) and :209 (format!(\"{}<U+0000>\", f.name)), and dotnet/mod.rs:146 (ch == '<U+0000>'), still hold raw NUL bytes. A byte scan of every .rs file finds exactly these three. 'git diff --stat' still prints 'Bin 27084 -> 25689 bytes' for dataflash.rs, so the round-72 rewrite and this round's state changes in that file still cannot be reviewed with git. Raised from P3 to P2 because the change notes list it as done.",
+      "required_fix": "Replace the three raw bytes with the escape '\\0' (and \"\\0\" in the format string). Add a test or a check-mode step that fails on any byte below 0x20 other than TAB/LF/CR in crates/**/*.rs. Do not report a fix without checking it."
+    },
+    {
+      "id": "R73-07",
+      "severity": "P2",
+      "file": "crates/mp-app/src/map.rs",
+      "line": 165,
+      "cs_reference": "ExtLibs/GMap.NET.Core/GMap.NET.Projections/MercatorProjection.cs:52-88; GMap.NET.Internals/Core.cs:549-576; GMap.NET.WindowsForms/GMapControl.cs:918-1050 (SetZoomToFitRect, ZoomAndCenterMarkers, GetRectOfAllMarkers returning null while the sentinels are untouched); SimpleGridUI.cs:37 (map.MapProvider = plugin.Host.FDMapType)",
+      "summary": "New. MercatorProjection is now ported, but the map widget still projects with its own latlng_to_world/world_to_latlng: the tan+sec formula, fractional pixels with no +0.5 truncation to a long GPoint, no longitude Clip, and a fractional zoom through 2^z. SimpleGrid therefore picks its zoom with GMap's integer-pixel Mercator (simplegridui.rs:393) and draws with a different projection. The fit also hard-codes MercatorProjection.Instance, where C# uses map.MapProvider = Host.FDMapType's Projection (different for Yandex, the LKS94 providers, PlateCarree WMS and others). The GetRectOfAllMarkers copy (simplegridui.rs:376) skips the 'left != double.MaxValue && ...' null check, so NaN-positioned markers yield a MAX/MIN rect where C# returns null and does nothing.",
+      "required_fix": "Port GMap.NET.Internals/Core.cs and GMapControl's projection path, and make map.rs draw through PureProjection (FromLatLngToPixel/FromPixelToLatLng with GPoint and the integer zoom). Take the projection from the active provider. Keep GetRectOfAllMarkers' sentinel check. Delete latlng_to_world/world_to_latlng."
+    },
+    {
+      "id": "R73-08",
+      "severity": "P2",
+      "file": "crates/mp-core/src/state.rs",
+      "line": 1000,
+      "cs_reference": "ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5409-5456 (UTF8 decode, cut at the first NUL; printit when sev <= Settings.GetInt32('severity', 4) with mavsev = sev, else EMERGENCY; printit also for 'Tuning:', 'PreArm:' and 'Arm:' prefixes; a component message on the current sysid also sets MAVlist[sysid, compidcurrent].cs.messageHigh = compid + ' : ' + logdata); CurrentState.cs:2554-3052 (other messageHigh writers)",
+      "summary": "New. The brief says every messageHigh caller now goes through the ported setter, but the STATUSTEXT caller is still not MAVLinkInterface's logic. (a) The threshold is a hard-coded 4 instead of the 'severity' setting. (b) 'Tuning:', 'PreArm:' and 'Arm:' messages with a severity above the threshold (Tuning: is sent at INFO) are dropped. C# shows them on the HUD with severity EMERGENCY, which draws red. (c) A STATUSTEXT from another component of the current sysid (a gimbal, for example) does not set 'compid : text' on the current component's state. (d) Invalid UTF-8 gives '' in the port (to_str().unwrap_or), where C# keeps the valid characters. Also missing are CurrentState's own messageHigh writers: EKF variance errors, the SYS_STATUS sensor-health text (BadGPSHealth/BadGyroHealth/...), InternalError 0x.., PERIPH_OVERCURRENT, (SAFETY) and the high-latency HL_FAILURE_FLAG loop for flags other than GPS.",
+      "required_fix": "Port MAVLinkInterface's STATUSTEXT block statement by statement: Settings 'severity' with default 4, the three prefixes, mavsev, the compidcurrent copy, and UTF8 decoding with the first-NUL cut. Port the CurrentState.cs messageHigh writers alongside the packets they belong to. Add tests: 'Tuning: x' at severity 6 sets messageHigh with severity 0, and a WARNING message at severity 4 sets severity 4."
+    },
+    {
+      "id": "R73-09",
+      "severity": "P2",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 804,
+      "cs_reference": "MainV2.cs:1036-1039, 4799-4830 (WarningEngine_QuickPanelColoring), 2074 (WarningEngine.Stop), 1122 (comPort_MavChanged); ExtLibs/ArduPilot/CurrentState.cs:1273-1293",
+      "summary": "R72-08, partly fixed. Fixed: CurrentState.messageHigh is a real property (state.rs:288-310) with the 10 s expiry, TrimUnPrintable, the null/''/equal guard, the log line and EMERGENCY severity, and the WarningEngine handler now applies every pending text through the setter. Still open: QuickPanelColoring has no subscriber, and WarningEngine::Stop is never called. Pending texts are applied on the next egui frame and are dropped when no link exists, where C# writes comPort.MAV.cs synchronously from the engine thread. defaultsrc is still a per-frame copy, not the live comPort.MAV.cs, and it is not re-pointed on MAV change. messageHighSeverity starts at 7 (state.rs:245), where the C# auto-property starts at 0 (EMERGENCY). The value is visible through the 'messageHighSeverity' property (state_properties.rs:268).",
+      "required_fix": "Subscribe QuickPanelColoring to a ported WarningEngine_QuickPanelColoring. Call Stop on close. Write messageHigh from the handler into the live state (a link-independent current state when disconnected). Initialise message_high_severity to 0. Add unit tests for message_high() expiry, dedupe and severity."
+    },
+    {
+      "id": "R73-10",
+      "severity": "P2",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 205,
+      "cs_reference": "Utilities/Speech.cs:24-80; MainV2.cs:469-481; WarningEngine.cs:131-137",
+      "summary": "Carried from R72-09 unchanged: AppSpeech.is_ready() is always true, and speak_async skips speechEnabled(), speech_armed_only, the whitespace check and Speech's regex rewrites.",
+      "required_fix": "As R72-09."
+    },
+    {
+      "id": "R73-11",
+      "severity": "P2",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 188,
+      "cs_reference": "CustomWarning.cs:57-90, 164-175; CurrentState.cs; WarningEngine.cs:119-156",
+      "summary": "Carried from R72-10 unchanged. CsSource still returns Text('') for every string property, even messageHigh, which now has a real getter. It returns Object for every reference property and Null for unmodelled ones, so one warning on an unmodelled field aborts the whole pass.",
+      "required_fix": "As R72-10."
+    },
+    {
+      "id": "R73-12",
+      "severity": "P2",
+      "file": "crates/mp-core/src/dataflash.rs",
+      "line": 89,
+      "cs_reference": "Log/LogBrowse.cs; ExtLibs/Utilities/DFLogBuffer.cs:46-49, 604-615, 876-900",
+      "summary": "Carried from R72-11 unchanged: parse() flattens DFLogBuffer back into Log/Record/Value. It drops DFItem.time, InstanceType, GetUnit and the 300 MB cache, and turns numeric-looking strings into numbers.",
+      "required_fix": "As R72-11."
+    },
+    {
+      "id": "R73-13",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_data.rs",
+      "line": 2000,
+      "cs_reference": "GCSViews/FlightData.cs:1090-1106 (new OpenFileDialog: no Title, no InitialDirectory, Filter 'Binary Log|*.bin;*.BIN', Multiselect = true; ShowDialog result ignored; foreach FileNames; ConvertBin exceptions unhandled)",
+      "summary": "R72-03, mostly fixed. BinaryLog::ConvertBin now writes <dir><sep><stem>.log and shows nothing on success. Still divergent: the shared binary_log_picker (platform.rs:556) is titled 'Load a Log', opens in the logs directory and selects one file. C# shows the default 'Open' title in the last-used directory and allows multiple files, each converted in turn. A ConvertBin error becomes toasts.error, where C# lets the exception reach the unhandled-exception path. dataflash::Log::to_text (dataflash.rs:170) is now dead code. There is no golden test of the ConvertBin output.",
+      "required_fix": "Give but_bintolog its own picker (no title, no initial directory, '*.bin;*.BIN', multiselect) and loop over every file. Route errors to the app's unhandled-exception handler. Delete Log::to_text. Add a byte-exact ConvertBin golden test."
+    },
+    {
+      "id": "R73-14",
+      "severity": "P3",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 296,
+      "cs_reference": "MainV2.cs:3407-3430; ExtLibs/Utilities/BinaryLog.cs:85-87, 557-562; ExtLibs/ArduPilot/Common.cs:88-200 (getModesList returns null for ArduSub, Ateryx-less firmwares and Other); Firmwares.cs",
+      "summary": "R72-07, fixed with residue. onFlightMode is now a handler list, binarylog.rs:556 calls every handler and keeps the last result, and app.rs registers MainV2's handler. Residue: (a) getFlightMode is a plain fn pointer, so a capturing handler cannot be added, and there is no '-=' remove. (b) The handler maps 'ArduSub' to Firmware::ArduSub's mode table. C#'s getModesList(ArduSub) returns null, the foreach throws NullReferenceException, and the catch returns null. That path is unreachable today, because BinaryLog never sets 'ArduSub'. Enum.Parse's other accepted forms (numeric strings, surrounding whitespace) map to None. (c) Clippy flags the .last() at binarylog.rs:556 and suggests next_back(), which would silently drop every handler but the last. It needs an allow with a comment. (d) There is still no test that MODE.Mode decodes to 'Loiter'.",
+      "required_fix": "Use Arc<dyn Fn(&str, i32) -> Option<String> + Send + Sync> with add/remove. Return None for ArduSub, as getModesList's null does. Accept Enum.Parse's numeric and whitespace forms. Add #[allow(clippy::double_ended_iterator_last)] citing BinaryLog.cs:558. Add the Loiter test."
+    },
+    {
+      "id": "R73-15",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/pureprojection.rs",
+      "line": 20,
+      "cs_reference": "ExtLibs/GMap.NET.Core/GMap.NET/PureProjection.cs:78-139; GMap.NET/PointLatLng.cs:93-101 (Equals: tf.Lng == this.Lng && tf.Lat == this.Lat, so NaN != NaN); System.Collections.Generic.Dictionary (ObjectEqualityComparer -> Equals(object))",
+      "summary": "New. key() maps every NaN to one bit pattern, so 'NaN equals NaN' and a NaN point hits the cache. In C#, Dictionary<PointLatLng, GPoint> compares keys with PointLatLng.Equals, which uses ==, so a NaN key is never found. Each FromLatLngToPixel(p, zoom, true) with NaN recomputes and adds another entry, and the reverse ContainsKey/Add behaves the same way. The module comment states the wrong rule, and pointlatlng.rs's own PartialEq uses == and contradicts it. Also, the Debug.WriteLine text formats p with {:?} (the derived Debug output 'PointLatLng { lat: .., lng: .., not_empty: .. }') instead of PointLatLng.ToString ('{Lat=.., Lng=..}'). It is a debug-only line, but still a different text.",
+      "required_fix": "Key the cache with a wrapper whose Eq uses f64 == (NaN never equal, so a NaN key is never found), and Hash with PointLatLng.GetHashCode. Use {p} (Display) in the log line."
+    },
+    {
+      "id": "R73-16",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/gmap_net_core/gmap_net/gpoint.rs",
+      "line": 94,
+      "cs_reference": "GMap.NET/GPoint.cs:130-133 (X.ToString(CultureInfo.CurrentCulture)), 145-157 (internal class GPointComparer, used by GMap.NET.Internals/TileMatrix.cs:21); GMap.NET/GSize.cs:111-114; GMap.NET/MapRoute.cs:14-32 (class with reference equality, 'public object Tag', Name nullable), 108-158 (ISerializable)",
+      "summary": "New. (a) GPoint and GSize ToString format with Rust's i64 Display. C# uses long.ToString(CurrentCulture), which uses the culture's NegativeSign. RectLatLng and PointLatLng in the same module do go through the culture helper. (b) GPointComparer is not ported, although it is part of GPoint.cs and TileMatrix depends on it. (c) MapRoute.Tag is narrowed from object to Option<String>, and #[derive(PartialEq, Clone)] gives the class value semantics. new()/with_points() cannot take a null name. The ISerializable region (about 50 of the 160 lines) is dropped, yet the file counts in full.",
+      "required_fix": "Format the longs with the culture-aware integer formatter. Port GPointComparer. Model Tag as an Option<Arc<dyn Any + Send + Sync>> (or the dotnet object shim), drop the derived PartialEq, and accept Option<&str> for the name. Either port GetObjectData/OnDeserialization or note the dropped lines in the manifest."
+    },
+    {
+      "id": "R73-17",
+      "severity": "P3",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 368,
+      "cs_reference": "No C# tests. GMap.NET.Core, SimpleGridUI.cs, CurrentState.messageHigh and BinaryLog behaviour is the spec.",
+      "summary": "New. Test coverage went down. The SimpleGrid change deleted simplegridui.rs's entire #[cfg(test)] module (mp-app lib 155 -> 153 tests), and nothing replaced it. The 1,383 new GMap lines have one test. Untested: AdjustLongitude's branches, Intersect/Union/Contains/IntersectsWith, the four GetHashCode variants, the ToString texts, GetAreaTileList/GetAreaTileNumber, FromPixelToLatLng at the clip limits, MapRoute.Distance with 0, 1 and 2+ points, the ZoomAndCenterMarkers zoom choice, messageHigh expiry/dedupe/severity, onFlightMode multicast and the ConvertBin wiring.",
+      "required_fix": "Restore and extend the SimpleGrid tests (wppoly.Distance label, zoom-fit for a known rect). Add golden vectors from GMap.NET for every public GMap member, and unit tests for message_high and onFlightMode."
+    },
+    {
+      "id": "R73-18",
+      "severity": "P3",
+      "file": "crates/mp-core/tests/altitude_change.rs",
+      "line": 219,
+      "cs_reference": "n/a (test reliability)",
+      "summary": "New. parameter_clear_then_reassign_waits_for_each_readback_and_cancels_on_target_change failed once under full parallel load ('assertion failed: result()' after the first PARAM_VALUE ack) and passed in 3 isolated runs and in a second full run. It is a second timing-sensitive integration test besides the documented link_sim case, so a full 'cargo test --workspace' run is not reliably green.",
+      "required_fix": "Find the race (the 3 s recv_timeout against the link thread's readback wait under load) and make the test deterministic, or document it with the link_sim test."
+    },
+    {
+      "id": "R73-19",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/warnings/customwarning.rs",
+      "line": 231,
+      "cs_reference": "System.Xml.Serialization.XmlSerializer; WarningEngine.cs:58-87",
+      "summary": "Carried from R72-12 unchanged.",
+      "required_fix": "As R72-12."
+    },
+    {
+      "id": "R73-20",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/warnings/warningengine.rs",
+      "line": 115,
+      "cs_reference": "ExtLibs/Utilities/Warnings/WarningEngine.cs:42, 46-56, 96-104, 141-150",
+      "summary": "Carried from R72-13 unchanged.",
+      "required_fix": "As R72-13."
+    },
+    {
+      "id": "R73-21",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/compasscalibrator.rs",
+      "line": 88,
+      "cs_reference": "ExtLibs/Utilities/CompassCalibrator.cs:645, 780; Newtonsoft.Json; MagCalib.cs",
+      "summary": "Carried from R72-14 unchanged.",
+      "required_fix": "As R72-14."
+    },
+    {
+      "id": "R73-22",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/dflog.rs",
+      "line": 608,
+      "cs_reference": "ExtLibs/Utilities/DFLog.cs:53-76, 713-734; DFLogBuffer.cs:46, 349, 487-523, 719-725, 751-829, 846-853",
+      "summary": "Carried from R72-15 unchanged.",
+      "required_fix": "As R72-15."
+    },
+    {
+      "id": "R73-23",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/binarylog.rs",
+      "line": 273,
+      "cs_reference": "ExtLibs/Utilities/BinaryLog.cs:75-78, 106-115",
+      "summary": "Carried from R72-16 unchanged. ConvertBini still writes UTF-8, where C# writes ASCII with '?' for non-ASCII characters. This now matters in practice: ConvertBin is wired to the UI, and the onFlightMode names flow into the output.",
+      "required_fix": "As R72-16."
+    },
+    {
+      "id": "R73-24",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/dflogbuffer.rs",
+      "line": 832,
+      "cs_reference": "BinaryLog.cs, DFLog.cs, DFLogBuffer.cs, WarningEngine.cs behaviour is the spec.",
+      "summary": "Carried from R72-17 unchanged.",
+      "required_fix": "As R72-17."
+    },
+    {
+      "id": "R73-25",
+      "severity": "P3",
+      "file": "crates/mp-app/src/units.rs",
+      "line": 27,
+      "cs_reference": "MainV2.cs:4326-4330, 4262-4340",
+      "summary": "Carried from R72-18 unchanged: knots are still labelled 'kn' (MainV2 uses 'kts'), the test at units.rs:75 still asserts 'kn', and an unparsable setting still resets the units.",
+      "required_fix": "As R72-18."
+    },
+    {
+      "id": "R73-26",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/mod.rs",
+      "line": 162,
+      "cs_reference": ".NET Framework decimal.cpp VarDecFromR8; Number.ParseDecimal; Decimal.ToString()",
+      "summary": "Carried from R72-20 unchanged. The leading-NUL trim at dotnet/mod.rs:146 is the same line that still holds a raw NUL (R73-06).",
+      "required_fix": "As R72-20."
+    },
+    {
+      "id": "R73-27",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 9,
+      "cs_reference": "ExtLibs/Utilities/clipper.cs",
+      "summary": "Carried from R72-21. The warnings went up: mp-core lib 164 -> 167. The 3 new ones are gpoint.rs:49, gsize.rs:49 and binarylog.rs:556. clipper.rs's file-wide clippy::all and the uncommented extern allow remain.",
+      "required_fix": "As R72-21, plus documented allows for the three new warnings (should_implement_trait mirrors C#'s static Add; double_ended_iterator_last must stay, see R73-14)."
+    },
+    {
+      "id": "R73-28",
+      "severity": "P3",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 175,
+      "cs_reference": "SimpleGridPlugin.cs:69; GMapControl.cs:918-923 (lazyEvents -> lazySetZoomToFitRect); SimpleGridUI.cs:298, 307-311 (HoldInvalidation)",
+      "summary": "Carried from R72-22 unchanged. GridUI_Load still runs before theming. The rewritten ZoomAndCenterMarkers applies at once instead of being deferred through lazyEvents/lazySetZoomToFitRect. HoldInvalidation is not modelled.",
+      "required_fix": "As R71-12 (2) and (5)."
+    },
+    {
+      "id": "R73-29",
+      "severity": "P2",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 530,
+      "cs_reference": "SimpleGridUI.Designer.cs:83-103; GMapControl.cs:320, 2132-2175; SimpleGridUI.cs:187, 212, 298, 307-311",
+      "summary": "Carried from R72-23 unchanged: SimpleGrid's map uses map::show's pan and zoom, not GMapControl's.",
+      "required_fix": "As R71-04."
+    },
+    {
+      "id": "R73-30",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 687,
+      "cs_reference": "GCSViews/FlightPlanner.cs:538-548, 3390-3428, 1096-1244, 2395-2425",
+      "summary": "Carried from R72-24 unchanged.",
+      "required_fix": "As R71-07."
+    },
+    {
+      "id": "R73-31",
+      "severity": "P3",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 622,
+      "cs_reference": "GMapMarker.cs:175-190; ToolTips/GMapRoundedToolTip.cs:44-64; GMapToolTip.cs:44-110",
+      "summary": "Carried from R72-25 unchanged.",
+      "required_fix": "As R71-09."
+    },
+    {
+      "id": "R73-32",
+      "severity": "P3",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 342,
+      "cs_reference": "SimpleGridUI.cs:345-348; GMapPolygon.cs:231-262",
+      "summary": "Carried from R72-26 unchanged.",
+      "required_fix": "As R71-10."
+    },
+    {
+      "id": "R73-33",
+      "severity": "P3",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui_designer.rs",
+      "line": 110,
+      "cs_reference": "UpDownBase.OnMouseWheel; NumericUpDown.UpButton/DownButton; OnTextBoxKeyPress; ComboBox DropDownStyle.DropDown",
+      "summary": "Carried from R72-27 unchanged.",
+      "required_fix": "As R71-11."
+    },
+    {
+      "id": "R73-34",
+      "severity": "P3",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 655,
+      "cs_reference": "SimpleGridUI.cs behaviour is the spec.",
+      "summary": "Carried from R72-28, and worse: the file now has no tests at all (see R73-17).",
+      "required_fix": "As R71-13."
+    },
+    {
+      "id": "R73-35",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan/menu.rs",
+      "line": 525,
+      "cs_reference": "SimpleGridPlugin.cs:36-61; FaceMapPlugin.cs:45; GridPluginv2.cs:52; PluginLoader.cs",
+      "summary": "Carried from R72-29 unchanged.",
+      "required_fix": "As R71-16."
+    },
+    {
+      "id": "R73-36",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/grid.rs",
+      "line": 163,
+      "cs_reference": "ExtLibs/Utilities/Grid.cs:34, 46-53, 190-194, 275-277, 295-302, 327-334",
+      "summary": "Carried from R72-30 unchanged.",
+      "required_fix": "As R70-04."
+    },
+    {
+      "id": "R73-37",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/grid.rs",
+      "line": 956,
+      "cs_reference": "Grid.cs behaviour is the spec.",
+      "summary": "Carried from R72-31 unchanged.",
+      "required_fix": "As R70-05."
+    },
+    {
+      "id": "R73-38",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan/menu.rs",
+      "line": 873,
+      "cs_reference": "GCSViews/FlightPlanner.cs:3661-3666, 3702, 999-1035",
+      "summary": "Carried from R72-32 unchanged.",
+      "required_fix": "As R70-06."
+    },
+    {
+      "id": "R73-39",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 4215,
+      "cs_reference": "ExtLibs/Utilities/clipper.cs:4400-4444, 3336-3340, 130-203",
+      "summary": "Carried from R72-33 unchanged.",
+      "required_fix": "As R70-07."
+    },
+    {
+      "id": "R73-40",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 1585,
+      "cs_reference": "ExtLibs/Utilities/clipper.cs:1137-1163, 1586-1590, 2958-2978, 4378",
+      "summary": "Carried from R72-34 unchanged.",
+      "required_fix": "As R69-05."
+    },
+    {
+      "id": "R73-41",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/enumtranslator.rs",
+      "line": 118,
+      "cs_reference": "ExtLibs/Utilities/EnumTranslator.cs:92, 107-123",
+      "summary": "Carried from R72-35 unchanged.",
+      "required_fix": "As R69-07."
+    },
+    {
+      "id": "R73-42",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1701,
+      "cs_reference": "GCSViews/FlightPlanner.cs:5606-5609, 2145-2155, 233-238",
+      "summary": "Carried from R72-36 unchanged.",
+      "required_fix": "As R69-08."
+    },
+    {
+      "id": "R73-43",
+      "severity": "P2",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 592,
+      "cs_reference": "MainV2.cs:1665-1735, 1758-1809; ExtLibs/Mavlink/MAVLinkParam.cs:219-224",
+      "summary": "Carried from R72-37 unchanged.",
+      "required_fix": "As R68-03."
+    },
+    {
+      "id": "R73-44",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/ltm.rs",
+      "line": 174,
+      "cs_reference": "ExtLibs/Utilities/LTM.cs:240-242, 341-349",
+      "summary": "Carried from R72-38 unchanged.",
+      "required_fix": "As R68-05."
+    },
+    {
+      "id": "R73-45",
+      "severity": "P2",
+      "file": "crates/mp-core/src/link.rs",
+      "line": 1196,
+      "cs_reference": "ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2005-2041, 1847-1885; MAVState.cs:102-128; MainV2.cs:1665-1747; APFirmware.cs",
+      "summary": "Carried from R72-39 unchanged.",
+      "required_fix": "As R67-03."
+    },
+    {
+      "id": "R73-46",
+      "severity": "P3",
+      "file": "crates/mp-app/src/show_again.rs",
+      "line": 15,
+      "cs_reference": "Common.cs:260-294; ExtLibs/Utilities/Settings.cs:223-232",
+      "summary": "Carried from R72-40 unchanged.",
+      "required_fix": "As R68-07."
+    },
+    {
+      "id": "R73-47",
+      "severity": "P2",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 1500,
+      "cs_reference": "MainV2.cs:1737-1832",
+      "summary": "Carried from R72-41 unchanged.",
+      "required_fix": "As R67-06."
+    },
+    {
+      "id": "R73-48",
+      "severity": "P2",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 133,
+      "cs_reference": "Controls/fftui.cs; ExtLibs/Utilities/Spectrogram.cs:119-244",
+      "summary": "Carried from R72-42 unchanged.",
+      "required_fix": "As R65-05."
+    },
+    {
+      "id": "R73-49",
+      "severity": "P2",
+      "file": "crates/mp-core/src/paramfile.rs",
+      "line": 36,
+      "cs_reference": "ExtLibs/Mavlink/MAVLinkParam.cs:219-224; ConfigRawParams.cs:237-252",
+      "summary": "Carried from R72-43 unchanged.",
+      "required_fix": "As R64-02."
+    },
+    {
+      "id": "R73-50",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1718,
+      "cs_reference": "GCSViews/FlightPlanner.cs:6706-6764, 322, 1864",
+      "summary": "Carried from R72-44 unchanged.",
+      "required_fix": "As R65-07."
+    },
+    {
+      "id": "R73-51",
+      "severity": "P2",
+      "file": "crates/mp-core/src/mission.rs",
+      "line": 227,
+      "cs_reference": "GCSViews/FlightPlanner.cs:5613-5635, 1138-1145, 6141-6181",
+      "summary": "Carried from R72-45 unchanged.",
+      "required_fix": "As R62-03."
+    },
+    {
+      "id": "R73-52",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1727,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1385-1400, 1413-1425, 5659",
+      "summary": "Carried from R72-46 unchanged.",
+      "required_fix": "As R62-05."
+    },
+    {
+      "id": "R73-53",
+      "severity": "P2",
+      "file": "crates/mp-core/src/rtk.rs",
+      "line": 42,
+      "cs_reference": "ConfigSerialInjectGPS.cs:757-834, 908-925; ubx_m8p.cs:440-472",
+      "summary": "Carried from R72-47 unchanged.",
+      "required_fix": "As R61-10."
+    },
+    {
+      "id": "R73-54",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/version.rs",
+      "line": 18,
+      "cs_reference": "System.Version; CircularBuffer.cs; fft.cs:84-89; Pelco.cs",
+      "summary": "Carried from R72-48 unchanged.",
+      "required_fix": "As R65-12."
+    },
+    {
+      "id": "R73-55",
+      "severity": "P3",
+      "file": "crates/mp-app/src/swarm.rs",
+      "line": 159,
+      "cs_reference": "Swarm/Formation.cs:321-324; Swarm/FormationControl.cs:273-293",
+      "summary": "Carried from R72-49 unchanged.",
+      "required_fix": "As R63-08."
+    },
+    {
+      "id": "R73-56",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan/menu.rs",
+      "line": 815,
+      "cs_reference": "GCSViews/FlightPlanner.cs:3272-3299, 1096-1223, 1038-1063",
+      "summary": "Carried from R72-50 unchanged.",
+      "required_fix": "As R63-09."
+    },
+    {
+      "id": "R73-57",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1887,
+      "cs_reference": "GMap.NET.WindowsForms/GMapRoute.cs:131-148",
+      "summary": "Carried from R72-51 unchanged. GMapRoute.Distance is MapRoute.Distance, which is now ported, but flight_plan.rs still computes route distance its own way.",
+      "required_fix": "As R62-09, using the ported MapRoute.Distance."
+    },
+    {
+      "id": "R73-58",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/maps/wpoverlay.rs",
+      "line": 87,
+      "cs_reference": "GMapPolygon.cs; WPOverlay.cs:30, 46-48, 403-457",
+      "summary": "Carried from R72-52 unchanged.",
+      "required_fix": "As R62-10."
+    },
+    {
+      "id": "R73-59",
+      "severity": "P3",
+      "file": "crates/mp-core/src/coords.rs",
+      "line": 36,
+      "cs_reference": "GCSViews/FlightPlanner.cs:2731-2763; ExtLibs/Controls/Coords.cs",
+      "summary": "Carried from R72-53 unchanged.",
+      "required_fix": "As R62-11."
+    },
+    {
+      "id": "R73-60",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/io.rs",
+      "line": 22,
+      "cs_reference": "System.Console.Out; ExtLibs/ArduPilot/Linux.cs",
+      "summary": "Carried from R72-54 unchanged. SimpleGrid's 'Poly Dist' line now also goes through console_write_line.",
+      "required_fix": "As R62-12."
+    },
+    {
+      "id": "R73-61",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 4762,
+      "cs_reference": "Behaviour is the spec.",
+      "summary": "Carried from R72-55 unchanged: no Clipper golden vectors.",
+      "required_fix": "As R69-28."
+    }
+  ],
+  "round_72_status": {
+    "fixed": [
+      "R72-07: onFlightMode is a handler list, every handler runs, the last result wins, and MainV2's handler is registered (app.rs:296). The residue is R73-14 (P3).",
+      "R72-03 (mostly): 'Convert .Bin to .Log' calls BinaryLog::ConvertBin with <dir><sep><stem>.log and stays silent on success. The residue (single select, picker title and directory, error toast, dead to_text) is R73-13 (P3)."
+    ],
+    "partly_fixed": [
+      "R72-08: CurrentState.messageHigh's getter and setter are ported exactly, and the WarningEngine handler applies every pending text through it. QuickPanelColoring, Stop, the next-frame/no-link handling, live defaultsrc and the initial severity remain (R73-09). The STATUSTEXT caller still lacks MAVLinkInterface's prefix, setting and compid logic (R73-08).",
+      "R72-01: 6 more files (1,383 lines) and an exact manifest. 91.6% still todo (R73-01).",
+      "R72-21: unchanged in substance, and the count rose by 3 (R73-27)."
+    ],
+    "not_fixed_despite_claim": [
+      "R72-19: the brief says the raw NUL bytes are now '\\0' escapes. A byte scan finds 0x00 at dataflash.rs:81, dataflash.rs:209 and dotnet/mod.rs:146, the same three places, and git still diffs dataflash.rs as binary (R73-06)."
+    ],
+    "still_open": [
+      "R72-02 (now R73-02).",
+      "R72-04 (now R73-03).",
+      "R72-05 (now R73-04).",
+      "R72-06 (now R73-05).",
+      "R72-09 (now R73-10).",
+      "R72-10 (now R73-11).",
+      "R72-11 (now R73-12).",
+      "R72-12 (now R73-19).",
+      "R72-13 (now R73-20).",
+      "R72-14 (now R73-21).",
+      "R72-15 (now R73-22).",
+      "R72-16 (now R73-23).",
+      "R72-17 (now R73-24).",
+      "R72-18 (now R73-25).",
+      "R72-20 (now R73-26).",
+      "R72-22 (now R73-28).",
+      "R72-23 (now R73-29).",
+      "R72-24 (now R73-30).",
+      "R72-25..R72-36 (now R73-31..R73-42).",
+      "R72-37..R72-55 (now R73-43..R73-61).",
+      "Older items still open as listed in rounds 61-72."
+    ],
+    "new_ports_verified": [
+      "gpoint.rs: faithful (wrapping long arithmetic, (int)(x ^ y) hash, Offset/OffsetNegative). The culture-insensitive ToString and the missing GPointComparer are R73-16.",
+      "gsize.rs: faithful, including Int64.GetHashCode's low ^ (high >> 32 arithmetic) and the 0 hash when empty. ToString is R73-16.",
+      "rectlatlng.rs: faithful. The NotEmpty flag, operator== without the flag, the half-open Contains, Intersect's Lat + HeightLat quirk, Union through FromLTRB, Math.Min/Max NaN propagation and the G15 culture ToString all match.",
+      "pureprojection.rs: faithful in arithmetic and ordering. AdjustLongitude's casts and long/double comparisons, the 33-entry caches with List's ArgumentOutOfRange text, and the reverse cache all match. The NaN cache key and the debug text are R73-15.",
+      "mercatorprojection.rs: faithful. Clip order, +0.5 then a cvttsd2si-style truncation, the 32-bit (1 << zoom) with a 5-bit count, the 85.05112878 clip, and the inverse formula's evaluation order all match.",
+      "maproute.rs: From/To/Distance/Clear are faithful, and Distance uses Mercator as EmptyProvider does. The Tag type, the derived equality and the dropped ISerializable are R73-16."
+    ]
+  },
+  "next_steps": [
+    "R73-06: actually replace the three raw NUL bytes with '\\0' escapes, and add a guard so that a NUL byte cannot come back unnoticed.",
+    "R73-07 / R73-01: port GMap.NET.Internals/Core.cs, TileMatrix.cs and GMapControl's projection path, so that map.rs and SimpleGrid draw and fit through the same PureProjection taken from the active provider.",
+    "R73-08 / R73-09: port MAVLinkInterface's STATUSTEXT block (the 'severity' setting, the Tuning:/PreArm:/Arm: prefixes, the compidcurrent copy) and CurrentState's other messageHigh writers. Subscribe QuickPanelColoring, call WarningEngine.Stop, and start messageHighSeverity at 0.",
+    "R73-02 / R73-10 / R73-11: port WarningsManager/WarningControl, back ISpeech with Speech.SpeakAsync/IsReady, and give CsSource real values, including messageHigh.",
+    "R73-17 / R73-18: restore the SimpleGrid tests, add GMap golden vectors and unit tests for message_high and onFlightMode, and make altitude_change.rs deterministic.",
+    "R73-13 / R73-14 / R73-15 / R73-16: the multiselect bintolog picker, the closure-capable onFlightMode with remove, the NaN-unequal projection cache, culture ToString for GPoint/GSize, GPointComparer, and MapRoute.Tag as an object.",
+    "R73-12 / R73-01: port Log/LogBrowse.cs over DFLogBuffer, and MagCalib.cs so that CompassCalibrator has a caller.",
+    "R73-03 / R73-04 / R73-05 / R73-29 / R73-30 and R73-43..R73-53: GridUI, the modal and sizable SimpleGrid, the WPOverlay/FlightData map, FlightPlanner AddCommand/setfromMap, and the long-standing MainV2/MAVLink/FlightPlanner/FlightData gaps."
+  ],
+  "verdict": "Build and clippy pass. Tests pass (428 passed, 1 ignored), but altitude_change.rs:219 failed once under parallel load. The manifest is exact: 39,757 / 479,014 ported lines (8.3%), so the cap stays 1.9. The six GMap.NET.Core ports (GPoint, GSize, RectLatLng, PureProjection, MapRoute, MercatorProjection) are careful line-by-line copies. They keep the wrapping long arithmetic, the .NET hash codes, Intersect's Lat + HeightLat quirk, the cvttsd2si casts in AdjustLongitude, the 32-bit (1 << zoom) and the List ArgumentOutOfRange text. Their only real slip is a projection cache that treats NaN keys as equal. The fixes for R72-03, R72-07 and R72-08 check out: ConvertBin is wired and silent, onFlightMode is a multicast with MainV2's handler, and messageHigh is a real property with the 10 s expiry, dedupe and EMERGENCY severity. Against an exact clone this still falls short. R72-19 was reported fixed, but all three raw NUL bytes are still in the source. The STATUSTEXT path still drops 'Tuning:'/'PreArm:'/'Arm:' handling, the 'severity' setting and the compid copy. The map widget still uses its own projection, so SimpleGrid fits its zoom with one projection and draws with another, and ignores the map provider. SimpleGrid's test module was deleted, and 1,383 new lines got a single test. The Warning Manager is still invented, and QuickPanelColoring and Stop are still unwired. Awarded 1.6 of a 1.9 cap. Round-file fidelity 6.8, UI/UX 2.8, features 3.8."
+}

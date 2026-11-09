@@ -313,6 +313,12 @@ impl FlightDataView {
     }
 
     pub fn on_event(&mut self, e: &LinkEvent) {
+        // the download threw ("Timeout getting waypoints"): the resume stops there
+        if let LinkEvent::MissionDownloadFailed { mission_type: 0 } = e {
+            if matches!(self.resume, Some(Resume::Download { .. })) {
+                self.resume = None;
+            }
+        }
         if let LinkEvent::MissionDownloaded { mission_type: 0, items } = e {
             self.mission = items.clone();
             if let Some(Resume::Download { wp }) = self.resume.clone() {
@@ -1991,6 +1997,17 @@ impl FlightDataView {
     }
 
     fn dflog_path(&mut self, what: &str, path: std::path::PathBuf, app: &mut AppCtx) {
+        if what == "Convert .Bin to .Log" {
+            // but_bintolog_Click: <dir>\<name>.log next to each log, through BinaryLog.ConvertBin;
+            // nothing is shown on success
+            let dir = path.parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
+            let stem = path.file_stem().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            let outfilename = format!("{dir}{}{stem}.log", std::path::MAIN_SEPARATOR);
+            if let Err(e) = mp_core::extlibs::utilities::binarylog::BinaryLog::ConvertBin(&path.to_string_lossy(), &outfilename, None) {
+                app.toasts.error(e.to_string());
+            }
+            return;
+        }
         let data = match std::fs::read(&path) {
             Ok(d) => d,
             Err(e) => {
@@ -2006,7 +2023,6 @@ impl FlightDataView {
                 let (kml, gpx) = log.to_kml_gpx(&name);
                 std::fs::write(stem.with_extension("kml"), kml).and_then(|_| std::fs::write(stem.with_extension("gpx"), gpx)).map(|_| format!("{}.kml / .gpx", stem.display()))
             }
-            "Convert .Bin to .Log" => std::fs::write(stem.with_extension("log"), log.to_text()).map(|_| format!("{}.log", stem.display())),
             "Create Matlab File" => std::fs::write(stem.with_extension("mat"), log.to_mat_v4()).map(|_| format!("{}.mat", stem.display())),
             "Auto Analysis" => {
                 self.analysis = Some((name.clone(), log.analysis()));

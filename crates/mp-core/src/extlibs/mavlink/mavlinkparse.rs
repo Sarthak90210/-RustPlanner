@@ -131,7 +131,7 @@ impl MavlinkParse {
         let mut timeout = 500i32;
         if base_stream.can_seek() {
             timeout = 0;
-            if base_stream.position() + count as i64 > base_stream.length() {
+            if base_stream.position()? + count as i64 > base_stream.length()? {
                 return Err(Exception::EndOfStream("End of data".into()));
             }
         }

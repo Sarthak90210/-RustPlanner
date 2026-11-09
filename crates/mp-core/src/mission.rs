@@ -1,8 +1,12 @@
-//! Mission model: port of `Locationwp`, `WaypointFile` and the "QGC WPL 110" writer from
-//! `FlightPlanner.cs`.
+//! The app's mission rows, as a layer over the file-by-file ports: reading goes through
+//! `WaypointFile.ReadWaypointFile` and `.plan` files through `MissionFile`
+//! (`extlibs::utilities::missionfile`), with rows converted to and from the ported
+//! `Locationwp`. The "QGC WPL 110" writer is `FlightPlanner.savewaypoints`'s.
 
 use std::fmt::Write as _;
 
+use crate::extlibs::utilities::locationwp::Locationwp as PortLocationwp;
+use crate::extlibs::utilities::missionfile::{MissionFile, WaypointFile};
 use crate::mavcmd;
 
 /// Mirrors MissionPlanner.Utilities.Locationwp (the struct as used in ArduPilot).
@@ -61,6 +65,29 @@ impl AltMode {
             AltMode::Absolute => "Absolute",
             AltMode::Relative => "Relative",
             AltMode::Terrain => "Terrain",
+        }
+    }
+}
+
+/// FlightPlanner's `enum altmode { Relative = GLOBAL_RELATIVE_ALT, Absolute = GLOBAL,
+/// Terrain = GLOBAL_TERRAIN_ALT }` as EnumTranslator reflects over it (no attributes).
+impl crate::extlibs::utilities::enumtranslator::EnumReflect for AltMode {
+    fn fields() -> Vec<crate::extlibs::utilities::enumtranslator::EnumFieldInfo> {
+        AltMode::ALL
+            .iter()
+            .map(|m| crate::extlibs::utilities::enumtranslator::EnumFieldInfo {
+                name: m.label().to_string(),
+                value: *m as i64,
+                display_text: None,
+                private: None,
+            })
+            .collect()
+    }
+
+    fn to_cs_string(value: i64) -> String {
+        match AltMode::ALL.iter().find(|m| **m as i64 == value) {
+            Some(m) => m.label().to_string(),
+            None => value.to_string(),
         }
     }
 }
@@ -160,173 +187,117 @@ impl Locationwp {
     }
 }
 
+/// The app's mission row to the ported `MissionPlanner.Utilities.Locationwp`.
+pub fn to_port(w: &Locationwp) -> PortLocationwp {
+    PortLocationwp {
+        seq: w.seq,
+        frame: w.frame,
+        tag: None,
+        id: w.id,
+        p1: w.p1,
+        p2: w.p2,
+        p3: w.p3,
+        p4: w.p4,
+        lat: w.lat,
+        lng: w.lng,
+        alt: w.alt,
+    }
+}
+
+/// The ported `Locationwp` back to the app's row (the `Tag` is dropped).
+pub fn from_port(w: &PortLocationwp) -> Locationwp {
+    Locationwp { id: w.id, p1: w.p1, p2: w.p2, p3: w.p3, p4: w.p4, lat: w.lat, lng: w.lng, alt: w.alt, frame: w.frame, seq: w.seq }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum WaypointFileError {
+    /// The first line has no "QGC WPL" header (`ReadWaypointFile` shows this and returns an
+    /// empty list; callers that fall back to other formats need to tell it apart).
     #[error("Invalid Waypoint file")]
     InvalidHeader,
-    #[error("Line invalid\n{0}")]
-    InvalidLine(String),
 }
 
-/// Port of `WaypointFile.ReadWaypointFile`. Index 0 is always home; if the file does not start
-/// with seq 0, a blank home is inserted, exactly like Mission Planner.
-pub fn read_waypoint_file(text: &str) -> Result<Vec<Locationwp>, WaypointFileError> {
-    let mut lines = text.lines();
-    let header = lines.next().unwrap_or("");
-    if !header.contains("QGC WPL") {
+/// `WaypointFile.ReadWaypointFile` over text already read: index 0 is home, and a file whose
+/// first item is not index 0 gets a blank home inserted. A bad line is skipped after `show`
+/// gets "Line invalid\n<line>", where the C# shows a `CustomMessageBox`.
+pub fn read_waypoint_file(text: &str, show: &mut dyn FnMut(&str)) -> Result<Vec<Locationwp>, WaypointFileError> {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    let mut bad_header = false;
+    let list = WaypointFile::read_waypoint_lines(crate::dotnet::io::split_lines(text), &mut |m| {
+        if m == "Invalid Waypoint file" {
+            bad_header = true;
+        } else {
+            show(m);
+        }
+        Ok(())
+    })
+    .unwrap_or_default();
+    if bad_header {
         return Err(WaypointFileError::InvalidHeader);
     }
-    let mut cmds = Vec::new();
-    let mut wp_count = 0;
-    for line in lines {
-        if line.starts_with('#') {
-            continue;
-        }
-        let items: Vec<&str> = line
-            .split(|c| c == '\t' || c == ' ' || c == ',')
-            .filter(|s| !s.is_empty())
-            .collect();
-        if items.len() <= 9 {
-            continue;
-        }
-        let parse = || -> Option<Locationwp> {
-            let mut id: u16 = items[3].parse().ok()?;
-            if id == 99 {
-                id = 0;
-            }
-            Some(Locationwp {
-                frame: items[2].parse::<i32>().ok()? as u8,
-                id,
-                p1: items[4].parse().ok()?,
-                p2: items[5].parse::<f64>().ok()? as f32,
-                p3: items[6].parse::<f64>().ok()? as f32,
-                p4: items[7].parse::<f64>().ok()? as f32,
-                lat: items[8].parse().ok()?,
-                lng: items[9].parse().ok()?,
-                alt: items[10].parse::<f64>().ok()? as f32,
-                seq: 0,
-            })
-        };
-        if wp_count == 0 && items[0] != "0" {
-            cmds.push(Locationwp::default());
-        }
-        let wp = parse().ok_or_else(|| WaypointFileError::InvalidLine(line.to_string()))?;
-        cmds.push(wp);
-        wp_count += 1;
-    }
-    for (i, c) in cmds.iter_mut().enumerate() {
-        c.seq = i as u16;
-    }
-    Ok(cmds)
+    Ok(list.iter().map(from_port).collect())
 }
 
-/// Port of the "QGC WPL 110" writer in `FlightPlanner.savewaypoints`. `items[0]` is home.
+/// The "QGC WPL 110" branch of `FlightPlanner.savewaypoints`: `StreamWriter.WriteLine` line
+/// ends, each grid cell's text (`float.ToString()` / `double.ToString()`) re-read with
+/// `double.Parse` and written with `ToString("0.00000000", en-US)` (alt "0.000000"). Home
+/// with empty TXT_home boxes (0,0 here) fails `double.Parse` and writes the fallback line.
 pub fn write_waypoint_file(home: &Locationwp, items: &[Locationwp]) -> String {
-    let mut s = String::from("QGC WPL 110\n");
-    let _ = writeln!(
-        s,
-        "0\t1\t0\t16\t0\t0\t0\t0\t{:.7}\t{:.7}\t{:.6}\t1",
-        home.lat, home.lng, home.alt
-    );
-    for (a, wp) in items.iter().enumerate() {
-        let _ = writeln!(
+    use crate::dotnet::{format_fixed, format_general, INVARIANT_CULTURE};
+    let nl = crate::dotnet::io::NEW_LINE;
+    let en = &INVARIANT_CULTURE;
+    // the grid cell's text and back: float cells hold G7, double cells G15
+    let cell_f = |v: f32| format_general(v as f64, 7, en).parse::<f64>().unwrap_or(v as f64);
+    let cell_d = |v: f64| format_general(v, 15, en).parse::<f64>().unwrap_or(v);
+    let f8 = |v: f64| format_fixed(v, 1, 8, en);
+
+    let mut s = format!("QGC WPL 110{nl}");
+    if home.lat == 0.0 && home.lng == 0.0 {
+        let _ = write!(s, "0\t1\t0\t0\t0\t0\t0\t0\t0\t0\t0\t1{nl}");
+    } else {
+        let _ = write!(
             s,
-            "{}\t0\t{}\t{}\t{:.8}\t{:.8}\t{:.8}\t{:.8}\t{:.8}\t{:.8}\t{:.6}\t1",
+            "0\t1\t0\t16\t0\t0\t0\t0\t{}\t{}\t{}\t1{nl}",
+            format_fixed(cell_d(home.lat), 1, 7, en),
+            format_fixed(cell_d(home.lng), 1, 7, en),
+            format_fixed(cell_f(home.alt), 1, 6, en)
+        );
+    }
+    for (a, wp) in items.iter().enumerate() {
+        let _ = write!(
+            s,
+            "{}\t0\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t1{nl}",
             a + 1,
             wp.frame,
             wp.id,
-            wp.p1,
-            wp.p2,
-            wp.p3,
-            wp.p4,
-            wp.lat,
-            wp.lng,
-            wp.alt
+            f8(cell_f(wp.p1)),
+            f8(cell_f(wp.p2)),
+            f8(cell_f(wp.p3)),
+            f8(cell_f(wp.p4)),
+            f8(cell_d(wp.lat)),
+            f8(cell_d(wp.lng)),
+            format_fixed(cell_f(wp.alt), 1, 6, en)
         );
     }
     s
 }
 
-/// MissionFile.Item as Json.NET writes it (every property, nulls included).
-#[derive(serde::Serialize)]
-#[allow(non_snake_case)]
-struct MissionFileItem {
-    autoContinue: bool,
-    command: u16,
-    doJumpId: u16,
-    frame: u8,
-    params: [f64; 7],
-    r#type: Option<String>,
-    TransectStyleComplexItem: Option<()>,
-    angle: Option<i32>,
-    complexItemType: Option<String>,
-    entryLocation: Option<i32>,
-    flyAlternateTransects: Option<bool>,
-    polygon: Option<()>,
-    splitConcavePolygons: Option<bool>,
-    version: Option<i32>,
-}
-
-#[derive(serde::Serialize)]
-#[allow(non_snake_case)]
-struct MissionFileMission {
-    cruiseSpeed: i32,
-    firmwareType: i32,
-    hoverSpeed: i32,
-    items: Vec<MissionFileItem>,
-    plannedHomePosition: Option<Vec<f64>>,
-    vehicleType: i32,
-    version: i32,
-}
-
-#[derive(serde::Serialize)]
-#[allow(non_snake_case)]
-struct MissionFileRoot {
-    fileType: Option<String>,
-    geoFence: Option<()>,
-    groundStation: String,
-    mission: MissionFileMission,
-    rallyPoints: Option<()>,
-    version: i32,
-}
-
-/// MissionFile.ConvertFromLocationwps(list with home first, frame) written with
-/// Formatting.Indented: the home's lat/lng/alt as plannedHomePosition, every other item with
-/// the chosen frame.
+/// `MissionFile.WriteFile(file, MissionFile.ConvertFromLocationwps(list, frame))` as
+/// `FlightPlanner.savewaypoints` calls it for a .plan file, returning the text: home first,
+/// its lat/lng/alt as plannedHomePosition, every other item with the chosen frame.
 pub fn write_mission_json(home: &Locationwp, items: &[Locationwp], frame: u8) -> String {
-    let item = |w: &Locationwp, frame: u8| MissionFileItem {
-        autoContinue: false,
-        command: w.id,
-        doJumpId: w.seq,
-        frame,
-        params: [w.p1 as f64, w.p2 as f64, w.p3 as f64, w.p4 as f64, w.lat, w.lng, w.alt as f64],
-        r#type: None,
-        TransectStyleComplexItem: None,
-        angle: None,
-        complexItemType: None,
-        entryLocation: None,
-        flyAlternateTransects: None,
-        polygon: None,
-        splitConcavePolygons: None,
-        version: None,
-    };
-    let root = MissionFileRoot {
-        fileType: None,
-        geoFence: None,
-        groundStation: "MissionPlanner".into(),
-        mission: MissionFileMission {
-            cruiseSpeed: 0,
-            firmwareType: 0,
-            hoverSpeed: 0,
-            items: items.iter().map(|w| item(w, frame)).collect(),
-            plannedHomePosition: Some(vec![home.lat, home.lng, home.alt as f64]),
-            vehicleType: 0,
-            version: 0,
-        },
-        rallyPoints: None,
-        version: 1,
-    };
-    serde_json::to_string_pretty(&root).unwrap_or_default()
+    // FlightPlanner.GetCommandList builds new Locationwps from the grid rows: _seq is never set,
+    // so every doJumpId is written as 0
+    let list: Vec<PortLocationwp> = std::iter::once(home).chain(items).map(|w| PortLocationwp { seq: 0, ..to_port(w) }).collect();
+    MissionFile::serialize_indented(&MissionFile::ConvertFromLocationwps(&list, Some(frame)))
+}
+
+/// `MissionFile.ReadFile` then `ConvertToLocationwps` over text already read; the exception's
+/// message where the C# throws.
+pub fn read_mission_json(text: &str) -> Result<Vec<Locationwp>, String> {
+    let root = MissionFile::parse_text(text).map_err(|e| e.message().to_string())?;
+    let Some(root) = root else { return Err("Object reference not set to an instance of an object.".into()) };
+    MissionFile::ConvertToLocationwps(&root).map(|l| l.iter().map(from_port).collect()).map_err(|e| e.message().to_string())
 }
 
 #[cfg(test)]
@@ -346,7 +317,23 @@ mod tests {
         let item = &v["mission"]["items"][0];
         assert_eq!((item["command"].as_u64(), item["frame"].as_u64(), item["autoContinue"].as_bool()), (Some(16), Some(3), Some(false)));
         assert!(item["type"].is_null());
-        assert!(j.starts_with("{\n  \"fileType\": null,"));
+        assert!(j.starts_with(&format!("{{{}  \"fileType\": null,", crate::dotnet::io::NEW_LINE)), "{j}");
+        // and back through MissionFile.ReadFile: only "SimpleItem" items survive ConvertToLocationwps
+        assert_eq!(read_mission_json(&j).unwrap().len(), 1);
+        assert!(read_mission_json("[]").is_err());
+    }
+
+    #[test]
+    fn bad_lines_are_reported_and_skipped_like_readwaypointfile() {
+        let text = "QGC WPL 110\n0\t1\t0\t16\t0\t0\t0\t0\t1.0\t2.0\t30\t1\n1\t0\t3\tNOPE\t0\t0\t0\t0\t1\t2\t3\t1\n2\t0\t3\t16\t0\t0\t0\t0\t3.0\t4.0\t30\t1\n";
+        let mut shown = vec![];
+        let parsed = read_waypoint_file(text, &mut |m| shown.push(m.to_string())).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[1].lat, 3.0);
+        assert_eq!(shown, vec!["Line invalid\n1\t0\t3\tNOPE\t0\t0\t0\t0\t1\t2\t3\t1".to_string()]);
+        let mut shown = vec![];
+        assert!(matches!(read_waypoint_file("hello", &mut |m| shown.push(m.to_string())), Err(WaypointFileError::InvalidHeader)));
+        assert!(shown.is_empty());
     }
 
     #[test]
@@ -372,7 +359,7 @@ mod tests {
             },
         ];
         let text = write_waypoint_file(&home, &items);
-        let parsed = read_waypoint_file(&text).unwrap();
+        let parsed = read_waypoint_file(&text, &mut |m| panic!("{m}")).unwrap();
         assert_eq!(parsed.len(), 4);
         assert!((parsed[0].lat - home.lat).abs() < 1e-7);
         assert_eq!(parsed[1].id, 22);
@@ -383,7 +370,7 @@ mod tests {
     #[test]
     fn missing_home_inserted() {
         let text = "QGC WPL 110\n1\t0\t3\t16\t0\t0\t0\t0\t1.0\t2.0\t30\t1\n";
-        let parsed = read_waypoint_file(text).unwrap();
+        let parsed = read_waypoint_file(text, &mut |m| panic!("{m}")).unwrap();
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[1].lat, 1.0);
     }

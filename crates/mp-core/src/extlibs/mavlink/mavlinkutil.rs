@@ -233,7 +233,7 @@ pub fn get_message_info(source: &'static [message_info], msgid: u32) -> &'static
         return &source[i];
     }
     drop(guard);
-    println!("Unknown Packet {msgid}");
+    crate::dotnet::io::console_write_line(&format!("Unknown Packet {msgid}"));
     &message_info::EMPTY
 }
 

@@ -182,6 +182,10 @@ pub enum LinkEvent {
         mission_type: u8,
         items: Vec<Locationwp>,
     },
+    /// mav_mission.download threw ("Timeout getting waypoints"): the caller keeps its list
+    MissionDownloadFailed {
+        mission_type: u8,
+    },
     MissionUploaded {
         mission_type: u8,
         result: Result<(), String>,
@@ -1186,6 +1190,15 @@ impl Worker {
                     .unwrap_or("")
                     .trim_end_matches('\0')
                     .to_string();
+                // getParamList's STATUSTEXT subscription (MAVLinkInterface.cs:2010-2030): while
+                // the parameters download, the "copter"/"rover"/"plane" banner becomes
+                // MAV.VersionString (e.g. "ArduCopter V4.5.7 (2a3dc4b7)")
+                if self.param_fetch.is_some() {
+                    let l = text.to_lowercase();
+                    if l.contains("copter") || l.contains("rover") || l.contains("plane") {
+                        s.cs.version_string = text.clone();
+                    }
+                }
                 s.messages.push(StatusMessage {
                     time: now_hms(),
                     severity: t.severity as u8,
@@ -1197,10 +1210,6 @@ impl Worker {
             }
             if let MavMessage::AUTOPILOT_VERSION(v) = &msg {
                 s.autopilot_version = Some((v.flight_sw_version, v.capabilities.bits()));
-                let major = (v.flight_sw_version >> 24) & 0xff;
-                let minor = (v.flight_sw_version >> 16) & 0xff;
-                let patch = (v.flight_sw_version >> 8) & 0xff;
-                s.cs.version_string = format!("{major}.{minor}.{patch}");
                 s.cs.uid2 = format!("{:016X}", v.uid);
             }
             if let MavMessage::MAG_CAL_PROGRESS(m) = &msg {
@@ -1864,11 +1873,7 @@ impl Worker {
             Some(Retry::FailDown(mt)) => {
                 self.mission = None;
                 self.set_progress(None);
-                let _ = mt;
-                self.event(LinkEvent::MissionDownloaded {
-                    mission_type: mt as u8,
-                    items: Vec::new(),
-                });
+                self.event(LinkEvent::MissionDownloadFailed { mission_type: mt as u8 });
                 self.push_local_message("Timeout getting waypoints");
             }
             Some(Retry::FailUp(mt)) => {

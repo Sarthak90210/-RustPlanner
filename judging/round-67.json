@@ -1,0 +1,262 @@
+{
+  "round": 67,
+  "date": "2026-11-08",
+  "reviewed_head": "0eddbe4 + uncommitted",
+  "commands_run": [],
+  "commands_note": "No commands were allowed this round (no shell, cargo, git, python or scripts). Everything below comes from reading files with Read/Grep/Glob. Nothing was compiled, so the judge also acted as the compiler.",
+  "manifest_summary": {
+    "manifest_status": "port/MANIFEST.md is still stale. VersionDetection.cs (2678), APFirmware.cs (235), MAVState.cs (277) and WPOverlay.cs (1430) are still todo, as are fft.cs, Pelco.cs, AP_GeodesicGrid.cs, CircularStream.cs, ParamFile.cs, RLE.cs, Spline2.cs and ubx_m8p.cs. wpoverlay.rs is still in mp-core, not at its manifest path.",
+    "new_owned_files_ported": {},
+    "new_owned_lines_ported": 0,
+    "owned_files_ported_corrected": 133,
+    "ported_lines_corrected": 27302,
+    "ported_lines_derivation": "27,302 (round 66) + 0. No owned C# file was ported this round. The changes are a STATUSTEXT branch in link.rs (part of MAVLinkInterface.getParamListAsync, still todo) and rewiring inside app.rs (part of MainV2.doConnect, still todo). Neither counts as a ported file.",
+    "owned_lines_total_corrected": 479014,
+    "ported_fraction_corrected": 0.057,
+    "conservatism_note": "Still an upper bound, as in round 66. VersionDetection.GetVersion now gets real input (the banner), so it is no longer dead in the running app.",
+    "wiring": "New wiring this round: (1) link.rs:1196-1201 sets cs.version_string from a STATUSTEXT containing copter/rover/plane while param_fetch is Some, which is the first branch of getParamListAsync's STATUSTEXT subscription. (2) app.rs runs the newer-firmware task from the ParamsLoaded arm when firmware_check_after_params (set on Connected) is still set. The same flag gates the doConnect rally fetch. (3) The result becomes a show_again::ShowAgain in firmware_prompt, drawn in App::ui after progress_window and before toasts_ui. (4) RALLY_TOTAL goes through dotnet::int_parse(dotnet::double_to_string(..)). Still unwired: the other branches of the STATUSTEXT subscription (SoftwareVersions, SerialString, FrameString), the title bar from VersionString/SerialString, GetMetaDataVersioned, APFirmware's static Manifest, AP_GeodesicGrid, Pelco, CircularStream, FFT2.rin/FreqTable, ConfigArducopter's 4.7 branch, setWPParams from Activate, ZoomAndCenterMarkers, WPOverlay markers/polygons, fence/rally overlays, the FlightData map, the .fen and rally loaders, the doConnect fence download and RALLY_LIMIT_KM warning, the inject loop, Septentrio/Unicore, RLE, MAVLinkInterface/MAVState/CurrentState and every GCSView."
+  },
+  "scores": {
+    "overall": 1.3,
+    "overall_cap": 1.6,
+    "overall_cap_derivation": "ceil1(27,302 / 479,014 * 10) = ceil1(0.570) = 0.6, plus at most +1.0 for the pre-manifest app = 1.6, unchanged. Awarded 0.5 for ported lines + 0.8 for the pre-manifest app = 1.3, unchanged. No owned file was ported, so the cap cannot move. No definite compile error was found, so there is no build-break deduction. The R66-03 fix makes an existing feature work rather than adding a file, and two new behavioural defects (R67-04 per-frame gate, R67-05 stale connect flags) offset it.",
+    "round_files_fidelity": 6.1,
+    "round_files_fidelity_rationale": "Up 0.1 net. Gained: the version string now comes from the STATUSTEXT banner while the parameter download runs, as in MAVLinkInterface.cs:2005-2021, so check_newer_firmware gets 'ArduCopter V4.5.7 (...)' from a real vehicle and the check is live. The sim also sends a banner on PARAM_REQUEST_LIST (sim.rs:674-676). The check now runs after the parameters, as doConnect does. The prompt is the ShowAgain form with the correct 'SHOWAGAIN_New_Firmware_Copter_4_5_7' key, a 'Show me again?' box and a parsed link. The text is exactly NewFirmwareA + type + ' ' + ver2 + Pleaseup + '[link;...]' with no extra newline. show_again_allows is gone. RALLY_TOTAL is parsed with int.TryParse rules. Lost: (a) app.rs:1470 re-tests should_show on every frame, so unticking 'Show me again?' closes the box on the next frame without OK. C# saves on the tick but keeps the dialog open until OK. (b) firmware_check_after_params and load_wps_after_params are never cleared on Disconnected or on a vehicle change. After a skip_params connect, the first Config 'Refresh Params' runs the whole post-connect block: the firmware check, the switch to Flight Plan with a waypoint read, and the rally fetch. (c) RALLY_TOTAL uses double G15 for every type. C# MAVLinkParam.ToString uses float G7 for REAL32, so a REAL32 2.9999999 gives '3' (fetch) in C# and '2.99999988079071' (no fetch) here. (d) The STATUSTEXT match ignores the component id, which C#'s SubscribeToPacketType(.., sysid, compid) filters on, and only the first of the four branches is ported. (e) version_string lives in CurrentState and is wiped on a vehicle change (link.rs:818), where C# keeps one per MAVState. (f) Not gated on showui. GetMetaDataVersioned, APFirmware's all-format/static/appended Manifest and ConfigArducopter 4.7 are still missing. (g) Settings.GetBoolean semantics are still eq_ignore_ascii_case(\"false\") in show_again.rs:15/47, so an unparsable value shows the box where C# hides it.",
+    "ui_ux": 2.4,
+    "ui_ux_rationale": "Up 0.1. A real vehicle that runs older firmware now gets Mission Planner's 'New Firmware-Copter x.y.z' box with the 'Show me again?' tick and a 'Release Notes' link, after the parameters. But unticking the box makes it disappear at once, which C# never does. The title is drawn as a bold label inside the modal, not as the window caption, and the already-formatted text goes through i18n::t as a whole, so it can never be translated (C# translates each Strings piece). The title bar (app.rs:1477-1487) still guesses VersionString from the first message starting with 'Ardu'/'PX4' and shows the ChibiOS/NuttX line as SerialString, which is C#'s SoftwareVersions, although cs.version_string now exists. Older gaps are unchanged: no FlightPlanner.Activate on the switch, no ProgressReporterDialogue errors, no rally-distance warning, no automatic geofence download, no markers, no ZoomAndCenterMarkers, no GCSView ports.",
+    "features": 3.3,
+    "features_rationale": "Up 0.1. The newer-firmware check works against ArduPilot vehicles now, and a Refresh Params on a normal connect no longer fetches rally points. Still wrong: with skip_params there is no ParamsLoaded, so loadwps, rally and the firmware check never run on connect, and the stale flags fire them on the next Refresh Params instead. With a fresh param cache C# never calls getParamList, so VersionString stays '' and no prompt appears. Here the link always downloads again, so the prompt does appear. With Params_BG, C# runs the post-parameter block at once and reads VersionString during the background download. Here everything waits. The stale awaiting_read after a vehicle change or pending-altitude abort still blocks the deferred rally fetch forever. There is no request id on mission reads. The geofence download and RALLY_LIMIT_KM warning are missing. Integer parameters of 1e7 or more lose digits on save, FFT output is not fftui's, and setWPParams ignores the distance unit."
+  },
+  "compile_check": {
+    "summary": "Checked every changed region against its definitions. link.rs:1196: `s` is the write guard from self.shared.write(), which borrows only the field self.shared. self.param_fetch.is_some() reads a different field, the same pattern as the existing self.param_fetch.as_mut() at 1303. text.clone() is taken before text moves into StatusMessage. No test or other code reads version_string as 'x.y.z' (grep finds only app.rs:650). app.rs fields 248-256 have matching initialisers at 359-363. firmware_prompt: Option<show_again::ShowAgain>, and ShowAgain derives Clone (show_again.rs:30). drain_events:524-528: as_ref().and_then(|rx| rx.try_recv().ok()) gives an owned Option<Option<(String, String)>>, then ShowAgain::new(&title, &msg, false) takes &str from &String. Connected arm: the assignments to self.load_wps_after_params, self.rally_after_read and self.firmware_check_after_params, and self.toasts.info, are disjoint from pl (&mut self.settings.planner) and link (&self.link). ParamsLoaded: dotnet::int_parse(&str) -> Result<i32, Exception> (dotnet/mod.rs:1466) and double_to_string(f64) -> String (670) are pub, so .ok() then unwrap_or(0) is i32. std::mem::take(&mut self.firmware_check_after_params) is disjoint from link. The thread closure is unchanged from round 66. App::ui:1469-1473: ctx is the egui::Context cloned at 1313, so &ctx matches ShowAgain::ui(&self, &egui::Context, &mut BTreeMap<String, String>). p is a clone, so &mut self.settings.planner does not conflict. should_show(&self.settings.planner, &p.tag) coerces &String to &str. The CentralPanel destructure of self ends at 1465. show_again_allows has no references left (grep). Test 1627-1650: the BTreeMap type is inferred from should_show's parameter, insert with .into() type-checks, and the expectations hold: 'New firmware available\\nCopter 4.5.7\\nPlease upgrade[link;' is a substring of the formatted message, and key('New Firmware-Copter 4.5.7') = 'SHOWAGAIN_New_Firmware_Copter_4_5_7'. No definite compile error.",
+    "likely_errors": [],
+    "low_confidence_risks": [
+      "crates/mp-app/src/app.rs:1559-1561 (carried): ver(f) with &&&FirmwareInfo relies on deref coercion at a closure call through the annotated parameter. If rustc rejects it, write ver(**f) / ver(***f).",
+      "crates/mp-core/src/dotnet/mod.rs:573 (carried): LCIDToLocaleName(langid as u32, Some(&mut buf), 0) assumes windows 0.62's slice form.",
+      "crates/mp-core/src/extlibs/utilities/versiondetection.rs:79 (test, runtime, carried): '4.5.0-rc2' -> '4.5.0.2' relies on regex keeping an earlier iteration's group-4 capture.",
+      "crates/mp-core/src/extlibs/utilities/ap_geodesicgrid.rs:403 (test, runtime, carried): 2000 spiral points reaching all 80 sections is likely but not proven.",
+      "crates/mp-app/src/views/flight_plan.rs:172 (carried runtime risk): NaN in a Locationwp makes WpOverlayKey unequal to itself, so the overlay is rebuilt every frame."
+    ]
+  },
+  "findings": [
+    {
+      "id": "R67-01",
+      "severity": "P0",
+      "file": "crates/mp-app/src/mp/ (missing), crates/mp-app/src/extlibs/ (missing)",
+      "line": 0,
+      "cs_reference": "reference/MissionPlanner/{MainV2.cs,Program.cs,GCSViews/*,Controls/*,ExtLibs/Maps/*,ExtLibs/ArduPilot/APFirmware.cs,ExtLibs/ArduPilot/Mavlink/*,...}",
+      "summary": "Carried over from R66-01. No owned file was ported this round. MainV2.doConnect and MAVLinkInterface.getParamListAsync's STATUSTEXT subscription are patched into app.rs and link.rs instead of being ported as MainV2.cs, MAVLinkInterface.cs and MAVState.cs. APFirmware.cs is still emulated in a private helper. About 94.3% of owned C# lines remain. MANIFEST.md is still stale.",
+      "required_fix": "Port ExtLibs/ArduPilot/APFirmware.cs, MAVState.cs (VersionString, SoftwareVersions, SerialString, FrameString per sysid/compid) and the getParamList parts of MAVLinkInterface.cs, then GCSViews/FlightPlanner.cs, ConfigRawParams.cs, Controls/fftui.cs, CompassCalibrator.cs and MainV2.cs file by file. Regenerate MANIFEST.md and move wpoverlay.rs."
+    },
+    {
+      "id": "R67-02",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1321,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1408-1580; GCSViews/FlightData.cs:3956-4046",
+      "summary": "Carried over from R66-02 unchanged: only routes come from WPOverlay. Markers, polygons, pointlist, the distance sum, the fence/rally overlays and the FlightData map are missing.",
+      "required_fix": "As R62-06."
+    },
+    {
+      "id": "R67-03",
+      "severity": "P2",
+      "file": "crates/mp-core/src/link.rs",
+      "line": 1196,
+      "cs_reference": "ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2005-2041 (SubscribeToPacketType(STATUSTEXT, .., sysid, compid), four branches), 1847-1885 (getParamListMavftp + DO_SEND_BANNER), 5336; ExtLibs/ArduPilot/Mavlink/MAVState.cs:102-128; MainV2.cs:1665-1735, 1747; ExtLibs/ArduPilot/APFirmware.cs:22-26, 103-182, 274-298",
+      "summary": "R66-03 is mostly fixed. The banner now becomes cs.version_string while the parameters download, so the newer-firmware check works for real vehicles. Remaining: (1) the subscription filters on sysid only, while C# also filters on compid, so a banner-like STATUSTEXT from another component of the same system can overwrite it. (2) Only the copter/rover/plane branch is ported. SoftwareVersions (nuttx/chibios), SerialString (px4v2 or the three-hex-word regex without IOMCU) and FrameString (frame) are not stored. (3) The value lives in CurrentState and is wiped by the vehicle-change reset at link.rs:818, where C# keeps it per MAVState. (4) Not gated on showui. (5) With a fresh param cache C# never calls getParamList, so VersionString stays '' and no prompt appears. The Rust link always downloads again, so the prompt does appear. (6) With Params_BG, C# starts the check at once, racing the background download. Here it always waits. (7) The APFirmware gaps are unchanged: apj-only filtering before GetRelease, no GetListAppend, no static Manifest (a download on every connect), and lenient version parsing where Newtonsoft fails the whole manifest. (8) GetMetaDataVersioned and ConfigArducopter's 4.7 branch are missing. (9) No test drives a STATUSTEXT through the link into the check. The app.rs test still passes a hand-made string.",
+      "required_fix": "Port MAVState's string properties and the full four-branch subscription with the compid filter, keyed per (sysid, compid). Gate the check on showui and follow the cache/Params_BG paths exactly. Port APFirmware.cs and GetMetaDataVersioned. Add a link-level test: PARAM_REQUEST_LIST -> STATUSTEXT banner -> version_string -> check_newer_firmware."
+    },
+    {
+      "id": "R67-04",
+      "severity": "P2",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 1470,
+      "cs_reference": "Common.cs:260-294 (MessageShowAgain checks Settings once before ShowDialog; chk_CheckStateChanged saves at once but the form stays until OK); ExtLibs/Utilities/Settings.cs:223-232 (GetBoolean = bool.TryParse else default false); ExtLibs/Strings/Strings.resx:283-292",
+      "summary": "R66-04 is mostly fixed (ShowAgain form, correct key, exact text, show_again_allows removed, test fixed). New defect: should_show is evaluated on every frame while the prompt is open. Unticking 'Show me again?' writes 'False' at once (show_again.rs:63), so on the next frame the prompt is dropped without the user pressing OK. In C# the dialog stays open. config.rs:1577 and menu.rs:720 test should_show only when the prompt is created, which is correct. Still open: (1) show_again.rs:15/47 treat any value except 'false' as true, but C#'s GetBoolean returns false for an unparsable value ('0', 'no', ''), which hides the box. bool.TryParse also trims whitespace. (2) ShowAgain::ui puts the composed text through i18n::t as one string, so it can never be translated. C# translates NewFirmware, NewFirmwareA and Pleaseup separately. (3) The title is a bold label inside the modal, not the form caption.",
+      "required_fix": "Test should_show once in drain_events before setting firmware_prompt, and only call p.ui(..) in App::ui. Make should_show/ui use bool.TryParse semantics (trimmed, case-insensitive 'True'/'False', anything else = false when the key exists). Build the title and text from translated Strings pieces."
+    },
+    {
+      "id": "R67-05",
+      "severity": "P2",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 645,
+      "cs_reference": "MainV2.cs:1665-1695, 1758-1780 (doConnect runs its post-parameter block exactly once per connect, synchronously after getParamList or the cache load); ExtLibs/Mavlink/MAVLinkParam.cs:219-224 (REAL32 ToString is float G7); GCSViews/FlightPlanner.cs:322 (Activate)",
+      "summary": "R66-05 is partly fixed: a Refresh Params after a normal connect no longer fetches rally. New and remaining: (1) firmware_check_after_params and load_wps_after_params are set on Connected and cleared only by a ParamsLoaded. They survive Disconnected and a vehicle change. After a skip_params connect (no ParamsLoaded), the first Config 'Refresh Params' runs the whole doConnect block: the firmware check, the switch to Flight Plan with a waypoint read, and the rally fetch. After a vehicle switch before the first download finishes, the block runs for the other vehicle. (2) With skip_params the block never runs on connect. (3) RALLY_TOTAL (642) formats every type with double G15. C#'s MAVLinkParam.ToString uses ((float)this).ToString() (G7) for REAL32, so a REAL32 near-integer such as 2.9999999 parses as 3 in C# and fails here. Use p.ptype and dotnet::float_to_string for REAL32. (4) A stale awaiting_read after OperationError (link.rs:804, 605) still blocks the deferred rally fetch forever, and there is no request id on mission reads. (5) No FlightPlanner Activate on the switch. (6) '== \"True\"' instead of bool.TryParse. (7) The Geo-Fence/Rally context Downloads still fill lists C# discards. (8) There are no tests for the ordering, the flags or read_busy.",
+      "required_fix": "Clear both flags on Disconnected and on SetTarget. Run doConnect's post-parameter block from one place reached on every connect path (download done, cache loaded, Params_BG, skip_params). Format RALLY_TOTAL as MAVLinkParam.ToString by type. Emit MissionDownloadFailed on every abort and tag reads with a request id. Add the tests listed in R66-05 plus 'skip_params then Refresh Params does not switch view or fetch rally'."
+    },
+    {
+      "id": "R67-06",
+      "severity": "P2",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 1477,
+      "cs_reference": "MainV2.cs:1737-1832 (title bar = titlebar + ' ' + MAV.VersionString + ' on ' + MAV.SerialString, set once in doConnect; UpdateSysIDS; HWConfig/SWConfig refresh; RALLY_LIMIT_KM warning; FENCE_TOTAL > 1 && FENCE_ACTION geofence download)",
+      "summary": "Carried over from R66-06. The title bar is rebuilt every frame from the first message that starts with 'Ardu'/'PX4' and the first ChibiOS/NuttX line, although cs.version_string now holds MAV.VersionString. The ChibiOS/NuttX line is C#'s SoftwareVersions, not SerialString, and C# always prints ' on ' even with empty strings. The RALLY_LIMIT_KM warning, the geofence download and the config screen refresh are still missing.",
+      "required_fix": "Set the title once in the doConnect block from MAVState.VersionString and SerialString in C#'s exact format. Port the rest of the BeginInvoke block statement by statement."
+    },
+    {
+      "id": "R67-07",
+      "severity": "P2",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 133,
+      "cs_reference": "Controls/fftui.cs; ExtLibs/Utilities/Spectrogram.cs:119-244",
+      "summary": "Carried over from R66-07 unchanged.",
+      "required_fix": "As R65-05."
+    },
+    {
+      "id": "R67-08",
+      "severity": "P2",
+      "file": "crates/mp-core/src/paramfile.rs",
+      "line": 36,
+      "cs_reference": "ExtLibs/Mavlink/MAVLinkParam.cs:219-224, 109-133; GCSViews/ConfigurationView/ConfigRawParams.cs:237-252; ExtLibs/Utilities/ParamFile.cs:85-108",
+      "summary": "Carried over from R66-08 unchanged.",
+      "required_fix": "As R64-02."
+    },
+    {
+      "id": "R67-09",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1699,
+      "cs_reference": "GCSViews/FlightPlanner.cs:6706-6764, 322, 1864",
+      "summary": "Carried over from R66-09 unchanged.",
+      "required_fix": "As R65-07."
+    },
+    {
+      "id": "R67-10",
+      "severity": "P2",
+      "file": "crates/mp-core/src/mission.rs",
+      "line": 227,
+      "cs_reference": "GCSViews/FlightPlanner.cs:5613-5635, 1138-1145, 6141-6181",
+      "summary": "Carried over from R66-10 unchanged.",
+      "required_fix": "As R62-03."
+    },
+    {
+      "id": "R67-11",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1727,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1385-1400, 1413-1425, 5659",
+      "summary": "Carried over from R66-11 unchanged.",
+      "required_fix": "As R62-05."
+    },
+    {
+      "id": "R67-12",
+      "severity": "P2",
+      "file": "crates/mp-core/src/rtk.rs",
+      "line": 42,
+      "cs_reference": "GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:757-834, 908-925; ExtLibs/Utilities/ubx_m8p.cs:440-472",
+      "summary": "Carried over from R66-12 unchanged.",
+      "required_fix": "As R61-10."
+    },
+    {
+      "id": "R67-13",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/version.rs",
+      "line": 18,
+      "cs_reference": "System.Version; ExtLibs/Utilities/CircularBuffer.cs; ExtLibs/Utilities/fft.cs:84-89; ExtLibs/Utilities/Pelco.cs",
+      "summary": "Carried over from R66-13 unchanged, including the cs_enum [Flags] Display note.",
+      "required_fix": "As R65-12, plus a [Flags] Display for cs_enum."
+    },
+    {
+      "id": "R67-14",
+      "severity": "P3",
+      "file": "crates/mp-app/src/swarm.rs",
+      "line": 159,
+      "cs_reference": "Swarm/Formation.cs:321-324; Swarm/FormationControl.cs:273-293",
+      "summary": "Carried over from R66-14 unchanged.",
+      "required_fix": "As R63-08."
+    },
+    {
+      "id": "R67-15",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan/menu.rs",
+      "line": 815,
+      "cs_reference": "GCSViews/FlightPlanner.cs:3272-3299, 1096-1223, 1038-1063",
+      "summary": "Carried over from R66-15 unchanged.",
+      "required_fix": "As R63-09."
+    },
+    {
+      "id": "R67-16",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1887,
+      "cs_reference": "ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapRoute.cs:131-148",
+      "summary": "Carried over from R66-16 unchanged.",
+      "required_fix": "As R62-09."
+    },
+    {
+      "id": "R67-17",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/maps/wpoverlay.rs",
+      "line": 87,
+      "cs_reference": "ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapPolygon.cs; WPOverlay.cs:30, 46-48, 403-457",
+      "summary": "Carried over from R66-17 unchanged.",
+      "required_fix": "As R62-10."
+    },
+    {
+      "id": "R67-18",
+      "severity": "P3",
+      "file": "crates/mp-core/src/coords.rs",
+      "line": 36,
+      "cs_reference": "GCSViews/FlightPlanner.cs:2731-2763; ExtLibs/Controls/Coords.cs",
+      "summary": "Carried over from R66-18 unchanged.",
+      "required_fix": "As R62-11."
+    },
+    {
+      "id": "R67-19",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/io.rs",
+      "line": 22,
+      "cs_reference": "System.Console.Out; ExtLibs/ArduPilot/Linux.cs",
+      "summary": "Carried over from R66-19 unchanged.",
+      "required_fix": "As R62-12."
+    },
+    {
+      "id": "R67-20",
+      "severity": "P3",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 1627,
+      "cs_reference": "No C# tests; behaviour is the spec",
+      "summary": "Carried over from R66-20. The test now pins the correct SHOWAGAIN key, but it still feeds a hand-made banner and never goes through the link. There are no tests for the per-frame prompt gate, the stale connect flags, loadwpsonconnect, read_busy, the deferred rally fetch, REAL32 RALLY_TOTAL, or a vehicle change. There are no golden vectors from the reference build.",
+      "required_fix": "Add the R67-03/R67-04/R67-05 tests and the golden vectors listed in R65-19."
+    }
+  ],
+  "round_66_status": {
+    "fixed": [],
+    "partly_fixed": [
+      "R66-03: version_string now comes from the STATUSTEXT banner during the parameter download (link.rs:1196-1201), and the check runs after ParamsLoaded, so it fires for real vehicles. Open: compid filter, the other three branches, per-MAVState storage, showui, the cache/Params_BG paths, APFirmware, GetMetaDataVersioned, ConfigArducopter 4.7, and a link-level test (R67-03).",
+      "R66-04: the prompt is now show_again::ShowAgain with the correct key, the 'Show me again?' box, a parsed link and the exact Strings text. show_again_allows is gone and the test asserts the C# key. New: should_show is re-tested every frame, so unticking the box closes it without OK. Open: GetBoolean semantics, translation of the composed text, the title as caption (R67-04).",
+      "R66-05: rally is no longer fetched on a normal Refresh Params, and RALLY_TOTAL uses int.TryParse over a ToString. Open: stale flags across disconnect/skip_params/vehicle change, ToString uses G15 for REAL32 instead of G7, skip_params, stale awaiting_read, request id, Activate, '== \"True\"', the context Downloads, tests (R67-05)."
+    ],
+    "still_open": [
+      "R66-01 (now R67-01).",
+      "R66-02 (now R67-02).",
+      "R66-06 (now R67-06; the title bar is now known to ignore cs.version_string and to show SoftwareVersions as SerialString).",
+      "R66-07 (now R67-07).",
+      "R66-08 (now R67-08).",
+      "R66-09 (now R67-09).",
+      "R66-10 (now R67-10).",
+      "R66-11 (now R67-11).",
+      "R66-12 (now R67-12).",
+      "R66-13 (now R67-13).",
+      "R66-14 (now R67-14).",
+      "R66-15 (now R67-15).",
+      "R66-16 (now R67-16).",
+      "R66-17 (now R67-17).",
+      "R66-18 (now R67-18).",
+      "R66-19 (now R67-19).",
+      "R66-20 (now R67-20).",
+      "Older items still open as listed in rounds 61-66."
+    ]
+  },
+  "next_steps": [
+    "R67-04: test should_show once when firmware_prompt is created (drain_events), not every frame in App::ui. One-line fix, and it removes a visible defect introduced this round.",
+    "R67-05: clear firmware_check_after_params and load_wps_after_params on Disconnected and SetTarget. Format RALLY_TOTAL by type (float G7 for REAL32). Then move the post-parameter block to one point reached on every connect path, including skip_params and the cache.",
+    "R67-03: port MAVState's VersionString/SoftwareVersions/SerialString/FrameString and the full four-branch STATUSTEXT subscription with the compid filter. Gate the check on showui. Add a link-level banner test.",
+    "R67-06: build the title bar once from VersionString + ' on ' + SerialString. Port the RALLY_LIMIT_KM warning and the FENCE_TOTAL geofence download.",
+    "R67-04: give show_again.rs bool.TryParse semantics and translate the Strings pieces before composing.",
+    "R67-01: port APFirmware.cs (static Manifest, GetListAppend, GetRelease with OrderBy(Format)), MAVState.cs/MAVLinkInterface.cs, then GCSViews/FlightPlanner.cs, ConfigRawParams.cs, fftui.cs, CompassCalibrator.cs and MainV2.cs file by file. Regenerate MANIFEST.md and move wpoverlay.rs.",
+    "R67-07..R67-12: fftui/Spectrogram, integer parameter saving, setWPParams/Activate, the Commands cells/TXT_home text, WPOverlay markers and the FlightData map, the RTK inject loop.",
+    "R67-13 and R67-20: the small .NET fidelity gaps, the tests above and golden vectors from the reference build."
+  ],
+  "verdict": "No definite compile error. link.rs reads self.param_fetch while the shared write guard is held, which borrows a different field, the same pattern the file already uses at 1303. The new app.rs fields have initialisers. The ShowAgain::ui call gets &egui::Context and &mut planner from a cloned prompt. int_parse and double_to_string exist and are pub. No reference to show_again_allows is left. R66-03 is substantially fixed: the version string is now the STATUSTEXT banner captured during the parameter download, as getParamListAsync does, so the newer-firmware check finally works against a real vehicle and runs after the parameters. R66-04 is substantially fixed: the prompt is the ShowAgain form with the C# key, the 'Show me again?' box, a parsed link and the exact Strings text. The round adds two defects. App::ui re-tests should_show every frame, so unticking 'Show me again?' closes the box at once. The connect flags are never cleared on disconnect, skip_params or a vehicle change, so a later Refresh Params can switch to Flight Plan, read waypoints, fetch rally points and run the firmware check. RALLY_TOTAL uses double G15 where C# uses float G7 for REAL32. Only one of the four STATUSTEXT branches is ported, with no compid filter, and the title bar still ignores the new version string. No owned file was ported. Ported lines stay at 27,302 / 479,014 (5.7%), and the cap stays 1.6. Awarded 1.3; round-file fidelity 6.1; UI/UX 2.4; features 3.3."
+}

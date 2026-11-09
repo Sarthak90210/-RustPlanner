@@ -1,0 +1,213 @@
+{
+  "round": 59,
+  "date": "2026-11-08",
+  "reviewed_head": "0eddbe4 + uncommitted",
+  "commands_run": [],
+  "commands_note": "No commands were allowed this round (no shell, cargo, git, python or scripts). Everything below comes from reading files with Read/Grep/Glob. Nothing was compiled, so the judge also acted as the compiler.",
+  "manifest_summary": {
+    "manifest_status": "port/MANIFEST.md is still stale. It reports 21 ported owned files (3,952 lines) and lists all 7 files in this batch as 'todo' (lines 2612, 2625, 2654-2656, 2672, 2683). The counts below come from round 58's corrected numbers plus the per-file C# line counts in MANIFEST.md.",
+    "new_owned_files_ported": {
+      "ExtLibs/Utilities": "7 files, 3,438 C# lines: rtcm3 2118, Matrix 507, Kalman3D 277, Septentrio 235, sbp 201, Unicore 53, YPRtoOPK 47."
+    },
+    "new_owned_lines_ported": 3438,
+    "owned_files_ported_corrected": 124,
+    "ported_lines_corrected": 24168,
+    "ported_lines_derivation": "Round 58 corrected 20,730 + 3,438 new = 24,168.",
+    "owned_lines_total_corrected": 479014,
+    "ported_fraction_corrected": 0.0505,
+    "conservatism_note": "This is an upper bound. Files are counted whole, although the rtcm3 subclass chain, the async Task signatures in Septentrio/Unicore and class reference semantics are not reproduced (see the findings).",
+    "wiring": "None of the ported code is used yet. Grep for 'extlibs::' or 'dotnet::' outside crates/mp-core/src/{extlibs,dotnet} still finds only crates/mp-core/build.rs. This batch adds more duplication of live pre-manifest code: crates/mp-core/src/rtk.rs (crc24q :14, RTCM3 framing Parser :53, base_ecef :137 = type1005.Read, ecef_to_lla :151 = rtcm3.ecef2pos, rtcm_frame :272, encode_1005 :281 = type1005.Write) drives crates/mp-app/src/rtcm.rs:172-224, and crates/mp-app/src/views/rtk_page.rs:97-113 rebuilds Septentrio.SetEnabledRTCM and the Unicore command list by hand without any acknowledgement logic. The app runs these, not rtcm3.rs, septentrio.rs or unicore.rs."
+  },
+  "scores": {
+    "overall": 1.0,
+    "overall_cap": 1.6,
+    "overall_cap_derivation": "ceil1(24,168 / 479,014 * 10) = ceil1(0.505) = 0.6, plus at most +1.0 for the pre-manifest app = 1.6. Awarded: 0.3 for ported lines (unchanged from round 58: the new 3,438 lines are unwired, uncompiled, and live code in rtk.rs/rtk_page.rs duplicates them) + 0.7 for the pre-manifest app = 1.0.",
+    "round_files_fidelity": 6.7,
+    "round_files_fidelity_rationale": "rtcm3.rs is a careful transliteration. The goto-case-4 framing keeps the persistent 'payloadlen += 3' that the length property exposes. getbitu/getbits/setbitu/setbits mask shift counts the way C# '& 31' does, and setbitu computes its mask before the len check. The C# overload choices are right: byte/ushort/const-int arguments go to the uint overload, double and the non-constant 'fit ? 1 : 0' go to the double overload. 'weeknumber*7' and gpsdifftime's '* 604800' wrap as int arithmetic. type1012 keeps its 85-bit header offset, its console output (G15 and '0.000' at 15 digits in the current culture) and its no-op Write. type1006.Write still labels the message 1005. AddDays/AddSeconds round to whole milliseconds and use .NET's range checks and messages. Matrix keeps the SetIdentity/IsIdentity counter bug and the 3x3 Invert bracket bug exactly. Kalman3D, sbp and YPRtoOPK match. Points are lost for: the MSM subclass chain flattened, so Read on a non-empty list diverges and no type1094 is a type1074; class reference semantics replaced by Copy+PartialEq values (ob, type1005/1006/1019, Matrix, Kalman3D); panics where C# throws (crc24q table index, pos+len overflow, ecef2pos/pos2ecef/dot); println! using LF instead of Console's CRLF; Matrix null/empty-array edge cases; async Task turned into blocking calls; the [Flags] RTCMSignals ToString; shim gaps (narrow double casts, enum-name sort algorithm, FunctorComparer name, the Mono C/POSIX culture, truncated UTF-16/32 tails, no BOM detection in StreamReaderAscii); and tests that never compare against C#-produced data.",
+    "ui_ux": 2.0,
+    "features": 2.5,
+    "features_rationale": "Unchanged since round 56: the new code is not wired into anything. The RTK inject page still runs the pre-manifest rtk.rs/rtcm.rs path."
+  },
+  "compile_check": {
+    "summary": "Read in full: utilities/{rtcm3,yprtoopk,sbp,septentrio,unicore,matrix,kalman3d,mod,icorrections}.rs, dotnet/{io,json,collections}.rs, the changed parts of dotnet/mod.rs (cs_enum, format_fixed_float, cultures, casts, Exception, DateTime/TimeSpan), and the fix sites in half.rs, missionfile.rs, vario.rs, custommessagebox.rs and mapprojection.rs. No definite compile error was found. Checked specifically: 'let mut ob = ob { .. }' (a braced struct has no value-namespace binding, so the pattern is a fresh binding); the struct rtcm3 resolving as the first path segment of 'rtcm3::set_week_guess' inside its own module and through 'use super::rtcm3::rtcm3' in yprtoopk.rs; free fn week_guess() called from the associated fn week_guess() (not recursive); macro_rules msm_type!/base_pos_common! defined before use, and base_pos_common! in impl-item position; the disjoint field borrows self.pre.Read(&self.packet) and self.m_p.Add(&self.m_q); &mut Vec<ob> coercing to &mut [T] for introspective_sort_named, with ob: Default + Clone; Arc<closure> unsizing to BasePosHandler at Vec::push; Option<BasePos>::unwrap through a MutexGuard (Copy); ICorrections reaching the test modules through 'use super::*'; associated-const patterns on the cs_enum newtypes RTCMLevel/RTCMSignals (derive PartialEq+Eq); a member named None in RTCMSignals/MessageBoxIcon not shadowing Option::None in the macro body (associated consts are not in unqualified scope); the FnMut 'put' closure in Matrix::Invert ending its borrow of rv before Ok(Some(rv)); StreamWriter::close taking 'mut self' with a Drop impl (take() is a mutation, not a move); std::path::absolute (Rust 1.79); usize::div_ceil (1.73); '&mut *bs' coercing &mut (dyn Stream + 'r) to the shorter object lifetime StreamReaderAscii expects (allowed unsizing); a move binding in the 'Exception::Argument(m) if m == BOGUS_COMPARER' guard; extern \"system\" without 'unsafe extern' under edition 2021; the 'log' dependency for log::error!.",
+    "likely_errors": [],
+    "low_confidence_risks": [
+      "crates/mp-core/src/dotnet/mod.rs:573 (carried over): LCIDToLocaleName(langid as u32, Some(&mut buf), 0) assumes windows 0.62 folds lpName/cchName into Option<&mut [u16]>. If the binding takes (u32, PWSTR, i32, u32), write: LCIDToLocaleName(langid as u32, Some(&mut buf[..]), 0) for the slice form, or LCIDToLocaleName(langid as u32, windows::core::PWSTR(buf.as_mut_ptr()), buf.len() as i32, 0) for the raw form."
+    ]
+  },
+  "findings": [
+    {
+      "id": "R59-01",
+      "severity": "P0",
+      "file": "crates/mp-app/src/mp/ (missing), crates/mp-app/src/extlibs/ (missing)",
+      "line": 0,
+      "cs_reference": "reference/MissionPlanner/{MainV2.cs,Program.cs,GCSViews/*,Controls/*,Log/*,...}",
+      "summary": "Carried over from R58-01. No Mission Planner project file and no UI ExtLib has been ported. About 95% of owned C# lines are still todo, and the whole UI is still the pre-manifest egui reimplementation. This round again added only non-UI ExtLibs/Utilities files.",
+      "required_fix": "Start the mp-app mirror (MainV2.cs and its Designer, then GCSViews, then GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs, which consumes rtcm3/sbp/Septentrio/Unicore) once the comms/state core is wired."
+    },
+    {
+      "id": "R59-02",
+      "severity": "P1",
+      "file": "crates/mp-core/src/rtk.rs",
+      "line": 14,
+      "cs_reference": "ExtLibs/Utilities/{rtcm3,Septentrio,Unicore,sbp}.cs; GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs",
+      "summary": "Carried over from R58-02 and worse again. Nothing is wired: only build.rs references extlibs/dotnet. This batch is duplicated by live code. rtk.rs has its own crc24q (:14), RTCM3 frame Parser (:53), base_ecef (:137, the type1005.Read decode), ecef_to_lla (:151, rtcm3.ecef2pos), rtcm_frame (:272) and encode_1005 (:281, type1005.Write). mp-app/src/rtcm.rs:172-224 runs that parser and forwards SBP bytes raw instead of using sbp.read. mp-app/src/views/rtk_page.rs:97-113 rebuilds Septentrio.SetEnabledRTCM's message list and Unicore's command list and sends them with no acknowledgement wait, no baud probing (ConfigureBaud) and no FailedAckException. The C#-mirrored rtcm3.rs, sbp.rs, septentrio.rs and unicore.rs have no caller.",
+      "required_fix": "Port ConfigSerialInjectGPS.cs against utilities::{rtcm3, sbp, septentrio, unicore}. Delete rtk.rs's RTCM/ECEF helpers and the hand-built command lists in rtk_page.rs. Then do the mission.rs/paramfile.rs/gimbal.rs/coords.rs moves still pending from R58-02."
+    },
+    {
+      "id": "R59-03",
+      "severity": "P2",
+      "file": "crates/mp-core/src/extlibs/utilities/septentrio.rs",
+      "line": 177,
+      "cs_reference": "ExtLibs/Utilities/Septentrio.cs:78-220 (async Task ... await FlushAsync/WriteAsync/ReadLineAsync); Unicore.cs:17-46",
+      "summary": "Every Septentrio/Unicore method is an 'async Task' in C#. Callers await it on the UI thread, which stays responsive while the port I/O runs. The port makes them blocking calls. ConfigureBaud alone tries 11 baud rates. Each try reads lines with a 200 ms port timeout, and AckTimeout is only checked after a line arrives. So a wired call from the egui frame would freeze the UI for seconds where Mission Planner keeps painting. Exception timing also changes: C# puts exceptions on the returned Task, and SetEnabledRTCM/SetRTCMInterval return SendAck's Task without awaiting it; Rust returns the error synchronously.",
+      "required_fix": "Expose these as tasks: run them on a worker thread or async executor and return a join handle or future that carries the Result. Callers then await or poll it as MP's 'await' does. Keep the blocking helpers private."
+    },
+    {
+      "id": "R59-04",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/rtcm3.rs",
+      "line": 1016,
+      "cs_reference": "ExtLibs/Utilities/rtcm3.cs:1045-1240 (type1074.Read virtual), 1243-1457 (type1077), 1460-1562 (type1084..type1127 : base.Read then foreach obs sys = ...)",
+      "summary": "msm_type! replaces the C# subclass chain (type1094 : type1084 : type1074, and the like) with ten unrelated structs. (1) C# Read adds to this.obs, then sorts the whole list and each override rewrites sys on every element. Rust read_msm sorts only the new observations, sets sys only on them, and then appends with extend. If Read is called on an instance whose obs is not empty (the field is public), the C# result is fully sorted and uniformly re-labelled, while the Rust result is old entries followed by sorted new ones, each keeping its old sys. (2) There is no subtyping: a type1094 cannot be used where C# accepts a type1084 or type1074, and Read is not polymorphic.",
+      "required_fix": "Push the decoded observations into self.obs inside read_msm, sort self.obs as a whole, and apply each level's sys to all of self.obs in chain order ('G', then 'R' or 'E'...). Give the family a shared trait (MsmRead with nbits/obs accessors) with a default Read, so type1094 can be used as a type1084/type1074."
+    },
+    {
+      "id": "R59-05",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/rtcm3.rs",
+      "line": 301,
+      "cs_reference": "ExtLibs/Utilities/rtcm3.cs:323, 339, 366, 377-383, 399-434, 583-588, 1590-1595",
+      "summary": "Panics or atomic behaviour where C# throws or wraps. (1) crc24q indexes CRC24QTAB[(crc >> 16) ^ b] directly. With a caller-supplied initial crc above 0xFFFFFF the index exceeds 255, and Rust panics where C# throws IndexOutOfRangeException. (2) setbitu's 'while i < pos + len' (:91), getbits_38's 'pos + 32' (:121) and set38bits' 'pos + 32' (:137) are plain u32 additions: debug builds panic on overflow, but C# uint arithmetic wraps (and setbitu then loops zero times). (3) dot/ecef2pos/pos2ecef (:155, :1826, :1851) index slices directly and panic on a short array, where C# throws IndexOutOfRangeException; they return () so the exception cannot be reported. (4) set_ecefposition checks len < 3 up front and assigns nothing. C#'s setter assigns rr0 and then throws on value[1] (and throws NullReferenceException for null).",
+      "required_fix": "Use .get() with index_out_of_range() for the table lookup; use wrapping_add for every uint position sum; make ecef2pos/pos2ecef/dot return Result<_, Exception> with checked indexing; assign rr0, rr1, rr2 in order, failing at the first missing element."
+    },
+    {
+      "id": "R59-06",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/rtcm3.rs",
+      "line": 681,
+      "cs_reference": "ExtLibs/Utilities/rtcm3.cs:926, 981-982 (Console.WriteLine), 2023 (Console.Write); System.Console.Out (NewLine = Environment.NewLine, __ConsoleStream ignores ERROR_NO_DATA/broken pipe)",
+      "summary": "type1012.Read prints with println!, which ends lines with LF. Console.WriteLine ends them with Environment.NewLine, which is CR LF on Windows, so redirected output differs byte for byte. println!/print! also panic on a write error such as a broken pipe, where .NET's console stream ignores it, so a closed stdout would kill the parser thread inside rtcm3.Read. The same pattern is in custommessagebox.rs ('CustomMessageBox.Show').",
+      "required_fix": "Add a dotnet::console module with write/write_line that use io::NEW_LINE and swallow write errors as __ConsoleStream does. Route every Console.Write/WriteLine port through it."
+    },
+    {
+      "id": "R59-07",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/matrix.rs",
+      "line": 82,
+      "cs_reference": "ExtLibs/Utilities/Matrix.cs:78-86 (Set), 130-139 (Clone), 147-172 (Get/Set), 301-307/354-360 (Add/Subtract), 450-467 (Determinant)",
+      "summary": "The null-Data edge cases differ from the C#. (1) Set, Clone, Add and Subtract fetch both Data arrays before the loop. C# only dereferences inside the loop or its bound. So copying a 0x0 matrix whose Data was assigned an empty array works in C# (Resize(0,0) is a no-op, the destination Data stays null, the loop runs zero times) but returns NullReferenceException in Rust. The same holds for Clone of such a matrix, and for Add/Subtract into an empty matrix from one with null Data. (2) Get/SetAt test idx < 0 before the null check. C# evaluates the null Data first, so a null-Data matrix with a negative index throws NullReferenceException, not IndexOutOfRangeException. (3) Determinant calls data()? before the size dispatch. For a square matrix of size 4 or more with Data set to null, C# returns 0 and Rust returns NullReferenceException; Invert inherits this (C# returns null there).",
+      "required_fix": "Fetch the arrays lazily in loop order: read 'm.Data.Length' first, and touch the destination only when an element is copied. Do the null check before the index check in Get/SetAt, and fetch Data in Determinant only inside the 1/2/3 branches."
+    },
+    {
+      "id": "R59-08",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/mod.rs",
+      "line": 740,
+      "cs_reference": "RyuJIT (x64, .NET Framework 4.6+) fgMorphCast: a double-to-small-int cast is morphed into double->int32 (32-bit cvttsd2si) and then a narrowing cast; only TYP_UINT is widened to a 64-bit convert (genFloatToIntCast)",
+      "summary": "cast_u8/cast_i8/cast_u16/cast_i16 go through cast_i64, a 64-bit truncation, and the doc comment says so. On x64 RyuJIT a double to byte/sbyte/short/ushort conversion first converts to int32, whose out-of-range result is 0x80000000, and then narrows. For |x| >= 2^31 the results differ: (ushort)2147549183.0 is 0 in C# and 65535 in Rust. rtcm3 calc_sat_pos's '(u16)(week)' (:1466) and cast_u8 on the snr/prn values use these helpers. Confidence is moderate: confirm against the reference build.",
+      "required_fix": "Implement the small-int casts as cast_i32(x) as u8/i8/u16/i16, keep cast_u32 on the 64-bit path, fix the doc comment, and add tests at 2^31 + 65535 and -2^31 - 1."
+    },
+    {
+      "id": "R59-09",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/mod.rs",
+      "line": 252,
+      "cs_reference": ".NET Framework Enum.GetCachedValuesAndNames -> native ReflectionEnum::GetEnumValuesAndNames (TempEnumValueSorter : CQuickSort, a middle-pivot Lomuto quicksort); ExtLibs/Mavlink/Mavlink.cs (enums), crates/mp-core/src/extlibs/mavlink/mavlink.rs:284-320",
+      "summary": "R58-11 is only partly fixed. (1) sorted_members sorts with ArraySortHelper introsort, which uses stable insertion sort below 17 elements. .NET Framework sorts the enum value table in native code with CQuickSort, which is unstable even for small inputs. For enum { A=1, B=1, C=1, D=1 }, CQuickSort gives [B, C, A, D] and the binary search lands on index 1, so .NET returns 'C'; Rust gives [A, B, C, D] and returns 'B'. MessageBoxIcon happens to give the same answers (Hand/Warning/Asterisk) under both, so the tests do not catch this. (2) The MAVLink CsEnum trait (mavlink.rs:284) still returns the first declared name, and get_values/get_names use a stable sort_by_key, so every MAVLink enum with aliased values still takes the old path. Confidence that the native sort is CQuickSort: moderate to high.",
+      "required_fix": "Port CQuickSort::SortRange (middle pivot swapped to the left, '<' partition, recurse into the smaller side) as the ordering for sorted_members. Make CsEnum::get_name/get_values/get_names use the same sorted table and binary search. Add the four-equal-values test."
+    },
+    {
+      "id": "R59-10",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/collections.rs",
+      "line": 131,
+      "cs_reference": ".NET Framework 4.7.2 List<T>.Sort(Comparison<T>) and Array.Sort<T>(T[], Comparison<T>) (both wrap the delegate in Array.FunctorComparer<T>); ArraySortHelper<T>.Sort catch(IndexOutOfRangeException) -> ThrowOrIgnoreBadComparer(comparer)",
+      "summary": "The bad-comparer message names the wrong type. On .NET Framework 4.7.2 a Comparison<T> passed to List.Sort or Array.Sort is wrapped in Array.FunctorComparer<T>, and that object goes into Arg_BogusIComparer. The text is \"IComparer: 'System.Array+FunctorComparer`1[MissionPlanner.Utilities.rtcm3+ob]'.\", not 'System.Comparison`1[...]' (default :131, rtcm3.rs:170, listextension.rs:6). The default(T) slack is also modelled as T::default(). For a C# reference type such as rtcm3.ob that is a zeroed object, but in .NET it is null, and the comparer's NullReferenceException becomes InvalidOperationException. All current callers either have a consistent comparer or swallow the exception, so this is latent.",
+      "required_fix": "Pass 'System.Array+FunctorComparer`1[<T full name>]' for Comparison-based sorts. Let reference-type callers sort Option<T> slots (as SortENABLE does) so the slack is null."
+    },
+    {
+      "id": "R59-11",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/mod.rs",
+      "line": 536,
+      "cs_reference": "mono/metadata/locales.c get_posix_locale/get_current_locale_name; CultureInfo.ConstructCurrentCulture (falls back to InvariantCulture)",
+      "summary": "R58-16 is fixed for the variable order (LC_ALL, then LANG), but not for the outcomes. (1) For LANG=C, LANG=POSIX, or both variables unset (Mono then falls back to setlocale(LC_ALL, NULL), which is normally 'C'), Mono's CurrentCulture and CurrentUICulture are InvariantCulture. Rust maps all of these to en-US, so DateTime.ToString() gives 'M/d/yyyy h:mm:ss tt' where Mono gives 'MM/dd/yyyy HH:mm:ss'. (2) Mono tests for NULL, not empty, so LC_ALL='' stops the lookup; Rust skips to LANG. (3) Mono strips an '@modifier'; Rust keeps it and only gets the right culture through its language fallback.",
+      "required_fix": "On non-Windows, return Some(\"\") for C/POSIX/unset (mapping to INVARIANT_CULTURE), treat a set-but-empty LC_ALL as final, and strip '@...' before matching."
+    },
+    {
+      "id": "R59-12",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/io.rs",
+      "line": 37,
+      "cs_reference": "System.Text.UTF32Encoding/UnicodeEncoding decoders (replacement fallback on a flushed partial sequence); StreamReader(Stream, Encoding) => detectEncodingFromByteOrderMarks = true; Mono Path.GetFullPath (collapses '..')",
+      "summary": "(1) decode_detect pads a truncated trailing UTF-32 group or a trailing odd UTF-16 byte with zeros and decodes it as a character. A file ending in 'FF FE 00 00 41' becomes 'A'. .NET's decoder flushes the partial sequence to U+FFFD. (2) StreamReaderAscii ignores byte order marks, but new StreamReader(stream, Encoding.ASCII), as Septentrio.SendAck uses it, still detects a UTF-8/UTF-16/UTF-32 BOM in the first buffer and switches encoding. (3) file_error uses std::path::absolute, which on Unix keeps '..' segments; Mono's Path.GetFullPath collapses them, so the messages differ for relative paths with '..'.",
+      "required_fix": "Emit U+FFFD for an incomplete trailing group, add the DetectEncoding step to StreamReaderAscii's first fill(), and normalise '..' on Unix before building the message."
+    },
+    {
+      "id": "R59-13",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/septentrio.rs",
+      "line": 32,
+      "cs_reference": "ExtLibs/Utilities/Septentrio.cs:44-71 ([Flags] RTCMSignals), 197-200 (new StreamReader(BaseStream, ASCII), WriteAsync(bytes, 0, command.Length)); Unicore.cs:41-44",
+      "summary": "(1) RTCMSignals is [Flags], so ToString() of Gps|Glonass is 'Gps, Glonass' in C#. cs_enum's Display prints '3' and has no Flags composition (the MAVLink CsEnum trait has one). (2) SendAck in both classes constructs a StreamReader before writing, which throws ArgumentException('Stream was not readable.') for a write-only BaseStream; Unicore.send_ack never checks. (3) WriteAsync(bytes, 0, command.Length) throws ArgumentException when a non-BMP character makes GetBytes shorter than Length; the port clamps with min() and writes silently. Every current command is ASCII, so (3) is latent.",
+      "required_fix": "Add a flags option to cs_enum (or implement Display for RTCMSignals) with .NET's 'A, B' composition. Check that the stream is readable at reader construction in both send_ack functions. Return Exception::Argument when bytes.len() < the UTF-16 length."
+    },
+    {
+      "id": "R59-14",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/rtcm3.rs",
+      "line": 326,
+      "cs_reference": "ExtLibs/Utilities/rtcm3.cs:1013-1043 (class ob), 1564/1649/1739 (classes type1005/1006/1019), 1972-2115 (calc_sat_pos keeps this.pos = pos), 65-67/151-307 (event EventHandler); Matrix.cs, Kalman3D.cs (classes)",
+      "summary": "R58-13 continues into this batch. ob, rawrtcm, type1005, type1006, type1019, Matrix and Kalman3D are classes in C#, but the port derives Copy (where possible) and PartialEq, inventing value equality and dropping aliasing. calc_sat_pos stores the caller's arrays ('this.pos = pos'), so the cache follows later writes to them; Rust snapshots (documented in the module header). Event handlers are 'Fn(&..)' with no Result. A C# handler that throws stops the remaining handlers and the exception leaves rtcm3.Read (with step already 0); Rust handlers cannot report one. ObsMessage's sender is the mutable List<ob>, which handlers can change; Rust passes &[ob].",
+      "required_fix": "Remove the PartialEq/Copy derives that C# does not have. Give handlers a Result return and stop at the first error, as a multicast invoke does. Model calc_sat_pos's array aliasing with Arc<RwLock<[f64; 3]>> or document every call site."
+    },
+    {
+      "id": "R59-15",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/rtcm3.rs",
+      "line": 1880,
+      "cs_reference": "No C# tests exist for these files; behaviour is the spec",
+      "summary": "The tests prove consistency with themselves, not with C#. rtcm3 only round-trips its own type1006 writer through its own reader (1e-3 tolerance) and checks bit helpers. Nothing tests 1002/1004/1012, any MSM type, 1019, calc_sat_pos, the week-guess logic or the type1012 console text, and no captured RTCM stream with C#-decoded values is used. The YPRtoOPK test only asserts finite outputs. The Kalman3D test only asserts a finite Update. Matrix has no test of the 3x3 Invert bracket bug. Septentrio/Unicore have no test with a scripted ICommsSerial.",
+      "required_fix": "Record golden data from the reference build: an RTCM capture containing 1004/1012/1077/1087/1097/1127/1005/1019 with the C# obs lists, the type1012 console text and calc_sat_pos outputs; YPRtoOPK and Kalman3D outputs for a fixed input grid; Matrix.Invert of a known 3x3. Assert exact equality. Add a fake ICommsSerial transcript test for SendAck/ConfigureBaud."
+    }
+  ],
+  "round_58_status": {
+    "fixed": [
+      "R58-04: Half overrides ne/lt/le/gt/ge with the C# operators (half.rs:351-379), and the test asserts !(NAN != NAN) and !(+0 <= -0) (:434-436). Remaining nit: partial_cmp(+0, -0) is Some(Equal) while eq is false.",
+      "R58-05: cast_u64 returns 0 for NaN (dotnet/mod.rs:775), matching JIT_Dbl2ULng; Half::to_u64(NaN) is tested (half.rs:437).",
+      "R58-07: json_str uses Newtonsoft's table: short escapes, lower-case \\u00xx, \\u0085/\\u2028/\\u2029, '/' and DEL raw (json.rs:43-63), tested.",
+      "R58-08: StreamWriter writes through a 1 KB BufWriter and flushes in Drop (io.rs:164-214); file_error uses full paths (:14); UTF-32 BE BOM is detected (:37). New edge cases are in R59-12.",
+      "R58-10: parse_mav_cmd falls through to the name lookup on a FormatException and reports UInt16 overflow (missionfile.rs:30-57); comma lists go through CsEnum::parse.",
+      "R58-12: Console.Beep messages now carry the .NET resource texts with 'Parameter name' and 'Actual value was' (vario.rs:28-37); Beep is Arc<dyn Fn> (:20).",
+      "R57-20: calc_utm_zone uses cast_i64 (mapprojection.rs:411-413)."
+    ],
+    "partly_fixed": [
+      "R58-03: the sort runs on a capacity-sized buffer with default(T) slack, never panics, and maps run-offs and comparer IndexOutOfRange to Arg_BogusIComparer (collections.rs:136-157). The comparer name is wrong and reference-type slack is not null (R59-10).",
+      "R58-11: cs_enum get_name binary-searches a sorted table and cs_name delegates to it, but the sort is not .NET's native CQuickSort, and the MAVLink CsEnum trait was not changed (R59-09).",
+      "R58-16: LC_ALL then LANG on Unix for both cultures, but C/POSIX/unset still map to en-US instead of InvariantCulture (R59-11).",
+      "R58-06: item (1) is fixed (booleans read as 'true'/'false' for string targets, json.rs:256). Items (2)-(9) remain: re-rendered number text (:257), bool from 0/1/strings, null list elements, '{null}' for empty strings, line/position suffix, serde_json strictness, BTreeMap order in the case-insensitive fallback, float_roundtrip."
+    ],
+    "still_open": [
+      "R58-01 (now R59-01), R58-02 (now R59-02).",
+      "R58-09: culture_compare is still the hand-made NLS approximation (dotnet/mod.rs:203-230), and starts_with/ends_with are still ordinal.",
+      "R58-13: continues in this batch (R59-14).",
+      "R58-14, R58-15: unchanged (alglib replacement; Fence/Half/Vector3/utmpos members still missing).",
+      "R58-17: still no C#-produced golden data; this batch adds more self-consistency tests (R59-15).",
+      "R58-18: port/MANIFEST.md still reports 21 ported files and lists all 7 files in this batch as todo.",
+      "Round 57 items still open as listed in round 58 (R57-04 hard-coded culture table, R57-05, R57-06/07, R57-09 flat Exception enum without InnerException, R57-11, R57-13/14, R57-15, R57-16, R57-17)."
+    ]
+  },
+  "next_priorities": [
+    "R59-02/R58-02: port ConfigSerialInjectGPS.cs on top of rtcm3/sbp/Septentrio/Unicore, delete rtk.rs's RTCM helpers and rtk_page.rs's hand-built command lists, and finish the mission/paramfile/gimbal/coords moves.",
+    "R59-03: give Septentrio/Unicore task-shaped APIs so a wired caller cannot block the UI.",
+    "R59-04: model the MSM subclass chain (shared trait, whole-list sort and sys rewrite).",
+    "R59-08 and R59-09: correct the small-int double casts and the enum value ordering (CQuickSort) in the shim, and apply the same name lookup to the MAVLink CsEnum trait.",
+    "R59-05/R59-06/R59-07: remove the remaining panics, add a dotnet::console that writes CR LF and swallows broken pipes, and fix the Matrix null-order edges.",
+    "R58-06: finish Newtonsoft reader parity.",
+    "Golden vectors from the reference build for RTCM decoding, calc_sat_pos, YPRtoOPK, Kalman3D, Matrix.Invert, Half, List.Sort and MissionFile JSON (R59-15, R58-17).",
+    "Regenerate port/MANIFEST.md once commands are allowed (R58-18).",
+    "Then ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs, MAVState.cs and CurrentState.cs to replace state.rs, followed by MainV2 and the GCSViews."
+  ],
+  "verdict": "This round adds 7 file-mirrored ports (3,438 C# lines): rtcm3, Matrix, Kalman3D, Septentrio, sbp, Unicore and YPRtoOPK, plus .NET shim work (DateTime add rounding, TimeSpan.TotalDays, single-precision custom formats, Exception::Custom, enum-name binary search, a streaming StreamWriter, the Newtonsoft escape table, a panic-free introsort). rtcm3.rs is a faithful transliteration down to the goto-based framing, uint shift masking, C# overload choices and int wraparound, and Matrix keeps both of its upstream bugs on purpose. No definite compile error was found. Nine round-58 findings and R57-20 are fixed or mostly fixed. What remains: the MSM subclass chain is flattened, class semantics are still collapsed into Copy values, there are panics and console newline differences, Septentrio/Unicore are now blocking calls, several shim primitives (narrow casts, enum sort, comparer name, Unix C locale, truncated decodes) diverge at the edges, and the tests never compare against C# output. Nothing is wired, and the app still runs rtk.rs and rtk_page.rs, which duplicate this batch. Owned progress is about 5.0% (24,168 / 479,014), so the cap is 1.6. Awarded 1.0; round-file fidelity is 6.7/10."
+}

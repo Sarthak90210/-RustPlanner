@@ -1,6 +1,11 @@
-//! RTK base station support (Utilities/rtcm3.cs, ubx_m8p.cs): split a GPS byte stream into
-//! RTCM3 and u-blox UBX frames, decode the 1005/1006 base position, and build the UBX
-//! packets Mission Planner sends to configure an M8P / F9P as a survey-in base.
+//! RTK base station support for the app's RTK/GPS inject screen, as a thin layer over the
+//! file-by-file ports of `ExtLibs/Utilities/rtcm3.cs` and `ubx_m8p.cs`
+//! (`extlibs::utilities::{rtcm3, ubx_m8p}`): the byte stream goes through the C# parsers'
+//! `Read` state machines, and the UBX packets come from `Ubx.generate` and `ubx_cfg_tmode3`.
+
+use crate::extlibs::utilities::icorrections::ICorrections;
+use crate::extlibs::utilities::rtcm3::{crc24, rtcm3, type1005, type1006};
+use crate::extlibs::utilities::ubx_m8p::{ubx_cfg_tmode3, ubx_nav_svin, Ubx};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Frame {
@@ -10,160 +15,88 @@ pub enum Frame {
     Ubx { class: u8, id: u8, payload: Vec<u8> },
 }
 
-/// CRC-24Q used by RTCM3.
+/// CRC-24Q used by RTCM3 (`rtcm3.crc24.crc24q`).
 pub fn crc24q(data: &[u8]) -> u32 {
-    let mut crc: u32 = 0;
-    for &b in data {
-        crc ^= (b as u32) << 16;
-        for _ in 0..8 {
-            crc <<= 1;
-            if crc & 0x0100_0000 != 0 {
-                crc ^= 0x0186_4CFB;
-            }
-        }
-    }
-    crc & 0x00FF_FFFF
+    crc24::crc24q(data, data.len() as u32, 0).unwrap_or(0)
 }
 
-pub fn ubx_checksum(data: &[u8]) -> [u8; 2] {
-    let (mut a, mut b) = (0u8, 0u8);
-    for &x in data {
-        a = a.wrapping_add(x);
-        b = b.wrapping_add(a);
-    }
-    [a, b]
-}
-
-/// ubx_m8p.generate
+/// `Ubx.generate(class, id, payload)`
 pub fn ubx(class: u8, id: u8, payload: &[u8]) -> Vec<u8> {
-    let mut v = vec![0xb5, 0x62, class, id, (payload.len() & 0xff) as u8, (payload.len() >> 8) as u8];
-    v.extend_from_slice(payload);
-    let ck = ubx_checksum(&v[2..]);
-    v.extend(ck);
-    v
+    Ubx::generate(class, id, payload)
 }
 
-/// Stream splitter: bytes in, frames out. Bytes that are neither are dropped.
-#[derive(Default)]
+/// Stream splitter: every byte goes through `rtcm3.Read` and `Ubx.Read`, as Mission
+/// Planner's inject loop does; a parser that completes a frame yields it.
 pub struct Parser {
-    buf: Vec<u8>,
+    rtcm: rtcm3,
+    ubx: Ubx,
+}
+
+impl Default for Parser {
+    fn default() -> Self {
+        Parser { rtcm: rtcm3::new(), ubx: Ubx::new() }
+    }
 }
 
 impl Parser {
     pub fn push(&mut self, data: &[u8]) -> Vec<Frame> {
-        self.buf.extend_from_slice(data);
         let mut out = Vec::new();
-        let mut i = 0;
-        while i < self.buf.len() {
-            let b = &self.buf[i..];
-            if b[0] == 0xD3 {
-                if b.len() < 3 {
-                    break;
+        for &b in data {
+            match self.rtcm.Read(b) {
+                Ok(msgtype) if msgtype >= 0 => {
+                    let len = self.rtcm.length().max(0) as usize;
+                    out.push(Frame::Rtcm { msgtype: msgtype as u16, raw: self.rtcm.packet().get(..len).map(<[u8]>::to_vec).unwrap_or_default() });
                 }
-                let len = (((b[1] & 0x03) as usize) << 8) | b[2] as usize;
-                if b[1] & 0xFC != 0 {
-                    i += 1;
-                    continue;
+                Ok(_) => {}
+                // a decode exception ends that frame; the C# inject loop catches it and goes on
+                Err(_) => {
+                    self.rtcm.resetParser();
                 }
-                if b.len() < len + 6 {
-                    break;
-                }
-                let crc = ((b[len + 3] as u32) << 16) | ((b[len + 4] as u32) << 8) | b[len + 5] as u32;
-                if crc24q(&b[..len + 3]) == crc && len >= 2 {
-                    let msgtype = ((b[3] as u16) << 4) | (b[4] as u16 >> 4);
-                    out.push(Frame::Rtcm { msgtype, raw: b[..len + 6].to_vec() });
-                    i += len + 6;
-                } else {
-                    i += 1;
-                }
-                continue;
             }
-            if b[0] == 0xB5 {
-                if b.len() < 2 {
-                    break;
+            match self.ubx.Read(b) {
+                Ok(id) if id >= 0 => {
+                    let len = (self.ubx.length() - 8).max(0) as usize;
+                    // Read returns (class << 8) + subclass
+                    out.push(Frame::Ubx {
+                        class: (id >> 8) as u8,
+                        id: id as u8,
+                        payload: self.ubx.packet().get(6..6 + len).map(<[u8]>::to_vec).unwrap_or_default(),
+                    });
                 }
-                if b[1] != 0x62 {
-                    i += 1;
-                    continue;
+                Ok(_) => {}
+                Err(_) => {
+                    self.ubx.resetParser();
                 }
-                if b.len() < 6 {
-                    break;
-                }
-                let len = b[4] as usize | ((b[5] as usize) << 8);
-                if len > 4096 {
-                    i += 1;
-                    continue;
-                }
-                if b.len() < len + 8 {
-                    break;
-                }
-                if ubx_checksum(&b[2..6 + len]) == [b[6 + len], b[7 + len]] {
-                    out.push(Frame::Ubx { class: b[2], id: b[3], payload: b[6..6 + len].to_vec() });
-                    i += len + 8;
-                } else {
-                    i += 1;
-                }
-                continue;
             }
-            i += 1;
-        }
-        self.buf.drain(..i);
-        if self.buf.len() > 8192 {
-            self.buf.clear();
         }
         out
     }
 }
 
-fn bits(data: &[u8], pos: usize, len: usize) -> u64 {
-    let mut v = 0u64;
-    for k in pos..pos + len {
-        let byte = data.get(k / 8).copied().unwrap_or(0);
-        v = (v << 1) | ((byte >> (7 - k % 8)) & 1) as u64;
-    }
-    v
-}
-
-fn sbits(data: &[u8], pos: usize, len: usize) -> i64 {
-    let v = bits(data, pos, len) as i64;
-    if v & (1 << (len - 1)) != 0 {
-        v - (1 << len)
-    } else {
-        v
-    }
-}
-
-/// RTCM 1005 / 1006 antenna reference point, ECEF metres, from a full frame.
+/// RTCM 1005 / 1006 antenna reference point, ECEF metres, from a full frame
+/// (`type1005.ecefposition` / `type1006.ecefposition`).
 pub fn base_ecef(raw: &[u8]) -> Option<[f64; 3]> {
-    let p = raw.get(3..raw.len().checked_sub(3)?)?;
-    let t = bits(p, 0, 12);
-    if t != 1005 && t != 1006 {
-        return None;
+    let msgtype = crate::extlibs::utilities::rtcm3::getbitu(raw, 24, 12).ok()?;
+    match msgtype {
+        1005 => {
+            let mut t = type1005::default();
+            t.Read(raw).ok()?;
+            Some(t.ecefposition())
+        }
+        1006 => {
+            let mut t = type1006::default();
+            t.Read(raw).ok()?;
+            Some(t.ecefposition())
+        }
+        _ => None,
     }
-    // 12 type, 12 station, 6 itrf, 4 flags, 38 X, 2 flags, 38 Y, 2 reserved, 38 Z
-    let x = sbits(p, 34, 38) as f64 * 0.0001;
-    let y = sbits(p, 74, 38) as f64 * 0.0001;
-    let z = sbits(p, 114, 38) as f64 * 0.0001;
-    Some([x, y, z])
 }
 
-/// rtcm3.ecef2pos: ECEF -> (lat deg, lng deg, height m) on WGS84.
+/// `rtcm3.ecef2pos` with the result in degrees (`* rtcm3.R2D`): (lat, lng, height m).
 pub fn ecef_to_lla(e: [f64; 3]) -> (f64, f64, f64) {
-    const RE: f64 = 6_378_137.0;
-    const FE: f64 = 1.0 / 298.257223563;
-    let e2 = FE * (2.0 - FE);
-    let r2 = e[0] * e[0] + e[1] * e[1];
-    let (mut z, mut zk, mut v) = (e[2], 0.0, RE);
-    while (z - zk).abs() >= 1e-4 {
-        zk = z;
-        let sinp = z / (r2 + z * z).sqrt();
-        v = RE / (1.0 - e2 * sinp * sinp).sqrt();
-        z = e[2] + v * e2 * sinp;
-    }
-    let lat = if r2 > 1e-12 { (z / r2.sqrt()).atan() } else if e[2] > 0.0 { std::f64::consts::FRAC_PI_2 } else { -std::f64::consts::FRAC_PI_2 };
-    let lng = if r2 > 1e-12 { e[1].atan2(e[0]) } else { 0.0 };
-    let h = (r2 + z * z).sqrt() - v;
-    (lat.to_degrees(), lng.to_degrees(), h)
+    let mut pos = [0.0; 3];
+    rtcm3::ecef2pos(&e, &mut pos);
+    (pos[0] * rtcm3::R2D, pos[1] * rtcm3::R2D, pos[2])
 }
 
 /// RTCM message number -> the status light it drives (labelbase / gps / glonass / ...).
@@ -178,64 +111,59 @@ pub fn constellation(msgtype: u16) -> Option<&'static str> {
     })
 }
 
-/// ubx_m8p.turnon_off: CFG-MSG rate on all ports.
+/// `Ubx.turnon_off` packet: CFG-MSG rate on ports 1 and 2.
 pub fn cfg_msg(class: u8, id: u8, rate: u8) -> Vec<u8> {
-    ubx(0x06, 0x01, &[class, id, 0, rate, 0, rate, 0, 0])
+    Ubx::generate(0x06, 0x01, &[class, id, 0, rate, 0, rate, 0, 0])
 }
 
-/// ubx_cfg_tmode3 survey-in (duration s, accuracy limit m).
+/// `new ubx_cfg_tmode3(DurationS, AccLimit)`: survey-in (duration s, accuracy limit m).
 pub fn tmode3_survey(dur: u32, acc_m: f64) -> Vec<u8> {
-    let mut p = vec![0u8, 0];
-    p.extend(1u16.to_le_bytes());
-    p.extend([0u8; 12]);
-    p.extend([0u8; 4]);
-    p.extend(0u32.to_le_bytes());
-    p.extend(dur.to_le_bytes());
-    p.extend(((acc_m * 10000.0) as u32).to_le_bytes());
-    p.extend([0u8; 8]);
-    ubx(0x06, 0x71, &p)
+    Ubx::generate(0x06, 0x71, &ubx_cfg_tmode3::survey_in(dur, acc_m).to_bytes())
 }
 
-/// ubx_cfg_tmode3 fixed position (lat/lng degrees, alt m; LLA mode).
+/// `new ubx_cfg_tmode3(lat, lng, alt)`: a fixed position (LLA; ECEF metres when |lat| > 90).
 pub fn tmode3_fixed(lat: f64, lng: f64, alt: f64) -> Vec<u8> {
-    let (x, y, z) = ((lat * 1e7) as i32, (lng * 1e7) as i32, (alt * 100.0) as i32);
-    let hp = |v: f64, i: i32| ((v - i as f64) * 100.0) as i8 as u8;
-    let mut p = vec![0u8, 0];
-    p.extend((256u16 + 2).to_le_bytes());
-    p.extend(x.to_le_bytes());
-    p.extend(y.to_le_bytes());
-    p.extend(z.to_le_bytes());
-    p.extend([hp(lat * 1e7, x), hp(lng * 1e7, y), hp(alt * 100.0, z), 0]);
-    p.extend(1u32.to_le_bytes()); // fixedPosAcc 0.001 m * 1000
-    p.extend(60u32.to_le_bytes());
-    p.extend(2000u32.to_le_bytes());
-    p.extend([0u8; 8]);
-    ubx(0x06, 0x71, &p)
+    Ubx::generate(0x06, 0x71, &ubx_cfg_tmode3::fixed(lat, lng, alt, None).to_bytes())
 }
 
-/// ubx_m8p.SetupM8P without the baud-rate hunt: 1 Hz, stationary, NMEA off, survey-in and
-/// PVT feedback, 1005 every 5 s, MSM7 (or MSM4 for fw 1.30+/F9P) every second, 1230.
+/// The packets `Ubx.SetupM8P` writes after its baud-rate hunt (which needs the serial port
+/// itself; with direct port access use `Ubx::SetupM8P`): 1 Hz, stationary, NMEA off,
+/// MON-VER poll, survey-in and PVT feedback, 1005 every 5 s, MSM7 (or MSM4 for fw
+/// 1.30+/F9P), 4072 off, 1230, NAV-VELNED, RXM raw/subframes and MON-HW.
 pub fn setup_m8p(m8p_130plus: bool) -> Vec<Vec<u8>> {
     let mut v = vec![
-        ubx(0x06, 0x08, &[0xE8, 0x03, 0x01, 0x00, 0x01, 0x00]),
-        ubx(0x06, 0x24, &[0xFF, 0xFF, 0x02, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x0F, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x00, 0x23, 0x10, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
+        Ubx::generate(0x6, 0x8, &[0xE8, 0x03, 0x01, 0x00, 0x01, 0x00]),
+        Ubx::generate(
+            0x6,
+            0x24,
+            &[
+                0xFF, 0xFF, 0x02, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x0F, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C,
+                0x01, 0x00, 0x00, 0x00, 0x23, 0x10, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ],
+        ),
     ];
     for a in 0..=0xfu8 {
-        if a != 0xb && a != 0xc && a != 0xe {
-            v.push(cfg_msg(0xf0, a, 0));
+        if a == 0xb || a == 0xc || a == 0xe {
+            continue;
         }
+        v.push(cfg_msg(0xf0, a, 0));
     }
-    v.push(ubx(0x0a, 0x04, &[]));
+    v.push(Ubx::generate(0xa, 0x4, &[]));
     v.push(cfg_msg(0x01, 0x3b, 1));
     v.push(cfg_msg(0x01, 0x07, 1));
     v.push(cfg_msg(0xf5, 0x05, 5));
-    let (r1, r2) = if m8p_130plus { (0, 1) } else { (1, 0) };
-    for (id, r) in [(0x4a, r2), (0x4d, r1), (0x54, r2), (0x57, r1), (0x5e, r2), (0x61, r1), (0x7c, r2), (0x7f, r1)] {
+    let (rate1, rate2) = if m8p_130plus { (0, 1) } else { (1, 0) };
+    for (id, r) in [(0x4a, rate2), (0x4d, rate1), (0x54, rate2), (0x57, rate1), (0x5e, rate2), (0x61, rate1), (0x7c, rate2), (0x7f, rate1)] {
         v.push(cfg_msg(0xf5, id, r));
     }
-    v.push(cfg_msg(0xf5, 0xfe, 0));
-    v.push(cfg_msg(0xf5, 0xe6, 5));
+    v.push(cfg_msg(0xf5, 0xFE, 0));
+    v.push(cfg_msg(0xf5, 0xE6, 5));
     v.push(cfg_msg(0x01, 0x12, 1));
+    v.push(cfg_msg(0x02, 0x15, 1));
+    v.push(cfg_msg(0x02, 0x10, 1));
+    v.push(cfg_msg(0x02, 0x13, 2));
+    v.push(cfg_msg(0x02, 0x11, 2));
+    v.push(cfg_msg(0x0a, 0x09, 2));
     v
 }
 
@@ -250,25 +178,23 @@ pub struct Svin {
     pub active: bool,
 }
 
-/// UBX NAV-SVIN (0x01 0x3B).
+/// UBX NAV-SVIN (0x01 0x3B) through `ubx_nav_svin`.
 pub fn nav_svin(payload: &[u8]) -> Option<Svin> {
-    if payload.len() < 40 {
+    if payload.len() < ubx_nav_svin::SIZE {
         return None;
     }
-    let u = |i: usize| u32::from_le_bytes([payload[i], payload[i + 1], payload[i + 2], payload[i + 3]]);
-    let s = |i: usize| u(i) as i32 as f64;
-    let hp = |i: usize| payload[i] as i8 as f64 * 0.0001;
+    let s = ubx_nav_svin::from_bytes(payload);
     Some(Svin {
-        dur: u(8),
-        mean_ecef: [s(12) / 100.0 + hp(24), s(16) / 100.0 + hp(25), s(20) / 100.0 + hp(26)],
-        mean_acc: u(28) as f64 / 10000.0,
-        obs: u(32),
-        valid: payload[36] != 0,
-        active: payload[37] != 0,
+        dur: s.dur,
+        mean_ecef: s.getECEF(),
+        mean_acc: s.meanAcc as f64 / 10000.0,
+        obs: s.obs,
+        valid: s.valid != 0,
+        active: s.active != 0,
     })
 }
 
-/// An RTCM3 frame around `payload` (for tests and the simulator).
+/// An RTCM3 frame around `payload` (`rtcmpreamble.Write`, payload, CRC-24Q).
 pub fn rtcm_frame(payload: &[u8]) -> Vec<u8> {
     let mut v = vec![0xD3, (payload.len() >> 8) as u8 & 3, payload.len() as u8];
     v.extend_from_slice(payload);
@@ -277,30 +203,14 @@ pub fn rtcm_frame(payload: &[u8]) -> Vec<u8> {
     v
 }
 
-/// Encode a 1005 message for an ECEF position (station 0).
+/// A 1005 message for an ECEF position (`type1005.Write`, station 1 as the C# default).
 pub fn encode_1005(e: [f64; 3]) -> Vec<u8> {
-    let mut bits_out: Vec<bool> = Vec::new();
-    let mut put = |v: i64, n: usize| {
-        for k in (0..n).rev() {
-            bits_out.push((v >> k) & 1 == 1);
-        }
-    };
-    put(1005, 12);
-    put(0, 12);
-    put(0, 6);
-    put(0b0001, 4);
-    put((e[0] / 0.0001).round() as i64 & ((1 << 38) - 1), 38);
-    put(0, 2);
-    put((e[1] / 0.0001).round() as i64 & ((1 << 38) - 1), 38);
-    put(0, 2);
-    put((e[2] / 0.0001).round() as i64 & ((1 << 38) - 1), 38);
-    let mut out = vec![0u8; bits_out.len().div_ceil(8)];
-    for (i, b) in bits_out.iter().enumerate() {
-        if *b {
-            out[i / 8] |= 0x80 >> (i % 8);
-        }
-    }
-    rtcm_frame(&out)
+    let mut t = type1005::default();
+    let _ = t.set_ecefposition(&e);
+    let mut buf = vec![0u8; 64];
+    let bits = t.Write(&mut buf).unwrap_or(0) as usize;
+    let end = bits.div_ceil(8);
+    rtcm_frame(&buf[3..end])
 }
 
 /// $GPGGA for an NTRIP caster ("Send NTRIP GGA").
@@ -375,6 +285,9 @@ mod tests {
         assert_eq!(&s[..4], &[0xb5, 0x62, 0x06, 0x71]);
         assert_eq!(u32::from_le_bytes([s[6 + 28], s[6 + 29], s[6 + 30], s[6 + 31]]), 20000);
         assert_eq!(tmode3_fixed(-35.0, 149.0, 584.0).len(), 48);
+        // |lat| > 90: ECEF fixed mode (flags 2)
+        let f = tmode3_fixed(-4_474_000.0, 2_672_000.0, -3_668_000.0);
+        assert_eq!(u16::from_le_bytes([f[6 + 2], f[6 + 3]]), 2);
         assert!(setup_m8p(true).len() > 20);
         let g = gga(-35.5, 149.25, 584.0, (1, 2, 3.0));
         assert!(g.starts_with("$GPGGA,010203.00,3530.0000,S,14915.0000,E,1,") && g.ends_with("\r\n"), "{g}");

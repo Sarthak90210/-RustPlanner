@@ -61,7 +61,9 @@ VENDORED = {
     "ObjectListView": "egui_extras::TableBuilder",
     "DirectShowLib": "nokhwa / gstreamer",
     "ICSharpCode.SharpZipLib": "zip + flate2",
-    "GMap.NET.Core": "walkers-style tile engine in mp-app/src/map.rs",
+    # GMap.NET.Core, ProjNet and GeoUtility are ported file by file (extlibs/gmap_net_core,
+    # extlibs/projnet, extlibs/geoutility): Mission Planner's own code depends on their exact
+    # types and numbers, and the crates once named here are not in the lockfile.
     "GMap.NET.WindowsForms": "egui map widget in mp-app/src/map.rs",
     "GMap.NET.Drawing": "egui painter",
     "BaseClasses": "nokhwa / gstreamer",
@@ -71,8 +73,6 @@ VENDORED = {
     "KMLib": "kml",
     "CsAssortedWidgets": "egui",
     "BSE.Windows.Forms": "egui",
-    "ProjNet": "proj4rs",
-    "GeoUtility": "utm / proj4rs",
     "SharpAdbClient": "adb_client",
     "zlib.net": "flate2",
     "LibVLC.NET": "gstreamer",
@@ -96,7 +96,6 @@ VENDORED = {
     "wasm": "eframe wasm32 target",
     "Onvif": "reqwest + quick-xml",
     "GDAL": "gdal",
-    "Interfaces": "eframe",
 }
 
 # Directories that are build, packaging or C#-only test glue.
@@ -113,6 +112,10 @@ UI_EXTLIBS = {
     "GStreamerHud", "TrackerHome", "SimpleGrid", "MissionPlanner.Gridv2", "Antenna",
     "WebCamService", "Flasher", "ExtGuided", "MavlinkMessagePlugin", "HIL", "solo", "Strings",
 }
+
+# Files in a UI ExtLib whose port keeps the overlay as plain data (no egui), so it sits in
+# mp-core where its non-UI callers (mission tooling, KML) can reach it.
+CORE_FILES_IN_UI_EXTLIBS = {"ExtLibs/Maps/WPOverlay.cs"}
 
 
 def seg(s: str) -> str:
@@ -133,7 +136,8 @@ def classify(rel: Path) -> tuple[str, str, str]:
     note = ""
     if parts[0] == "ExtLibs":
         lib = parts[1]
-        crate = "mp-app" if lib in UI_EXTLIBS else "mp-core"
+        ui = lib in UI_EXTLIBS and rel.as_posix() not in CORE_FILES_IN_UI_EXTLIBS
+        crate = "mp-app" if ui else "mp-core"
         rust = Path("crates", crate, "src", *rs_parts)
         if lib == "Mavlink" and parts[2:4] == ["pymavlink", "generator"]:
             return str(rust).replace("\\", "/"), "n/a",                 "template copy inside the generator; ExtLibs/Mavlink/*.cs are the shipped versions"
@@ -141,6 +145,8 @@ def classify(rel: Path) -> tuple[str, str, str]:
             return str(rust).replace("\\", "/"), "generated",                 "emitted by crates/mp-core/build.rs, a port of pymavlink mavgen_cs.py, from the same message_definitions XML"
         if lib == "DroneCAN" and len(parts) > 2 and parts[2] == "out":
             return str(rust).replace("\\", "/"), "generated",                 "emitted by canard_dsdlc from DSDL; port the generator, not its output"
+        if lib == "Comms" and len(parts) > 3 and parts[2] == "System.IO.Ports":
+            return str(rust).replace("\\", "/"), "vendored",                 "Mono's System.IO.Ports (BCL source); the Rust build uses the serialport crate"
         if lib in VENDORED:
             return str(rust).replace("\\", "/"), "vendored", VENDORED[lib]
         if lib in NOT_APPLICABLE_DIRS or any(p in NOT_APPLICABLE_DIRS for p in parts[2:-1]):

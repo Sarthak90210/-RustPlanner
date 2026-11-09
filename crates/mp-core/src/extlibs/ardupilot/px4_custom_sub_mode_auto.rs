@@ -1,0 +1,14 @@
+//! Port of `ExtLibs/ArduPilot/PX4_CUSTOM_SUB_MODE_AUTO.cs`
+
+crate::cs_enum! {
+    /// `MissionPlanner.ArduPilot.PX4_CUSTOM_SUB_MODE_AUTO`
+    pub PX4_CUSTOM_SUB_MODE_AUTO: i32 {
+        PX4_CUSTOM_SUB_MODE_AUTO_READY = 1,
+        PX4_CUSTOM_SUB_MODE_AUTO_TAKEOFF = 2,
+        PX4_CUSTOM_SUB_MODE_AUTO_LOITER = 3,
+        PX4_CUSTOM_SUB_MODE_AUTO_MISSION = 4,
+        PX4_CUSTOM_SUB_MODE_AUTO_RTL = 5,
+        PX4_CUSTOM_SUB_MODE_AUTO_LAND = 6,
+        PX4_CUSTOM_SUB_MODE_AUTO_RTGS = 7,
+    }
+}

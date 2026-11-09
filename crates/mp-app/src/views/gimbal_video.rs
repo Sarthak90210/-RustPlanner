@@ -806,7 +806,7 @@ impl GimbalVideo {
         if binding == p.move_camera_to_mouse_location {
             let Some((g, vehicle_yaw)) = gimbal_manager(app) else { return };
             let (Some(att), Some(c)) = (g.attitude(0, vehicle_yaw), camera) else { return };
-            let q = att.mul(&c.image_point_rotation(point.0, point.1));
+            let q = att * c.image_point_rotation(point.0, point.1);
             send(app, g.set_attitude(&q, self.yaw_lock, vehicle_yaw, 0));
         } else if binding == p.move_camera_poi_to_mouse_location {
             let Some(loc) = camera.and_then(|c| c.image_point_location(point.0, point.1)) else { return };

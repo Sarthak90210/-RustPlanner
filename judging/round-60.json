@@ -1,0 +1,171 @@
+{
+  "round": 60,
+  "date": "2026-11-08",
+  "reviewed_head": "0eddbe4 + uncommitted",
+  "commands_run": [],
+  "commands_note": "No commands were allowed this round (no shell, cargo, git, python or scripts). Everything below comes from reading files with Read/Grep/Glob. Nothing was compiled, so the judge also acted as the compiler.",
+  "manifest_summary": {
+    "manifest_status": "port/MANIFEST.md is still stale. It lists all 3 files in this batch as 'todo' (lines 2653 RLE.cs, 2663 Spline2.cs, 2670 ubx_m8p.cs). The counts below come from round 59's corrected numbers plus the per-file C# line counts in MANIFEST.md.",
+    "new_owned_files_ported": {
+      "ExtLibs/Utilities": "3 files, 1,348 C# lines: ubx_m8p 642, Spline2 409, RLE 297."
+    },
+    "new_owned_lines_ported": 1348,
+    "owned_files_ported_corrected": 127,
+    "ported_lines_corrected": 25516,
+    "ported_lines_derivation": "Round 59 corrected 24,168 + 1,348 new = 25,516.",
+    "owned_lines_total_corrected": 479014,
+    "ported_fraction_corrected": 0.0533,
+    "conservatism_note": "This is an upper bound. Files are counted whole, although class reference semantics, the MavlinkUtil marshalling path for the UBX structs and the inherited Utils member of Spline2 are not reproduced (see the findings).",
+    "wiring": "None of the ported code is used yet. Grep for 'extlibs::' or 'dotnet::' outside crates/mp-core/src/{extlibs,dotnet} still finds only crates/mp-core/build.rs. This batch adds more duplication of live pre-manifest code. crates/mp-core/src/rtk.rs has its own ubx_checksum (:28), generate (ubx, :38), UBX framing (:81-101), turnon_off (cfg_msg, :182), tmode3 survey-in (:187) and fixed (:200) encoders, a cut-down SetupM8P (setup_m8p, :218) and its own NAV-SVIN decoder (nav_svin, :254). crates/mp-app/src/rtcm.rs:217-219 runs those, not ubx_m8p.rs. Spline2 has no caller. In C#, ExtLibs/Maps/WPOverlay.cs:497-525 uses it to draw SPLINE_WAYPOINT legs as curves. mp-app creates SPLINE_WAYPOINT items (views/flight_plan/menu.rs:362, flight_plan.rs:1390, survey_ui.rs:373) but has no spline drawing code. RLE/HuffMan/Delta have no caller in C# either, apart from their own test()."
+  },
+  "scores": {
+    "overall": 1.0,
+    "overall_cap": 1.6,
+    "overall_cap_derivation": "ceil1(25,516 / 479,014 * 10) = ceil1(0.533) = 0.6, plus at most +1.0 for the pre-manifest app = 1.6. Awarded: 0.3 for ported lines (unchanged from round 59: the new 1,348 lines are unwired and uncompiled, and live code in rtk.rs duplicates ubx_m8p) + 0.7 for the pre-manifest app = 1.0.",
+    "round_files_fidelity": 6.9,
+    "round_files_fidelity_rationale": "All three files are close transliterations. ubx_m8p: the framing state machine matches case by case. That includes the default/case-0 merge, the 'payloadlen > buffer.Length' reset after step++, the zero-length payload stall, the overrun at msglencount+6 that throws before msglencount++, and the checksum over [2, payloadlen+6). Every struct size checks out against Pack=1 (mon_ver 70, mon_hw 60, nav_pvt 92, nav_svin 40, nav_velned 36, cfg_nav5 36, cfg_tmode3 40). The tmode3 constructors keep the ECEF/LLA split on |lat| > 90, the (int)/(sbyte)/(uint) casts through the shim and the HP arithmetic order. to_bytes pads or truncates reserved3 to 8 bytes as StructureToByteArray's Array.Resize does. getPointLatLngAlt keeps the C# quirk of returning ECEF metres in Lat/Lng/Alt. SetupM8P, SetupBasePos, turnon_off and poll_msg send the same bytes in the same order with the same sleeps. Spline2 keeps the float/double mix (1.0e7f, 0.1f and LATLON_TO_CM widened, 1.0e-7f float products, float lengths, (float)Math.Sqrt of a float product), stores the static speeds as f32 bits, models the null _origin/_destination/_hermite_spline_solution, and wraps update_spline's uint subtraction. RLE keeps the dropped last byte and the 250 split. Its Huffman tree uses a stable sort (OrderBy), sets Root only inside the loop and keeps Dictionary insertion order; Delta wraps. Points are lost for: the UBX structs bypassing MavlinkUtil/MarshalStruct, with short-buffer semantics that differ from ByteArrayToStructure and are documented wrongly; panics where C# throws on a replaced public buffer; Spline2's up-front null check, which skips C#'s partial side effects; Encode/Decode rejecting a null Root even when C# never dereferences it; HuffMan.test writing compact JSON where ToJSON() is Formatting.Indented; JSON error paths and byte? coercion; the class/reference semantics collapsed again; the inherited Utils member dropped; and self-consistency tests with tolerances instead of C# golden data.",
+    "ui_ux": 2.0,
+    "features": 2.5,
+    "features_rationale": "Unchanged since round 56: the new code is not wired into anything. The RTK inject page still runs the pre-manifest rtk.rs path, whose setup_m8p omits the baud hunt, both CFG-PRT writes, RXM-RAWX/SFRBX/RAW/SFRB and MON-HW. The Flight Planner map draws spline waypoints as straight legs."
+  },
+  "compile_check": {
+    "summary": "Read in full: utilities/{ubx_m8p,spline2,rle,mod}.rs. Also read the round-59 fix sites: rtcm3.rs crc24q (:298-307) and its console calls (:683, :744, :1498), dotnet/io.rs console_write/console_write_line (:9-27), custommessagebox.rs:113, settings.rs:515 and minifloat.rs:181-183. Checked against the definitions they use: ICommsSerial (base_stream -> Result<Box<dyn Stream + '_>>, baud_rate/set_baud_rate i32, write_str, write(&[u8], i32, i32)), ICorrections, PointLatLngAlt (zero(), from_dblarr, PartialEq, Display), Vector3 (alias of Vector3T<f64>, derives Copy+Default, Mul<f64>/Neg/Add/Sub), the cs_enum! macro (derives PartialEq+Eq+Default, hand-written Debug), Dictionary (Debug+Clone derive, manual Default), json::{J, parse, JsonObj::{new,get,int,opt_int}}, and the Exception variants used (NullReference, ArgumentNull, InvalidOperation, JsonSerialization, IndexOutOfRange). No definite compile error was found. Checked specifically: 'port.base_stream()?.flush()?' without the Stream trait in scope (flush resolves as a dyn Stream method, same pattern as unicore.rs/septentrio.rs); Rd::take::<N> inferred from u16/i32/u32::from_le_bytes; methods named u8/i8/u16/i32/u32/bytes/class; '[None; 4]' for [Option<Vector3>; 4] (Vector3 is Copy); the non-capturing 'nre' closure passed by value twice (closures that capture nothing are Copy); '&self.home_location' held across the write to self.scale_long_down (disjoint fields of &mut self); const patterns on cs_enum newtypes in the seg_end_type match; 'as' binding tighter than '*' in 'h2 * 2.0 * spline_time as f64'; Box<Node>::as_ref() to &Node in Decode; the typed closure 'child' returning Result inside from_v; derive(Debug, Clone, Default) on HuffmanTree through Dictionary<u8, i32>; ICorrections::length reaching the ubx test via 'use super::*'; crc24q's new Result propagating at rtcm3.rs:1705 and unwrapped in the tests (:1902, :1942).",
+    "likely_errors": [],
+    "low_confidence_risks": [
+      "crates/mp-core/src/dotnet/mod.rs:573 (carried over): LCIDToLocaleName(langid as u32, Some(&mut buf), 0) assumes windows 0.62 folds lpName/cchName into Option<&mut [u16]>. If the binding takes (u32, PWSTR, i32, u32), write: LCIDToLocaleName(langid as u32, windows::core::PWSTR(buf.as_mut_ptr()), buf.len() as i32, 0)."
+    ]
+  },
+  "findings": [
+    {
+      "id": "R60-01",
+      "severity": "P0",
+      "file": "crates/mp-app/src/mp/ (missing), crates/mp-app/src/extlibs/ (missing)",
+      "line": 0,
+      "cs_reference": "reference/MissionPlanner/{MainV2.cs,Program.cs,GCSViews/*,Controls/*,ExtLibs/Maps/*,...}",
+      "summary": "Carried over from R59-01. No Mission Planner project file and no UI ExtLib has been ported. About 95% of owned C# lines are still todo, and the whole UI is still the pre-manifest egui reimplementation. This round again added only non-UI ExtLibs/Utilities files.",
+      "required_fix": "Start the mp-app mirror: MainV2.cs and its Designer, then GCSViews. Port ExtLibs/Maps/WPOverlay.cs, the Spline2 consumer, and GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs, which consumes Ubx, rtcm3, sbp, Septentrio and Unicore, once the comms/state core is wired."
+    },
+    {
+      "id": "R60-02",
+      "severity": "P1",
+      "file": "crates/mp-core/src/rtk.rs",
+      "line": 28,
+      "cs_reference": "ExtLibs/Utilities/ubx_m8p.cs:131-168, 440-640; ExtLibs/Maps/WPOverlay.cs:497-525; GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs",
+      "summary": "Carried over from R59-02 and worse again. Nothing is wired: only build.rs references extlibs/dotnet. The live app now duplicates ubx_m8p as well as rtcm3, and the duplicate diverges. rtk.rs has its own ubx_checksum (:28), generate (:38), UBX framing (:81-101), cfg_msg (:182), tmode3_survey (:187), tmode3_fixed (:200), setup_m8p (:218) and nav_svin (:254). tmode3_fixed has no ECEF branch for |lat| > 90 and hard-codes fixedPosAcc = 1. setup_m8p skips the 7-rate baud hunt with 'UU' autobaud and CFG-PRT(UART1), CFG-PRT(USB) and the switch to 460800. It also never enables RXM-RAWX/SFRBX (0x02 0x15/0x13), RXM-RAW/SFRB (0x02 0x10/0x11) or MON-HW (0x0a 0x09), and it drops the 10/100/200/300 ms pacing. mp-app/src/rtcm.rs:217-219 runs this path. Spline2 has no caller, so SPLINE_WAYPOINT legs are drawn straight where WPOverlay draws the Hermite curve.",
+      "required_fix": "Port ConfigSerialInjectGPS.cs against utilities::{ubx_m8p::Ubx, rtcm3, sbp, septentrio, unicore} and delete rtk.rs's UBX/RTCM helpers. Port WPOverlay.cs with Spline2 for the spline legs. Then finish the mission/paramfile/gimbal/coords moves still pending from R58-02."
+    },
+    {
+      "id": "R60-03",
+      "severity": "P2",
+      "file": "crates/mp-core/src/extlibs/utilities/ubx_m8p.rs",
+      "line": 5,
+      "cs_reference": "ExtLibs/Mavlink/MavlinkUtil.cs:15 (UseUnsafe = true), 25-32 (ByteArrayToStructure<T>(bytearray, startoffset = 6)), 119-130 (ReadUsingPointer returns default(T) when data.Length - startoffset < SizeOf(T)), 270-307 (StructureToByteArray, generic over any struct); ubx_m8p.cs:382-385; crates/mp-core/src/extlibs/mavlink/mavlinkutil.rs:13-22 (MarshalStruct)",
+      "summary": "The six UBX structs ignore the existing MavlinkUtil port. In C# they are read with packet.ByteArrayToStructure<Ubx.ubx_nav_svin>(6) and written with MavlinkUtil.StructureToByteArray. The Rust structs do not implement MarshalStruct, so MavlinkUtil::byte_array_to_structure / structure_to_byte_array_t / the big-endian variants cannot take them, and there is no FieldInfo table. The header comment (:5-7) says from_bytes matches ByteArrayToStructure with 'a short buffer leaves the remaining fields zero'. That is wrong: with UseUnsafe (the default), a buffer shorter than startoffset + SizeOf(T) returns default(T), with every field zero and every byte[] null, not a partially decoded struct. from_bytes also has no startoffset parameter (C# default 6). Only ubx_cfg_tmode3 has to_bytes, while C# StructureToByteArray serialises any of them.",
+      "required_fix": "Implement MarshalStruct (SIZE, fields(), from_bytes, to_bytes) for ubx_mon_ver, ubx_mon_hw, ubx_nav_pvt, ubx_nav_svin, ubx_nav_velned, ubx_cfg_nav5_getset_s and ubx_cfg_tmode3. Route the tmode3 byte[] conversion through MavlinkUtil::structure_to_byte_array_t, and let callers decode through MavlinkUtil::byte_array_to_structure(buf, 6). Fix the doc comment. Add a test that a short buffer yields the default struct."
+    },
+    {
+      "id": "R60-04",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/ubx_m8p.rs",
+      "line": 493,
+      "cs_reference": "ubx_m8p.cs:18 (public byte[] buffer), 22-30 (@class/subclass getters), 53-95 (Read steps 0-5 index buffer[0..5]), 574-616 (SetupBasePos dereferences basepos)",
+      "summary": "Panics where C# throws, and nullability is lost. 'buffer' is a public field in both versions, and a caller can replace it with a shorter array. class() (:493), subclass() (:498) and Read steps 0-5 (:509, :516, :520, :524, :529, :570) index self.buffer directly and panic, where C# throws IndexOutOfRangeException out of Read (or NullReferenceException for null). Steps 6-8 already go through put(). SetupBasePos takes &PointLatLngAlt. In C# a null basepos passes 'basepos == PointLatLngAlt.Zero' (false, through the null-aware operator) and then throws NullReferenceException at basepos.Lat, after the two 100 ms sleeps. That path cannot be expressed.",
+      "required_fix": "Use buffer.get(i).ok_or_else(index_out_of_range) (and get_mut) in every step and in class()/subclass(), returning Result. Take basepos as Option<&PointLatLngAlt>: None compares unequal to Zero and then fails with NullReference at the fixed-position branch, in C# order."
+    },
+    {
+      "id": "R60-05",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/spline2.rs",
+      "line": 188,
+      "cs_reference": "Spline2.cs:139-162 (origin = _destination or _origin, possibly null), 180-244 (first dereference of origin depends on the branch)",
+      "summary": "set_spline_destination rejects a null origin before calling set_spline_origin_and_destination. C# hits the NullReferenceException at the first arithmetic use, and on some paths it mutates state first. Take reached_destination = true (the public _flags allows it with _destination null), stopped_at_start = false and segment_type = SEGMENT_SPLINE. C# then assigns _spline_origin_vel = _spline_destination_vel, rewrites _spline_time (minus 1, or 0) and zeroes _spline_vel_scaler. With SEGMENT_END_STRAIGHT it also assigns _spline_destination_vel and sets fast_waypoint = true, and only then throws at '(destination - origin).length()'. Rust throws with none of those writes. A caller that catches the exception sees different object state.",
+      "required_fix": "Remove the pre-check. Pass Option<Vector3> origin into set_spline_origin_and_destination and unwrap it with NullReference at each C# use site, in C# evaluation order: the stopped branch's (destination - origin), the STOP/SPLINE end-type arms and pos_len."
+    },
+    {
+      "id": "R60-06",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/rle.rs",
+      "line": 217,
+      "cs_reference": "RLE.cs:206-228 (Root dereferenced inside the loop; returns BitArray), 230-263 (current = Root; dereferenced on the first bit)",
+      "summary": "Encode and Decode check Root up front. In C#, Encode with an empty source never touches this.Root and returns an empty BitArray, and Decode with an empty BitArray returns an empty byte[], both even when Root is null (for example after BuildHuffmanTree on a single-symbol input). Rust returns NullReferenceException in both cases. The C# BitArray return/parameter type is also replaced by Vec<bool>, so BitArray members such as Length, Get/Set and CopyTo are missing.",
+      "required_fix": "Dereference Root lazily: inside the per-byte loop in Encode and on the first bit in Decode. Add a small dotnet BitArray (or document the Vec<bool> mapping) and test the empty/null-root cases."
+    },
+    {
+      "id": "R60-07",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/rle.rs",
+      "line": 103,
+      "cs_reference": "ExtLibs/Utilities/Extensions.cs:413-430 (ToJSON(object) => SerializeObject(msg, Formatting.Indented, Error handler sets Handled)); RLE.cs:127-131; Newtonsoft.Json 13.0.3 (MissionPlanner.Utilities.csproj:52) DefaultMaxDepth = 64, JsonSerializerInternalReader.EnsureType for byte?",
+      "summary": "(1) HuffMan.test writes huff.json with to_compact. In C#, huff.Root.ToJSON() is Formatting.Indented: two-space indent and Environment.NewLine, so the file bytes differ. (2) The Symbol error at from_v :134 formats \"Path '{path}.Symbol'\", which gives \"Path '.Symbol'\" for the root object. Newtonsoft writes \"Path 'Symbol', line 1, position N.\" (the child path from JsonObj::get, plus line/position). (3) Symbol is read with read_int's Int32 rules, but byte? goes through ReadType.Read and Convert.ChangeType. A token of 5.0 or \"5\" converts in C#, while Rust rejects 5.0 ('Input string ... not a valid integer'). 3000000000 gives \"Error converting value 3000000000 to type 'System.Nullable`1[System.Byte]'\" in C#, not the Int32 overflow text. (4) Newtonsoft 13 stops at MaxDepth 64 with a JsonReaderException. The Rust recursion has no such limit below serde_json's 128, so trees 64-127 levels deep deserialise in Rust and fail in C#.",
+      "required_fix": "Use to_j().to_indented() in to_json (ToJSON's default). Build the Symbol error from the path returned by o.get(\"Symbol\") and add the line/position suffix. Read byte? with Newtonsoft's ChangeType rules (integral doubles and numeric strings accepted, 'Error converting value' for overflow). Enforce MaxDepth 64 in from_v with Newtonsoft's message."
+    },
+    {
+      "id": "R60-08",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/spline2.rs",
+      "line": 55,
+      "cs_reference": "Spline2.cs:8 (class), 59-60/126-127/264-265 (_origin/_destination alias the caller's Vector3 objects), 339 (ref target_pos); Vector3.cs:19/34 (class Vector3<T>); RLE.cs:62/153/181-202 (class Node, List.Remove by reference, Root = nodes.FirstOrDefault()); ubx_m8p.cs:14 (class Ubx), 170-411 (structs whose byte[] fields are shared on copy)",
+      "summary": "R59-14 continues into this batch. Spline2, Ubx, Node and HuffmanTree are classes but derive Clone, and Node derives value PartialEq where C# has reference identity. Spline2 stores copies where C# keeps references to the caller's Vector3 objects, so a later 'origin.x = ...' by the caller changes C#'s _origin and not Rust's. In the spline-segment branch, _spline_origin_vel and _spline_destination_vel alias each other until the next reassignment. HuffmanTree.Root is a deep clone of nodes[0], while in C# Root is that node, so writes through Root reach nodes and later BuildHuffmanTree calls. Copying a UBX struct in C# shares its byte[] fields; Rust clones the Vecs.",
+      "required_fix": "Drop the Clone/PartialEq derives the C# types do not have. Hold Node as Rc<RefCell<Node>> (or arena indices) so Root and nodes share identity, and hold Spline2's Vector3 fields as shared handles, or document every call site that relies on value semantics."
+    },
+    {
+      "id": "R60-09",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/spline2.rs",
+      "line": 56,
+      "cs_reference": "Spline2.cs:8 (Spline2 : Utils), 61 (_wp_speed_up_cms), 117-120 (calculate_wp_leash_length); Utils.cs:677 (public instance gps_newpos); RLE.cs:59-271 (nested HuffMan.Node/HuffmanTree); ubx_m8p.cs:387 (nested ubx_cfg_tmode3.modeflags)",
+      "summary": "Missing or flattened members. Spline2 inherits Utils, so the public instance method gps_newpos(lat, lon, bearing, distance, ref latitude, ref longitude) can be called on a Spline2. The port has no Deref/AsRef to Utils and no forwarding method. The private no-op calculate_wp_leash_length and the boxed field _wp_speed_up_cms = 100 are dropped. The nested types HuffMan.Node, HuffMan.HuffmanTree and ubx_cfg_tmode3.modeflags are flattened to module level, so rle::Node is not reachable as HuffMan::Node. Default UBX structs carry empty Vecs where C# default(T) has null arrays.",
+      "required_fix": "Add a gps_newpos forwarding method (or Deref<Target = Utils>) on Spline2. Port the two private members (they may stay dead code). Re-export the nested types under modules named after their owners (huff_man::Node, ubx_cfg_tmode3_types::modeflags). Use Option<Vec<u8>> for the ByValArray fields."
+    },
+    {
+      "id": "R60-10",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/ardupilot/serial.rs",
+      "line": 27,
+      "cs_reference": "System.Console.Out (Console.OutputEncoding: the OEM code page on Windows, e.g. 437/850; Environment.NewLine); ExtLibs/Mavlink/MavlinkUtil.cs:432; ExtLibs/Comms/CommsSerialPort.cs:547,576; ExtLibs/Comms/SerialTest.cs:15,21; ExtLibs/ArduPilot/Serial.cs; ExtLibs/ArduPilot/Linux.cs",
+      "summary": "R59-06 is only partly fixed. The utilities sites now use dotnet::io::console_write/console_write_line, but other ported files still use println!/print!, which write LF on Windows and panic on a stdout write error: ardupilot/serial.rs:27,33; ardupilot/linux.rs:26,32,38,57; comms/commsserialport.rs:704,723; comms/serialtest.rs:56,64; mavlink/mavlinkutil.rs:236. Separately, console_write writes UTF-8. .NET's Console.Out encodes with Console.OutputEncoding, the OEM code page on Windows, so non-ASCII text such as the settings.rs:515 'Bad config key' with an accented key comes out as different bytes when redirected.",
+      "required_fix": "Replace every remaining println!/print! that ports a Console.Write/WriteLine with the dotnet::io helpers. Have the helpers encode with the console output code page (GetConsoleOutputCP on Windows, UTF-8 elsewhere), with '?' replacement for unmappable characters as .NET's encoder does."
+    },
+    {
+      "id": "R60-11",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/ubx_m8p.rs",
+      "line": 844,
+      "cs_reference": "No C# tests exist for these files; behaviour is the spec",
+      "summary": "The tests prove consistency with themselves, not with C#. ubx: one self-generated frame and a tmode3 round trip checked to 1e-9. There are no golden bytes for generate/turnon_off/SetupM8P, the ECEF (|lat| > 90) branch, survey_in's svinAccLimit, a bad checksum, the oversize reset, the zero-length stall or the buffer-overrun exception. spline2 (:410): one straight leg checked to 1e-5 plus reached_destination, with no comparison of target_pos/_yaw sequences against C#. rle (:344): no 250-run split, no check of the tree shape that ties produce, and Encode/Decode only round-trip each other.",
+      "required_fix": "Record golden data from the reference build: SetupM8P/SetupBasePos byte transcripts through a fake ICommsSerial; tmode3 bytes for LLA, ECEF and survey-in inputs; WPOverlay's spline point list for a fixed mission; and the HuffmanTree JSON and codes for a fixed input. Assert exact equality."
+    }
+  ],
+  "round_59_status": {
+    "fixed": [],
+    "partly_fixed": [
+      "R59-05: item (1) is fixed. crc24q looks up CRC24QTAB.get(idx) and returns IndexOutOfRange (rtcm3.rs:300-306), and the Result propagates at :1705. Items (2)-(4) remain: setbitu 'pos + len' (:92), getbits_38 'pos + 32' (:122) and set38bits 'pos + 32' (:138) are unchecked u32 additions; dot/ecef2pos/pos2ecef (:156, :1838, :1863) index slices directly; set_ecefposition (:1063) still checks len < 3 up front instead of assigning rr0 before failing.",
+      "R59-06: dotnet/io.rs:9-27 adds console_write/console_write_line with NEW_LINE (CR LF on Windows) and ignores write errors. rtcm3.rs:683/744/1498, custommessagebox.rs:113, settings.rs:515 and minifloat.rs:181-183 use them. The rest of the println! sites and the console encoding are in R60-10."
+    ],
+    "still_open": [
+      "R59-01 (now R60-01), R59-02 (now R60-02, extended to ubx_m8p and Spline2).",
+      "R59-03: Septentrio/Unicore are still blocking calls (no task/handle API found).",
+      "R59-04: the MSM subclass chain is still flattened.",
+      "R59-07: the Matrix null-Data ordering is unchanged.",
+      "R59-08: cast_u8/i8/u16/i16 still truncate through cast_i64 (dotnet/mod.rs:740-751). ubx_cfg_tmode3's HP (sbyte) casts use cast_i8, harmless for their in-range values.",
+      "R59-09: the enum value sort is still introsort, not CQuickSort; the MAVLink CsEnum trait is unchanged.",
+      "R59-10, R59-11, R59-12, R59-13: unchanged.",
+      "R59-14: continues in this batch (R60-08).",
+      "R59-15: still no C#-produced golden data; this batch adds more self-consistency tests (R60-11).",
+      "R58-18: port/MANIFEST.md still lists RLE.cs, Spline2.cs and ubx_m8p.cs as todo.",
+      "Older items still open as listed in round 59 (R58-06 items 2-9, R58-09, R58-14, R58-15, R57-04/05/06/07/09/11/13/14/15/16/17)."
+    ]
+  },
+  "next_priorities": [
+    "R60-02/R59-02: port ConfigSerialInjectGPS.cs on Ubx/rtcm3/sbp/Septentrio/Unicore, delete rtk.rs's UBX and RTCM helpers, and port WPOverlay.cs so spline legs use Spline2.",
+    "R60-03: implement MarshalStruct for the UBX structs and decode/encode them through MavlinkUtil as C# does.",
+    "R59-03: give Septentrio/Unicore (and Ubx.SetupM8P/SetupBasePos, which sleep for seconds) task-shaped APIs so a wired caller cannot block the UI.",
+    "R60-04/R60-05/R60-06/R59-05: remove the remaining panics and eager null checks, so exceptions occur where C# throws them and with the same partial state.",
+    "R60-10: finish the Console routing and the console encoding.",
+    "R59-08/R59-09: correct the small-int double casts and the enum value ordering in the shim.",
+    "Golden vectors from the reference build for UBX setup transcripts, WPOverlay spline points, Huffman trees, RTCM decoding and the other R59-15 items.",
+    "Regenerate port/MANIFEST.md once commands are allowed (R58-18).",
+    "Then ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs, MAVState.cs and CurrentState.cs to replace state.rs, followed by MainV2 and the GCSViews."
+  ],
+  "verdict": "This round adds 3 file-mirrored ports (1,348 C# lines): ubx_m8p (Ubx), Spline2 and RLE (RLE/HuffMan/Delta). It also fixes the crc24q panic and adds CR LF, broken-pipe-safe Console helpers. The ports are faithful at the level of bytes and floats: the UBX state machine, checksum, struct sizes, tmode3 casts and setup transcripts match, Spline2 keeps the float/double mix and the uint wrap, and the Huffman build keeps stable-sort ties and the Root-only-in-loop quirk. No definite compile error was found. What remains: the UBX structs bypass MavlinkUtil, and their short-buffer semantics are documented wrongly; there are panics and eager null checks where C# throws later; HuffMan.test writes compact JSON instead of indented; JSON errors and byte? coercion differ; class semantics are collapsed again; Spline2's inherited Utils member is missing; the tests are self-consistency only; and println! remains in five ported files. Nothing is wired. The app still runs rtk.rs, which now duplicates and diverges from ubx_m8p, and it draws spline waypoints straight. Owned progress is about 5.3% (25,516 / 479,014), so the cap is 1.6. Awarded 1.0; round-file fidelity is 6.9/10."
+}

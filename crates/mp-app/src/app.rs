@@ -244,6 +244,16 @@ pub struct MissionPlannerApp {
     skip_params_once: bool,
     /// MainV2.Comports besides comPort (the active `link`)
     extra_links: Vec<Link>,
+    /// doConnect's "loadwpsonconnect": the planner read runs after the parameter download
+    load_wps_after_params: bool,
+    /// doConnect's rally fetch, which comes after the (blocking) planner read
+    rally_after_read: bool,
+    /// the newer-firmware task started on connect
+    firmware_check: Option<crossbeam_channel::Receiver<Option<(String, String)>>>,
+    /// doConnect's newer-firmware check, run once the parameters are in
+    firmware_check_after_params: bool,
+    /// the newer-firmware Common.MessageShowAgain box
+    firmware_prompt: Option<crate::show_again::ShowAgain>,
     /// ConnectionOptions form: (port, baud)
     conn_form: Option<(String, u32)>,
     /// InputBox "Enter Password": Some(view) to open a protected screen, None to set it
@@ -280,6 +290,22 @@ impl MissionPlannerApp {
         crate::fonts::install(&cc.egui_ctx);
         theme::apply(&cc.egui_ctx);
         cc.egui_ctx.set_zoom_factor(settings.ui_scale);
+        crate::tool_windows::start_warning_engine(&settings.planner);
+        // MainV2: BinaryLog.onFlightMode += (firmware, modeno) => the mode's name from
+        // getModesList(Enum.Parse(Firmwares, firmware)), null on "" or any failure
+        mp_core::extlibs::utilities::binarylog::BinaryLog::add_onFlightMode(|firmware, modeno| {
+            use mp_core::firmware::Firmware;
+            let fw = match firmware {
+                "" => return None,
+                "ArduCopter2" => Firmware::ArduCopter2,
+                "ArduPlane" => Firmware::ArduPlane,
+                "ArduRover" => Firmware::ArduRover,
+                "ArduSub" => Firmware::ArduSub,
+                "ArduTracker" => Firmware::ArduTracker,
+                _ => return None,
+            };
+            fw.modes().into_iter().find(|(k, _)| *k as i64 == modeno as i64).map(|(_, v)| v)
+        });
         if let Ok(guid) = std::env::var("MP_DESKTOP") {
             if let Err(e) = platform::move_to_virtual_desktop(cc, &guid) {
                 log::warn!("virtual desktop: {e}");
@@ -346,6 +372,11 @@ impl MissionPlannerApp {
             stream_shot: Instant::now(),
             skip_params_once: false,
             extra_links: Vec::new(),
+            load_wps_after_params: false,
+            rally_after_read: false,
+            firmware_check: None,
+            firmware_check_after_params: false,
+            firmware_prompt: None,
             conn_form: None,
             pw_prompt: None,
             pw_protect_seen: None,
@@ -505,6 +536,16 @@ impl MissionPlannerApp {
     }
 
     fn drain_events(&mut self) {
+        // the newer-firmware task's Common.MessageShowAgain
+        if let Some(found) = self.firmware_check.as_ref().and_then(|rx| rx.try_recv().ok()) {
+            self.firmware_check = None;
+            if let Some((title, msg)) = found {
+                // MessageShowAgain checks the setting once, when it is called
+                if crate::show_again::should_show(&self.settings.planner, &title) {
+                    self.firmware_prompt = Some(crate::show_again::ShowAgain::new(&title, &msg, false));
+                }
+            }
+        }
         // other comports run their own workers; their events are not shown
         for l in &self.extra_links {
             for _ in l.events.try_iter() {}
@@ -518,6 +559,7 @@ impl MissionPlannerApp {
             }
         }
         let mut drop_link = false;
+        let mut load_wps_on_connect = false;
         for e in events {
             match &e {
                 LinkEvent::Connected => {
@@ -544,17 +586,24 @@ impl MissionPlannerApp {
                         rc: rate("raterc", 2),
                         sensors: rate("ratesensors", 2),
                     });
-                    if pl.get("loadwpsonconnect").map(|v| v == "True").unwrap_or(false) {
-                        link.send(mp_core::link::LinkCommand::ReadMission { mission_type: 0 });
+                    // MenuFlightPlanner_Click then FlightPlanner.BUT_read_Click, once the
+                    // parameters are in (doConnect runs getParamList first)
+                    self.load_wps_after_params = pl.get("loadwpsonconnect").map(|v| v == "True").unwrap_or(false);
+                    self.rally_after_read = false;
+                    // getparams false: no ParamsLoaded will come, so doConnect's following
+                    // block (the WP read) runs now; with no parameters there is no rally fetch
+                    // and no VersionString for the firmware check
+                    let params_skipped = link.shared.read().skip_params;
+                    if params_skipped && std::mem::take(&mut self.load_wps_after_params) {
+                        load_wps_on_connect = true;
                     }
                     let cs = link.shared.read().cs.clone();
                     self.toasts
                         .info(format!("Connected: {:?} sysid {}", cs.firmware, cs.sysid));
 
-                    // Check for newer firmware (MainV2.cs:1697-1725)
-                    if let Some((title, msg)) = check_newer_firmware(&cs, pl) {
-                        self.toasts.message(msg, &title);
-                    }
+                    // the newer-firmware check comes after getParamList, which fills
+                    // MAV.VersionString from the STATUSTEXT banner
+                    self.firmware_check_after_params = !params_skipped;
 
                     // ParamCachePath check (MainV2.cs:1667-1694): UseCachedParams younger than 1h
                     let use_cached = pl.get("UseCachedParams").map(|v| !v.eq_ignore_ascii_case("false")).unwrap_or(true);
@@ -588,6 +637,10 @@ impl MissionPlannerApp {
                     }
                 }
                 LinkEvent::Disconnected(err) => {
+                    // doConnect's post-parameter work belongs to that connect only
+                    self.firmware_check_after_params = false;
+                    self.load_wps_after_params = false;
+                    self.rally_after_read = false;
                     match err {
                         Some(e) => self.toasts.error(format!("Connection closed: {e}")),
                         None => self.toasts.info("Disconnected"),
@@ -609,11 +662,47 @@ impl MissionPlannerApp {
                         let _ = std::fs::write(&cache_path, json);
                     }
 
-                    // RALLY_TOTAL: get any rallypoints if RALLY_TOTAL > 0 (MainV2.cs:1773-1780)
-                    let rally_total = link.shared.read().params.get("RALLY_TOTAL").and_then(|p| {
-                        if p.value.is_nan() || p.value.is_infinite() { None } else { Some(p.value as i32) }
-                    }).unwrap_or(0);
-                    if rally_total > 0 {
+                    // RALLY_TOTAL: int.TryParse(param.ToString()) > 0 (MainV2.cs:1773-1780), so
+                    // "3.5", "NaN" or "1E+30" fetch nothing
+                    let rally_total = link
+                        .shared
+                        .read()
+                        .params
+                        .get("RALLY_TOTAL")
+                        .and_then(|p| {
+                            // MAVLinkParam.ToString(): a REAL32 prints its float (G7), the
+                            // integer types their value
+                            let text = if p.ptype == 9 {
+                                mp_core::dotnet::float_to_string(p.value)
+                            } else {
+                                mp_core::dotnet::double_to_string(p.value as f64)
+                            };
+                            mp_core::dotnet::int_parse(&text).ok()
+                        })
+                        .unwrap_or(0);
+                    // doConnect's post-parameter block runs once per connect, not on a refresh
+                    let after_connect = std::mem::take(&mut self.firmware_check_after_params);
+                    let rally_total = if after_connect { rally_total } else { 0 };
+                    // Check for newer firmware (MainV2.cs:1697-1725): Task.Run over
+                    // APFirmware.GetReleaseNewest(OFFICIAL); any exception is swallowed
+                    if after_connect {
+                        let version_string = link.shared.read().cs.version_string.clone();
+                        let (tx, rx) = crossbeam_channel::bounded(1);
+                        std::thread::spawn(move || {
+                            let found = crate::firmware_ui::get("https://firmware.ardupilot.org/manifest.json.gz")
+                                .and_then(|b| mp_core::fwupload::gunzip(&b))
+                                .and_then(|j| mp_core::fwupload::parse_manifest(&j))
+                                .ok()
+                                .and_then(|fw| check_newer_firmware(&version_string, &fw));
+                            let _ = tx.send(found);
+                        });
+                        self.firmware_check = Some(rx);
+                    }
+                    if std::mem::take(&mut self.load_wps_after_params) {
+                        load_wps_on_connect = true;
+                        // the rally fetch waits for the planner's read (doConnect order)
+                        self.rally_after_read = rally_total > 0;
+                    } else if rally_total > 0 {
                         link.send(mp_core::link::LinkCommand::ReadMission { mission_type: 2 });
                     }
                 }
@@ -651,6 +740,16 @@ impl MissionPlannerApp {
             self.setup.on_event(&e, link, &mut self.toasts);
             self.flight_data.on_event(&e);
             self.flight_data.on_log_event(&e);
+        }
+        if load_wps_on_connect {
+            self.settings.view = View::FlightPlan;
+            self.flight_plan.but_read_click();
+        } else if self.rally_after_read && !self.flight_plan.read_busy() {
+            // the planner read is over (done, failed or its confirm cancelled)
+            self.rally_after_read = false;
+            if let Some(l) = &self.link {
+                l.send(mp_core::link::LinkCommand::ReadMission { mission_type: 2 });
+            }
         }
         if drop_link {
             self.joystick.stop(self.link.as_ref());
@@ -1303,6 +1402,9 @@ impl eframe::App for MissionPlannerApp {
                 (s.cs.clone(), s.messages.clone())
             };
             self.speech.tick(&self.settings.planner, &cs, &msgs);
+            // Settings.Instance.GetInt32("severity", 4), read by STATUSTEXT handling
+            let severity = self.settings.planner.get("severity").and_then(|v| mp_core::dotnet::int_try_parse(v)).unwrap_or(4);
+            mp_core::state::STATUSTEXT_SEVERITY.store(severity as u8, std::sync::atomic::Ordering::Relaxed);
             // Vario: spoken climb / sink rate every 3 s while enabled
             if self.settings.planner.get("vario").map(|v| v == "True").unwrap_or(false) && self.vario.map(|t| t.elapsed().as_secs() >= 3).unwrap_or(true) {
                 self.vario = Some(std::time::Instant::now());
@@ -1405,6 +1507,12 @@ impl eframe::App for MissionPlannerApp {
             });
 
         self.progress_window(&ctx);
+        // Common.MessageShowAgain answers OK by itself once "Show me again?" was unticked
+        if let Some(p) = self.firmware_prompt.clone() {
+            if p.ui(&ctx, &mut self.settings.planner).is_some() {
+                self.firmware_prompt = None;
+            }
+        }
         self.toasts_ui(&ctx);
         self.handle_actions(actions);
 
@@ -1472,26 +1580,48 @@ pub fn param_cache_path(sysid: u8, compid: u8, aptype: &str, uid2: &str) -> std:
 }
 
 /// Check if newer official firmware is available (MainV2.cs:1697-1725)
-fn check_newer_firmware(cs: &mp_core::state::CurrentState, pl: &std::collections::BTreeMap<String, String>) -> Option<(String, String)> {
-    let veh = match cs.firmware {
-        mp_core::firmware::Firmware::ArduCopter2 => "Copter",
-        mp_core::firmware::Firmware::ArduPlane => "Plane",
-        mp_core::firmware::Firmware::ArduRover => "Rover",
-        mp_core::firmware::Firmware::ArduSub => "Sub",
-        mp_core::firmware::Firmware::ArduTracker => "Tracker",
-        _ => return None,
-    };
-    if cs.version_string.is_empty() {
-        return None;
+/// MainV2's newer-firmware task over the manifest: GetReleaseNewest(OFFICIAL) is, per MavType
+/// in first-seen order, the first entry at that type's highest MavFirmwareVersion. The first
+/// whose VehicleType appears in the version string's first word decides: when its version is
+/// above VersionDetection.GetVersion(VersionString) the (title, text) of
+/// Common.MessageShowAgain is returned. Any exception gives nothing (the task's catch).
+fn check_newer_firmware(version_string: &str, firmware: &[mp_core::fwupload::FirmwareInfo]) -> Option<(String, String)> {
+    use mp_core::dotnet::version::Version;
+    use mp_core::extlibs::utilities::versiondetection::VersionDetection;
+    let fields1: Vec<&str> = version_string.split(' ').collect();
+    let ver = |f: &mp_core::fwupload::FirmwareInfo| f.version.as_deref().and_then(|v| Version::parse(v).ok());
+    let official: Vec<&mp_core::fwupload::FirmwareInfo> = firmware.iter().filter(|f| f.version_type == "OFFICIAL").collect();
+    let mut types: Vec<&str> = Vec::new();
+    for f in &official {
+        if !types.contains(&f.mav_type.as_str()) {
+            types.push(f.mav_type.as_str());
+        }
     }
-    let title = format!("New Firmware-{veh}");
-    let key = format!("SHOWAGAIN_{}", title.replace([' ', '-'], "_"));
-    if pl.get(&key).map(|v| v.eq_ignore_ascii_case("false")).unwrap_or(false) {
-        return None;
+    for t in types {
+        let group: Vec<&&mp_core::fwupload::FirmwareInfo> = official.iter().filter(|f| f.mav_type == t).collect();
+        let max = group.iter().filter_map(|f| ver(f)).max();
+        let Some(item) = group.iter().find(|f| ver(f) == max) else { continue };
+        // check primare firmware type. ie arudplane, arducopter
+        if fields1[0].to_lowercase().contains(&item.vehicletype.to_lowercase()) {
+            let ver1 = VersionDetection::GetVersion(version_string).ok()?;
+            let ver2 = max?;
+            if ver2 > ver1 {
+                let title = format!("New Firmware-{} {ver2}", item.vehicletype);
+                // Strings.NewFirmwareA ("New firmware available\n") + type + " " + ver2 +
+                // Strings.Pleaseup ("\nPlease upgrade") + the link token
+                let msg = format!(
+                    "New firmware available\n{} {ver2}\nPlease upgrade[link;https://discuss.ardupilot.org/tags/stable-release;Release Notes]",
+                    item.vehicletype
+                );
+                return Some((title, msg));
+            }
+            // check the first hit only
+            return None;
+        }
     }
-    let msg = format!("New firmware available\n{veh}\nPlease upgrade\n[link;https://discuss.ardupilot.org/tags/stable-release;Release Notes]");
-    Some((title, msg))
+    None
 }
+
 
 /// connectionListToolStripMenuItem: `tcp://host:port`, `udp://host:port` (listen),
 /// `udpcl://host:port` and `serial:PORT:baud`, one per line.
@@ -1540,18 +1670,24 @@ mod connection_list_tests {
         let p = super::param_cache_path(1, 1, "ArduCopter2", "UID123");
         assert!(p.ends_with(std::path::Path::new("paramcache/ArduCopter2/UID123/1/1/param.json")));
 
-        let mut cs = mp_core::state::CurrentState::default();
-        cs.firmware = mp_core::firmware::Firmware::ArduCopter2;
-        cs.version_string = "4.5.0".into();
-        let mut pl = std::collections::BTreeMap::new();
-        let fw = super::check_newer_firmware(&cs, &pl);
-        assert!(fw.is_some());
-        let (title, msg) = fw.unwrap();
-        assert_eq!(title, "New Firmware-Copter");
-        assert!(msg.contains("New firmware available\nCopter"));
+        let manifest = br#"{"firmware":[
+            {"mav-type":"QUADROTOR","vehicletype":"Copter","mav-firmware-version-type":"OFFICIAL","mav-firmware-version":"4.5.7","format":"apj"},
+            {"mav-type":"QUADROTOR","vehicletype":"Copter","mav-firmware-version-type":"OFFICIAL","mav-firmware-version":"4.4.4","format":"apj"},
+            {"mav-type":"QUADROTOR","vehicletype":"Copter","mav-firmware-version-type":"BETA","mav-firmware-version":"4.6.0","format":"apj"},
+            {"mav-type":"FIXED_WING","vehicletype":"Plane","mav-firmware-version-type":"OFFICIAL","mav-firmware-version":"4.5.7","format":"apj"}]}"#;
+        let fw = mp_core::fwupload::parse_manifest(manifest).unwrap();
+        let (title, msg) = super::check_newer_firmware("ArduCopter V4.5.0 (abcdef)", &fw).unwrap();
+        assert_eq!(title, "New Firmware-Copter 4.5.7");
+        assert!(msg.contains("New firmware available\nCopter 4.5.7\nPlease upgrade[link;"));
+        // up to date, another vehicle, and an unparsable version
+        assert!(super::check_newer_firmware("ArduCopter V4.5.7", &fw).is_none());
+        assert_eq!(super::check_newer_firmware("ArduPlane V4.3.0", &fw).unwrap().0, "New Firmware-Plane 4.5.7");
+        assert!(super::check_newer_firmware("ArduCopter", &fw).is_none());
 
-        // If suppressed by SHOWAGAIN key, returns None
-        pl.insert("SHOWAGAIN_New_Firmware_Copter".into(), "False".into());
-        assert!(super::check_newer_firmware(&cs, &pl).is_none());
+        // MessageShowAgain's key replaces ' ', '+', '-' and '.'; False suppresses the box
+        let mut pl = std::collections::BTreeMap::new();
+        assert!(crate::show_again::should_show(&pl, &title));
+        pl.insert("SHOWAGAIN_New_Firmware_Copter_4_5_7".into(), "False".into());
+        assert!(!crate::show_again::should_show(&pl, &title));
     }
 }

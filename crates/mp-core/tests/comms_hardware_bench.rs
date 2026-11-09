@@ -147,7 +147,7 @@ fn winusb_bulk_endpoint_high_throughput_benchmark() {
     for i in 0..packet_count {
         let mut h = header;
         h.sequence = (i % 256) as u8;
-        let msg = make_attitude(i as u32 * 20, 0.1 * (i as f32).sin(), 0.05, 3.14);
+        let msg = make_attitude(i as u32 * 20, 0.1 * (i as f32).sin(), 0.05, 3.0);
         let bytes = serialize_msg(&h, &msg);
         total_bytes += bytes.len();
         tx_dev.write_all(&bytes).expect("WinUSB write failed");

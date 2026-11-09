@@ -1,0 +1,208 @@
+{
+  "round": 61,
+  "date": "2026-11-08",
+  "reviewed_head": "0eddbe4 + uncommitted",
+  "commands_run": [],
+  "commands_note": "No commands were allowed this round (no shell, cargo, git, python or scripts). Everything below comes from reading files with Read/Grep/Glob. Nothing was compiled, so the judge also acted as the compiler.",
+  "manifest_summary": {
+    "manifest_status": "port/MANIFEST.md is still stale. It lists ExtLibs/Maps/WPOverlay.cs as todo (line 1430) with the target crates/mp-app/src/extlibs/maps/wpoverlay.rs. The port was placed at crates/mp-core/src/extlibs/maps/wpoverlay.rs instead. RLE.cs, Spline2.cs and ubx_m8p.cs are still listed as todo too.",
+    "new_owned_files_ported": {
+      "ExtLibs/Maps": "1 file, 611 C# lines: WPOverlay.cs (MANIFEST.md:1430)."
+    },
+    "new_owned_lines_ported": 611,
+    "owned_files_ported_corrected": 128,
+    "ported_lines_corrected": 26127,
+    "ported_lines_derivation": "Round 60 corrected 25,516 + 611 (WPOverlay.cs) = 26,127. The new entry points read_waypoint_lines, parse_text, serialize_indented and ParamFile::load_text split existing ported functions. They add no C# lines.",
+    "owned_lines_total_corrected": 479014,
+    "ported_fraction_corrected": 0.0545,
+    "conservatism_note": "This is an upper bound. WPOverlay is counted whole, although its GMap.NET types are reduced to plain data and its spline points keep data that C# strips (R61-05).",
+    "wiring": "This is the first round with real wiring, and it answers part of R60-02. Ported code is now called from outside extlibs/dotnet in these places. (1) flight_plan.rs:1213-1224 runs WPOverlay.CreateOverlay and draws overlay.routes, so spline legs go through Spline2 and the home leg is dashed. (2) mission.rs:200 reads waypoint files through WaypointFile.read_waypoint_lines, and mission.rs:248 writes .mission files through MissionFile.ConvertFromLocationwps and serialize_indented. (3) coords.rs drives the UTM/MGRS readout and grid cells through GeoUtility (Geographic/UTM/MGRS), PointLatLngAlt.GetUTMZone/ToUTM (ProjNet) and utmpos.ToLLA. (4) rtk.rs runs the inject byte stream through rtcm3.Read and Ubx.Read and builds UBX packets with Ubx.generate and ubx_cfg_tmode3. (5) paramfile.rs loads .param files through ParamFile. (6) gimbal.rs re-exports the ported Quaternion. (7) swarm.rs uses Quaternion.from_euler312 and the coords layer. (8) geo.rs delegates distance, bearing and newpos to the ported PointLatLngAlt. Still not wired: WPOverlay markers, polygons and pointlist (the app draws its own markers and keeps its own pointlist copy); the fence and rally WPOverlay instances; the FlightData map; read_mission_json (no caller); ParamFile.SaveParamFile; Septentrio and Unicore (rtk_page.rs builds their command strings inline); RLE; MAVLinkInterface, MAVState and CurrentState; every GCSView."
+  },
+  "scores": {
+    "overall": 1.2,
+    "overall_cap": 1.6,
+    "overall_cap_derivation": "ceil1(26,127 / 479,014 * 10) = ceil1(0.545) = 0.6, plus at most +1.0 for the pre-manifest app = 1.6. Awarded: 0.45 for ported lines (up from 0.3, because WPOverlay, Spline2, WaypointFile, MissionFile, GeoUtility, ProjNet, utmpos, rtcm3, Ubx, ParamFile and Quaternion now run in the app) + 0.75 for the pre-manifest app = 1.2. The award stays below the cap for four reasons: the app passes a non-Zero home at (0,0) (R61-02); only routes are taken from the overlay (R61-03); the Custom route stroke loses its arrows (R61-04); and the save, .plan-load and inject-loop paths are still not the C# ones (R61-07 to R61-10).",
+    "round_files_fidelity": 6.4,
+    "round_files_fidelity_rationale": "WPOverlay.rs follows CreateOverlay branch by branch. It keeps the navigable-command test with C#'s && / || precedence, the LAND/VTOL_LAND (0,0) skip that adds no pointlist entry (so DO_JUMP indices shift as in C#), and the DO_LAND_START split that regenerates the route without the home leg. It keeps the ROI marker and its 'Dont draw line' rect (nothing added at 0,0), and the loiter radius from p3/p2 with Math.Sign throwing on NaN. Loiter tangent exit uses the item's frame for the next point's GetHomeAlt, as C# does. DO_JUMP uses (int)Math.Max(float,0) with NaN -> int.MinValue and throws ArgumentOutOfRange on a bad index. Fence vertex polygons are shared across inclusion and exclusion and complete when Count == p1, as a float compare. The fence home circle has 73 points every 5 degrees, a blue 2 px dashed pen and the fencehome ?? home fallback. GetHomeAlt returns 0, SRTM or -999, or home alt. RegenerateWPRoute appends fullpointlist[0], does the Spline2 run with the reached_destination preset, and builds the homeroute [last, home, first] through the counter logic. The dash applies only if both home distances are < 5000 m; the yellow pens are 2 and 4 px wide, and the wp route uses Custom. The C# overlay.Clear() and the pointlist/route fields that are never cleared are kept, as is the home.Tag = \"H\" side effect. Points are lost for these reasons. Spline points keep Alt, Tag, Tag2 and color, where C#'s List<PointLatLng> strips them (R61-05). The GMapPolygon default fill alpha is 95 where C# uses 155. Fence polygon points keep their Tag. Null home and fencehome cannot be expressed. The Markers.Add(null) path is not modelled. The file is in the wrong crate per the manifest. The tests check self-consistency only. The wiring layers have their own divergences: the coords cells use invariant {:.3} formatting and write NaN; the WPL writer uses LF and prints f32 expansions; the .mission writer emits doJumpId = seq; ParamFile save is not ported; and the inject parser has no cross-resets. LightBlue (91, FFADD8E6) and Pink (137, FFFFC0CB) are correct KnownColor entries.",
+    "ui_ux": 2.0,
+    "ui_ux_rationale": "This stays very low until MainV2 and the GCSViews are ported file by file. Gains: Flight Planner now draws the C# wp route geometry, with Spline2 curves for SPLINE_WAYPOINT runs, DO_JUMP repeats, loiter tangent exits, DO_LAND_START splits and the 2 px dashed home leg with the 5 km rule. These gains are cancelled by a visible regression: with no home set (the default (0,0)), the app passes PointLatLngAlt(0,0,0,\"H\"), which is not equal to Zero, so a solid yellow home leg runs to 0,0 for every mission (R61-02). Markers are still the app's own uniform pins, and the C# Custom route arrows are missing.",
+    "features": 2.8,
+    "features_rationale": "Up from 2.5 because real C# behaviour now runs in the app. Waypoint files are read with ReadWaypointFile's rules: the blank home insert, Enum.Parse of the command, 'Line invalid' reporting and id 99 -> 0. .mission files are written with ConvertFromLocationwps and Newtonsoft's indented layout. The UTM/MGRS readout and grid cells use GeoUtility, ProjNet and utmpos. RTK frames go through the rtcm3 and Ubx state machines, and setup_m8p now sends the full SetupM8P packet list, including RXM and MON-HW. .param files load with ParamFile's exclusions and FormatException. Spline routes match WPOverlay. Gaps that hold the score down: .plan/.mission loading is unwired; the param save and the WPL writer are still pre-manifest; there is no fence/rally/FlightData WPOverlay; the inject loop's parser cross-resets and the SetupM8P baud hunt and pacing are missing; and Septentrio/Unicore are still inline."
+  },
+  "compile_check": {
+    "summary": "Read in full: extlibs/maps/{wpoverlay,mod}.rs, extlibs/mod.rs, coords.rs, mission.rs, geo.rs, rtk.rs, paramfile.rs, the changed parts of gimbal.rs, dotnet/drawing.rs, ardupilot/{serial,linux}.rs, and the app call sites flight_plan.rs:55-91, 735-770, 978-980, 1189-1262, 1476-1516, 2175-2211; menu.rs:564-581, 681-719; swarm.rs:135-189, 250-254; gimbal_video.rs:808-810. Checked against the definitions they use. PointLatLngAlt: all pub fields, so struct-update syntax works; manual PartialEq on Lat/Lng/Alt/color/Tag; new_tagged/new_alt/from_locationwp/zero/get_bearing/get_distance/newpos. Spline2::new(PointLatLngAlt), pv_location_to_vector(&mut self, &PointLatLngAlt), pv_vector_to_location(&self, &Vector3), set_wp_origin_and_destination (returns ()), set_spline_destination and advance_spline_target_along_track (both Result), the pub _flags/target_pos, and the pub cs_enum spline_segment_end_type. Locationwp: pub(crate) seq is only built inside mp-core. Color constants plus from_argb(i32) and from_argb4 -> Result; Exception::{Arithmetic, ArgumentOutOfRange, NullReference, Argument} and Display; format_fixed(x, usize, u32, &CultureInfo) and current_culture(); cast_i32; MathHelper::RAD2DEG. The MAV_CMD/MAV_FRAME/MAV_MISSION_TYPE constant names follow build.rs's NAV_ and prefix stripping (LAST, VTOL_LAND, LOITER_TO_ALT, GUIDED_ENABLE, DO_RETURN_PATH_START, FENCE_HOME_CIRCLE_INCLUSION=5005 exist in Mavlink.cs), and #![allow(deprecated)] covers DO_SET_ROI and the frames. GeoUtility: Geographic::new(lon, lat), to_utm(&self), to_mgrs(&mut self) on an rvalue, UTM Deref to Geocentric for zone/band/east/north, with_band, Display, MGRS::parse. utmpos::new/to_lla; Quaternion::{new, from_euler, from_euler312, from_axis_angle_theta, default, Mul, get_euler_*}; ICorrections::{length, packet, resetParser} in scope in rtk.rs; rtcm3::{new, Read -> Result<i32>, ecef2pos, R2D}, crc24::crc24q -> Result, getbitu -> Result, type1005 base_pos_common (set_ecefposition, Write -> Result<u32>); Ubx::{new, Read -> Result<i32>, generate}; ubx_nav_svin::{SIZE, from_bytes, getECEF}; ParamFile::{load_text, loadParamFile}; dotnet::io::{split_lines -> Vec<String>, NEW_LINE}; Toasts::error(impl Into<String>) -> (). Closure coercions to &mut dyn FnMut work: '&mut |m| toasts.error(m)', '&mut |_, _| None', '&mut |m| panic!(...)' (the ! body coerces to ()), '&mut crate::srtm::altitude' (a fn item, unsized to &mut dyn FnMut(f64, f64) -> Option<f64>), and mission.rs:203's closure that returns Ok(()) and calls the captured &mut dyn FnMut. Borrow checks pass: self.route.push(self.pointlist[..].clone()) borrows disjoint fields; fullpointlist.push(fullpointlist[0].clone()) is a two-phase borrow; the fencepoly get_or_insert_with borrow ends before addpolygonmarker; overlay.overlay.routes is a partial move out of a local with no Drop; fencehome.unwrap_or(&*home) works. Tests reviewed for expectations that now fail: the wpoverlay tests (8 markers, 'Alt: 100', homeroute tags [3, H, 1], DO_JUMP [1,2,1,2,1,2], Pink stroke), mission.rs (only home survives ConvertToLocationwps because type is null; 'Line invalid' text), geo.rs (1000*6371/6378.1), swarm.rs:896/1535/2563 (the new 6371 km/6378.1 km mix stays inside the 0.05/0.1/0.01 m tolerances), survey.rs:102 (still 5 lines), config.rs:393 (#NOTE is skipped as a comment) and flight_plan.rs:2188 (UTM Display uses G15, so '166021.4' holds). No definite compile error was found.",
+    "likely_errors": [],
+    "low_confidence_risks": [
+      "crates/mp-core/src/extlibs/maps/wpoverlay.rs:175: the closure passes the captured '&mut dyn FnMut' parameter straight to GetHomeAlt. The implicit reborrow at that coercion site should make the closure capture it by unique borrow, so the closure stays FnMut. If rustc instead treats it as a by-value capture, the closure becomes FnOnce and every later gethomealt(...) call fails with E0382/E0525. A defensive fix that costs nothing: '... Self::GetHomeAlt(altmode, home_alt, lat, lng, &mut *srtm_get_altitude)'.",
+      "crates/mp-core/src/coords.rs:119 (test): it asserts that ProjNet's transverse Mercator and GeoUtility's series agree to 1 cm at -35.36, 149.17. They should agree to within millimetres, but this was not computed here. If the test fails, widen the tolerance to 5 cm or compare against golden C# output.",
+      "crates/mp-core/src/dotnet/mod.rs:573 (carried over): LCIDToLocaleName(langid as u32, Some(&mut buf), 0) assumes windows 0.62 folds lpName/cchName into Option<&mut [u16]>. If the binding takes (u32, PWSTR, i32, u32), write: LCIDToLocaleName(langid as u32, windows::core::PWSTR(buf.as_mut_ptr()), buf.len() as i32, 0)."
+    ]
+  },
+  "findings": [
+    {
+      "id": "R61-01",
+      "severity": "P0",
+      "file": "crates/mp-app/src/mp/ (missing), crates/mp-app/src/extlibs/ (missing)",
+      "line": 0,
+      "cs_reference": "reference/MissionPlanner/{MainV2.cs,Program.cs,GCSViews/*,Controls/*,ExtLibs/Maps/*,...}",
+      "summary": "Carried over from R60-01. No Mission Planner project file has been ported. Of the UI ExtLibs, only WPOverlay.cs is ported, and it was placed in mp-core rather than the manifest's crates/mp-app/src/extlibs/maps/. About 94.5% of owned C# lines are still todo. FlightPlanner.writeKML, setgradanddistandaz, processToScreen, savewaypoints and the whole UI are still the pre-manifest egui reimplementation that calls into the ports.",
+      "required_fix": "Start the mp-app mirror: MainV2.cs and its Designer, then GCSViews/FlightPlanner.cs, whose writeKML is the WPOverlay caller. Move wpoverlay.rs to the manifest path, or update the manifest. Port GMap.NET.WindowsForms' GMapRoute/GMapPolygon/GMapMarkerRect rendering so the overlay is drawn by ported code."
+    },
+    {
+      "id": "R61-02",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1215,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1385-1400 (home = new PointLatLngAlt() unless TXT_homealt/lat/lng are all non-empty; then Tag \"H\" and Tag2 = CMB_altmode.SelectedValue), 1416-1419 (wpradius and loiterradius / CurrentState.multiplierdist, altunitmultiplier = CurrentState.multiplieralt); WPOverlay.cs:46 (home != PointLatLngAlt.Zero compares Lat, Lng, Alt, color and Tag); PointLatLngAlt.cs:126-154",
+      "summary": "The caller does not build home the way writeKML does. It always passes PointLatLngAlt::new_tagged(home.lat, home.lng, home.alt, \"H\"), and the view's default home is (0,0) (flight_plan.rs:176). Because Tag \"H\" differs from Zero's \"\", CreateOverlay treats (0,0) as a real home. It adds the H marker and route point, and RegenerateWPRoute draws a solid yellow 2 px homeroute [last, (0,0), first] for every mission, even one with a single waypoint. In C#, empty home fields give PointLatLngAlt.Zero. The first route point then acts as homepoint, and the loop closes through wp1 with a dashed leg. Tag2 (the alt mode) is not set. altunitmultiplier is hard-coded to 1.0, and wp_radius and loiter_radius are not divided by multiplierdist.",
+      "required_fix": "Pass PointLatLngAlt::zero() when the planner has no home, matching the empty TXT_home* state (track 'home set' explicitly; do not infer it from 0,0). Otherwise build new_tagged(lat, lng, alt / multiplieralt, \"H\") with Tag2 = the alt-mode value. Pass wpradius / multiplierdist, loiterradius / multiplierdist and multiplieralt from the units settings. Add a test that an unset home yields the C# [last, wp1, first] homeroute and no point at 0,0."
+    },
+    {
+      "id": "R61-03",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1218,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1408-1509 (wpOverlay inserted at Overlays[1] with its markers; lbl_distance sums overlay.Routes points; setgradanddistandaz(wpOverlay.pointlist, home); midline GMapMarkerPlus; fenceoverlay via WPOverlay with the vehicle or planned home), 1512-1580 (FENCE and RALLY mission types drawn with WPOverlay), 1421 (only FormatException is caught); GCSViews/FlightData.cs:3956-4046 (FlightData map draws the mission and fence through WPOverlay)",
+      "summary": "WPOverlay is only partly wired. The app keeps overlay.overlay.routes and discards the rest. (1) overlay.markers is dropped, so there are no LightBlue loiter-radius rects, no green spline markers, no red ROI marker plus 'Dont draw line' rect, and no per-item wprad/Color/FillColor. Instead the app draws uniform green pins and a white wp_radius circle for every located row (:1247-1280). (2) The pointlist is re-derived by the pre-manifest overlay_points (:979, :1863), which diverges. An unlocated DO_LAND_START gives no entry where C# adds null; other DO commands give no entry where C# adds null; and home counts when alt != 0. (3) lbl_distance comes from total_distance (:1487), which walks home -> items. C# sums every point of overlay.Routes, including the [last, home, first] leg, the spline curves and the DO_JUMP repeats. (4) Fence and rally are drawn by draw_fence and pins, not by WPOverlay with PointLatLngAlt.Zero and fencehome. (5) The FlightData map does not use WPOverlay at all. (6) On a non-Format exception, C# skips the overlay update and the old routes stay drawn; the app logs the error and draws no route. (7) CreateOverlay, including every Spline2 run, is recomputed on the UI thread every frame. C# calls it only from writeKML.",
+      "required_fix": "Render overlay.markers (Marker::Marker/Rect, with wprad circles in the Rect color and fill) and overlay.polygons. Delete overlay_points/grad_dist_az and feed setgradanddistandaz from WPOverlay.pointlist. Compute lbl_distance as C# does, from overlay.routes. Draw fence and rally through their own WPOverlay instances with the C# arguments (Zero home, fencehome = vehicle home else planned home). Wire the FlightData map. Cache the overlay and rebuild it only when the mission or home changes (the writeKML trigger points)."
+    },
+    {
+      "id": "R61-04",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1256,
+      "cs_reference": "ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapRoute.cs:131-139 (a local point beyond 99000 px forces DashStyle.Solid), 155-227 (DashStyle.Custom: draw solid, then two 15 px arrow strokes at angle +/-210 degrees from the midpoint of each path segment longer than 20 px); WPOverlay.cs:605-606",
+      "summary": "The app's route painter does not render the GMap pens as GMapRoute does. The 4 px wp route has DashStyle.Custom, which in Mission Planner means a solid line with direction arrows at every segment midpoint. The app draws a plain line, so the mission direction arrows are missing. The dashed home leg never falls back to solid when a point is far off-screen. The 3-on/1-off dash pattern is right.",
+      "required_fix": "Port GMapRoute.OnRender: for Custom, draw solid, then for each pair of consecutive screen points with r > 20 add the two 15 px arrow strokes at atan2(dy, dx) +/- 210 degrees from the midpoint (skip NaN angles; 'last' advances only after a drawn segment, as in C#). Switch Dash to Solid when any |x| or |y| exceeds 99000 px."
+    },
+    {
+      "id": "R61-05",
+      "severity": "P2",
+      "file": "crates/mp-core/src/extlibs/maps/wpoverlay.rs",
+      "line": 517,
+      "cs_reference": "WPOverlay.cs:493 (List<PointLatLng> list), 525 (list.Add(pv_vector_to_location(...)) converts to PointLatLng), 528 (list.Add(splinepnts[no]) converts the PointLatLngAlt to PointLatLng), 531 (wproute.Add(x) converts back through new PointLatLngAlt(PointLatLng): Alt 0, Tag \"\", Tag2 \"\", color White); PointLatLngAlt.cs:97-105",
+      "summary": "The spline list is Vec<PointLatLngAlt>, so the round trip through GMap's PointLatLng is lost. In C#, every generated spline point and every spline waypoint enters wproute with Alt 0, an empty Tag and Tag2, and color White. Rust keeps loc.z/100 as Alt for generated points, and keeps Tag \"n\", Tag2 \"spline\", the absolute Alt and the color for the spline waypoints. This changes the data in route.points and in homeroute's firstpoint/lastpoint whenever the first or last leg is a spline. Callers that read Alt or Tag (C#'s lbl_distance cast, later tooltips) see different values.",
+      "required_fix": "Hold the list as Vec<PointLatLng> (gmap_net_core::PointLatLng) and push p.point() for both sources. Extend wproute with PointLatLngAlt::from_point(x). Add a test asserting that a spline route point has Alt 0 and an empty Tag."
+    },
+    {
+      "id": "R61-06",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/maps/wpoverlay.rs",
+      "line": 376,
+      "cs_reference": "ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapPolygon.cs:231-262 (DefaultFill = SolidBrush(FromArgb(155, AliceBlue)), DefaultStroke = Pen(FromArgb(155, MidnightBlue)) width 5, LineJoin.Round; Points is List<PointLatLng>); WPOverlay.cs:30, 46-48 (a null home passes '!= Zero' and throws NullReferenceException at home.Tag), 297-299, 341, 403-457 (a null marker is added inside the try: Collection.Add stores the null, then the CollectionChanged handler throws)",
+      "summary": "There are smaller fidelity gaps in WPOverlay. (1) The incomplete-polygon default fill is 0x5FF0F8FF (alpha 95) where GMapPolygon.DefaultFill uses alpha 155. Both the comment and the constant are wrong; this is invisible only because incomplete polygons are never added. (2) Fence polygon points keep the PointLatLngAlt Tag, where C# stores PointLatLng. (3) home and fencehome cannot be null, so the C# NullReferenceException for a null home is lost. (4) addpolygonmarker with an unsupported mission type returns without effect. In C#, it adds a null marker and then throws inside the try, so the null remains in Markers. (5) Marker kinds are reduced to an enum, so GMapMarkerWP/GMarkerGoogle/GMapMarkerRect/GMapMarkerRallyPt defaults (ToolTip offsets, Rect default Color) cannot be read back.",
+      "required_fix": "Use FromArgb(155, AliceBlue) for the default fill. Store polygon points as PointLatLng. Take home as Option<&mut PointLatLngAlt> and fencehome as Option<&PointLatLngAlt> with C#'s null semantics. Model the null-marker path, or document that it is unreachable (every caller passes MISSION/FENCE/RALLY). Port the marker classes' fields, or record their defaults beside the enum."
+    },
+    {
+      "id": "R61-07",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1502,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1845-1870 (LoadWPFile: a first line that starts with '{' goes to MissionFile.ReadFile + ConvertToLocationwps, otherwise readQGC110wpfile), 975-997 (FENCE/RALLY cmds.RemoveAt(0); 'Can't open file! ' + ex), 4359-4420 (fence 'Load from File' reads .fen into drawnpolygon/geofenceoverlay, never WaypointFile), 5510-5545 (processToScreen clears the grid on an empty list, skips home when appending, and stops at id 0 or 255)",
+      "summary": "The mission load paths are wired differently from C#. read_mission_json (mission.rs:255) has no caller, and the Load WP File dialogs only accept waypoints/txt, so a .mission/.plan file can never be loaded. load_text keeps the old mission and shows 'Invalid Waypoint file' for a header-only file. C# clears the grid and shows nothing. processToScreen's break at the first id-0/255 row is not applied, so list[1..] is copied whole. Load and Append errors when the file has only home; C# silently appends nothing. load_list (menu.rs:693) calls WaypointFile for the fence and rally menus and falls back to a home-made .fen parser. C#'s fence 'Load from File' is a .fen reader that fills the drawn polygon and return marker. load_list also keeps cmds[0] (home) as the first fence or rally item, where readQGC110wpfile removes it for FENCE and RALLY.",
+      "required_fix": "Port LoadWPFile's dispatch on the first line, calling read_mission_json for '{'. Port processToScreen (clear, append and break rules) and route every load through it. Port loadFromFileToolStripMenuItem_Click and the rally loader as they are, and apply RemoveAt(0) for FENCE and RALLY WPL loads."
+    },
+    {
+      "id": "R61-08",
+      "severity": "P2",
+      "file": "crates/mp-core/src/mission.rs",
+      "line": 219,
+      "cs_reference": "GCSViews/FlightPlanner.cs:6083-6180 (savewaypoints: StreamWriter.WriteLine gives CRLF; each cell goes through double.Parse(cell.ToString()).ToString(\"0.00000000\", en-US); a home parse failure writes '0\\t1\\t0\\t0\\t0\\t0\\t0\\t0\\t0\\t0\\t0\\t1'), 3070-3115 (DataViewtoLocationwp never sets _seq); Locationwp.cs:140-151 (doJumpId = _seq)",
+      "summary": "The writers are still not savewaypoints. write_waypoint_file uses '\\n' line ends, where StreamWriter on Windows writes CRLF. It formats the f32 params with {:.8} on the binary value (45.3f prints 45.29999924), where C# re-parses the grid's float text and prints 45.30000000. Rust rounds half-to-even on the binary value; .NET custom formats round half away from zero. The home-failure line is missing. mavlog.rs:233 and save_list use the same writer. write_mission_json converts the app rows with their seq, so a mission downloaded from a vehicle saves doJumpId 1..n. C#'s grid rows always have _seq 0, so every item gets doJumpId 0.",
+      "required_fix": "Port savewaypoints: write CRLF and format with format_fixed over the float-to-string-to-double round trip (ToString() then double.Parse) for p1-p4/lat/lng/alt. Write the C# fallback home line. Clear seq (0) in write_mission_json, as DataViewtoLocationwp does. Add golden-text tests."
+    },
+    {
+      "id": "R61-09",
+      "severity": "P2",
+      "file": "crates/mp-core/src/paramfile.rs",
+      "line": 34,
+      "cs_reference": "ExtLibs/Utilities/ParamFile.cs:85-107 (SaveParamFile: SortedList of keys; value = double.Parse(paramlist[item].ToString()); written with ToString(CultureInfo.InvariantCulture); no header); GCSViews/ConfigurationView/ConfigRawParams.cs:252",
+      "summary": "Only loading delegates to ParamFile. paramfile::save writes a '#NOTE: dd/mm/yyyy HH:MM:SS' header that SaveParamFile never writes. Its values come from format_value, which applies {:.7} to the f32 and trims zeros, where C# prints the double with invariant G15/R. It writes the caller's iteration order instead of the SortedList key order. ConfigRawParams' save (config.rs:1279) and the mavlog extractor (mavlog.rs:212) both use it. format_value is also used for every displayed parameter value in place of the C# grid's formatting.",
+      "required_fix": "Route saves through the ported ParamFile::SaveParamFile (or a text twin factored out of it) with the C# key order and double formatting, and drop the #NOTE header. Check each display use of format_value against the C# control that shows that value."
+    },
+    {
+      "id": "R61-10",
+      "severity": "P2",
+      "file": "crates/mp-core/src/rtk.rs",
+      "line": 42,
+      "cs_reference": "GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:757-834 (after a frame is seen, the other parsers are reset: rtcm -> sbp/ubx/nmea, sbp -> rtcm/ubx/nmea, ubx -> rtcm/sbp/nmea, nmea -> rtcm/sbp/ubx; the test is '> 0'; an exception drops the rest of the read buffer at the outer catch and resets nothing), 908-925 (ProcessUBXMessage: ByteArrayToStructure<ubx_nav_svin>(6); valid == 1, active == 1); ExtLibs/Utilities/ubx_m8p.cs:440-472 (baud hunt, CFG-PRT and the sleeps)",
+      "summary": "rtk::Parser is not the inject loop. It never cross-resets the parsers after a frame, so a partial UBX parse survives an RTCM frame and the reverse. It accepts msgtype/id 0 (>= 0, where C# uses > 0). On an exception it resets only the failing parser and carries on with the next byte, where C# leaves parser state alone and discards the remainder of the 110/180-byte read. There are no sbp, nmea or SLCAN parsers in the loop. nav_svin maps valid/active with != 0, where C# uses == 1. A short payload gives None, where C# decodes a default (all-zero) struct and still updates the SVIN label. setup_m8p sends its list back to back through the inject writer, without the 10/100/200/300 ms pacing, the baud hunt with 'UU', the two CFG-PRT writes or the switch to 460800. Septentrio and Unicore setup strings are still inline in rtk_page.rs:103-113 instead of calling septentrio.rs and unicore.rs.",
+      "required_fix": "Port ConfigSerialInjectGPS's read loop with its four (five with CAN) parsers, the cross-resets, the '> 0' tests and the outer-catch semantics. Decode NAV-SVIN through MavlinkUtil.ByteArrayToStructure (see R60-03) and compare with == 1. Run Ubx.SetupM8P/SetupBasePos on the serial port itself (task-shaped, see R59-03). Call Septentrio and Unicore through their ports."
+    },
+    {
+      "id": "R61-11",
+      "severity": "P3",
+      "file": "crates/mp-app/src/swarm.rs",
+      "line": 136,
+      "cs_reference": "Swarm/Formation.cs:62-64, 86-110 (one CoordinateTransformationFactory transform per call: WGS84_UTM((int)((Lng + 186) / 6), masterpos.Lat >= 0), used forward and inverse); Swarm/FormationControl.cs:221-253 (the leader's zone and hemisphere are used for both the leader and the follower); ExtLibs/Utilities/PointLatLngAlt.cs TryGetTransform (static per-zone cache, hemisphere from the transformed point's lat)",
+      "summary": "The formation maths is wired to the wrong C# function. to_utm calls PointLatLngAlt.ToUTM(utmzone, lat, lng). That function picks the hemisphere from each point's own latitude, flips a positive zone for a southern point, and returns whatever transform the static cache first stored for that signed zone. Formation and FormationControl build one uncached transform from the leader's unsigned zone and hemisphere, and use it for both points. A follower on the other side of the equator from the leader is projected in a different hemisphere, or with the leader's transform, depending on cache history. The resulting offsets and targets differ by about 10,000 km of false northing.",
+      "required_fix": "Build the transform as Formation does: ProjectedCoordinateSystem::wgs84_utm(unsigned zone, leader.lat >= 0) with create_from_wgs84_to_projected, then transform and inverse with that one object, with no cache. Use it in offset_from_leader and target_for."
+    },
+    {
+      "id": "R61-12",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 75,
+      "cs_reference": "GCSViews/FlightPlanner.cs:2731-2763 (convertFromGeographic: ToString(\"0.000\") in the current culture; an exception leaves the cells unchanged), 2765-2815 (convertFromMGRS/convertFromUTM: int.Parse/double.Parse in the current culture; an exception or 0,0 leaves Lat/Lon unchanged); ExtLibs/Controls/Coords.cs:100-159",
+      "summary": "The coords wiring has formatting and error-path divergences. coord_cells formats easting/northing with {:.3} (invariant '.', half-even), where C# uses ToString(\"0.000\", current culture), which rounds half away from zero. When ProjNet fails, Rust writes 'NaN' and an empty MGRS; C# leaves the previous cell text. coords::utm_signed_to_geo returns (NaN, NaN) on an exception, and coords_from_cells hands that to the row, so Lat/Lng become NaN where C# keeps them (utm.ToLLA() throws inside the try). The cells are parsed with str::parse instead of int/double.Parse in the current culture. The GEO/UTM mouse readout uses {:.7}/{:.2}, where C# uses ToString(\"0.0000000\")/\"0.00\" in the current culture. The doc comments in coords.rs show decimals and MGRS digits that the functions do not produce.",
+      "required_fix": "Use format_fixed(x, 1, 3, current_culture()) and the culture-aware parsers. Return Option/Result from utm_signed_to_geo and leave the row unchanged on error. Keep the previous cell text when a conversion throws. Correct the doc comments."
+    },
+    {
+      "id": "R61-13",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/ardupilot/serial.rs",
+      "line": 27,
+      "cs_reference": "ExtLibs/ArduPilot/Serial.cs (print -> Console.Write); System.Console.Out (Console.OutputEncoding = OEM code page)",
+      "summary": "R60-10 is only partly fixed. mavlinkutil.rs:236, commsserialport.rs:704/723, serialtest.rs:56/64, linux.rs and Serial.println now use console_write_line, but Serial.print still uses print! (it panics on a broken stdout and bypasses the helper). The helpers still write UTF-8 instead of Console.OutputEncoding. Linux.cs's Console.WriteLine(ex) prints the exception's ToString(), with type name and stack trace; the port prints only the message.",
+      "required_fix": "Use dotnet::io::console_write in Serial.print. Encode with the console output code page in the helpers. Print exceptions with their .NET ToString() format."
+    },
+    {
+      "id": "R61-14",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/ubx_m8p.rs",
+      "line": 738,
+      "cs_reference": "ubx_m8p.cs:574-616 (basepos == PointLatLngAlt.Zero with a null basepos is false; NullReferenceException at basepos.Lat after both 100 ms sleeps)",
+      "summary": "R60-04 is fixed for class(), subclass() and Read: every index goes through get/put and returns IndexOutOfRange. The null-basepos half is still open, because SetupBasePos takes &PointLatLngAlt.",
+      "required_fix": "Take basepos as Option<&PointLatLngAlt>. None compares unequal to Zero, then fails with NullReference at the fixed-position branch after the sleeps."
+    },
+    {
+      "id": "R61-15",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/maps/wpoverlay.rs",
+      "line": 618,
+      "cs_reference": "No C# tests exist for WPOverlay; behaviour is the spec",
+      "summary": "The three WPOverlay tests are self-consistency checks. None covers the loiter tangent exit (p4 == 1, dist > radius, direction sign), DO_LAND_START or LAND splits (the route regenerated without the home leg), ROI markers and 0,0 hiding, the exclusion polygon fill/stroke, the circle exclusion fill colour, FENCE_HOME_CIRCLE_INCLUSION's 73 points, rally markers, GetHomeAlt's terrain/-999 branch, or the Math.Sign NaN exception. The spline test only checks that more than 6 points exist and that the last tag is '4'. There is no golden point list from the reference build (R59-15, R60-11).",
+      "required_fix": "Record CreateOverlay output (markers with tag/wprad/color, route and homeroute points, polygons) from the C# build for a mission covering every branch, and assert exact equality. Add unit tests for each branch listed."
+    }
+  ],
+  "round_60_status": {
+    "fixed": [],
+    "partly_fixed": [
+      "R60-02: wiring now exists (see manifest_summary.wiring). rtk.rs no longer re-implements UBX/RTCM framing, checksums, tmode3 or NAV-SVIN; it calls rtcm3, crc24, type1005/1006, Ubx and ubx_cfg_tmode3, and setup_m8p now includes RXM-RAWX/SFRBX/RAW/SFRB and MON-HW. Spline2 is used through WPOverlay for SPLINE_WAYPOINT legs. Still open: ConfigSerialInjectGPS.cs is not ported (R61-10), and the baud hunt, CFG-PRT and pacing are missing.",
+      "R60-04: class(), subclass() and Read steps 0-8 return IndexOutOfRange instead of panicking (ubx_m8p.rs:478-578). The SetupBasePos null basepos is still open (R61-14).",
+      "R60-10: mavlinkutil.rs, commsserialport.rs, serialtest.rs, linux.rs and Serial.println use console_write_line. serial.rs:27 print! and the console encoding remain (R61-13)."
+    ],
+    "still_open": [
+      "R60-01 (now R61-01).",
+      "R60-03: the UBX structs still bypass MarshalStruct/ByteArrayToStructure. rtk::nav_svin now depends on that path, and its short-buffer behaviour differs (R61-10).",
+      "R60-05: set_spline_destination still checks for a null origin up front (spline2.rs:188-192).",
+      "R60-06, R60-07: unchanged (rle.rs).",
+      "R60-08, R60-09: unchanged. WPOverlay adds another C# class (WPOverlay, GMapOverlay) that derives Clone.",
+      "R60-11: unchanged; WPOverlay adds more self-consistency tests (R61-15).",
+      "Older items still open as listed in round 60 (R59-03/04/05 items 2-4, R59-07/08/09/10/11/12/13/14/15, R58-06 items 2-9, R58-09, R58-14, R58-15, R58-18, R57-04/05/06/07/09/11/13/14/15/16/17)."
+    ]
+  },
+  "next_steps": [
+    "R61-02: pass PointLatLngAlt.Zero when no home is set, and pass the C# unit multipliers. This removes the yellow home leg to 0,0.",
+    "R61-03/R61-04: draw overlay.markers and overlay.polygons, port GMapRoute.OnRender (Custom arrows, the 99000 px solid fallback), use WPOverlay.pointlist for setgradanddistandaz and overlay.routes for lbl_distance, draw fence and rally through their own WPOverlay instances, wire the FlightData map, and cache the overlay between mission changes.",
+    "R61-05/R61-06: keep the PointLatLng round trip in RegenerateWPRoute, fix the GMapPolygon default fill alpha, and model null home/fencehome.",
+    "R61-07/R61-08: port FlightPlanner.LoadWPFile (with '{' dispatch to read_mission_json), processToScreen, savewaypoints (CRLF, C# number formatting, doJumpId 0) and the .fen/rally loaders.",
+    "R61-09: route parameter saving through ParamFile.SaveParamFile.",
+    "R61-10/R60-03: port ConfigSerialInjectGPS's read loop with cross-resets and the outer-catch semantics, decode UBX through MavlinkUtil, run SetupM8P/SetupBasePos on the port as a task (R59-03), and call Septentrio/Unicore through their ports.",
+    "R61-11: build Formation's own uncached UTM transform from the leader's zone and hemisphere.",
+    "R61-12/R61-13/R61-14: culture-aware coords formatting and error paths, the remaining Console routing, and the SetupBasePos null basepos.",
+    "R61-15/R60-11: golden data from the reference build for WPOverlay (every branch), UBX transcripts, Huffman trees and RTCM decoding.",
+    "Then GCSViews/FlightPlanner.cs file by file (writeKML is now the natural seam), followed by MAVLinkInterface/MAVState/CurrentState and MainV2. Regenerate port/MANIFEST.md once commands are allowed, and move wpoverlay.rs to its manifest path."
+  ],
+  "verdict": "This is the first wiring round. WPOverlay.cs (611 lines) is ported closely, and the app now runs real C# logic in eight areas: WPOverlay and Spline2 route drawing, WaypointFile reading, MissionFile .mission writing, GeoUtility/ProjNet/utmpos coordinates, rtcm3/Ubx inject parsing and UBX packet building, ParamFile loading, the Quaternion maths and PointLatLngAlt distances. No definite compile error was found. The largest new problem is in the caller: the app tags a (0,0) home with \"H\", so it is not Zero, and every mission gets a solid home leg to Null Island. Otherwise only the routes are taken from the overlay. The markers, pointlist, fence/rally overlays and FlightData map are still pre-manifest, and the Custom route arrows are not drawn. Spline points keep data that C# strips. The .plan load, WPL save, param save and inject loop are still not the C# paths. Owned progress is about 5.5% (26,127 / 479,014), so the cap is 1.6. Awarded 1.2; round-file fidelity is 6.4/10; UI/UX stays at 2.0 and features rise to 2.8."
+}

@@ -1,68 +1,54 @@
-//! Port of `ParamFile`: Mission Planner `.param` files ("NAME,VALUE" per line, `#` comments).
+//! The app's `.param` file entry points, as a layer over the file-by-file port of
+//! `ExtLibs/Utilities/ParamFile.cs` (`extlibs::utilities::paramfile::ParamFile`): loading
+//! goes through `ParamFile.loadParamFile`'s rules (comment lines, separators, the excluded
+//! counter/calibration names, FormatException on a bad number).
 
 use std::collections::BTreeMap;
+
+use crate::extlibs::utilities::paramfile::ParamFile;
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {
     #[error("{0}")]
     Io(#[from] std::io::Error),
-    #[error("Invalid number on param {name} : {value} (line {line})")]
-    InvalidNumber { name: String, value: String, line: usize },
+    /// The exception `ParamFile.loadParamFile` throws (its `Message`).
+    #[error("{}", .0.message())]
+    Exception(crate::dotnet::Exception),
 }
 
-// ExtLibs/Utilities/ParamFile.cs filters these in the shared reader, so both
-// ConfigRawParams Load and ParamCompare exclude them.
-const EXCLUDED: &[&str] = &["SYSID_SW_MREV", "WP_TOTAL", "CMD_TOTAL", "FENCE_TOTAL", "SYS_NUM_RESETS", "ARSPD_OFFSET", "GND_ABS_PRESS", "GND_TEMP", "BARO1_GND_PRESS", "BARO2_GND_PRESS", "BARO3_GND_PRESS", "BARO_GND_TEMP", "CMD_INDEX", "LOG_LASTFILE", "FORMAT_VERSION"];
+fn to_map(d: crate::dotnet::collections::Dictionary<String, f64>) -> BTreeMap<String, f32> {
+    d.iter().map(|(k, v)| (k.clone(), *v as f32)).collect()
+}
 
+/// `ParamFile.loadParamFile` over the file's text.
 pub fn load(text: &str) -> Result<BTreeMap<String, f32>, LoadError> {
-    let mut out = BTreeMap::new();
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
-    for (number, line) in text.lines().enumerate() {
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let mut it = line
-            .split(|c: char| c == ',' || c == '\t' || c == ' ')
-            .filter(|s| !s.is_empty());
-        if let (Some(name), Some(val)) = (it.next(), it.next()) {
-            let value = val.parse::<f64>().map_err(|_| LoadError::InvalidNumber { name: name.into(), value: val.into(), line: number + 1 })?;
-            if !EXCLUDED.contains(&name) { out.insert(name.to_string(), value as f32); }
-        }
-    }
-    Ok(out)
+    ParamFile::load_text(text).map(to_map).map_err(LoadError::Exception)
 }
 
-/// StreamReader-style BOM detection. Like .NET's default decoder, malformed
-/// code units become replacement characters, then numeric parsing decides validity.
+/// `ParamFile.loadParamFile(path)`: StreamReader BOM detection, then the C# parsing rules.
 pub fn read(path: &std::path::Path) -> Result<BTreeMap<String, f32>, LoadError> {
-    let bytes = std::fs::read(path)?;
-    let text = if bytes.starts_with(&[0xff, 0xfe, 0, 0]) || bytes.starts_with(&[0, 0, 0xfe, 0xff]) {
-        let little = bytes[0] == 0xff;
-        let mut text: String = bytes[4..].chunks_exact(4).map(|b| {
-            let code = if little { u32::from_le_bytes(b.try_into().unwrap()) } else { u32::from_be_bytes(b.try_into().unwrap()) };
-            char::from_u32(code).unwrap_or(char::REPLACEMENT_CHARACTER)
-        }).collect();
-        if (bytes.len() - 4) % 4 != 0 { text.push(char::REPLACEMENT_CHARACTER); }
-        text
-    } else if bytes.starts_with(&[0xff, 0xfe]) || bytes.starts_with(&[0xfe, 0xff]) {
-        let little = bytes[0] == 0xff;
-        let units: Vec<u16> = bytes[2..].chunks_exact(2).map(|b| if little { u16::from_le_bytes([b[0],b[1]]) } else { u16::from_be_bytes([b[0],b[1]]) }).collect();
-        let mut text = String::from_utf16_lossy(&units);
-        if (bytes.len() - 2) % 2 != 0 { text.push(char::REPLACEMENT_CHARACTER); }
-        text
-    } else { String::from_utf8_lossy(&bytes).into_owned() };
-    load(&text)
+    ParamFile::loadParamFile(&path.to_string_lossy()).map(to_map).map_err(LoadError::Exception)
 }
 
+/// `ParamFile.SaveParamFile` as ConfigRawParams calls it: each row's value cell text goes
+/// through `double.Parse`, keys are written in SortedList order, no header.
 pub fn save<'a>(params: impl IntoIterator<Item = (&'a String, f32)>) -> String {
-    let mut s = format!(
-        "#NOTE: {}\r\n",
-        chrono::Local::now().format("%d/%m/%Y %H:%M:%S")
-    );
-    for (name, value) in params {
-        s.push_str(&format!("{name},{}\r\n", format_value(value)));
-    }
-    s
+    // data[name] = double.Parse(cell text): the cell holds the float's ToString() (G7, current
+    // culture), parsed to a double whose ToString() SaveParamFile parses back in the same
+    // culture, so the file gets the cell's digits ("0.135", not the widened float's G15)
+    let list: Vec<(String, String)> = params
+        .into_iter()
+        .map(|(name, value)| {
+            let cell = crate::dotnet::float_to_string(value);
+            let text = crate::dotnet::double_parse(&cell).map(crate::dotnet::double_to_string).unwrap_or(cell);
+            (name.clone(), text)
+        })
+        .collect();
+    ParamFile::save_text(&list).unwrap_or_else(|e| {
+        log::error!("{e}");
+        String::new()
+    })
 }
 
 /// Format like Mission Planner: integers without a decimal point, floats with up to 7 digits.
@@ -92,10 +78,17 @@ mod tests {
 
     #[test]
     fn reference_exclusions_apply_to_all_imports_and_bad_numbers_abort_the_file() {
+        let excluded = [
+            "SYSID_SW_MREV", "WP_TOTAL", "CMD_TOTAL", "FENCE_TOTAL", "SYS_NUM_RESETS", "ARSPD_OFFSET", "GND_ABS_PRESS", "GND_TEMP",
+            "BARO1_GND_PRESS", "BARO2_GND_PRESS", "BARO3_GND_PRESS", "BARO_GND_TEMP", "CMD_INDEX", "LOG_LASTFILE", "FORMAT_VERSION",
+        ];
         let mut text = "ALT,5\n".to_string();
-        for name in EXCLUDED { text.push_str(&format!("{name},99\n")); }
+        for name in excluded { text.push_str(&format!("{name},99\n")); }
         assert_eq!(load(&text).unwrap(), BTreeMap::from([("ALT".into(), 5.0)]));
-        assert!(matches!(load("ALT,5\nOTHER,bad\n"), Err(LoadError::InvalidNumber { line: 2, .. })));
+        match load("ALT,5\nOTHER,bad\n") {
+            Err(LoadError::Exception(e)) => assert_eq!(e.message(), "Invalid number on param OTHER : bad"),
+            other => panic!("{other:?}"),
+        }
         // Source parses a value before deciding whether to exclude its name.
         assert!(load("FORMAT_VERSION,bad").is_err());
     }

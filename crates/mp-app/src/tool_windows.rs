@@ -128,36 +128,13 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 
 // ------------------------------------------------------------------ FFT
 
+/// The forward FFT through the port of `fft.cs` (FFT2.init(log2 n) + run); `n` is a power
+/// of two.
 fn fft(re: &mut [f64], im: &mut [f64]) {
-    let n = re.len();
-    let mut j = 0;
-    for i in 1..n {
-        let mut bit = n >> 1;
-        while j & bit != 0 {
-            j ^= bit;
-            bit >>= 1;
-        }
-        j |= bit;
-        if i < j {
-            re.swap(i, j);
-            im.swap(i, j);
-        }
-    }
-    let mut len = 2;
-    while len <= n {
-        let ang = -2.0 * std::f64::consts::PI / len as f64;
-        for i in (0..n).step_by(len) {
-            for k in 0..len / 2 {
-                let (s, c) = (ang * k as f64).sin_cos();
-                let (ur, ui) = (re[i + k], im[i + k]);
-                let (vr, vi) = (re[i + k + len / 2] * c - im[i + k + len / 2] * s, re[i + k + len / 2] * s + im[i + k + len / 2] * c);
-                re[i + k] = ur + vr;
-                im[i + k] = ui + vi;
-                re[i + k + len / 2] = ur - vr;
-                im[i + k + len / 2] = ui - vi;
-            }
-        }
-        len <<= 1;
+    let mut f = mp_core::extlibs::utilities::FFT2::new();
+    f.init(re.len().trailing_zeros());
+    if let Err(e) = f.run(re, im, false) {
+        log::error!("{e}");
     }
 }
 
@@ -195,17 +172,68 @@ struct Output {
     last: Instant,
 }
 
+/// The Warning Manager's new row: (field, condition, value, repeat seconds, text).
 #[derive(Clone)]
 struct Warning {
     field: String,
-    op: usize,
+    op: mp_core::extlibs::utilities::warnings::Conditional,
     value: f64,
     text: String,
-    repeat: f64,
-    last: Option<Instant>,
+    repeat: i32,
 }
 
-const OPS: [&str; 5] = ["<", ">", "==", "<=", ">="];
+/// `CustomWarning.defaultsrc = comPort.MAV.cs`: the vehicle state as of the last frame.
+struct CsSource(std::sync::Arc<std::sync::RwLock<mp_core::state::CurrentState>>);
+
+impl mp_core::extlibs::utilities::warnings::PropertySource for CsSource {
+    fn property_names(&self) -> Vec<String> {
+        mp_core::state::properties::PROPERTIES.iter().map(|(n, _)| n.to_string()).collect()
+    }
+    fn property_value(&self, name: &str) -> Option<mp_core::extlibs::utilities::warnings::PropertyValue> {
+        use mp_core::extlibs::utilities::warnings::PropertyValue;
+        use mp_core::state::properties::PropertyKind;
+        let (_, kind) = mp_core::state::properties::PROPERTIES.iter().find(|(n, _)| *n == name)?;
+        let cs = self.0.read().ok()?;
+        Some(match kind {
+            PropertyKind::Number | PropertyKind::Bool => cs.field(name).map(PropertyValue::Number).unwrap_or(PropertyValue::Null),
+            PropertyKind::Text => PropertyValue::Text(String::new()),
+            PropertyKind::Object => PropertyValue::Object,
+        })
+    }
+}
+
+/// MainV2's `speechEngine` as WarningEngine's ISpeech.
+struct AppSpeech;
+
+impl mp_core::extlibs::utilities::ispeech::ISpeech for AppSpeech {
+    fn speechEnable(&self) -> bool {
+        true
+    }
+    fn set_speechEnable(&self, _value: bool) {}
+    fn is_ready(&self) -> bool {
+        true
+    }
+    fn speak_async(&self, text: &str) {
+        crate::speech::say(text.to_string());
+    }
+    fn speak_async_cancel_all(&self) {}
+}
+
+static CS_SNAPSHOT: std::sync::OnceLock<std::sync::Arc<std::sync::RwLock<mp_core::state::CurrentState>>> = std::sync::OnceLock::new();
+/// WarningMessage texts waiting to become `cs.messageHigh` on the next frame
+static MESSAGE_HIGH: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// MainV2: `CustomWarning.defaultsrc = comPort.MAV.cs;
+/// WarningEngine.Start(speechEnable ? speechEngine : null);
+/// WarningEngine.WarningMessage += (sender, s) => MAV.cs.messageHigh = s;`
+pub fn start_warning_engine(planner: &std::collections::BTreeMap<String, String>) {
+    use mp_core::extlibs::utilities::warnings::{CustomWarning, WarningEngine};
+    let snap = CS_SNAPSHOT.get_or_init(Default::default).clone();
+    CustomWarning::set_defaultsrc(Some(std::sync::Arc::new(CsSource(snap))));
+    let speech_enable = planner.get("speechenable").is_some_and(|v| v.eq_ignore_ascii_case("true"));
+    WarningEngine::Start(if speech_enable { Some(std::sync::Arc::new(AppSpeech)) } else { None });
+    WarningEngine::add_WarningMessage(std::sync::Arc::new(|s: &str| MESSAGE_HIGH.lock().unwrap().push(s.to_string())));
+}
 
 enum Prompt {
     MsgInterval { name: String, rate: String },
@@ -324,7 +352,6 @@ pub struct Tools {
     outputs: Vec<Output>,
     out_window: Option<OutKind>,
     out_target: String,
-    warnings: Vec<Warning>,
     warn_open: bool,
     warn_new: Option<Warning>,
     mirror_open: bool,
@@ -727,7 +754,7 @@ impl Tools {
             }
         }
         self.output_ui(ctx);
-        self.warn_ui(ctx, &cs);
+        self.warn_ui(ctx, &cs, toasts);
         self.mirror_ui(ctx, link);
         self.follow_ui(ctx);
         self.prox_ui(ctx, link);
@@ -735,7 +762,7 @@ impl Tools {
         self.fft_ui(ctx);
     }
 
-    fn tick(&mut self, link: Option<&Link>, cs: &CurrentState, toasts: &mut Toasts) {
+    fn tick(&mut self, link: Option<&Link>, cs: &CurrentState, _toasts: &mut Toasts) {
         for o in &mut self.outputs {
             if o.last.elapsed() < Duration::from_millis(500) {
                 continue;
@@ -768,18 +795,16 @@ impl Tools {
                 }
             }
         }
-        for w in &mut self.warnings {
-            let Some(v) = cs.field(&w.field) else { continue };
-            let hit = match w.op {
-                0 => v < w.value,
-                1 => v > w.value,
-                2 => (v - w.value).abs() < 1e-6,
-                3 => v <= w.value,
-                _ => v >= w.value,
-            };
-            if hit && w.last.map(|t| t.elapsed().as_secs_f64() > w.repeat).unwrap_or(true) {
-                w.last = Some(Instant::now());
-                toasts.info(format!("{} ({} {} {})", w.text, w.field, OPS[w.op], w.value));
+        // WarningEngine reads defaultsrc; its WarningMessage sets messageHigh
+        if let Some(snap) = CS_SNAPSHOT.get() {
+            if let Ok(mut s) = snap.write() {
+                *s = cs.clone();
+            }
+        }
+        let pending: Vec<String> = std::mem::take(&mut *MESSAGE_HIGH.lock().unwrap());
+        if let Some(l) = link {
+            for m in &pending {
+                l.shared.write().cs.set_message_high(m);
             }
         }
     }
@@ -944,25 +969,30 @@ impl Tools {
         }
     }
 
-    fn warn_ui(&mut self, ctx: &egui::Context, cs: &CurrentState) {
+    fn warn_ui(&mut self, ctx: &egui::Context, cs: &CurrentState, toasts: &mut Toasts) {
         if !self.warn_open {
             return;
         }
         let mut open = true;
         let fields: Vec<&'static str> = cs.fields().into_iter().map(|(n, _)| n).collect();
         let mut remove = None;
+        let mut add_error: Option<String> = None;
         egui::Window::new(crate::i18n::t("Warning Manager")).open(&mut open).collapsible(false).default_size([520.0, 300.0]).show(ctx, |ui| {
             egui::Grid::new("warnings").num_columns(6).striped(true).show(ui, |ui| {
                 for h in ["Field", "Op", "Value", "Repeat (s)", "Say", ""] {
                     theme::label(ui, h);
                 }
                 ui.end_row();
-                for (i, w) in self.warnings.iter().enumerate() {
-                    theme::label(ui, &w.field);
-                    theme::label(ui, OPS[w.op]);
-                    theme::label(ui, w.value.to_string());
-                    theme::label(ui, w.repeat.to_string());
-                    theme::label(ui, &w.text);
+                use mp_core::extlibs::utilities::warnings::WarningEngine;
+                let rows: Vec<(String, String, f64, i32, String)> = WarningEngine::warnings(|w| {
+                    w.iter().map(|w| (w.Name().to_string(), w.ConditionType.to_string(), w.Warning, w.RepeatTime, w.Text().unwrap_or("").to_string())).collect()
+                });
+                for (i, (name, op, value, repeat, text)) in rows.iter().enumerate() {
+                    theme::label(ui, name);
+                    theme::label(ui, op);
+                    theme::label(ui, mp_core::dotnet::double_to_string(*value));
+                    theme::label(ui, repeat.to_string());
+                    theme::label(ui, text);
                     if theme::button(ui, "Delete").clicked() {
                         remove = Some(i);
                     }
@@ -970,30 +1000,61 @@ impl Tools {
                 }
             });
             ui.separator();
-            let nw = self.warn_new.get_or_insert_with(|| Warning { field: "alt".into(), op: 0, value: 10.0, text: "Altitude low".into(), repeat: 10.0, last: None });
+            let nw = self.warn_new.get_or_insert_with(|| Warning {
+                field: "alt".into(),
+                op: mp_core::extlibs::utilities::warnings::Conditional::LT,
+                value: 10.0,
+                text: "WARNING: {name} is {value}".into(),
+                repeat: 10,
+            });
             ui.horizontal(|ui| {
                 egui::ComboBox::from_id_salt("wm_field").width(110.0).selected_text(nw.field.as_str()).show_ui(ui, |ui| {
                     for f in &fields {
                         ui.selectable_value(&mut nw.field, f.to_string(), *f);
                     }
                 });
-                egui::ComboBox::from_id_salt("wm_op").width(40.0).selected_text(OPS[nw.op]).show_ui(ui, |ui| {
-                    for (k, o) in OPS.iter().enumerate() {
-                        ui.selectable_value(&mut nw.op, k, *o);
+                egui::ComboBox::from_id_salt("wm_op").width(60.0).selected_text(nw.op.to_string()).show_ui(ui, |ui| {
+                    for o in mp_core::extlibs::utilities::warnings::Conditional::get_values() {
+                        ui.selectable_value(&mut nw.op, o, o.to_string());
                     }
                 });
                 ui.add(egui::DragValue::new(&mut nw.value).speed(0.1));
-                ui.add(egui::DragValue::new(&mut nw.repeat).range(1.0..=3600.0));
+                ui.add(egui::DragValue::new(&mut nw.repeat).range(0..=3600));
                 ui.add(egui::TextEdit::singleline(&mut nw.text).desired_width(120.0));
             });
             if theme::button(ui, "Add").clicked() {
                 if let Some(w) = self.warn_new.clone() {
-                    self.warnings.push(w);
+                    use mp_core::extlibs::utilities::warnings::{CustomWarning, WarningEngine};
+                    let mut cw = CustomWarning::new();
+                    match cw.set_Name(&w.field) {
+                        Ok(()) => {
+                            cw.ConditionType = w.op;
+                            cw.Warning = w.value;
+                            cw.RepeatTime = w.repeat;
+                            cw.set_Text(Some(w.text.clone()));
+                            WarningEngine::warnings(|list| list.push(cw));
+                            if let Err(e) = WarningEngine::SaveConfig() {
+                                add_error = Some(e.to_string());
+                            }
+                        }
+                        Err(e) => add_error = Some(e.to_string()),
+                    }
                 }
             }
         });
+        if let Some(e) = add_error {
+            toasts.error(e);
+        }
         if let Some(i) = remove {
-            self.warnings.remove(i);
+            use mp_core::extlibs::utilities::warnings::WarningEngine;
+            WarningEngine::warnings(|list| {
+                if i < list.len() {
+                    list.remove(i);
+                }
+            });
+            if let Err(e) = WarningEngine::SaveConfig() {
+                toasts.error(e.to_string());
+            }
         }
         if !open {
             self.warn_open = false;

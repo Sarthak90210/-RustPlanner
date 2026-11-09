@@ -1,0 +1,670 @@
+{
+  "round": 72,
+  "date": "2026-11-09",
+  "reviewed_head": "0eddbe4 + uncommitted",
+  "commands_run": [
+    {
+      "command": "git status --short ; git diff --stat ; git diff --text -- crates/mp-core/src/dataflash.rs crates/mp-core/src/state.rs ; git show HEAD:port/manifest.json",
+      "result": "Read-only. The tracked diff now includes dataflash.rs, state.rs (mod properties made pub), tool_windows.rs, app.rs, units.rs and the round-71 files. Plain 'git diff' prints 'Binary files a/crates/mp-core/src/dataflash.rs and b/... differ' because the file holds raw NUL bytes at lines 81 and 209 (dotnet/mod.rs:146 has one too). With --text the diff shows the old hand-written decoder (field_size/decode/parse) removed and parse() rebuilt over DFLogBuffer. The new ExtLibs/Utilities files and warnings/ are untracked."
+    },
+    {
+      "command": "cargo build --workspace --all-targets",
+      "result": "exit 0. 'Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.27s'. No warnings were emitted."
+    },
+    {
+      "command": "cargo test --workspace",
+      "result": "exit 0, in one full run. mp_app lib: 155 passed, 1 ignored (gstreamer::tests::real_runtime_plays_the_default_test_pipeline). missionplanner bin: 0. mp_core lib: 245 passed (233 last round plus 12 new: binarylog 2, dflog 2, dflogbuffer 2, compasscalibrator 2, customwarning 1, warningengine 1, dotnet decimal 2). Integration tests: altitude_change 7, camera_ftp 1, comms_hardware_bench 3, high_latency 3, link_sim 9 (guided_fly_to_switches_mode_and_moves_the_copter passed in the full run, so it was not re-run), maiden_flight 1, mavserial 4, proximity_wire 1. mp_plugin 0, mp_plugin_example 0, 4 doc-test crates 0. Total: 429 passed, 0 failed, 1 ignored."
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets",
+      "result": "exit 0 ('Finished `dev` profile ... in 0.37s'). No deny-level errors, so mp-app is now linted too. Warnings: mp-core build script 3, mp-core lib 164, mp-core lib test 179 (163 duplicates), tests comms_hardware_bench 2 / mavserial 1 / maiden_flight 1, mp-app lib 74, mp-app lib test 91 (74 duplicates). The new files add 12 in compasscalibrator.rs (11 neg_multiply on the C#'s '-1.0f * ...', 1 explicit_counter_loop), 2 in binarylog.rs (neg_multiply, if_same_then_else on the C#'s duplicated ArduCopter branch), 2 in dflog.rs, 2 in dflogbuffer.rs and 3 excessive_precision in units.rs (the f32 literals 3.2808399 / 2.23693629 / 1.94384449, which are the exact C# literals)."
+    },
+    {
+      "command": "python scripts/port_manifest.py --check",
+      "result": "exit 0, no output: every Rust file at a manifest path starts with exactly '//! Port of `<C# path>`'."
+    },
+    {
+      "command": "python -I <scratchpad>/verify_manifest.py (imports scripts/port_manifest.py, re-runs classify/header_ok in memory, writes nothing)",
+      "result": "rows equal: True (3,477 rows, 0 differences against port/manifest.json), bad headers []. Owned (ported+todo) 476,061 lines, ported 38,374. Twelve legacy files carry a free-text '//! Port of `MainV2`...'-style header outside any manifest path (app.rs, link.rs, state.rs, param_meta.rs, log_browse.rs, sitl.rs, views/{config,flight_data,flight_plan,help,setup,simulation}.rs). That is the pre-manifest app, which the +1.0 already covers."
+    },
+    {
+      "command": "python (sum of lines where status == 'ported' in port/manifest.json; Counter of statuses; diff against HEAD:port/manifest.json)",
+      "result": "ported 147 files / 38,374 lines; todo 1,271 / 437,687; generated 382 / 62,758; vendored 1,580 / 651,002; n/a 97 / 16,224. Against HEAD's stale manifest: 111 todo->ported, 28 vendored->ported, 197 vendored->todo, 15 todo->vendored (ExtLibs/Comms/System.IO.Ports, Mono BCL source, 2,058 lines), 2 vendored->n/a."
+    },
+    {
+      "command": "for f in BinaryLog DFLog DFLogBuffer CompassCalibrator AP_HAL Warnings/CustomWarning Warnings/WarningEngine Grid clipper: wc -l and awk 'END{print NR}'",
+      "result": "BinaryLog.cs wc 602 / awk 603; DFLog.cs 755 / 755; DFLogBuffer.cs 901 / 902; CompassCalibrator.cs 904 / 905; AP_HAL.cs 13 / 14; CustomWarning.cs 250 / 251; WarningEngine.cs 151 / 152; Grid.cs 1013 / 1014; clipper.cs 4930 / 4930. The manifest counts like awk NR (the last line has no newline), and every sampled value matches it. Rust: binarylog.rs 632, dflog.rs 680, dflogbuffer.rs 867, compasscalibrator.rs 727, ap_hal.rs 15, customwarning.rs 322, warningengine.rs 206, dataflash.rs 547."
+    },
+    {
+      "command": "grep/sed on MainV2.cs (1020-1050, 2074, 3395-3425, 4262-4335, 459-481, 4799-4811), CurrentState.cs:1273-1293, Utilities/Speech.cs:15-80, Warnings/WarningsManager.cs, Warnings/WarningControl.cs, WarningsManager.Designer.cs, ConfigAdvanced.cs:22-25, FlightData.cs:1090-1106 and 1313-1345, Utils.cs:10-30 and 110-118, Vector3.cs, CompassCalibrator.cs, DFLog.cs, DFLogBuffer.cs, BinaryLog.cs",
+      "result": "Used for the side-by-side checks below."
+    }
+  ],
+  "commands_note": "Commands were allowed. No GUI or window was opened, no source file was touched, port_manifest.py ran only with --check, and the manifest was re-derived in memory by importing the script. The only file written is judging/round-72.json, plus throwaway logs and the verify script in the scratchpad.",
+  "manifest_summary": {
+    "manifest_status": "port/MANIFEST.md and port/manifest.json are accurate. A fresh in-memory run of the script's classify/header_ok logic reproduces manifest.json row for row (3,477 rows, 0 differences), and --check finds no bad header. The round-71 P0 complaint, seven ported files marked todo, is resolved: SimpleGrid x3, Grid.cs, clipper.cs, EnumTranslator.cs and LTM.cs are all 'ported'. The script's own denominator is now 476,061 owned lines, not 479,014, because Mono's System.IO.Ports (15 files, 2,058 lines) was reclassified as vendored, along with smaller reclassifications. The cap formula keeps 479,014 as instructed, and with either denominator ceil1 gives 0.9.",
+    "new_owned_files_ported": {
+      "ExtLibs/Utilities/BinaryLog.cs": 603,
+      "ExtLibs/Utilities/DFLog.cs": 755,
+      "ExtLibs/Utilities/DFLogBuffer.cs": 902,
+      "ExtLibs/Utilities/CompassCalibrator.cs": 905,
+      "ExtLibs/Utilities/AP_HAL.cs": 14,
+      "ExtLibs/Utilities/Warnings/CustomWarning.cs": 251,
+      "ExtLibs/Utilities/Warnings/WarningEngine.cs": 152
+    },
+    "new_owned_lines_ported": 3582,
+    "owned_files_ported_corrected": 147,
+    "ported_lines_corrected": 38374,
+    "ported_lines_derivation": "Sum of 'lines' over status == 'ported' in port/manifest.json = 38,374 (147 files). Cross-check: 34,792 (round 71) + 603 + 755 + 902 + 905 + 14 + 251 + 152 = 38,374, an exact match, so the regenerated manifest agrees with round 71's hand count. Sampled line counts (BinaryLog, DFLogBuffer, CompassCalibrator, AP_HAL, CustomWarning, WarningEngine, Grid, clipper) equal awk NR.",
+    "owned_lines_total_corrected": 479014,
+    "owned_lines_total_manifest": 476061,
+    "ported_fraction_corrected": 0.0801,
+    "conservatism_note": "This is an upper bound. All 3,582 new lines count in full. But CompassCalibrator.cs (905) has no caller, because MagCalib.cs is unported, so it is dead code in the app. BinaryLog.ConvertBin is ported but not wired to 'Convert .Bin to .Log', which still runs the old Log::to_text. WarningEngine/CustomWarning drive an invented Warning Manager instead of WarningsManager.cs/WarningControl.cs. The +1.0 pre-manifest allowance still covers the legacy free-text-header files.",
+    "wiring": "New wiring. (1) dataflash::parse (dataflash.rs:89) now builds DFLogBuffer::new over a Cursor of the whole file with filename '' (so no 300 MB index cache), copies dflog.logformat into Log::formats, walks every line with LineEnumerator::next_item (DFLogBuffer.this[long]), and turns each DFItem.raw into Values. The log browser, FFT, geotag and FlightData's dflog tools all read this, and text .log files now parse too. (2) app.rs:293 calls tool_windows::start_warning_engine, which sets CustomWarning.defaultsrc to a CsSource over a per-frame CurrentState snapshot, calls WarningEngine::Start (speech only if 'speechenable' was true at startup) and subscribes WarningMessage to a queue that the next frame copies into link.shared.cs.message_high. (3) The 'Warning Manager' tool window (tool_windows.rs:970) lists WarningEngine's list and adds and deletes entries, saving warnings.xml after each change. Still unwired: BinaryLog.onFlightMode (MainV2.cs:3407), WarningEngine.QuickPanelColoring (MainV2.cs:1039), WarningEngine.Stop (MainV2.cs:2074), BinaryLog.ConvertBin (FlightData.cs:1105, LogDownload*.cs), CompassCalibrator (MagCalib.cs), and DFLogBuffer's InstanceType/GetUnit/DFItem.time in the log browser."
+  },
+  "scores": {
+    "overall": 1.6,
+    "overall_cap": 1.9,
+    "overall_cap_derivation": "ceil1(38,374 / 479,014 * 10) = ceil1(0.8011) = 0.9, plus at most +1.0 for the pre-manifest app = 1.9. With the manifest's own denominator, ceil1(38,374 / 476,061 * 10) = ceil1(0.806) = 0.9 as well. Awarded 0.8 for ported lines and 0.8 for the pre-manifest app, 1.6 in total. That is up 0.1 for 3,582 faithfully ported lines and an accurate manifest. The 0.1 held back from the ported-lines part covers the following. CompassCalibrator has no caller. ConvertBin is ported but 'Convert .Bin to .Log' still writes Log::to_text. The Warning Manager UI is invented, not WarningsManager/WarningControl. onFlightMode and QuickPanelColoring have no subscriber. WarningMessage writes messageHigh without the severity, the 10 s expiry or the dedupe of CurrentState's setter.",
+    "round_files_fidelity": 6.7,
+    "round_files_fidelity_rationale": "Up 0.1. The seven new files were compared line by line, and they copy even the C# bugs. BinaryLog: the log_step state machine, the FMT Marshal layout (86 bytes: type, length, name[4], format[16], labels[64]), packettypecache with the logformat fallback loop (no break, so the last match wins), 'new byte[size - 3]' with OverflowException for size 1-2, GetObjectFromMessage's 21 format chars with /100, /1e7 and 2*32, Trim('\\0') and '?' for non-ASCII, invariant G7/G15 for numbers, 'System.Byte[]', UnionArray '[..]'. Aggregate on an empty Z string throws, so the whole line is dropped and 'Bad Binary log line {0}' is printed. The duplicated ArduCopter else-if and the firmware sniffing are there. ReadMessageTypeOffset returns position - 3. DFLog: ToDictionary's a.IsNumber() tests the loop counter, so byte[] fields throw InvalidCast. ERR gains two slots (subsystem name, then null), EV gains one, the byte-enum cast wraps (300 -> 44). FMTLine adds the hidden 'FMT' label with Length 59. FindMessageOffset's ToUpper ContainsKey with an exact-case indexer throws KeyNotFound. msgoffsetcache survives Clear(). GetTimeGPS's 3D-lock check sits outside the try. gpsTimeToTime uses this month's LeapSecondsGPS and ToLocalTime. The static instanceCache is kept. DFLogBuffer: the binary and text index builds, the 128 pre-seed, the 'Seen' loop ending at the first Id > 255, FMT/FMTU/InstanceType (2,000-item cap), the dead 'if (Unit.Count > 0)' branches, so UnitMultiList always has a null unit and multi 0 or 1 for c/C/e/E/L, the MSG/PARM string pass that sets the firmware, the GPS pass, the GZip cache with all of LoadCache's rejection rules, SplitLog with File.OpenWrite (no truncation), the string indexer's cache checked after the bounds, and GetEnumeratorType's two regexes (ACC[0], ACC1 -> instance 0) with the sort only for more than one type. CompassCalibrator keeps the C# class aliasing: fit1_params = fit2_params = _params, so both LM updates land on _params, interleaved per column. Utils.memset is a no-op (array.Initialize()). _params.offset.zero() zeroes a copy, so calc_initial_offset accumulates onto the old offset. thin_samples compares each sample with itself and so rejects about half, and slot copies make samples alias. Also kept: the FAILED -> STEP_TWO fall-through in update(), the static m_z/m_w RNG and the wrapping uint arithmetic. CustomWarning/WarningEngine: XmlSerializer member order (field Child, then the properties), nulls omitted, CRLF with 2-space indent and no BOM, the Name setter storing before SetField throws, AddSeconds on MinValue, SayText calling GetValue even without a {value} placeholder, and the swallowed static-ctor failure. Lost: CustomWarning XML writes '<Name></Name>' where XmlSerializer writes '<Name />', and duplicate elements take the last value where XmlSerializer takes the first (R72-12). The WarningEngine first-pass ordering and the static warningconfigfile (R72-13). Json.NET 'R' and quoted NaN in CompassCalibrator's console line (R72-14). The XOR-hash caches, eager GetEnumeratorType, resumable errors and Clear/Dispose semantics (R72-15). ConvertBini's UTF-8 into_bytes and the single fn-pointer onFlightMode (R72-16). The R71 fixes check out: 'Error' captions, capitalised 'Minimum'/'Maximum', units f32 literals, savesettings after the adds, LocationRightBottom, the List indexer text and CircularBuffer.Get() IndexOutOfRange. decimal_from_double still formats the exact binary expansion instead of using VarDecFromR8's double arithmetic (R72-20).",
+    "ui_ux": 2.7,
+    "ui_ux_rationale": "Unchanged. Gains: 'Bad Grid' and 'Please define a polygon.' now carry the 'Error' caption, and custom warnings now reach the HUD and speech. Losses and new gaps. (1) The Warning Manager is invented. WarningsManager.cs is an 872x238 form with '+' (13,13) and 'Save' (94,13) buttons and a panel of 850x27 WarningControl rows. Each row has the 'QuickPanel Coloring' checkbox at 3,5, CMB_Source (131,3), CMB_condition (253,3), NUM_warning (313,4, ±99999, 2 dp), CMB_color (384,3), TXT_warningtext (494,3), NUM_repeattime (745,4) and the '+' child (791,4) and '-' remove (822,4) buttons. It edits rows in place, chains Child conditions and saves only on 'Save'. The port shows a read-only grid with 'Delete' buttons, a one-line editor defaulting to alt/LT/10 (C# defaults to GetOptions()[0], NONE, 0), auto-saves on every add and delete, cannot edit existing rows and has no Coloring, colour or child support (R72-02). (2) A warning on the HUD keeps the previous STATUSTEXT severity, so it is often white instead of EMERGENCY red, and it never expires, where C# clears it after 10 s (R72-08). (3) 'Convert .Bin to .Log' writes Rust-formatted text with LF endings and reports success through toasts.error('Saved ...'). C# converts silently with BinaryLog.ConvertBin and allows multiple files (R72-03). (4) MODE markers in the log browser show mode numbers, because onFlightMode is not subscribed (R72-07). (5) The knots unit label is 'kn', where MainV2 uses 'kts' (R72-18). Every round-71 UI gap is unchanged: the modeless fixed-size SimpleGrid, the GMap behaviours, tooltips, GridUI heuristics, the WPOverlay markers, the FlightData map and the title bar.",
+    "features": 3.7,
+    "features_rationale": "Up 0.1. warnings.xml is now loaded and saved in MP's format, a 250 ms engine evaluates SpeakAndText warnings with repeat time and AND-chained children, and the hits are spoken and shown on the HUD. The log pipeline runs on the real DFLogBuffer, so text .log files open, and ERR and EV text lines gain their names. The CompassCalibrator algorithm exists. Missing: QuickPanelColoring (Coloring warnings do nothing) and WarningEngine.Stop. Speech ignores speechEnabled()/speech_armed_only at speak time and Speech's regex rewrites (R72-09). Warnings on CurrentState properties that the port does not model throw InvalidCast every pass and silence every later warning in the list (R72-10). ConvertBin is not used. Mode names are missing from logs. The onboard/offline mag calibration (MagCalib.cs) is unported. All round-68..71 feature gaps remain (GridUI lanes, FlightPlanner AddCommand/setfromMap, MAVLinkInterface/MAVState, FFT, param files, RTK)."
+  },
+  "compile_check": {
+    "summary": "Compiled and tested for real. cargo build --workspace --all-targets: 0 warnings. cargo test --workspace: 429 passed, 0 failed, 1 ignored. cargo clippy --workspace --all-targets: exit 0 for the first time in this series, so mp-app is linted too. The three round-71 deny lints now carry item-level allows citing the C# literal (missionfile.rs:94, rtcm3.rs:28, vector3.rs:91). Warning counts (164/179 mp-core, 74/91 mp-app) and the file-wide clippy::all in clipper.rs:9 remain (R72-21).",
+    "likely_errors": [],
+    "warnings": [
+      "clippy: mp-core lib 164 / lib test 179, mp-app lib 74 / lib test 91, build.rs 3, integration tests 4. The new files add 12 (compasscalibrator), 2 (binarylog), 2 (dflog), 2 (dflogbuffer) and 3 (units).",
+      "clipper.rs:9 still has a file-wide #![allow(..., clippy::all)]. commsserialport.rs:785 #[allow(clashing_extern_declarations)] still has no comment.",
+      "dataflash.rs:81 and :209 and dotnet/mod.rs:146 embed raw U+0000 bytes inside char/string literals ('<NUL>'), so git treats both files as binary and 'git diff' cannot show the dataflash rewrite (R72-19)."
+    ],
+    "test_failures": [],
+    "test_expectations_checked": [
+      "binarylog.rs reads_lines_and_objects: 'FMT, 128, 89, FMT, BBnNZ, Type,Length,Name,Format,Columns\\r\\n' matches C#: String.Join(', ') over 'FMT', byte 128, byte 89, then names Trim('\\0'). 'TST, 1000000, 7, hi' (Q as UInt64 invariant, B, Z trimmed). Offsets 0, 89, 178 = position - 3. Correct.",
+      "binarylog.rs empty_z_string_drops_the_line: an all-NUL Z gives an empty string, Select(...).Aggregate throws InvalidOperationException, the catch prints and the loop goes on to EOF, so ReadMessage returns ''. Correct.",
+      "dflog.rs text_lines_fmt_err_ev: ERR's subsystem 3 gives 'COMPASS' at Length-2 and null at Length-1. EV 10 gives 'ARMED'. this['Id'] gives ' 10' (leading space kept, as Split(',', ':') leaves it). timems 2.0 comes from TimeUS 2000/1000. ERR 300 gives (byte) 44, so '44'. Correct.",
+      "dflog.rs gps_time_needs_3d_lock: Status 2 gives MinValue, status 3 does not. FindMessageOffset('gps', ...) throws KeyNotFound because ContainsKey uses ToUpper and the indexer does not. Correct.",
+      "dflogbuffer.rs binary_log_index_and_types / text_log_index: Count 3 / 4. FMT[0x81] = (76, 'TST', 'QBZ', 'TimeUS,V,Msg'). SeenMessageTypes = ['FMT', 'TST'] (0x80 is present because FMT lines are indexed). Correct.",
+      "compasscalibrator.rs sample_fixed_point_and_status_flow: roundf(1.06*8) = 8, -20, 5000*8 clamped to 32767. start(false, 0) moves WAITING -> STEP_ONE at once (attempt 1, delay 0). A duplicate sample at distance 0 is rejected. Correct, but there is no full-fit test.",
+      "customwarning.rs check_and_say: '0.##' of 12.345 gives '12.35' (half away from zero after G15). The repeat time holds the second check back. Correct.",
+      "dotnet decimal_tests: (decimal)1e-15 = 0.000000000000001, 123.456789012345678 -> 123.456789012346, decimal.Parse('5-') = -5, overflow -> OverflowException. Correct for these inputs."
+    ],
+    "low_confidence_risks": [
+      "warningengine.rs: tick() holds the WARNINGS mutex while calling the WarningMessage handlers and CsSource (which takes the snapshot RwLock). The current handlers only push to MESSAGE_HIGH. A future handler that touches WarningEngine::warnings would deadlock, where C#'s re-entrant lock would not.",
+      "dataflash.rs:89 copies the whole file (data.to_vec()) and decodes every line eagerly through stream_read_byte on a dyn Read+Seek. C# LogBrowse reads lazily. Memory and time on 300 MB+ logs were not measured.",
+      "dflogbuffer.rs:735 sorts with the introspective_sort emulation. For i64 keys any correct sort gives the same order, so this is harmless.",
+      "carried: clipper.rs stale m_Scanbeam (R72-34), grid.rs lane overflow (R72-30), dotnet LCIDToLocaleName, versiondetection.rs:79, ap_geodesicgrid.rs:403, flight_plan.rs NaN WpOverlayKey."
+    ]
+  },
+  "findings": [
+    {
+      "id": "R72-01",
+      "severity": "P0",
+      "file": "port/MANIFEST.md, crates/mp-app/src/mp/ (missing)",
+      "line": 7,
+      "cs_reference": "reference/MissionPlanner/{MainV2.cs, GCSViews/FlightPlanner.cs, GCSViews/FlightData.cs, Log/LogBrowse.cs, MagCalib.cs, Warnings/WarningsManager.cs, Warnings/WarningControl.cs, Grid/GridUI.cs, ExtLibs/ArduPilot/Mavlink/*, ...}",
+      "summary": "Carried from R71-01, partly fixed. The manifest is now regenerated and exact (0 differences, --check clean), and 7 more files are ported (38,374 lines). But 437,687 owned lines (91.9%) are still todo. Several of the new back-ends sit behind unported front-ends: CompassCalibrator without MagCalib.cs, WarningEngine without WarningsManager.cs/WarningControl.cs, DFLogBuffer without Log/LogBrowse.cs.",
+      "required_fix": "Port the front-ends of what was just ported: Warnings/WarningsManager.cs + .Designer.cs + WarningControl.cs, MagCalib.cs, Log/LogBrowse.cs. Then GridUI.cs, FlightPlanner.cs, MAVLinkInterface.cs/MAVState.cs and MainV2.cs."
+    },
+    {
+      "id": "R72-02",
+      "severity": "P1",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 970,
+      "cs_reference": "Warnings/WarningsManager.cs:9-81 (reload, addwarningcontrol with x += 5 for children and TXT_warningtext hidden, BUT_Add_Click: new CustomWarning; defaultsrc = cs; SetField(GetOptions()[0]); Add; reload - no save; BUT_save_Click: SaveConfig); WarningsManager.Designer.cs (ClientSize 872x238, '+' at 13,13, 'Save' at 94,13, panel1 866x175 at 4,53); Warnings/WarningControl.cs:15-48 (ctor/updateDisplay), 82-217 (layout 850x27), 219-330 (handlers: SetField on CMB_Source, Enum.Parse on CMB_condition, color, (double)NUM_warning.Value, Text, (int)NUM_repeattime, but_addchild sets Child = new CustomWarning, but_remove removes from the list and every Child chain, CB_type toggles Coloring: text '', repeat 0, colour on); ConfigAdvanced.cs:22-25 (new WarningsManager().Show())",
+      "summary": "New. warn_ui is an invented editor. It shows a read-only egui::Grid (Field/Op/Value/Repeat (s)/Say + 'Delete') and a single 'new row' editor whose defaults (field 'alt', LT, 10.0) are not C#'s. C# defaults to GetOptions()[0], ConditionType NONE, Warning 0 and RepeatTime 10. Rows cannot be edited in place. There is no 'QuickPanel Coloring' type, no CMB_color, no '+' child or AND chain, and children are not shown indented. 'Add' and 'Delete' save warnings.xml at once, where C# saves only on 'Save'. Delete removes by index and does not run removewarning over Child chains. The field list comes from cs.fields(), not CustomWarning.GetOptions(). Errors go to toasts.error, where C# would raise an unhandled exception.",
+      "required_fix": "Port WarningsManager.cs/.Designer.cs and WarningControl.cs as crates/mp-app/src/mp/warnings/*.rs. Keep the resx/designer coordinates and the controls bound to the live CustomWarning objects (edit in place through WarningEngine::warnings). Add, + child, - remove (with removewarning) and CB_type must behave as in C#, and SaveConfig runs only from 'Save'. Delete the invented Warning struct and warn_ui."
+    },
+    {
+      "id": "R72-03",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/flight_data.rs",
+      "line": 2015,
+      "cs_reference": "GCSViews/FlightData.cs:1090-1106 (but_bintolog_Click: OpenFileDialog Filter 'Binary Log|*.bin;*.BIN', Multiselect = true; foreach file BinaryLog.ConvertBin(logfile, dir + name + '.log'); no message); ExtLibs/Utilities/BinaryLog.cs:89-119, 123-215",
+      "summary": "New. BinaryLog.ConvertBin is now ported (binarylog.rs:252) but not used. 'Convert .Bin to .Log' still runs dataflash::Log::to_text (dataflash.rs:170), so the output differs from MP's .log. (a) Lines end in LF instead of CRLF. (b) f32 fields are widened and printed with Rust's shortest f64 Display ('0.10000000149011612') instead of G7 invariant ('0.1'), and doubles are not G15. (c) Z strings are not escaped (\\\\, \\n, \\r, \\t, \\xNN). (d) Empty-Z lines are kept where C# drops them. (e) Mode numbers appear instead of onFlightMode names. (f) Unknown-type and FMT handling differs. The UI picks one file, not several, and reports 'Saved x.log' through toasts.error, where C# shows nothing.",
+      "required_fix": "Call BinaryLog::ConvertBin(input, dir + stem + '.log', None) for each selected file, with a multi-select *.bin picker and no success message. Delete Log::to_text, or keep it only for internal use. Add a golden test: ConvertBin output for a fixed .bin, byte for byte against MP's output."
+    },
+    {
+      "id": "R72-04",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/survey_ui.rs",
+      "line": 260,
+      "cs_reference": "Grid/GridUI.cs:578-645, 1620-1800; ExtLibs/Utilities/Grid.cs:46-53, 190-194, 327-334",
+      "summary": "Carried from R71-02 unchanged: GridUI still uses the survey::grid shim and local heuristics. Corridor, Spiral and lane_dist feed nothing, and crossgrid does not use StartPosition.Point.",
+      "required_fix": "As R71-02."
+    },
+    {
+      "id": "R72-05",
+      "severity": "P1",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 515,
+      "cs_reference": "SimpleGridPlugin.cs:67-71 (ShowDialog); SimpleGridUI.resx (Sizable, Dock rules); SimpleGridUI.Designer.cs:425; SimpleGridUI.cs:459-462",
+      "summary": "Carried from R71-03 unchanged: the SimpleGrid form is a modeless, fixed-size egui::Window. It should be a modal, sizable ShowDialog with Dock layout and GridUI_Resize.",
+      "required_fix": "As R71-03."
+    },
+    {
+      "id": "R72-06",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1321,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1408-1580; GCSViews/FlightData.cs:3956-4046",
+      "summary": "Carried from R71-28 unchanged: the WPOverlay markers, polygons, fence and rally overlays and the FlightData map are missing.",
+      "required_fix": "As R62-06."
+    },
+    {
+      "id": "R72-07",
+      "severity": "P2",
+      "file": "crates/mp-core/src/extlibs/utilities/binarylog.rs",
+      "line": 220,
+      "cs_reference": "ExtLibs/Utilities/BinaryLog.cs:85-87 (public static event getFlightMode onFlightMode), 557-562 ('M': onFlightMode?.Invoke(_firmware, modeno) ?? modeno.ToString()); MainV2.cs:3407-3430 (BinaryLog.onFlightMode += (firmware, modeno) => { if (firmware == \"\") return null; Common.getModesList((Firmwares)Enum.Parse(...)) lookup; catch return null })",
+      "summary": "New. Nothing in the app calls BinaryLog::set_onFlightMode, so every 'M' field (MODE.Mode and others) decodes to the number string. The log browser's MODE markers (log_browse.rs:372), DFItem.items, records and any .log output show '5' where MP shows 'Loiter'. The port also models the event as a single plain fn pointer that a setter replaces. C#'s '+=' multicast delegate keeps every subscriber and returns the last one's result, and a capturing lambda cannot be expressed. The handler's firmware detection (_firmware set by the MSG/PARM string pass) is ported, but no handler ever reads it.",
+      "required_fix": "Model onFlightMode as a list of Arc<dyn Fn(&str, i32) -> Option<String> + Send + Sync> with add/remove and last-result semantics. Register MainV2's handler at startup: return null for '', Enum.Parse(Firmwares), look up Common.getModesList, and catch to null. Add a test that MODE.Mode decodes to 'Loiter' for an ArduCopter log."
+    },
+    {
+      "id": "R72-08",
+      "severity": "P2",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 229,
+      "cs_reference": "MainV2.cs:1036-1039 (defaultsrc = comPort.MAV.cs; Start(speechEnable ? speechEngine : null); WarningMessage += (s, m) => MAV.cs.messageHigh = m; QuickPanelColoring += WarningEngine_QuickPanelColoring), 4799-4830 (WarningEngine_QuickPanelColoring: tabQuick QuickView BackColor by field name, 'NoColor' restores), 2074 (MainV2_FormClosing: WarningEngine.Stop()); ExtLibs/ArduPilot/CurrentState.cs:1273-1293 (messageHigh getter returns '' 10 s after _messageHighTime; setter ignores null/'', returns when equal to the current value, logs, stamps the time and sets messageHighSeverity = EMERGENCY)",
+      "summary": "New. The WarningMessage handler pushes into a static queue. tick() (tool_windows.rs:804-807) then assigns only the last entry straight to link.shared.cs.message_high, so it skips CurrentState's setter logic. It does not set message_high_severity = EMERGENCY, so hud.rs:544 draws the warning white or yellow from the previous STATUSTEXT severity instead of red. It does not stamp a time, and Rust's messageHigh never expires (C# blanks it after 10 s). It does not ignore an unchanged value. It drops warnings entirely when no link exists, where C# writes comPort.MAV.cs regardless. QuickPanelColoring has no subscriber, so Coloring warnings from an MP warnings.xml do nothing. WarningEngine::Stop is never called on close. defaultsrc is a copy refreshed only when egui repaints (tool_windows.rs:799-802), not the live comPort.MAV.cs, and comPort_MavChanged (MainV2.cs:1122) never re-points it.",
+      "required_fix": "Port CurrentState.messageHigh's setter and getter (the _messageHighTime 10 s expiry, the equality guard, severity EMERGENCY) and route both STATUSTEXT and WarningMessage through it. Subscribe QuickPanelColoring to the quick-view panel colouring (WarningEngine_QuickPanelColoring). Call WarningEngine::Stop from the close path. Make defaultsrc read the live link state, and re-point it on MAV change."
+    },
+    {
+      "id": "R72-09",
+      "severity": "P2",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 205,
+      "cs_reference": "Utilities/Speech.cs:24-46 (IsReady: _speechwindows.State == SynthesizerState.Ready; false on exception or no synth), 65-80 (SpeakAsync: if (!MainV2.speechEnabled()) return; IsNullOrWhiteSpace return; PreArm/dist/NAV/'Nm'/'Nft'/baud/q-word regex rewrites); MainV2.cs:469-481 (speechEnabled: engine, speechEnable, speech_armed_only -> cs.armed); ExtLibs/Utilities/Warnings/WarningEngine.cs:131-137 (while (!_speech.IsReady) Thread.Yield())",
+      "summary": "New. AppSpeech.is_ready() always returns true, so WarningEngine never waits for the current utterance to finish as C# does. speak_async goes straight to speech::say, skipping the speechEnabled() check at speak time. In C#, disabling speech or 'speech when armed only' while disarmed silences warnings, but the port keeps speaking. It also skips the IsNullOrWhiteSpace check and the regex rewrites. speechEnable is read from settings once at startup, which matches C#'s Start(speechEnable ? ...).",
+      "required_fix": "Implement ISpeech on the app's real speech engine. is_ready should report whether the synthesizer is idle. speak_async should run Speech.SpeakAsync's port: the speechEnabled() gate with speech_armed_only and cs.armed, the whitespace check, then the regex rewrites."
+    },
+    {
+      "id": "R72-10",
+      "severity": "P2",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 188,
+      "cs_reference": "ExtLibs/Utilities/Warnings/CustomWarning.cs:57-90 (GetOptions: properties whose GetValue is non-null and does not throw), 164-175 (GetValue: Convert.ChangeType(Item.GetValue(defaultsrc), double)); ExtLibs/ArduPilot/CurrentState.cs (every public property has a real value); WarningEngine.cs:119-156 (one exception aborts the whole pass)",
+      "summary": "New. CsSource returns PropertyValue::Text('') for every string property, so a non-null string is always reported and GetValue parses '' (FormatException) instead of the real text. It returns Object for every reference property, so a null property counts as present. It returns Null for each of the 1,205 PROPERTIES that CurrentState::field() does not model. A warning on such a property (valid in an MP-made warnings.xml, since SetField checks only the name list) makes GetValue throw InvalidCast on every pass. Because WarningEngine's try wraps the whole foreach, every later warning in the list is never evaluated. GetOptions in the port therefore differs from C#'s. The Warning Manager's own field list uses cs.fields(), a third list.",
+      "required_fix": "Back CsSource with the real CurrentState property getters: generate a getter table alongside state_properties.rs, return Text with the real string and Null for null references, and model the remaining properties. Use GetOptions() for the Source combo. Add a test where a warning on an unmodelled property does not hide later warnings, which needs the real values."
+    },
+    {
+      "id": "R72-11",
+      "severity": "P2",
+      "file": "crates/mp-core/src/dataflash.rs",
+      "line": 89,
+      "cs_reference": "Log/LogBrowse.cs (DFLogBuffer usage: SeenMessageTypes, InstanceType sub-nodes 'ACC[0]', GetEnumeratorType per graph, DFItem.time / lineno as X, GetUnit for axis labels); ExtLibs/Utilities/DFLogBuffer.cs:46-49 (filename ctor: cache for logs of 300 MB+), 604-615, 876-900",
+      "summary": "New. The new parse() runs the real DFLogBuffer, then flattens it back into the old Log/Record/Value model and drops what LogBrowse uses from it. series() still plots TimeUS*1e-6 or the row index, not DFItem.time (GPS-anchored, msoffset) or lineno. tree() has no InstanceType sub-trees. GetUnit/UnitMultiList, SeenMessageTypes and getInstanceIndex are unused. The buffer is built with filename '', so the 300 MB index cache never applies. Every line is decoded eagerly into memory, where C# reads on demand. On a DFLogBuffer error it logs a warning and returns a Log holding only FMT, where C# LogBrowse surfaces the exception. to_value turns numeric-looking strings ('n'/'N'/'M'/text-log fields) into Int/Float and C# keeps them as strings, so a PARM/MSG text such as '1.5' becomes a number.",
+      "required_fix": "Port Log/LogBrowse.cs over DFLogBuffer directly (new_file(path) for the cache, GetEnumeratorType per graph, DFItem.time/lineno for X, InstanceType nodes, GetUnit labels) and retire dataflash::Log for the browser. Keep values as DFItem.items strings until a graph converts them."
+    },
+    {
+      "id": "R72-12",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/warnings/customwarning.rs",
+      "line": 231,
+      "cs_reference": "System.Xml.Serialization.XmlSerializer (XmlSerializationWriter.WriteElementString -> XmlWriter.WriteElementString: an empty value gives '<Name />'; generated reader: paramsRead[] so a repeated element is UnknownNode; elements must be in namespace ''; XmlTextWriter entitizes invalid chars; InvalidOperationException 'There is an error in XML document (line, pos).'); WarningEngine.cs:58-87",
+      "summary": "New. to_xml writes '<Name></Name>', '<color></color>' and '<Text></Text>' for empty strings. XmlSerializer writes '<Name />', so a default CustomWarning (Name '') or an emptied text produces a different warnings.xml. from_xml lets a repeated element overwrite the earlier one, where XmlSerializer keeps the first and skips the rest. It ignores namespaces, accepts enum text that cs_enum parse may treat differently, and trims Warning/RepeatTime with Unicode trim() instead of XmlConvert's XML-whitespace trim. esc() does not entitize control characters, so a Text holding U+0001 writes XML that roxmltree then fails to read, and the whole list is lost on the next start. The root-mismatch error hard-codes '(2, 2)'.",
+      "required_fix": "Write empty elements as '<Tag />'. Track members already read and ignore repeats. Check the empty namespace. Parse enums by exact name, throwing 'Instance validation error'. Entitize chars below 0x20 the way XmlTextWriter does. Report the real line/position. Add a byte-exact SaveConfig golden test captured from MP."
+    },
+    {
+      "id": "R72-13",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/warnings/warningengine.rs",
+      "line": 115,
+      "cs_reference": "ExtLibs/Utilities/Warnings/WarningEngine.cs:42 (static warningconfigfile evaluated once at type init), 46-56 (static ctor on first access to any static member, events included), 96-104 (Start calls the async MainLoop: the first pass runs synchronously on the caller before '_speech = speech' and before MainV2 subscribes WarningMessage), 141-150 (QuickPanelColoring(item.Name, item.color) passes null for a null color)",
+      "summary": "New. MainLoop spawns a thread, so the first pass races with SPEECH being set and with the WarningMessage subscription. In C# the first pass runs inline, with no speech and no subscriber, but still stamps lastrepeat, so a warning already true at startup is silent for RepeatTime seconds. In the port it may be spoken and shown at once. warningconfigfile() is recomputed on every call, where C# fixes it at type init, so a later custom data directory changes the path. add_WarningMessage/add_QuickPanelColoring do not run the static constructor, although any static access does in C#. A null color reaches QuickPanelColoring handlers as '', not null.",
+      "required_fix": "Run the first tick synchronously inside Start before storing the speech engine, then loop on the thread. Cache warningconfigfile in a OnceLock at static init. Call static_init from every static entry point. Pass Option<&str> to QuickPanelColoring."
+    },
+    {
+      "id": "R72-14",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/compasscalibrator.rs",
+      "line": 88,
+      "cs_reference": "ExtLibs/Utilities/CompassCalibrator.cs:645, 780 (Console.WriteLine(fit1_params.ToJSON(Formatting.None) + ' ' + fit1 + ' ' + fit2)); Newtonsoft.Json JsonConvert.ToString(float) = EnsureDecimalPlace(value.ToString(\"R\", Invariant)), FloatFormatHandling.String writes \"NaN\"/\"Infinity\" quoted; MagCalib.cs (the only caller)",
+      "summary": "New. json_f formats with G7. Json.NET uses 'R', which falls back to 9 digits when 7 do not round-trip, so most fit parameters print differently. NaN and Infinity come out bare (radius:NaN) where Json.NET writes them quoted ('\"NaN\"'). This matters because diverging fits are exactly when NaN appears. The 905-line port has no caller because MagCalib.cs is unported. Its only tests cover fixed-point conversion, the status flow and span sharing. Nothing runs a 300-sample calibration through STEP_ONE/STEP_TWO against MP's numbers, so the carefully kept aliasing quirks are unverified.",
+      "required_fix": "Port JsonConvert.ToString(float) ('R' plus EnsureDecimalPlace, quoted NaN/Infinity). Port MagCalib.cs and call CompassCalibrator from it. Add a golden test: a fixed 300-sample sphere through to SUCCESS, comparing offsets/diag/offdiag, the completion mask and the console lines with MP's output."
+    },
+    {
+      "id": "R72-15",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/dflog.rs",
+      "line": 608,
+      "cs_reference": "ExtLibs/Utilities/DFLog.cs:53-76 (instanceCache keyed by msgtype.GetHashCode()), 713-734 (msgoffsetcache keyed by linetype.GetHashCode() ^ find.GetHashCode()), 230-232 ((IConvertible)raw[a] cast message); DFLogBuffer.cs:46 (FileShare.Read), 349 (Path.GetTempFileName creates the file), 487-523 (messageindex[type.Id] throws for Id > 255), 719-725/846-853 (Clear/Dispose close the stream; later use throws), 751-829 (lazy iterator: instances/slist built on the first MoveNext; an exception ends it)",
+      "summary": "New. The details do not match C#. FindMessageOffset's cache is keyed by (String, String). C#'s XOR of the two .NET Framework string hashes collides: (a, b) and (b, a) share a key, any (x, x) maps to 0, and real pairs can collide, so a cached offset can be returned for the wrong field. instanceCache likewise uses the string, not its hash. SplitLog indexes messageindex with 'Id as u8', which wraps where C# throws IndexOutOfRange. Clear() swaps in an empty Cursor and Dispose() clears, where C# closes the stream so later reads throw ObjectDisposed/NullReference. ToDictionary always says 'System.Byte[]' even for a UnionArray. GetEnumeratorType builds slist and the progress second when called, not on the first MoveNext. TypeEnumerator returns Some(Err) and can be advanced again, where a C# iterator that threw is finished. new_file opens with Rust's share mode instead of FileShare.Read. The GetTempFileName fallback does not create the temp file. The dead UNIT/MULT branch uses if-let instead of try/catch, and char::from_u32 instead of the (char)int wrap.",
+      "required_fix": "Key both caches by .NET Framework string hash codes (port String.GetHashCode for x64 .NET Framework), with C#'s XOR. Throw IndexOutOfRange for Id > 255. Make Clear/Dispose put the buffer in a disposed state that errors. Make the enumerator lazy and fused after an error. Use the real cast message, FileShare.Read on Windows, and create the temp file."
+    },
+    {
+      "id": "R72-16",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/binarylog.rs",
+      "line": 273,
+      "cs_reference": "ExtLibs/Utilities/BinaryLog.cs:106-115 (DateTime.Now read twice; ASCIIEncoding.ASCII.GetBytes(line) maps chars > 0x7F to '?'), 75-78 (UnionArray.ToString: String.Join over short.ToString() in the current culture)",
+      "summary": "New. ConvertBini writes line.into_bytes() (UTF-8). C# writes ASCII.GetBytes, so any non-ASCII character becomes one '?' byte, not a multi-byte UTF-8 sequence. Such characters come from onFlightMode names, current-culture float text in a?.ToString() paths, and the UnionArray join. UnionArray's Display uses Rust i16 formatting, not the culture's NegativeSign. ConvertBini reads DateTime.Now once where C# reads it twice, which is negligible but differs.",
+      "required_fix": "Encode with an ASCII encoder that maps above 0x7F to '?'. Format UnionArray elements with the culture-aware integer formatter. Read DateTime.Now in the condition and again in the assignment."
+    },
+    {
+      "id": "R72-17",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/dflogbuffer.rs",
+      "line": 832,
+      "cs_reference": "No C# tests. BinaryLog.cs, DFLog.cs, DFLogBuffer.cs and WarningEngine.cs behaviour is the spec.",
+      "summary": "New. The 3,582 new lines have 10 tests. Untested: GetEnumeratorType instance filters ('GPS[0]', 'GPS2' -> GPS instance 1), FMTU/InstanceType and the 2,000 cap, UnitMultiList's multi 0/1, the 300 MB cache save/load and each rejection rule, SplitLog, GetLineNoFromTime, GetTimeGPS with msoffset and leap seconds, DFItem.time, BinaryLog 'g'/'c'/'e'/'L'/'a'/'M' decoding and the G7/G15 invariant text, firmware sniffing, and WarningEngine.tick (repeat time, child AND chain, Coloring/NoColor, exception aborting the pass).",
+      "required_fix": "Add golden tests from MP runs on a real ArduCopter .bin and its .log: line count, Count, SeenMessageTypes, FMT/FMTU/InstanceType dumps, the first 100 ReadMessage lines, DFItem.time of the first GPS lines, and a tick-by-tick WarningEngine trace."
+    },
+    {
+      "id": "R72-18",
+      "severity": "P3",
+      "file": "crates/mp-app/src/units.rs",
+      "line": 27,
+      "cs_reference": "MainV2.cs:4326-4330 (case speeds.knots: multiplierspeed = 1.94384449f; SpeedUnit = \"kts\"), 4262-4340 (Enum.Parse failure is caught and leaves the previous multipliers and units unchanged)",
+      "summary": "New, found while checking R71-08. The multipliers now match C#, but knots are labelled 'kn' where MainV2 sets 'kts', and the test at units.rs:75 asserts the wrong 'kn'. An unknown setting value resets to 1.0/'m/s' or 'm' where C#'s Enum.Parse throws and the catch leaves the old values.",
+      "required_fix": "Use 'kts', fix the test, and keep the previous units when a setting does not parse as the enum."
+    },
+    {
+      "id": "R72-19",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dataflash.rs",
+      "line": 81,
+      "cs_reference": "n/a (source hygiene)",
+      "summary": "New. dataflash.rs:81 (trim_matches('<U+0000>')) and :209 (the MAT v4 name terminator) and dotnet/mod.rs:146 contain raw NUL bytes inside literals. Git treats both files as binary, so 'git diff' shows only 'Binary files differ' for this round's dataflash rewrite, and reviews and blame are blind to it.",
+      "required_fix": "Replace the raw bytes with the escape '\\0' (and \"\\0\")."
+    },
+    {
+      "id": "R72-20",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/mod.rs",
+      "line": 162,
+      "cs_reference": ".NET Framework decimal.cpp VarDecFromR8 (dbl * dblPower10[iPower] in double arithmetic, residual rounding, trailing-zero strip); Number.ParseDecimal (only trailing NULs ignored); Decimal.ToString() (NumberFormatInfo.NegativeSign)",
+      "summary": "R71-06, partly fixed. The trailing sign, OverflowException, the scale cap at 28 and VarR8FromDec's formula are now right, with tests. Still open: decimal_from_double takes its 15 digits from Rust's exact '{:.14e}' expansion instead of VarDecFromR8's double-arithmetic scaling, so the 15th digit can differ. decimal_parse also trims leading NULs. decimal_to_string still ignores NegativeSign. No golden tests for 'F2'/'0.##' of 2.345m and -0.001m, '1,000.50', or (double)79228162514264337593543950335m.",
+      "required_fix": "Port VarDecFromR8 statement by statement. Trim only trailing NULs. Use NegativeSign. Add the remaining golden vectors."
+    },
+    {
+      "id": "R72-21",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 9,
+      "cs_reference": "ExtLibs/Utilities/clipper.cs",
+      "summary": "R71-14, partly fixed. Clippy now passes workspace-wide, with documented item-level allows. Still open: clipper.rs keeps the file-wide clippy::all, commsserialport.rs:785's clashing_extern_declarations allow has no comment, and 238 non-duplicate warnings remain (164 mp-core, 74 mp-app).",
+      "required_fix": "Replace clippy::all with the specific lints clipper needs, comment the extern allow, and work the warning count down, with C#-literal allows where the code copies C#."
+    },
+    {
+      "id": "R72-22",
+      "severity": "P3",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 175,
+      "cs_reference": "SimpleGridPlugin.cs:69 (ThemeManager.ApplyThemeTo before ShowDialog/Load); GMapControl.cs:918-923 (lazyEvents); SimpleGridUI.cs:298, 307-311 (HoldInvalidation)",
+      "summary": "R71-12, partly fixed. (1) savesettings now runs after the AddWPtoList rows (flight_plan.rs:1902). (3) LocationRightBottom is rebuilt from top - height / left + width (simplegridui.rs:426). (4) The List indexer exception text is now used. Still open: (2) GridUI_Load still runs inside new(), before any theming, and ZoomAndCenterMarkers applies at once instead of being deferred through lazyEvents. (5) HoldInvalidation is still not modelled.",
+      "required_fix": "As R71-12 (2) and (5)."
+    },
+    {
+      "id": "R72-23",
+      "severity": "P2",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 549,
+      "cs_reference": "SimpleGridUI.Designer.cs:83-103; GMapControl.cs:320, 2132-2175; SimpleGridUI.cs:187, 212, 298, 307-311",
+      "summary": "Carried from R71-04 unchanged: SimpleGrid's map uses map::show's pan and zoom instead of GMapControl's (right-drag pan, integer wheel zoom, MaxZoom 24, exact modifier and button tests, HoldInvalidation).",
+      "required_fix": "As R71-04."
+    },
+    {
+      "id": "R72-24",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 687,
+      "cs_reference": "GCSViews/FlightPlanner.cs:538-548, 3390-3428, 1096-1244, 2395-2425",
+      "summary": "Carried from R71-07 unchanged: add_wp_to_list/set_from_map is a shim of the unported FlightPlanner. The home-alt and default-alt InputBoxes, 'Invalid Home or wp Alt', ChangeColumnHeader, convertFromGeographic and selectedrow are missing.",
+      "required_fix": "As R71-07."
+    },
+    {
+      "id": "R72-25",
+      "severity": "P3",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 641,
+      "cs_reference": "GMapMarker.cs:175-190; ToolTips/GMapRoundedToolTip.cs:44-64; GMapToolTip.cs:44-110",
+      "summary": "Carried from R71-09 unchanged: the tooltips are not GMapRoundedToolTip.",
+      "required_fix": "As R71-09."
+    },
+    {
+      "id": "R72-26",
+      "severity": "P3",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 373,
+      "cs_reference": "SimpleGridUI.cs:345-348; GMapPolygon.cs:231-262",
+      "summary": "Carried from R71-10 unchanged: the shared GMapPolygon.DefaultStroke mutation and the round join are not modelled.",
+      "required_fix": "As R71-10."
+    },
+    {
+      "id": "R72-27",
+      "severity": "P3",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui_designer.rs",
+      "line": 110,
+      "cs_reference": "UpDownBase.OnMouseWheel; NumericUpDown.UpButton/DownButton; OnTextBoxKeyPress; ComboBox DropDownStyle.DropDown",
+      "summary": "Carried from R71-11 unchanged: wheel, keys, auto-repeat, the editable combo and TabIndex.",
+      "required_fix": "As R71-11."
+    },
+    {
+      "id": "R72-28",
+      "severity": "P3",
+      "file": "crates/mp-app/src/extlibs/simplegrid/simplegridui.rs",
+      "line": 655,
+      "cs_reference": "SimpleGridUI.cs behaviour is the spec.",
+      "summary": "Carried from R71-13 unchanged: no headless SimpleGrid behaviour tests.",
+      "required_fix": "As R71-13."
+    },
+    {
+      "id": "R72-29",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan/menu.rs",
+      "line": 525,
+      "cs_reference": "SimpleGridPlugin.cs:36-61; FaceMapPlugin.cs:45; GridPluginv2.cs:52; PluginLoader.cs",
+      "summary": "Carried from R71-16 unchanged: the SimpleGrid menu item is hard-coded, and FaceMap and Gridv2 are missing.",
+      "required_fix": "As R71-16."
+    },
+    {
+      "id": "R72-30",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/grid.rs",
+      "line": 163,
+      "cs_reference": "ExtLibs/Utilities/Grid.cs:34, 46-53, 190-194, 275-277, 295-302, 327-334",
+      "summary": "Carried from R71-17 unchanged.",
+      "required_fix": "As R70-04."
+    },
+    {
+      "id": "R72-31",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/grid.rs",
+      "line": 956,
+      "cs_reference": "Grid.cs behaviour is the spec.",
+      "summary": "Carried from R71-18 unchanged.",
+      "required_fix": "As R70-05."
+    },
+    {
+      "id": "R72-32",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan/menu.rs",
+      "line": 873,
+      "cs_reference": "GCSViews/FlightPlanner.cs:3661-3666, 3702, 999-1035",
+      "summary": "Carried from R71-19 unchanged.",
+      "required_fix": "As R70-06."
+    },
+    {
+      "id": "R72-33",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 4215,
+      "cs_reference": "ExtLibs/Utilities/clipper.cs:4400-4444, 3336-3340, 130-203",
+      "summary": "Carried from R71-20 unchanged.",
+      "required_fix": "As R70-07."
+    },
+    {
+      "id": "R72-34",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 1585,
+      "cs_reference": "ExtLibs/Utilities/clipper.cs:1137-1163, 1586-1590, 2958-2978, 4378",
+      "summary": "Carried from R71-21 unchanged.",
+      "required_fix": "As R69-05."
+    },
+    {
+      "id": "R72-35",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/enumtranslator.rs",
+      "line": 118,
+      "cs_reference": "ExtLibs/Utilities/EnumTranslator.cs:92, 107-123",
+      "summary": "Carried from R71-22 unchanged.",
+      "required_fix": "As R69-07."
+    },
+    {
+      "id": "R72-36",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1701,
+      "cs_reference": "GCSViews/FlightPlanner.cs:5606-5609, 2145-2155, 233-238",
+      "summary": "Carried from R71-23 unchanged.",
+      "required_fix": "As R69-08."
+    },
+    {
+      "id": "R72-37",
+      "severity": "P2",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 592,
+      "cs_reference": "MainV2.cs:1665-1735, 1758-1809; ExtLibs/Mavlink/MAVLinkParam.cs:219-224",
+      "summary": "Carried from R71-24 unchanged.",
+      "required_fix": "As R68-03."
+    },
+    {
+      "id": "R72-38",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/ltm.rs",
+      "line": 174,
+      "cs_reference": "ExtLibs/Utilities/LTM.cs:240-242, 341-349",
+      "summary": "Carried from R71-25 unchanged.",
+      "required_fix": "As R68-05."
+    },
+    {
+      "id": "R72-39",
+      "severity": "P2",
+      "file": "crates/mp-core/src/link.rs",
+      "line": 1196,
+      "cs_reference": "ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2005-2041, 1847-1885; MAVState.cs:102-128; MainV2.cs:1665-1747; APFirmware.cs",
+      "summary": "Carried from R71-26 unchanged.",
+      "required_fix": "As R67-03."
+    },
+    {
+      "id": "R72-40",
+      "severity": "P3",
+      "file": "crates/mp-app/src/show_again.rs",
+      "line": 15,
+      "cs_reference": "Common.cs:260-294; ExtLibs/Utilities/Settings.cs:223-232",
+      "summary": "Carried from R71-27 unchanged.",
+      "required_fix": "As R68-07."
+    },
+    {
+      "id": "R72-41",
+      "severity": "P2",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 1500,
+      "cs_reference": "MainV2.cs:1737-1832",
+      "summary": "Carried from R71-29 unchanged.",
+      "required_fix": "As R67-06."
+    },
+    {
+      "id": "R72-42",
+      "severity": "P2",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 133,
+      "cs_reference": "Controls/fftui.cs; ExtLibs/Utilities/Spectrogram.cs:119-244",
+      "summary": "Carried from R71-30 unchanged. The FFT tools now read logs through the DFLogBuffer-backed parse(), but the FFT and spectrogram code is still not fftui.cs/Spectrogram.cs.",
+      "required_fix": "As R65-05."
+    },
+    {
+      "id": "R72-43",
+      "severity": "P2",
+      "file": "crates/mp-core/src/paramfile.rs",
+      "line": 36,
+      "cs_reference": "ExtLibs/Mavlink/MAVLinkParam.cs:219-224; ConfigRawParams.cs:237-252",
+      "summary": "Carried from R71-31 unchanged.",
+      "required_fix": "As R64-02."
+    },
+    {
+      "id": "R72-44",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1718,
+      "cs_reference": "GCSViews/FlightPlanner.cs:6706-6764, 322, 1864",
+      "summary": "Carried from R71-32 unchanged.",
+      "required_fix": "As R65-07."
+    },
+    {
+      "id": "R72-45",
+      "severity": "P2",
+      "file": "crates/mp-core/src/mission.rs",
+      "line": 227,
+      "cs_reference": "GCSViews/FlightPlanner.cs:5613-5635, 1138-1145, 6141-6181",
+      "summary": "Carried from R71-33 unchanged.",
+      "required_fix": "As R62-03."
+    },
+    {
+      "id": "R72-46",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1727,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1385-1400, 1413-1425, 5659",
+      "summary": "Carried from R71-34 unchanged.",
+      "required_fix": "As R62-05."
+    },
+    {
+      "id": "R72-47",
+      "severity": "P2",
+      "file": "crates/mp-core/src/rtk.rs",
+      "line": 42,
+      "cs_reference": "ConfigSerialInjectGPS.cs:757-834, 908-925; ubx_m8p.cs:440-472",
+      "summary": "Carried from R71-35 unchanged.",
+      "required_fix": "As R61-10."
+    },
+    {
+      "id": "R72-48",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/version.rs",
+      "line": 18,
+      "cs_reference": "System.Version; CircularBuffer.cs; fft.cs:84-89; Pelco.cs",
+      "summary": "Carried from R71-36 unchanged.",
+      "required_fix": "As R65-12."
+    },
+    {
+      "id": "R72-49",
+      "severity": "P3",
+      "file": "crates/mp-app/src/swarm.rs",
+      "line": 159,
+      "cs_reference": "Swarm/Formation.cs:321-324; Swarm/FormationControl.cs:273-293",
+      "summary": "Carried from R71-37 unchanged.",
+      "required_fix": "As R63-08."
+    },
+    {
+      "id": "R72-50",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan/menu.rs",
+      "line": 815,
+      "cs_reference": "GCSViews/FlightPlanner.cs:3272-3299, 1096-1223, 1038-1063",
+      "summary": "Carried from R71-38 unchanged.",
+      "required_fix": "As R63-09."
+    },
+    {
+      "id": "R72-51",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1887,
+      "cs_reference": "GMap.NET.WindowsForms/GMapRoute.cs:131-148",
+      "summary": "Carried from R71-39 unchanged.",
+      "required_fix": "As R62-09."
+    },
+    {
+      "id": "R72-52",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/maps/wpoverlay.rs",
+      "line": 87,
+      "cs_reference": "GMapPolygon.cs; WPOverlay.cs:30, 46-48, 403-457",
+      "summary": "Carried from R71-40 unchanged. The manifest now maps WPOverlay.cs to mp-core through CORE_FILES_IN_UI_EXTLIBS, which is the right bookkeeping. The behavioural gaps remain.",
+      "required_fix": "As R62-10."
+    },
+    {
+      "id": "R72-53",
+      "severity": "P3",
+      "file": "crates/mp-core/src/coords.rs",
+      "line": 36,
+      "cs_reference": "GCSViews/FlightPlanner.cs:2731-2763; ExtLibs/Controls/Coords.cs",
+      "summary": "Carried from R71-41 unchanged.",
+      "required_fix": "As R62-11."
+    },
+    {
+      "id": "R72-54",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/io.rs",
+      "line": 22,
+      "cs_reference": "System.Console.Out; ExtLibs/ArduPilot/Linux.cs",
+      "summary": "Carried from R71-42 unchanged. BinaryLog, DFLogBuffer (including a line number printed every second by GetEnumeratorType), CompassCalibrator and WarningEngine now all print through console_write_line.",
+      "required_fix": "As R62-12."
+    },
+    {
+      "id": "R72-55",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 4762,
+      "cs_reference": "Behaviour is the spec.",
+      "summary": "Carried from R71-43 unchanged: no Clipper golden vectors.",
+      "required_fix": "As R69-28."
+    }
+  ],
+  "round_71_status": {
+    "fixed": [
+      "R71-05: 'Bad Grid' (simplegridui.rs:492) and 'Please define a polygon.' (simplegridplugin.rs:73 -> menu.rs:540 toasts.message(e, caption)) carry 'Error'. NumericUpDown's ArgumentOutOfRange text now reads 'Minimum'/'Maximum' (simplegridui_designer.rs:59). The value is formatted with decimal_to_string, which ignores NegativeSign (R72-20).",
+      "R71-08: units.rs uses the f32 literals 3.2808399 / 3.6 / 2.23693629 / 1.94384449, identical to MainV2.cs:4276-4330 after f32 rounding. A new, related divergence (the 'kn' label) is R72-18.",
+      "R71-15: CircularBuffer.Get() returns IndexOutOfRange when head is out of bounds (circularbuffer.rs:161-168), with a test."
+    ],
+    "partly_fixed": [
+      "R71-01: the manifest is regenerated and verified exact, and 7 more files are ported (38,374 lines). 91.9% of owned lines are still todo (R72-01).",
+      "R71-06: trailing sign, OverflowException, scale cap and VarR8FromDec are done and tested. VarDecFromR8's double arithmetic, NegativeSign and the leading-NUL trim are not (R72-20).",
+      "R71-12: (1) savesettings after the adds, (3) LocationRightBottom and (4) the List indexer exception are fixed. (2) Load-before-theme/lazyEvents and (5) HoldInvalidation are not (R72-22).",
+      "R71-14: clippy exits 0 workspace-wide with C#-citing item-level allows. clipper.rs's clippy::all, the uncommented extern allow and 238 warnings remain (R72-21)."
+    ],
+    "still_open": [
+      "R71-02 (now R72-04).",
+      "R71-03 (now R72-05).",
+      "R71-04 (now R72-23).",
+      "R71-07 (now R72-24).",
+      "R71-09 (now R72-25).",
+      "R71-10 (now R72-26).",
+      "R71-11 (now R72-27).",
+      "R71-13 (now R72-28).",
+      "R71-16 (now R72-29).",
+      "R71-17 (now R72-30).",
+      "R71-18 (now R72-31).",
+      "R71-19 (now R72-32).",
+      "R71-20 (now R72-33).",
+      "R71-21 (now R72-34).",
+      "R71-22 (now R72-35).",
+      "R71-23 (now R72-36).",
+      "R71-24 (now R72-37).",
+      "R71-25 (now R72-38).",
+      "R71-26 (now R72-39).",
+      "R71-27 (now R72-40).",
+      "R71-28 (now R72-06).",
+      "R71-29 (now R72-41).",
+      "R71-30 (now R72-42).",
+      "R71-31 (now R72-43).",
+      "R71-32 (now R72-44).",
+      "R71-33 (now R72-45).",
+      "R71-34 (now R72-46).",
+      "R71-35 (now R72-47).",
+      "R71-36 (now R72-48).",
+      "R71-37 (now R72-49).",
+      "R71-38 (now R72-50).",
+      "R71-39 (now R72-51).",
+      "R71-40 (now R72-52).",
+      "R71-41 (now R72-53).",
+      "R71-42 (now R72-54).",
+      "R71-43 (now R72-55).",
+      "Older items still open as listed in rounds 61-71."
+    ],
+    "new_ports_verified": [
+      "ap_hal.rs: (uint)(UtcNow - 1970-01-01).TotalMilliseconds keeps the low 32 bits of the truncated value, which is x64 .NET Framework's conv.u4 behaviour. Faithful.",
+      "binarylog.rs: faithful apart from R72-07 and R72-16. The ConvertBini open order (output with FileMode.Create first), the 1 MB buffer, progress (int)(pos/(float)len*100) and the 'ConvertBin ' console line match.",
+      "dflog.rs: faithful apart from the hash-keyed caches (R72-15).",
+      "dflogbuffer.rs: faithful apart from R72-15. LoadCache/SaveCache use the same magic, version, little-endian layout and rejection rules, so caches written by MP and by the port are interchangeable.",
+      "compasscalibrator.rs: the algorithm and every class-aliasing quirk are kept. JSON console formatting (R72-14). No caller.",
+      "customwarning.rs / warningengine.rs: the logic is faithful. XML edge cases (R72-12), threading/static order (R72-13), app wiring (R72-08/09/10) and the invented UI (R72-02) diverge."
+    ]
+  },
+  "next_steps": [
+    "R72-02 / R72-08 / R72-09 / R72-10: port Warnings/WarningsManager.cs, its Designer and WarningControl.cs. Route WarningMessage through a real CurrentState.messageHigh setter (EMERGENCY, 10 s expiry, equality guard). Subscribe QuickPanelColoring, call Stop on close, back ISpeech with Speech.SpeakAsync/IsReady, and give CsSource real property values.",
+    "R72-03 / R72-07: wire BinaryLog::ConvertBin to 'Convert .Bin to .Log' (multi-select, no message) and register MainV2's onFlightMode handler as a proper multicast event.",
+    "R72-11 / R72-01: port Log/LogBrowse.cs directly over DFLogBuffer (time axis from DFItem.time, InstanceType nodes, GetUnit) and retire dataflash::Log for the browser. Port MagCalib.cs so CompassCalibrator has its caller.",
+    "R72-12 / R72-13 / R72-14 / R72-15 / R72-16: XmlSerializer empty-element and repeat semantics, the synchronous first MainLoop pass, Json.NET 'R'/quoted NaN, .NET-hash-keyed DFLog caches, ASCII encoding in ConvertBini.",
+    "R72-17 / R72-14: golden tests from MP for a real .bin/.log (ConvertBin bytes, index dumps, DFItem.time), a full CompassCalibrator run and a WarningEngine tick trace.",
+    "R72-18 / R72-19 / R72-20 / R72-21 / R72-22: 'kts', no raw NUL bytes in source, VarDecFromR8, the clippy cleanup, and the remaining SimpleGrid order items.",
+    "R72-04 / R72-05 / R72-06 / R72-23 / R72-24: GridUI.cs, a modal and sizable SimpleGrid with the GMapControl map mode, the WPOverlay/FlightData map, and FlightPlanner AddCommand/setfromMap.",
+    "R72-37, R72-39, R72-41..R72-47: the long-standing MainV2/MAVLink/FlightPlanner/FlightData gaps carried from earlier rounds."
+  ],
+  "verdict": "Build, tests (429 passed, 1 ignored) and, for the first time, clippy all pass. The manifest has been regenerated, and an independent in-memory re-run shows it is exact. Seven ExtLibs/Utilities files (3,582 lines) are new, which lifts ported lines to 38,374 / 479,014 (8.0%) and the cap to 1.9. BinaryLog, DFLog and DFLogBuffer are strong file-by-file ports that keep even MP's bugs: the empty-Aggregate line drop, ToDictionary's counter IsNumber, the dead Unit/Mult branches, the ToUpper/indexer KeyNotFound, and caches surviving Clear. CompassCalibrator keeps the param_t aliasing, the no-op memset and the self-rejecting thin_samples. CustomWarning and WarningEngine are faithful in logic. The R71 fixes for captions, units, CircularBuffer, savesettings order and clippy check out. Against an exact clone, the wiring and front-ends fall short. The Warning Manager is an invented grid, not WarningsManager/WarningControl. 'Convert .Bin to .Log' ignores the newly ported ConvertBin. onFlightMode and QuickPanelColoring have no subscribers, so log modes show as numbers and Coloring warnings do nothing. Custom warnings reach the HUD without EMERGENCY severity, expiry or dedupe. Speech bypasses speechEnabled()/IsReady. Warnings on unmodelled CurrentState properties silence every later warning. CompassCalibrator is dead code until MagCalib is ported. The log browser flattens DFLogBuffer back into the old model. Awarded 1.6 of a 1.9 cap. Round-file fidelity 6.7, UI/UX 2.7, features 3.7."
+}

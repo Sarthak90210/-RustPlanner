@@ -1,0 +1,15 @@
+//! Port of `ExtLibs/ArduPilot/PX4_CUSTOM_MAIN_MODE.cs`
+
+crate::cs_enum! {
+    /// `MissionPlanner.ArduPilot.PX4_CUSTOM_MAIN_MODE`
+    pub PX4_CUSTOM_MAIN_MODE: i32 {
+        PX4_CUSTOM_MAIN_MODE_MANUAL = 1,
+        PX4_CUSTOM_MAIN_MODE_ALTCTL = 2,
+        PX4_CUSTOM_MAIN_MODE_POSCTL = 3,
+        PX4_CUSTOM_MAIN_MODE_AUTO = 4,
+        PX4_CUSTOM_MAIN_MODE_ACRO = 5,
+        PX4_CUSTOM_MAIN_MODE_OFFBOARD = 6,
+        PX4_CUSTOM_MAIN_MODE_STABILIZED = 7,
+        PX4_CUSTOM_MAIN_MODE_RATTITUDE = 8,
+    }
+}

@@ -1,0 +1,273 @@
+{
+  "round": 57,
+  "date": "2026-11-08",
+  "reviewed_head": "0eddbe4 + uncommitted",
+  "commands_run": [],
+  "commands_note": "No commands were allowed this round (no shell, cargo, git, python or scripts). Everything below comes from reading files with Read/Grep/Glob. Nothing was compiled, so the judge also acted as the compiler.",
+  "manifest_summary": {
+    "manifest_status": "port/MANIFEST.md is stale for this batch: it lists the 59 newly ported owned files as 'todo' (e.g. CommsNTRIP.cs, CommsSerialPort.cs, Settings.cs, PointLatLngAlt.cs) and the GeoUtility/ProjNet/GMap.NET.Core files as 'vendored'. Counts below are derived by hand from the '//! Port of' headers and the C# line counts in MANIFEST.md.",
+    "headers_found": "99 '//! Port of' headers in crates/mp-core/src. 5 are pre-manifest reimplementations that only claim to be ports (state.rs, paramfile.rs, param_meta.rs, geo.rs, link.rs). 9 are ExtLibs/Mavlink (already counted in round 56 plus Parameter.cs). 85 are new in this batch.",
+    "new_owned_files_ported": {
+      "ExtLibs/Comms": "14 files, 3,932 C# lines (CircularBuffer 49, CommsBase 69, CommsFile 213, CommsInjection 193, CommsNTRIP 542, CommsSerialPipe 446, CommsSerialPort 773, CommsStream 51, CommsTCPSerial 400, CommsUdpSerial 357, CommsUDPSerialConnect 366, CommsWebSocket 381, SerialTest 43, UDPStream 49). CommsBLE.cs (1,424) and CommsWinUSB.cs (924) remain todo.",
+      "ExtLibs/Interfaces": "3 files, 137 lines (IActivate 27, ICommsSerial 75, ServiceLocator 35). IGraphics.cs (367) remains todo.",
+      "ExtLibs/ArduPilot": "18 files, 823 lines (the enums and small helpers, missionpck, parampck, RetryTimeout, Mavlink/Extension, MAVAuthKeys, ProgressEventHandler). MAVLinkInterface.cs, MAVState.cs, MAVList.cs, CurrentState.cs and MAVFtp.cs remain todo.",
+      "ExtLibs/Utilities": "24 files, 3,043 lines (Settings 561, PointLatLngAlt 476, DisplayView 457, CircularBuffer 309, minifloat 252, locationwp 212, Crypto 186, ExpireType 73, L10NU 65, three Attributes 116, and 13 small files)."
+    },
+    "new_owned_lines_ported": 7935,
+    "new_vendored_files_ported": "26 files, 6,546 C# lines that the manifest classes as vendored and therefore excludes from owned totals: GeoUtility 17 files / 3,684 lines, ProjNet 7 files / 2,600 lines, GMap.NET.Core 2 files / 262 lines.",
+    "owned_files_ported_corrected": 67,
+    "ported_lines_corrected": 9960,
+    "ported_lines_derivation": "Round 56 corrected base 1,646 (7 ExtLibs/Mavlink files) + ExtLibs/Mavlink/component_information/Parameter.cs 379 (committed in 0eddbe4) + 7,935 new owned lines = 9,960.",
+    "owned_lines_total_corrected": 434552,
+    "ported_fraction_corrected": 0.0229,
+    "ported_fraction_if_vendored_counted": "(9,960 + 6,546) / (434,552 + 6,546) = 0.0374",
+    "conservatism_note": "These are upper bounds. Files are counted whole even where members are admitted unported (PointLatLngAlt.Transform, the Locationwp MissionFile operators, Geographic/UTM/MGRS ConvertFrom/ConvertTo and their GaussKrueger/MapService operators, most of Ellipsoid/ProjectedCoordinateSystem/CoordinateTransformationFactory/MathTransform).",
+    "wiring": "None of the ported code is used. Grep for 'extlibs::' or 'dotnet::' outside crates/mp-core/src/{extlibs,dotnet} finds only build.rs. mp-app and the rest of mp-core still use the pre-manifest modules."
+  },
+  "scores": {
+    "overall": 0.9,
+    "overall_cap": 1.3,
+    "overall_cap_derivation": "ceil1(9,960 / 434,552 * 10) = ceil1(0.229) = 0.3, plus at most +1.0 for the pre-manifest app = 1.3. Counting the vendored GeoUtility/ProjNet/GMap ports would give ceil1(0.374) = 0.4 and a cap of 1.4; that is rejected because scripts/port_manifest.py still classes them as vendored. Awarded: 0.2 for ported lines (discounted because nothing is wired, nothing has been compiled, and several files are partial) + 0.7 for the pre-manifest app = 0.9.",
+    "round_files_fidelity": 6.0,
+    "round_files_fidelity_rationale": "The GeoUtility transformation math, MGRS/UTM parsing and formatting, Sexagesimal, the TransverseMercator/MapProjection series and the GMap structs are close line-by-line transliterations, with careful int casts, Substring checks and null/empty paths. Points are lost for: unported members inside 'ported' files (counted against fidelity even where headers admit them); a ProjNet port that is a narrow slice of each class; a UI-culture lookup that reads the regional-format locale; a hard-coded 27-culture table that ignores user overrides and localized NaN/Infinity symbols; panics where C# throws (TcpSerial.Read/Write); wrong KnownColor numbers; invented equality and ToString semantics; and tests with loose tolerances and no C#-produced golden vectors.",
+    "ui_ux": 2.0,
+    "features": 2.5,
+    "features_rationale": "Unchanged from round 56: the new code is not wired into anything, so the running app behaves exactly as before."
+  },
+  "compile_check": {
+    "summary": "Every newest-batch file was read in full (geoutility/**, projnet/**, gmap_net_core/**, utilities/{pointlatlngalt,locationwp,math}.rs, dotnet/{mod,drawing,collections,uri,environment}.rs), along with serialtest.rs, commstcpserial.rs, icommsserial.rs, servicelocator.rs, l10nu.rs, crypto.rs, extension.rs, settings.rs and parts of net.rs. No definite type, borrow, path or visibility error was found in them. Checked specifically: the deferred-init borrow in wgsutm.rs:16-22; inherent PointLatLng::add vs the Add trait; the Deref 'type Target' alongside the imported enum Target in utm.rs/mgrs.rs; pub(crate) items reached across geosystem/transformation; trait methods in scope (MathTransform in pointlatlngalt.rs, MapProjectionImpl in transversemercator.rs, CsEnum in locationwp.rs); const-fn statics (TRANSFORM, CULTURES, Color consts); [char; N] patterns; f64::round_ties_even (1.77+); the windows 0.62 GetUserDefaultLocaleName(&mut [u16]) signature.",
+    "likely_errors": [
+      "crates/mp-core/Cargo.toml:41 with crates/mp-core/src/extlibs/comms/serialtest.rs:36-38: serialtest.rs imports windows::Win32::Foundation::{CloseHandle, GENERIC_ACCESS_RIGHTS} and uses the HANDLE-returning CreateFileW, but mp-core enables windows 0.62 without the \"Win32_Foundation\" feature. It builds only when feature unification pulls the feature in from mp-app (crates/mp-app/Cargo.toml:42). 'cargo build/test -p mp-core' on Windows will probably fail with unresolved imports. Fix: add \"Win32_Foundation\" to mp-core's windows features.",
+      "crates/mp-core/src/dotnet/net.rs:23-63: fionread_raw/available_tcp/available_udp exist only under cfg(windows) and cfg(unix). mp-core's Cargo.toml explicitly supports target_arch = \"wasm32\" (the serialport cfg), and there TcpClient::available and UdpClient::available reference missing functions. Fix: add a cfg(not(any(windows, unix))) fallback that returns Ok(0) or an Unsupported error."
+    ],
+    "not_read": "Not read line by line, and so not compile-checked: comms/{commsntrip,commsserialport,commsserialpipe,commswebsocket,commsudpserial,commsudpserialconnect,commsinjection,commsfile}.rs; utilities/{displayview,minifloat,circularbuffer,expiretype,hires,polldelay}.rs; dotnet/{ports,crypto,xml}.rs; the rest of net.rs."
+  },
+  "findings": [
+    {
+      "id": "R57-01",
+      "severity": "P0",
+      "file": "crates/mp-app/src/mp/ (missing), crates/mp-app/src/extlibs/ (missing)",
+      "line": 0,
+      "cs_reference": "reference/MissionPlanner/{MainV2.cs,Program.cs,GCSViews/*,Controls/*,Log/*,...}",
+      "summary": "Carried over from R56-01. No Mission Planner project file and no UI ExtLib has been ported. 97.7% of owned C# lines are still todo, and the whole UI is still the pre-manifest egui reimplementation. This round added only non-UI ExtLibs.",
+      "required_fix": "Start the mp-app mirror (MainV2.cs and its Designer, then GCSViews) once the comms/state core below is wired."
+    },
+    {
+      "id": "R57-02",
+      "severity": "P1",
+      "file": "crates/mp-core/src/lib.rs",
+      "line": 6,
+      "cs_reference": "ExtLibs/Utilities/PointLatLngAlt.cs, ExtLibs/GeoUtility/*, ExtLibs/Comms/*, ExtLibs/ArduPilot/{missionpck,parampck}.cs",
+      "summary": "The 85-file batch (about 16k Rust lines) is completely unwired. Grep finds no reference to crate::extlibs or crate::dotnet outside those two trees, apart from build.rs. The pre-manifest reimplementations remain live and now duplicate the ports: coords.rs (its header claims GeoUtility WGSUTM/UTMWGS/UTMMGR/MGRUTM and PointLatLngAlt.ToUTM) next to extlibs/geoutility + extlibs/projnet; geo.rs (PointLatLngAlt) next to extlibs/utilities/pointlatlngalt.rs; comms.rs (Transport/ConnectionSpec) next to extlibs/comms; missionpck.rs and parampck.rs next to extlibs/ardupilot/{missionpck,parampck}.rs. Two divergent implementations of the same C# now coexist, and the app runs the non-faithful one. In C#, PointLatLngAlt, Coords.cs, utmpos.cs and FlightPlanner call GeoUtility, and MAVLinkInterface consumes ICommsSerial transports. The Rust app follows neither path.",
+      "required_fix": "Point every caller of coords.rs, geo.rs, comms.rs, missionpck.rs and parampck.rs at the extlibs ports, delete the old modules, and add a grep check (or CI test) that no old module remains when its C# file is marked ported."
+    },
+    {
+      "id": "R57-03",
+      "severity": "P2",
+      "file": "crates/mp-core/src/dotnet/mod.rs",
+      "line": 531,
+      "cs_reference": "ExtLibs/GeoUtility/Localizer/Localizer.cs:41,50 (CultureInfo.CurrentUICulture.TwoLetterISOLanguageName); ExtLibs/Utilities/L10NU.cs:19 (CurrentUICulture.Name)",
+      "summary": "current_ui_culture_name() falls back to os_locale_name(), which on Windows is GetUserDefaultLocaleName: the regional-format locale. On Unix it reads LC_ALL/LC_NUMERIC/LANG. .NET's CurrentUICulture comes from the user's UI language (GetUserDefaultUILanguage / preferred UI languages); Mono reads LANG/LC_MESSAGES. On an English-UI Windows with German regional settings, C# shows English GeoUtility errors while Rust switches Localizer to DE_ messages. L10NU likewise picks its zh-Hans/uk tables from the wrong setting.",
+      "required_fix": "Use GetUserDefaultUILanguage (or GetUserPreferredUILanguages) plus LCIDToLocaleName on Windows, and LC_ALL > LC_MESSAGES > LANG on Unix, for the UI culture. Keep GetUserDefaultLocaleName for CurrentCulture only."
+    },
+    {
+      "id": "R57-04",
+      "severity": "P2",
+      "file": "crates/mp-core/src/dotnet/mod.rs",
+      "line": 454,
+      "cs_reference": ".NET Framework 4.7.2 CultureInfo.CurrentCulture (NLS data, UseUserOverride = true); NumberFormatInfo.{NaNSymbol,PositiveInfinitySymbol,NegativeSign,NumberGroupSeparator}",
+      "summary": "CurrentCulture is a hard-coded 27-row table. Locales outside it fall back by language (fr-CA gets fr-FR's dd/MM/yyyy instead of yyyy-MM-dd) or to en-US (hu-HU, da-DK, fi-FI, el-GR, nb-NO...). Control Panel overrides of the decimal or group symbol, which .NET honours, are ignored. NaN and Infinity are always printed and parsed as \"NaN\"/\"Infinity\", whereas .NET Framework NLS cultures use localized symbols (de-DE \"n. def.\"/\"+unendlich\"). NegativeSign is not modelled. Parsing does not accept U+0020 where the group separator is U+00A0, as .NET's MatchChars does. The fr-FR group separator on current Windows 10 NLS is likely U+202F, not U+00A0. Every format_general/format_fixed/double_parse call therefore diverges outside en-US-like setups: GeoUtility LonString/EastString, Geographic.TryParse, PointLatLngAlt.ToString and CompareTo.",
+      "required_fix": "On Windows, query the live NLS values (GetLocaleInfoEx with LOCALE_SDECIMAL, LOCALE_STHOUSAND, LOCALE_SNAN, LOCALE_SPOSINFINITY, LOCALE_SNEGINFINITY, LOCALE_SNEGATIVESIGN, LOCALE_SSHORTDATE, LOCALE_SLONGTIME, AM/PM) instead of a table, and apply them in format_general/format_fixed/normalize_number. On Unix, mirror Mono's culture data for the locale."
+    },
+    {
+      "id": "R57-05",
+      "severity": "P2",
+      "file": "crates/mp-core/src/extlibs/comms/commstcpserial.rs",
+      "line": 300,
+      "cs_reference": "ExtLibs/Comms/CommsTCPSerial.cs:171-191 (Read catch -> throw new Exception(\"Socket Closed\")), :241-251 (Write catch {} swallow)",
+      "summary": "Read slices readto[o..o + l] and Write slices write[..length] directly. A negative offset, an offset+length past the buffer, or a length longer than the array panics (and aborts the link thread). In C#, Socket.Receive/Send throws ArgumentOutOfRangeException, which Read turns into Exception(\"Socket Closed\") and Write swallows. discard_in_buffer and read_existing pass sizes from Available, which is fine, but every ICommsSerial caller with a bad range crashes where C# recovers.",
+      "required_fix": "Check the range before slicing. Read should return Err(Exception::Other(\"Socket Closed\")) and Write should return Ok(()). Apply the same audit to the other transports' read/write slices (commsudpserial, commsudpserialconnect, commsserialpipe, commsntrip, commswebsocket)."
+    },
+    {
+      "id": "R57-06",
+      "severity": "P2",
+      "file": "crates/mp-core/src/extlibs/geoutility/geosystem/geographic.rs",
+      "line": 3,
+      "cs_reference": "ExtLibs/GeoUtility/GeoSystem/Geographic.cs:350,421,446,485; UTM.cs:392,419,439,479; MGRS.cs:470,498,519,560; GaussKrueger.cs; MapService.cs (+MapService/Cache,Images,Info); Helper/GeoPoint.cs, GeoRect.cs; GeoUtility.cs; Transformation/{Conversion,GKPOD,WGSGK,WGSIMAP,WGSPixel,MapDimension,MapInternal,MapMove}.cs; Properties/Resources.Designer.cs:39-66 (typed properties, Culture)",
+      "summary": "GeoUtility is only partly ported. Inside the 'ported' files, the explicit operators to GaussKrueger and MapService and the generic ConvertFrom<T>/ConvertTo<T> (with their ERROR_CONVERTFROM wrapping) are missing from Geographic, UTM and MGRS. Resources.Designer exposes only get_string, without the 46 typed properties or the settable Culture (resourceCulture) the generated class has. Missing whole files: GaussKrueger, MapService and its three helpers, GeoPoint, GeoRect, GeoUtility.cs and eight Transformation files (about 4,700 C# lines). The headers justify this with 'nothing in Mission Planner calls them'. The goal is every file, so these count against fidelity.",
+      "required_fix": "Port GaussKrueger.cs, GKPOD.cs, WGSGK.cs and Conversion.cs, then the MapService set, then add to_gauss_krueger/to_map_service and a ConvertFrom/ConvertTo equivalent to the three coordinate types, plus the Resources typed accessors and Culture."
+    },
+    {
+      "id": "R57-07",
+      "severity": "P2",
+      "file": "crates/mp-core/src/extlibs/projnet/coordinatesystems/transformations/coordinatetransformationfactory.rs",
+      "line": 17,
+      "cs_reference": "ExtLibs/ProjNet/CoordinateSystems/Transformations/CoordinateTransformationFactory.cs:45-82,98-429; CoordinateTransformation.cs; Projections/ProjectionsRegistry.cs:104-124; MathTransform.cs:44-226; Ellipsoid.cs:79-239; ProjectedCoordinateSystem.cs:49-255; Projections/MapProjection.cs:83-92,148-264,331-341",
+      "summary": "The ProjNet 'ports' are a thin slice of each class. CoordinateTransformationFactory has no CreateFromCoordinateSystems and no Proj2Geog/Geog2Geoc/Geoc2Geog/Proj2Proj/CreateGeog2Geog/CreateGeoc2Geoc/Fitt2Any/Any2Fitt. create_from_wgs84_to_projected assumes source.EqualParams(target.GeographicCoordinateSystem) without checking it, and returns a bare TransverseMercator instead of a CoordinateTransformation (ICoordinateTransformation with Source/Target/TransformType/MathTransform). PointLatLngAlt therefore caches TransverseMercator where C# caches ICoordinateTransformation and calls trans.MathTransform.Transform. ProjectionsRegistry.cs is not ported: its lookup is inlined, and Activator.CreateInstance's TargetInvocationException wrapping of constructor errors is lost. MathTransform lacks DimSource/DimTarget (abstract), Identity, Derivative, GetCodomainConvexHull, GetDomainFlags, Inverse, Invert and the Coordinate/ICoordinateSequence overloads. Ellipsoid lacks International1924, Clarke1880, Clarke1866, Sphere, AxisUnit (ILinearUnit), alias/abbreviation/remarks, WKT and XML; its header wrongly says the WKT/XML text is ported. ProjectedCoordinateSystem lacks GeographicCoordinateSystem/HorizontalDatum/AxisInfo, WebMercator, GetUnits, WKT, XML and EqualParams, and replaces the C# object graph with flattened fields. MapProjection lacks WKT/XML, and Inverse() returns an unlinked copy, so Invert() no longer flips the paired instance and Inverse().Inverse() is a new object rather than the original.",
+      "required_fix": "Port ProjNet class by class with the C# shapes: GeographicCoordinateSystem, HorizontalDatum, LinearUnit/AngularUnit, PrimeMeridian, AxisInfo, Info, CoordinateTransformation, ProjectionsRegistry, the full CoordinateTransformationFactory, and MathTransform as a trait carrying all abstract/virtual members. Link the inverse pair with Arc/Weak to keep the Invert semantics."
+    },
+    {
+      "id": "R57-08",
+      "severity": "P2",
+      "file": "crates/mp-core/src/extlibs/utilities/pointlatlngalt.rs",
+      "line": 3,
+      "cs_reference": "ExtLibs/Utilities/PointLatLngAlt.cs:21,236-244,441-468; ExtLibs/Utilities/locationwp.cs:121-151",
+      "summary": "PointLatLngAlt.Transform(Coordinate[], string, string) is not ported; it needs ProjNet's CoordinateSystemFactory/WKT reader. PointLatLngAlt.Zero is a static readonly shared instance with mutable properties in C#, so code that mutates Zero affects every user; zero() returns a fresh value each call. IComparable is only a compare_to helper, not Ord/PartialOrd, so List.Sort-style use is impossible. The static ctfac/wgs84 members are missing. Locationwp's implicit conversions to and from MissionFile.Item are absent: its header defers them to an unported missionfile.rs.",
+      "required_fix": "Port the WKT path (CoordinateSystemFactory, CoordinateSystemWktReader) and Transform(). Model Zero as a shared Arc<RwLock<PointLatLngAlt>> or document the aliasing. Port MissionFile.Item and the two Locationwp operators in the same round."
+    },
+    {
+      "id": "R57-09",
+      "severity": "P2",
+      "file": "crates/mp-core/src/dotnet/mod.rs",
+      "line": 716,
+      "cs_reference": "System.Exception hierarchy (ArgumentOutOfRangeException : ArgumentException, FileNotFoundException/EndOfStreamException : IOException, InnerException); ExtLibs/GeoUtility/ErrorProvider/ErrorProvider.cs:84-106 (GeoException(message, inner), Data[\"ExtraInfo\"])",
+      "summary": "Exception is a flat enum, so C# catch clauses on a base type cannot be expressed: catch (ArgumentException) also catches ArgumentOutOfRange and ArgumentNull, and catch (IOException) catches FileNotFound and EndOfStream. There is no InnerException, so GeoException(ERROR_CONVERTFROM/ERROR_MGRS, ex) and MGRS(string) drop the inner exception, and Data[\"ExtraInfo\"] is gone. ex.ToString() also cannot reproduce the ' ---> inner' chain. Ported catch sites will silently stop matching once callers rely on base-type catches.",
+      "required_fix": "Add an is_a(base) relation (or a kind hierarchy) plus an optional boxed inner exception and data map, and give catch helpers the C# assignability rules."
+    },
+    {
+      "id": "R57-10",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/drawing.rs",
+      "line": 18,
+      "cs_reference": "System.Drawing.KnownColor (Gold = 76, Goldenrod = 77, Gray = 78, Green = 79, GreenYellow = 80)",
+      "summary": "The KnownColor numbers are off by one for two entries: Rust has (79, \"Gray\") and (80, \"Green\"). In .NET, Gray is 78 and Green is 79 (Transparent 27, then AliceBlue 28 onwards alphabetically, which is consistent with the Black 35, Blue 37, Orange 127, Red 141, White 164 and Yellow 166 entries that are correct). Color::GRAY therefore carries KnownColor.Green's number and Color::GREEN carries GreenYellow's, which breaks equality and ToKnownColor against any color built from a KnownColor value.",
+      "required_fix": "Use (78, \"Gray\", 0xFF808080) and (79, \"Green\", 0xFF008000), and add a test that checks every listed member against the KnownColor enum values."
+    },
+    {
+      "id": "R57-11",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/mod.rs",
+      "line": 326,
+      "cs_reference": ".NET Framework Number.NumberToStringFormat (15-digit custom formatting of any finite double); Math.Round(double, int) InternalRound (|value| < 1e16 guard, digits 0..15 ArgumentOutOfRangeException)",
+      "summary": "format_fixed builds a rust_decimal from the 15-digit scientific text and falls back to 0 via unwrap_or_default when that fails (|x| > ~7.9e28, or exponents rust_decimal rejects). A large value prints as \"0\"/\"0.00\" where .NET prints the 15 significant digits followed by zeros. math_round (line 633) has no |x| < 1e16 guard (.NET returns x unchanged above it, while Rust rescales and may change the bits) and no 0..15 digits check.",
+      "required_fix": "Implement the .NET custom-format digit-buffer algorithm directly (15 digits, round at the decimal position, pad with '0') rather than going through rust_decimal. Add the InternalRound guard and the digits range check to math_round."
+    },
+    {
+      "id": "R57-12",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/geoutility/geosystem/utm.rs",
+      "line": 256,
+      "cs_reference": "ExtLibs/GeoUtility/GeoSystem/UTM.cs:251, MGRS.cs:384, Geographic.cs:271, Helper/Sexagesimal.cs:117 ('public new string ToString()')",
+      "summary": "The C# types hide object.ToString with 'new' instead of overriding it. String concatenation, string.Format, interpolation and any call through an object/BaseSystem reference print the type name (\"GeoUtility.GeoSystem.UTM\"); only a direct call on a UTM-typed variable gets the coordinate text. Rust's Display always gives the coordinate text. Several equalities are also invented: Sexagesimal derives PartialEq (C# class, reference equality), and Ellipsoid, Projection, ProjectedCoordinateSystem and ProjectionParameter derive PartialEq where C# uses reference equality and only EqualParams compares values.",
+      "required_fix": "Expose the hidden method as an inherent to_string_new()/to_cs_string(), make Display print the C# Object.ToString() type name, and remove the invented PartialEq derives (or replace them with equal_params)."
+    },
+    {
+      "id": "R57-13",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/geoutility/geosystem/utm.rs",
+      "line": 47,
+      "cs_reference": "UTM.cs:147 / MGRS.cs:292 char.IsLetter(Band, 0) -> .NET Framework Char.IsLetter(String,int): throw new ArgumentOutOfRangeException(\"index\")",
+      "summary": "For an empty Band, .NET Framework throws ArgumentOutOfRangeException(\"index\") with the default text \"Specified argument was out of the range of valid values.\\r\\nParameter name: index\". Rust uses the ArgumentOutOfRange_Index text (\"Index was out of range. Must be non-negative and less than the size of the collection.\"). is_letter_at0 also uses char::is_alphabetic (the Alphabetic property, which includes Nl and Other_Alphabetic) instead of the Unicode L* categories that Char.IsLetter tests.",
+      "required_fix": "Use the default ArgumentOutOfRange message with the 'index' parameter name, and test the general category (Lu/Ll/Lt/Lm/Lo) for IsLetter."
+    },
+    {
+      "id": "R57-14",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/mod.rs",
+      "line": 1304,
+      "cs_reference": ".NET Framework Number.ParseNumber (IsWhite: 0x20, 0x09-0x0D; trailing NULs only)",
+      "summary": "int_parse trims with char::is_whitespace and normalize_number trims whitespace and NULs from both ends. .NET's NumberStyles.Integer/Float allow only U+0020 and U+0009-U+000D as leading/trailing white, and NULs only at the end. \"\\u00A05\" and \"\\u30005\" parse in Rust but throw FormatException in C#, and a leading NUL is accepted only in Rust. This affects UTM/MGRS TryParse, Settings getters and Geographic.TryParse.",
+      "required_fix": "Trim exactly the .NET white set, plus trailing '\\0' only."
+    },
+    {
+      "id": "R57-15",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/locationwp.rs",
+      "line": 69,
+      "cs_reference": "System.ValueType.Equals (reflection path for structs containing references: thisField.Equals(thatField))",
+      "summary": "PartialEq compares Tag with Arc::ptr_eq. ValueType.Equals calls the boxed field's virtual Equals, so two Locationwp values whose Tag holds equal strings or equal boxed numbers are equal in C# and unequal in Rust.",
+      "required_fix": "Store Tag as a type with C#-like Equals (an enum over string, number and reference) or provide an equality hook, and compare through it."
+    },
+    {
+      "id": "R57-16",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/mavlink/mavlinkparse.rs",
+      "line": 61,
+      "cs_reference": "ExtLibs/Mavlink/Mavlink.cs:826-827 ([Description(...)] then [hasLocation()]); MavlinkParse.cs:38-63",
+      "summary": "EnumEntry::attributes claims to return attributes 'in the generator's order' but emits hasLocation, Obsolete, Description. The generated C# declares [Description] first and [hasLocation()] after it, and GetCustomAttributes on .NET Framework returns metadata order. The Units, Description and hasLocation types are now declared (partly resolving R56-10), but nothing uses Attribute to query arbitrary types, and Units.Unit and Description.Text are settable in C# but read-only through attributes().",
+      "required_fix": "Emit the attributes in Mavlink.cs declaration order, and add a test that compares the order against the reference file."
+    },
+    {
+      "id": "R57-17",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/interfaces/servicelocator.rs",
+      "line": 16,
+      "cs_reference": "ExtLibs/Interfaces/ServiceLocator.cs:12-33 (lock(_lock) is a reentrant Monitor; Register<T> keyed by the interface type)",
+      "summary": "start() runs while a non-reentrant std Mutex is held. A factory that calls ServiceLocator::get or register deadlocks in Rust, where the C# Monitor re-enters. T must be Sized, so the usual C# pattern Register<ISpeech>(() => new Speech()) has no direct equivalent: callers must invent a Box<dyn ISpeech> wrapper, and Get<ISpeech> differs at every call site.",
+      "required_fix": "Use a reentrant lock (parking_lot::ReentrantMutex) and support trait-object registration (e.g. register_dyn::<dyn ISpeech>(Arc<dyn ISpeech>))."
+    },
+    {
+      "id": "R57-18",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/settings.rs",
+      "line": 94,
+      "cs_reference": "ExtLibs/Utilities/Settings.cs:20,47 (auto-properties with defaults), :471-504 (catch around the whole reader -> File.Copy(..., true); throw); ExtLibs/Utilities/L10NU.cs:12",
+      "summary": "AppConfigName and FileName use \"\" as an 'unset' sentinel, so set_app_config_name(\"\") brings back \"Mission Planner\" where C# keeps \"\" (and null is also allowed in C#). In Load, an I/O error reading the user config (std::fs::read at :478) returns without the .failed copy that C#'s catch makes for any exception in the reader block. L10NU.strings is a public mutable static Dictionary in C#; Rust returns an immutable &HashMap.",
+      "required_fix": "Store Option<String> initialised to the defaults, wrap the whole read in the .failed-copy path, and expose L10NU.strings mutably (RwLock<Dictionary>)."
+    },
+    {
+      "id": "R57-19",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/crypto.rs",
+      "line": 87,
+      "cs_reference": "ExtLibs/Utilities/Crypto.cs:66-69 (algorithm.Clear()), :181-184 (Convert.FromBase64String)",
+      "summary": "DecryptString trims only the ends of the string, while Convert.FromBase64String ignores whitespace anywhere in it (spaces, tabs, CR/LF between blocks), so wrapped base64 decrypts in C# and fails in Rust. dispose() zeroes key and IV, but SymmetricAlgorithm.Clear() disposes them (KeyValue/IVValue = null), so a later Key/IV access generates a new random key.",
+      "required_fix": "Strip all base64 whitespace before decoding, and model Clear() as clearing to None with regeneration on the next access."
+    },
+    {
+      "id": "R57-20",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/projnet/coordinatesystems/projections/mapprojection.rs",
+      "line": 412,
+      "cs_reference": "ExtLibs/ProjNet/CoordinateSystems/Projections/MapProjection.cs:834-837 ((long) cast)",
+      "summary": "calc_utm_zone uses 'as i64', which saturates and maps NaN to 0. The C# (long) cast on x64 gives long.MinValue for NaN or out-of-range values. The same file's adjust_lon correctly uses a to_long helper for this; calc_utm_zone does not.",
+      "required_fix": "Use the same to_long (cvttsd2si) helper."
+    },
+    {
+      "id": "R57-21",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/uri.rs",
+      "line": 90,
+      "cs_reference": "System.Uri (path canonicalization, escaping); System.Net.IPEndPoint.ToString",
+      "summary": "Uri::parse does not canonicalize the path: '/a/../b' stays as written (C# gives '/b'), backslashes are not converted to '/', and spaces and other unsafe characters are not escaped in PathAndQuery. IPEndPoint's Display prints IPv6 as '::1:80' (net.rs:183), where .NET prints '[::1]:80'.",
+      "required_fix": "Implement the .NET path compression and escaping rules used for http/ws URIs, and bracket IPv6 in IPEndPoint.ToString."
+    },
+    {
+      "id": "R57-22",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/geoutility/geosystem/geographic.rs",
+      "line": 229,
+      "cs_reference": "Geographic.cs / UTM.cs / MGRS.cs / PointLatLngAlt.cs (no C# tests exist; behaviour is the spec)",
+      "summary": "The tests do not prove fidelity. The UTM round trips use 1e-5/1e-6 tolerances, mgrs_of_a_point checks only the '32UMB' prefix, the PointLatLngAlt UTM test checks loose ranges, and TransverseMercator, Sexagesimal, Geographic.TryParse and format_fixed_optional have no exact expected outputs. No vector was produced by running the C#. Rust's sin/cos/tan/atan/pow come from ucrt or glibc, while .NET Framework x64 uses its own CRT (msvcr120_clr0400) and Mono uses the platform libm, so bit-identical eastings and northings are unproven. Math.Pow(x, n) is translated as powf(n), which LLVM may lower differently from the CRT pow.",
+      "required_fix": "Generate golden vectors with the reference build (or an exact-arithmetic oracle) for a grid of lat/lon points through WGSUTM, UTMWGS, UTMMGR, MGRUTM, TransverseMercator.Transform, Sexagesimal and the string formatters, and assert exact equality."
+    },
+    {
+      "id": "R57-23",
+      "severity": "P3",
+      "file": "scripts/port_manifest.py",
+      "line": 64,
+      "cs_reference": "ExtLibs/GeoUtility/*, ExtLibs/ProjNet/*, ExtLibs/GMap.NET.Core/*",
+      "summary": "Progress accounting contradicts the code. GeoUtility, ProjNet and GMap.NET.Core are now being ported file by file, yet VENDORED still maps them to 'utm / proj4rs' and a 'walkers-style tile engine', so 26 ports (6,546 C# lines) are invisible to the metric. MANIFEST.md also still shows the 59 newly ported owned files as todo. Neither reading is honest: the ports either belong in the owned totals or should not exist.",
+      "required_fix": "Decide per library: if the policy is to port every C# file, reclassify these libraries as owned and regenerate MANIFEST.md; otherwise remove the ports and use the replacement crates."
+    }
+  ],
+  "resolved_since_round_56": [
+    "R56-09: DateTime.to_local_time/to_universal_time now take the zone offset for the specific instant (dotnet/mod.rs:896-923).",
+    "R56-19: DateTime::new and add_milliseconds now range-check and round to whole milliseconds as .NET Framework does.",
+    "R56-10 (partial): Units, Description and hasLocation now exist as types with an attributes() accessor (see R57-16 for what remains).",
+    "R56-08 (partial): a CultureInfo abstraction now drives number and date formatting (see R57-03 and R57-04 for what remains)."
+  ],
+  "next_priorities": [
+    "Fix the likely compile errors first: add \"Win32_Foundation\" to mp-core's windows features (serialtest.rs) and add a non-windows/non-unix fallback for net.rs FIONREAD.",
+    "R57-02: wire the ports in. Point coords.rs/geo.rs callers at extlibs::utilities::PointLatLngAlt and geoutility, comms.rs callers at extlibs::comms (ICommsSerial), and missionpck.rs/parampck.rs callers at extlibs::ardupilot; then delete the old modules.",
+    "R57-03/R57-04: correct UI-culture detection and replace the hard-coded culture table with live NLS data, including the NaN/Infinity/NegativeSign symbols.",
+    "R57-05: replace slice panics with the C# exception paths in every transport.",
+    "ExtLibs/ArduPilot/Mavlink/MAVState.cs, MAVList.cs, MAVLinkInterface.cs on top of extlibs::mavlink and extlibs::comms; then drop the `mavlink` crate (R56-02 is still open).",
+    "ExtLibs/ArduPilot/CurrentState.cs to replace state.rs/state_properties.rs.",
+    "Finish ProjNet's class graph (R57-07) and GeoUtility's GaussKrueger/MapService (R57-06), or reclassify the libraries in the manifest (R57-23).",
+    "ExtLibs/Comms/CommsBLE.cs, CommsWinUSB.cs; ExtLibs/Interfaces/IGraphics.cs; ExtLibs/Utilities/MissionFile.cs (for the Locationwp operators) and utmpos.cs.",
+    "Golden-vector tests produced from the C# for every numeric and formatting port (R57-22).",
+    "MainV2.cs + MainV2.Designer.cs, then GCSViews/FlightData.cs + FlightData.Designer.cs."
+  ],
+  "verdict": "This round adds 85 file-mirrored ports: 59 owned files (Comms, Interfaces, small ArduPilot files, Utilities including Settings and PointLatLngAlt) and 26 files from libraries the manifest calls vendored (GeoUtility, the ProjNet transverse-Mercator path, GMap PointLatLng/SizeLatLng), plus a much larger .NET BCL shim. The GeoUtility math, MGRS/UTM parsing and formatting, and the TransverseMercator series are careful transliterations that handle int-cast wrap, Substring argument checks and null/empty paths faithfully. No definite compile error was found in the files read; two likely ones are listed (missing Win32_Foundation feature, missing wasm32 FIONREAD fallback). But none of it is used. The app still runs coords.rs, geo.rs, comms.rs and the old missionpck/parampck reimplementations, so two divergent copies of the same C# now coexist. The UI culture is read from the regional-format locale, the culture table is hard-coded and ignores user overrides, transports panic where C# throws, KnownColor numbers are wrong, and ProjNet and GeoUtility are ported as narrow slices with many C# members missing. Owned progress is about 2.3% (9,960 / 434,552 lines), giving a cap of 1.3; awarded 0.9. Round-file fidelity is 6.0/10."
+}

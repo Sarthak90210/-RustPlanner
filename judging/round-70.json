@@ -1,0 +1,373 @@
+{
+  "round": 70,
+  "date": "2026-11-08",
+  "reviewed_head": "0eddbe4 + uncommitted",
+  "commands_run": [],
+  "commands_note": "No commands were allowed this round (no shell, cargo, git, python or scripts). Everything below comes from reading files with Read/Grep/Glob. Nothing was compiled, so the judge also acted as the compiler.",
+  "manifest_summary": {
+    "manifest_status": "port/MANIFEST.md is still stale. Grid.cs (line 2601) is now marked todo although grid.rs exists at its manifest path, and so are clipper.cs (2563), EnumTranslator.cs (2591) and LTM.cs (2622). The older stale entries from round 69 are unchanged.",
+    "new_owned_files_ported": {
+      "ExtLibs/Utilities/Grid.cs": 1014
+    },
+    "new_owned_lines_ported": 1014,
+    "owned_files_ported_corrected": 137,
+    "ported_lines_corrected": 33750,
+    "ported_lines_derivation": "32,736 (round 69) + 1,014 (Grid.cs -> extlibs/utilities/grid.rs) = 33,750. Every synchronous method of Grid.cs is ported statement by statement: CreateCorridor, GenerateOffsetPath, CreateRotary, Centroid, CreateGrid, getPolyMinMax, both newpos overloads, FindLineIntersection, FindLineIntersectionExtension, findClosestPoint, AddAngle, findClosestLine, PointInPolygon, linelatlng, StartPosition and StartPointLatLngAlt. The three async wrappers (CreateCorridorAsync, CreateRotaryAsync and CreateGridAsync, about 20 lines) are missing, and the whole file is still counted (R70-04).",
+    "owned_lines_total_corrected": 479014,
+    "ported_fraction_corrected": 0.07,
+    "conservatism_note": "This is an upper bound. Grid.cs is counted whole, but only CreateGrid has a caller, and it is reached through a shim (survey.rs) that fixes StartPosition, home, lead-in and spacing. CreateCorridor and CreateRotary have no caller, even though survey_ui.rs shows 'Corridor' and 'Spiral' checkboxes. The missing async wrappers are not deducted.",
+    "wiring": "New wiring this round. (1) menu.rs:98-145 offset_polygon now follows FlightPlanner.cs:3653-3702: ToUTM in list[0]'s zone, closing with operator != semantics, IntPoint(x*1000, y*1000), ClipperOffset(2.0, 0.25) jtMiter/etClosedPolygon, Execute_tree with (Int64)(intmeter*1000), None when ChildCount == 0, then every child contour concatenated and converted through utmpos.ToLLA. The caller (menu.rs:871-877) replaces the polygon only on Some. Cancel feeds the default '0', so a zero offset still runs, as in C#. (2) survey.rs:19-31 grid() calls Grid::CreateGrid(poly, 0, spacing, 0, angle, overshoot, overshoot, BottomLeft, false, 0, overshoot, overshoot, poly[0], true) and keeps the S/E points. Both flight_plan.rs:1830 (the 'SimpleGrid' dialog) and survey_ui.rs:260 (the GridUI port's lanes) use it. survey_ui.rs then reorders and extends the lanes with its own heuristics (R70-02). Still unwired: CreateCorridor, CreateRotary (and so ReversePolyTreePaths), StartPosition.Point/StartPointLatLngAlt (crossgrid), minLaneSeparation, useextendedendpoint, trigger spacing, and everything listed as unwired in round 69."
+  },
+  "scores": {
+    "overall": 1.5,
+    "overall_cap": 1.8,
+    "overall_cap_derivation": "ceil1(33,750 / 479,014 * 10) = ceil1(0.705) = 0.8, plus at most +1.0 for the pre-manifest app = 1.8. Awarded 0.7 for ported lines + 0.8 for the pre-manifest app = 1.5. There is no definite compile error and no expected test failure. The 0.1 held back inside the ported-lines part covers what is left unwired: CreateCorridor and CreateRotary have no caller, the GridUI port uses CreateGrid only for lane endpoints and runs its own ordering, lead-in and trigger logic, the SimpleGrid dialog hard-codes BottomLeft and lead-in = overshoot, and MANIFEST.md is stale for four ported files.",
+    "round_files_fidelity": 6.5,
+    "round_files_fidelity_rationale": "Up 0.2. I checked grid.rs line by line against Grid.cs and it is faithful. Loop bounds match: GenerateOffsetPath's a < Count-2 (as i64), CreateGrid's lines < (diag+2d)/d compared as a double, gridno frozen before the split lines are appended, and b running from 1. Int and double loops match: GenerateOffsetPath uses int d = (int)(dist % spacing), d += (int)spacing with cast_i32 and wrapping_add, and compares (d as f64) < dist on every iteration. CreateGrid's double d loops keep spacing - (basepnt->p1 % spacing) on the p1 side and basepnt->p2 % spacing on the p2 side. The start index (int)((lanes/2)*-1) uses cast_i32 (NaN gives int.MinValue), end uses wrapping_mul(-1), and (lane-start)%2 uses wrapping_sub. The rotary offset (Int64)(distance*1000*-lane) is cast_i64(..) as f64; -0.0 against C#'s int 0 collapses to 0 after the cast. Tags match: S, SM, ME, E and M are set before each Add. new utmpos(utmpos){Tag=..} is copy_of plus tag, so the tag is dropped and then reset. closest.p1/p2.Tag mutates the local copy, as in C#. Start position: switch default goes to Home through new utmpos(HomeLocation) in the home's own zone, then findClosestPoint against the polygon. Remove and IndexOf use utmpos.Equals (x, y). linelatlng equality is ValueType.Equals field by field through boxed utmpos.Equals, because the struct holds an object, so CanCompareBits is false. The Dictionary<utmpos, linelatlng> keeps insertion order, the indexer keeps the first key and overwrites the value, keys match on GetHashCode (x, y, zone, with .NET Framework's 0/-0 rule in double_get_hash_code) plus Equals, and the filter reads the stored key. Dictionary<double,..>.ContainsKey treats NaN as equal to NaN, and Sort puts NaN first. Exceptions: list[0] and ordered_keys[Count-1] give the List indexer's ArgumentOutOfRange, and Last()/First() give 'Sequence contains no elements'. ToLLA runs at each Add in CreateGrid and CreateCorridor, and at the final Select in CreateRotary. closestpoint is mutated field by field, so its Tag stays null, and is then fed into findClosestPoint in the split loop. In CreateRotary, the lane loop breaks on an empty tree, the reversal goes through the new ReversePolyTreePaths (same traversal as AddPolyNodeToPaths, through Childs rather than m_AllPolys, so the dropped outer node is skipped), the rotation goes through GetRange, and the Insert(0, Last) and Add(First) conditions use wrapping_sub. Rect's (minx, maxy, w, miny-maxy) construction keeps Bottom = maxy + (miny - maxy) bit for bit. R69-04 is fixed: m_IntersectCapacity follows List growth (0, 4, x2), survives Clear, and is passed as backing_len. Lost: (a) the async wrappers are missing, and StartPointLatLngAlt is a cloned getter/setter instead of a public static field aliasing PointLatLngAlt.Zero (R70-04). (b) An IndexOf of -1 reaches GetRange(-1, ..), which throws 'Non-negative number required.', while the port returns the List-indexer message (R70-04). (c) The dead `if (ans.Count() > 2)` block is dropped. It indexes ans1[0], but that cannot fire before (b). (d) The tests are shape-only (R70-05). (e) The offset menu maps a double.Parse failure to 0 and runs, where C# throws (R70-06). (f) The survey callers are shims (R70-02, R70-03).",
+    "ui_ux": 2.6,
+    "ui_ux_rationale": "Up 0.1. 'Offset Polygon' now produces C#'s geometry: a UTM Clipper miter offset with self-intersection clipping, the polygon kept when it vanishes, and all child contours concatenated. The SimpleGrid dialog now draws real Grid.CreateGrid lanes. Still wrong: that dialog has 4 inputs where SimpleGridUI has altitude, distance, spacing, angle, overshoot1/2, startfrom, and the internals/markers/boundary/grid toggles. It always starts BottomLeft, applies the overshoot as the lead-in too, and recomputes the whole grid (one ProjNet transform per point) every frame. The GridUI port's Corridor and Spiral checkboxes do nothing. Its lane order, lead-in and trigger points come from local-plane heuristics, not from CreateGrid. Every round-69 UI gap (WPOverlay markers, FlightData map, title bar, and so on) is unchanged.",
+    "features": 3.5,
+    "features_rationale": "Up 0.1. Grid.CreateGrid now generates the survey lanes, and offset polygon is the real ClipperOffset. Spiral (CreateRotary with clockwise_laps/match_spiral_perimeter/laps) and corridor (CreateCorridor) surveys are ported but unreachable. Crossgrid via StartPosition.Point, minimum lane separation, optimize-for-distance and C#-phased trigger points are not available through any UI. All round-68/69 feature gaps remain: skip_params/Params_BG, the PERIPHERAL check, the geofence download, RALLY_LIMIT_KM, integer params stored as f32, FFT, and setWPParams units."
+  },
+  "compile_check": {
+    "summary": "I checked grid.rs (987 lines), the clipper.rs changes, menu.rs offset_polygon and its caller, and survey.rs as the compiler. grid.rs: the file-level #![allow(non_snake_case, non_camel_case_types)] follows only //! inner docs, which is legal. Imports: Clipper, ClipperOffset, EndType, IntPoint, JoinType and PolyTree are pub in clipper.rs. PointLatLngAlt, Rect and utmpos::{utmpos, TagToString} resolve, and TagToString is used in tag()'s return type, so there is no unused import. tag() returns Some(Arc::new(String)), and the expected Option<Arc<dyn TagToString>> coerces the Some argument. String implements TagToString and is Any + Send + Sync. linelatlng derives Debug/Clone/Default, which utmpos supplies (manual Debug, derived Clone and Default). cs_enum! StartPosition: the macro derives PartialEq + Eq on the newtype, so `StartPosition::BottomLeft =>` const patterns are legal in start_position's match, and `_ =>` covers Home and the C# default. START_POINT: RwLock::new is const, and PointLatLngAlt (f64s, Strings, Color{i64, i16, i16, Option<String>}) is Send + Sync, so the static is Sync. In StartPointLatLngAlt(), guard.clone() resolves through Deref to Option::clone, because RwLockReadGuard is not Clone, and unwrap_or_else(PointLatLngAlt::zero) takes a fn item. getPolyMinMax's parameter named `utmpos` shadows nothing in the value namespace because utmpos is a braced struct, so E0530 does not apply, and `&[utmpos]` resolves in the type namespace. findClosestLine: iter_mut().find(|(k, _)| ..) binds k: &utmpos by match ergonomics through &&mut. The `match .. { Some(e) => e.1 = .., None => push }` is accepted by NLL, because the None arm holds no borrow. `*ordered_keys.last().ok_or_else(list_index)?` parses as *(..?). The filter/map closures destructure &(utmpos, linelatlng). The recursive call passes &Vec as &[linelatlng]. CreateGrid: grid[a].p1 = closestpoint moves closestpoint in one branch only, and it is redeclared each iteration. The remove_first closures borrow closestpoint/closest immutably next to &mut matchs/&mut grid. `closest = if .. { findClosestLine(&closest.p2, ..)? }` evaluates the right side before assigning. `-leadin1 as f64` is (-leadin1) as f64, because unary minus binds tighter than as. `lines` defaults to i32. PointInPolygon's (&oldPoint, &newPoint) borrows end before oldPoint = newPoint. CreateRotary: ClipperOffset::new(f64, f64), AddPath(&Path, JoinType, EndType) returning (), Execute_tree(&mut PolyTree, f64) -> Result<(), Exception>, ChildCount(ROOT) -> i32, Childs(ROOT) -> &[usize] iterated with &treeChild while Contour(treeChild) borrows tree shared, and IntPoint.X is pub cInt. ok_or_else(list_index) takes a fn() -> Exception. Centroid carries #[allow(dead_code)], and every other private helper is used. clipper.rs: ReversePolyTreePaths' nested fn walk(&mut PolyTree, usize) reads the private nodes/m_Childs from the same module, and m_Childs.clone() frees the borrow before the recursive &mut call. m_IntersectCapacity: usize is initialised in new() (596). introspective_sort(&mut Vec<IntersectNode>, usize, closure) still type-checks. menu.rs: mp_core::{dotnet, extlibs::utilities::{clipper, utmpos, PointLatLngAlt}} are all pub paths (lib.rs:7-8, extlibs/mod.rs:12, utilities/mod.rs:8/57/87). The immediately invoked closure returns Result<Option<Vec<(f64, f64)>>, Exception>, and its `return Ok(None)` leaves the closure. The (first, last) shared borrows end at the if condition, before push. A (f64, f64, i32) tuple supports !=. Exception implements Display (dotnet/mod.rs:901) for log::error!, and log is a dependency of both crates. R is still used in menu.rs (161, 1028) outside the tests. survey.rs: utilities re-exports PointLatLngAlt, to_local stays used by area(), and `p.Tag == \"S\"` is String == &str. No definite compile error.",
+    "likely_errors": [],
+    "warnings": [],
+    "test_failures": [],
+    "test_expectations_checked": [
+      "grid.rs grid_lanes_alternate_and_carry_tags: a 0.0022 deg x 0.0018 deg square at -35.36 is about 199.7 x 199.7 m. UTM zone 55 convergence at 149.16 E is about 1.25 deg, so the x half-extent is about 102 m. diagdist is about 283, so there are 10 outer lines at mid-181.5+40k, and 6 cross the polygon (-101.5 .. 98.5) or 5 if the corner clip misses. Each lane gives exactly S, SM, ME, E with lead-in and overshoot 0, Alt is set to 50, and the empty polygon returns Ok(empty). It passes (4..=6).",
+      "grid.rs rotary_shrinks_lap_by_lap: laps 3 at 30 m on a 200 m square gives lanes at 0, -30,000 and -60,000 (scaled units), all non-empty. findClosestPoint returns a contour element, so IndexOf finds it. Every point gets Tag 'S' and Alt 30. It passes. clockwise_laps is 0, so ReversePolyTreePaths never runs in any test.",
+      "grid.rs line_intersection: denom -200, r = s = 0.5 gives (5, 5). The second pair has r = 5, so it returns Zero with zone 0 and is_zero is true. The Extension variant gives (5, 5). It passes.",
+      "survey.rs square_grid: a 100 m square has a half-extent of about 51.1 m with convergence. Lines sit at mid-90.7+20k, 6 of them cross, and S/E per lane gives 12, inside 8..=12. It passes, but at the top of the range.",
+      "menu.rs offset_polygon_moves_each_edge_by_the_distance: the square sits at 0/0, UTM zone 31N, 3 deg off the central meridian, with scale k about 1.00097. +10 UTM m gives 120.097 UTM m, which is 119.98 true m, and the measure is |w-120| = 0.02. -10 gives 80.02. The miter ratio of 1.414 is under the limit of 2, so the corners stay square. -60 leaves only the outer rectangle, so Clear() is called, ChildCount is 0 and the result is None. Empty input returns None. It passes."
+    ],
+    "low_confidence_risks": [
+      "crates/mp-core/src/extlibs/utilities/grid.rs:163 (runtime): CreateCorridor's `lane += 1` overflows, and panics in a debug build, when end == i32::MAX (width/distance about 2^32). C# wraps and loops forever. This is pathological, but it is still a divergence.",
+      "crates/mp-core/src/extlibs/utilities/grid.rs:876 (runtime, negligible): Dictionary compares hashCode & 0x7FFFFFFF, and the port compares the full i32. The two differ only for keys whose zones differ in bit 31.",
+      "crates/mp-app/src/views/flight_plan.rs:1830 (perf): survey::grid runs CreateGrid every frame while the SimpleGrid window is open. utmpos.ToLLA builds a new ProjNet transform per point, and every error is logged once per frame.",
+      "crates/mp-core/src/survey.rs:72 (test): 12 is the upper bound of the accepted range, so a sub-metre change in projection accuracy, or one extra crossing, fails the test.",
+      "carried: clipper.rs stale m_Scanbeam after a failed Execute (R69-05); app.rs ver(f) deref coercion; dotnet/mod.rs:573 LCIDToLocaleName; versiondetection.rs:79; ap_geodesicgrid.rs:403; flight_plan.rs:172 NaN WpOverlayKey; altmode_list() rebuilt per row per frame."
+    ]
+  },
+  "findings": [
+    {
+      "id": "R70-01",
+      "severity": "P0",
+      "file": "crates/mp-app/src/mp/ (missing), port/MANIFEST.md",
+      "line": 2601,
+      "cs_reference": "reference/MissionPlanner/{MainV2.cs,GCSViews/*,Grid/GridUI.cs,ExtLibs/SimpleGrid/SimpleGridUI.cs,ExtLibs/ArduPilot/Mavlink/*,ExtLibs/ArduPilot/APFirmware.cs,...}",
+      "summary": "Carried from R69-01. Grid.cs (1,014 lines) is ported, but about 93% of owned C# lines are still missing, including both Grid.cs consumers (Grid/GridUI.cs and ExtLibs/SimpleGrid/SimpleGridUI.cs), FlightPlanner.cs, MainV2.cs and MAVLinkInterface.cs. MANIFEST.md marks Grid.cs, clipper.cs, EnumTranslator.cs and LTM.cs todo although each has a port.",
+      "required_fix": "Regenerate MANIFEST.md. Port Grid/GridUI.cs and ExtLibs/SimpleGrid/SimpleGridUI.cs file by file on top of grid.rs, then APFirmware.cs, MAVState.cs/MAVLinkInterface.cs, GCSViews/FlightPlanner.cs and MainV2.cs."
+    },
+    {
+      "id": "R70-02",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/survey_ui.rs",
+      "line": 260,
+      "cs_reference": "Grid/GridUI.cs:578-645 (domainUpDown1_ValueChanged), 1620-1800 (accept: S/E/SM/ME/M handling); ExtLibs/Utilities/Grid.cs:46-53, 190-194, 327-334",
+      "summary": "New. The GridUI port is not wired the way GridUI.cs is. GridUI calls CreateCorridorAsync when chk_Corridor is checked, CreateRotaryAsync when chk_spiral is checked, and otherwise CreateGridAsync(list, alt, NUM_Distance, NUM_spacing, NUM_angle, NUM_overshoot, NUM_overshoot2, CMB_startfrom, false, NUM_Lane_Dist, NUM_leadin, NUM_leadin2, PlannedHomeLocation, chk_optimize_for_distance). For crossgrid it sets Grid.StartPointLatLngAlt = grid.Last() and appends CreateGridAsync(.., angle+90, StartPosition.Point, ..). survey_ui.rs:259-330 instead calls survey::grid (BottomLeft, home = poly[0], lead-in and overshoot 0, spacing 0, minLaneSeparation 0) only for the S/E endpoints. It then picks one of 4 orderings by distance to a bounding-box corner, extends the ends with a local-plane extend() instead of Grid.newpos along the grid angle, and places M points by linear lat/lng interpolation from k = 1 with floor(len/spacing), instead of starting from spacing - (basepnt->p1 % spacing). The SM/ME tags are lost. The Corridor and Spiral checkboxes (694-695) and lane_dist (720) feed nothing. Crossgrid restarts from the last lane's end with its own heuristic instead of StartPosition.Point.",
+      "required_fix": "Port GridUI.cs's domainUpDown1_ValueChanged: call Grid::CreateCorridor, CreateRotary or CreateGrid with exactly the C# arguments, set_StartPointLatLngAlt(grid.last()) for crossgrid with StartPosition::Point, and consume the returned S/SM/M/ME/E points directly (markers, stats and accept) instead of re-deriving them. Delete the local lanes(), extend() and trigger interpolation."
+    },
+    {
+      "id": "R70-03",
+      "severity": "P2",
+      "file": "crates/mp-core/src/survey.rs",
+      "line": 24,
+      "cs_reference": "ExtLibs/SimpleGrid/SimpleGridUI.cs:284-345 (CreateGrid(list, NUM_altitude, NUM_Distance, NUM_spacing, NUM_angle, NUM_overshoot, NUM_overshoot2, CMB_startfrom, false, 0, 0, 0, PlannedHomeLocation))",
+      "summary": "New. The SimpleGrid dialog (flight_plan.rs:1814-1851) reaches CreateGrid through survey::grid. That call passes the overshoot as both lead-ins, where SimpleGrid passes 0, 0, so every S point moves back by the overshoot. It uses one overshoot for both overshoot1 and overshoot2, hard-codes StartPosition::BottomLeft (SimpleGrid takes CMB_startfrom, whose first entry is Home, with PlannedHomeLocation), uses poly[0] as home, and forces spacing 0, so there are no M points. It passes altitude 0 and sets alt afterwards. Errors become an empty list plus a log line. The dialog itself lacks spacing, overshoot2, startfrom and the marker/boundary/grid toggles.",
+      "required_fix": "Pass SimpleGrid's arguments unchanged (lead-in 0, 0, separate overshoots, the selected StartPosition, the planned home, the trigger spacing), add the missing inputs, and compute only on value change, not every frame."
+    },
+    {
+      "id": "R70-04",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/grid.rs",
+      "line": 328,
+      "cs_reference": "ExtLibs/Utilities/Grid.cs:34, 46-53, 190-194, 275-277, 295-302, 327-334; List<T>.GetRange (ArgumentOutOfRange_NeedNonNegNum)",
+      "summary": "New. (1) CreateCorridorAsync, CreateRotaryAsync and CreateGridAsync are not ported. GridUI's only call paths go through them. (2) StartPointLatLngAlt is a public static field initialised to the shared PointLatLngAlt.Zero reference. The port replaces it with a getter that returns a clone and a setter, so callers that mutate it in place (or read PointLatLngAlt.Zero after doing so) diverge. (3) When IndexOf returns -1, C# throws from GetRange(-1, ..) with 'Non-negative number required.\\r\\nParameter name: index'. The port returns the List indexer's 'Index was out of range...' text. (4) The `if (ans.Count() > 2)` block with its unused locals is dropped. It is unreachable as a throw only because (3) fires first. (5) CreateCorridor's `lane += 1` can panic in a debug build where C# wraps (line 163).",
+      "required_fix": "Add the three async wrappers (spawn plus join, or async fns), model StartPointLatLngAlt as shared state with C#'s aliasing, use the GetRange message for the -1 case, keep the dead block as a comment explaining why it is a no-op, and use wrapping_add for lane."
+    },
+    {
+      "id": "R70-05",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/grid.rs",
+      "line": 956,
+      "cs_reference": "No C# tests; Grid.cs behaviour is the spec",
+      "summary": "New. The grid tests check only shapes: a lane count range, tag cycles and Alt. Nothing checks exact coordinates, the order of lanes chosen by findClosestLine, the crosses > 2 split, crosses == 0 removal through PointInPolygon, minLaneSeparation (the Dictionary path), useextendedendpoint=false, negative lead-in/overshoot (the copy_of branches), trigger M points, StartPosition corners or Point, CreateCorridor, or CreateRotary with clockwise_laps > 0, < 0 or match_spiral_perimeter. With clockwise_laps = 0, ReversePolyTreePaths never runs, and clipper.rs has no test that it reverses the tree in place (the R69-03 required test).",
+      "required_fix": "Add golden vectors from the C# build (exact UTM coordinates and tags) for each path above, plus a clipper.rs test that ReversePolyTreePaths(tree) leaves every Contour reversed."
+    },
+    {
+      "id": "R70-06",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan/menu.rs",
+      "line": 873,
+      "cs_reference": "GCSViews/FlightPlanner.cs:3661-3666, 3702, 999-1035",
+      "summary": "New, and the remainder of R69-02. C# calls double.Parse(meter), which throws FormatException out of the click handler, so the polygon is untouched and the exception dialog shows. The port maps a parse failure to 0.0 and runs a zero offset. That replaces the drawn polygon with Clipper's normalised contour, which can have a different orientation and start vertex. A ToUTM/Clipper/ToLLA error is only logged, where C# surfaces it. redrawPolygonSurvey's 'S' tags and numbered addpolygonmarkergrid markers have no counterpart in a (lat, lng) Vec.",
+      "required_fix": "On a double_parse error, show the exception and keep the polygon. Surface Execute/ToLLA errors the same way. Add a test that bad input leaves the polygon unchanged."
+    },
+    {
+      "id": "R70-07",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 4215,
+      "cs_reference": "ExtLibs/Utilities/clipper.cs:4400-4444, 3336-3340, 130-203",
+      "summary": "R69-03 is partly fixed and R69-06 is partly fixed. ReversePolyTreePaths emulates Grid.cs:264 correctly: the same traversal, contours reversed in place, the dropped outer node skipped. But PolyTreeToPaths, ClosedPathsFromPolyTree and OpenPathsFromPolyTree still return copies, Contour is still &Path, and no general aliasing exists. Of R69-06, only the dead_code allows were added. Swap(ref, ref) and the PolyNode.IsOpen setter are still missing, and PolyTree::Clear still leaves nodes in the arena.",
+      "required_fix": "Document the copy semantics on PolyTreeToPaths, add Contour_mut, Swap and an IsOpen setter, and make Clear truncate the nodes."
+    },
+    {
+      "id": "R70-08",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 1585,
+      "cs_reference": "ExtLibs/Utilities/clipper.cs:1137-1163, 1586-1590, 2958-2978, 1804/1930/2523/2593/4201, 4378",
+      "summary": "Carried from R69-05 unchanged: stale m_Scanbeam after a failed Execute, panics not mapped to ClipperException, wrapping_abs where Math.Abs throws OverflowException, and the pattern[0] exception type.",
+      "required_fix": "As R69-05."
+    },
+    {
+      "id": "R70-09",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/enumtranslator.rs",
+      "line": 118,
+      "cs_reference": "ExtLibs/Utilities/EnumTranslator.cs:92, 107-123",
+      "summary": "Carried from R69-07 unchanged.",
+      "required_fix": "As R69-07."
+    },
+    {
+      "id": "R70-10",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1701,
+      "cs_reference": "GCSViews/FlightPlanner.cs:5606-5609, 2145-2155, 233-238",
+      "summary": "Carried from R69-08 unchanged.",
+      "required_fix": "As R69-08."
+    },
+    {
+      "id": "R70-11",
+      "severity": "P2",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 592,
+      "cs_reference": "MainV2.cs:1665-1735, 1758-1809; ExtLibs/Mavlink/MAVLinkParam.cs:219-224",
+      "summary": "Carried from R69-09 unchanged.",
+      "required_fix": "As R68-03."
+    },
+    {
+      "id": "R70-12",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/ltm.rs",
+      "line": 174,
+      "cs_reference": "ExtLibs/Utilities/LTM.cs:240-242, 341-349",
+      "summary": "Carried from R69-10 unchanged.",
+      "required_fix": "As R68-05."
+    },
+    {
+      "id": "R70-13",
+      "severity": "P2",
+      "file": "crates/mp-core/src/link.rs",
+      "line": 1196,
+      "cs_reference": "ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2005-2041, 1847-1885; MAVState.cs:102-128; MainV2.cs:1665-1747; APFirmware.cs",
+      "summary": "Carried from R69-11 unchanged.",
+      "required_fix": "As R67-03."
+    },
+    {
+      "id": "R70-14",
+      "severity": "P3",
+      "file": "crates/mp-app/src/show_again.rs",
+      "line": 15,
+      "cs_reference": "Common.cs:260-294; ExtLibs/Utilities/Settings.cs:223-232",
+      "summary": "Carried from R69-12 unchanged.",
+      "required_fix": "As R68-07."
+    },
+    {
+      "id": "R70-15",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1321,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1408-1580; GCSViews/FlightData.cs:3956-4046",
+      "summary": "Carried from R69-13 unchanged: WPOverlay markers, polygons, fence/rally overlays and the FlightData map are missing.",
+      "required_fix": "As R62-06."
+    },
+    {
+      "id": "R70-16",
+      "severity": "P2",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 1500,
+      "cs_reference": "MainV2.cs:1737-1832",
+      "summary": "Carried from R69-14 unchanged.",
+      "required_fix": "As R67-06."
+    },
+    {
+      "id": "R70-17",
+      "severity": "P2",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 133,
+      "cs_reference": "Controls/fftui.cs; ExtLibs/Utilities/Spectrogram.cs:119-244",
+      "summary": "Carried from R69-15 unchanged.",
+      "required_fix": "As R65-05."
+    },
+    {
+      "id": "R70-18",
+      "severity": "P2",
+      "file": "crates/mp-core/src/paramfile.rs",
+      "line": 36,
+      "cs_reference": "ExtLibs/Mavlink/MAVLinkParam.cs:219-224; ConfigRawParams.cs:237-252",
+      "summary": "Carried from R69-16 unchanged.",
+      "required_fix": "As R64-02."
+    },
+    {
+      "id": "R70-19",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1718,
+      "cs_reference": "GCSViews/FlightPlanner.cs:6706-6764, 322, 1864",
+      "summary": "Carried from R69-17 unchanged.",
+      "required_fix": "As R65-07."
+    },
+    {
+      "id": "R70-20",
+      "severity": "P2",
+      "file": "crates/mp-core/src/mission.rs",
+      "line": 227,
+      "cs_reference": "GCSViews/FlightPlanner.cs:5613-5635, 1138-1145, 6141-6181",
+      "summary": "Carried from R69-18 unchanged.",
+      "required_fix": "As R62-03."
+    },
+    {
+      "id": "R70-21",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1727,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1385-1400, 1413-1425, 5659",
+      "summary": "Carried from R69-19 unchanged.",
+      "required_fix": "As R62-05."
+    },
+    {
+      "id": "R70-22",
+      "severity": "P2",
+      "file": "crates/mp-core/src/rtk.rs",
+      "line": 42,
+      "cs_reference": "ConfigSerialInjectGPS.cs:757-834, 908-925; ubx_m8p.cs:440-472",
+      "summary": "Carried from R69-20 unchanged.",
+      "required_fix": "As R61-10."
+    },
+    {
+      "id": "R70-23",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/version.rs",
+      "line": 18,
+      "cs_reference": "System.Version; CircularBuffer.cs; fft.cs:84-89; Pelco.cs",
+      "summary": "Carried from R69-21 unchanged.",
+      "required_fix": "As R65-12."
+    },
+    {
+      "id": "R70-24",
+      "severity": "P3",
+      "file": "crates/mp-app/src/swarm.rs",
+      "line": 159,
+      "cs_reference": "Swarm/Formation.cs:321-324; Swarm/FormationControl.cs:273-293",
+      "summary": "Carried from R69-22 unchanged.",
+      "required_fix": "As R63-08."
+    },
+    {
+      "id": "R70-25",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan/menu.rs",
+      "line": 815,
+      "cs_reference": "GCSViews/FlightPlanner.cs:3272-3299, 1096-1223, 1038-1063",
+      "summary": "Carried from R69-23 unchanged.",
+      "required_fix": "As R63-09."
+    },
+    {
+      "id": "R70-26",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1887,
+      "cs_reference": "GMap.NET.WindowsForms/GMapRoute.cs:131-148",
+      "summary": "Carried from R69-24 unchanged.",
+      "required_fix": "As R62-09."
+    },
+    {
+      "id": "R70-27",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/maps/wpoverlay.rs",
+      "line": 87,
+      "cs_reference": "GMapPolygon.cs; WPOverlay.cs:30, 46-48, 403-457",
+      "summary": "Carried from R69-25 unchanged.",
+      "required_fix": "As R62-10."
+    },
+    {
+      "id": "R70-28",
+      "severity": "P3",
+      "file": "crates/mp-core/src/coords.rs",
+      "line": 36,
+      "cs_reference": "GCSViews/FlightPlanner.cs:2731-2763; ExtLibs/Controls/Coords.cs",
+      "summary": "Carried from R69-26 unchanged.",
+      "required_fix": "As R62-11."
+    },
+    {
+      "id": "R70-29",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/io.rs",
+      "line": 22,
+      "cs_reference": "System.Console.Out; ExtLibs/ArduPilot/Linux.cs",
+      "summary": "Carried from R69-27 unchanged.",
+      "required_fix": "As R62-12."
+    },
+    {
+      "id": "R70-30",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/clipper.rs",
+      "line": 4762,
+      "cs_reference": "No C# tests; behaviour is the spec",
+      "summary": "Carried from R69-28 unchanged: no Clipper golden vectors (vertex order, start vertex, open paths, StrictlySimple, jtRound/jtSquare, open ends, Minkowski, hiRange), and no test of the new intersect-list capacity.",
+      "required_fix": "As R69-28."
+    }
+  ],
+  "round_69_status": {
+    "fixed": [
+      "R69-02: offset_polygon is now offsetPolygonToolStripMenuItem_Click through ClipperOffset (UTM in list[0]'s zone, x1000 IntPoints, (Int64) offset, Execute_tree, empty-tree return, every child contour, ToLLA). The equirectangular approximation is gone. The parse-failure remainder is now R70-06.",
+      "R69-04: m_IntersectList's emulated List capacity (0, 4, x2, kept across Clear) is passed to introspective_sort as backing_len."
+    ],
+    "partly_fixed": [
+      "R69-01: Grid.cs is ported. MANIFEST.md is still stale for Grid.cs, clipper.cs, EnumTranslator.cs and LTM.cs, and 93% is still missing (now R70-01).",
+      "R69-03: ReversePolyTreePaths gives Grid.cs:264's in-place reversal. PolyTreeToPaths still copies, there is no Contour_mut and no test (now R70-07).",
+      "R69-06: #[allow(dead_code)] was added on PointIsVertex/PointOnLineSegment/PointOnPolygon. Swap, the IsOpen setter and PolyTree::Clear truncation are still open (now R70-07)."
+    ],
+    "still_open": [
+      "R69-05 (now R70-08).",
+      "R69-07 (now R70-09).",
+      "R69-08 (now R70-10).",
+      "R69-09 (now R70-11).",
+      "R69-10 (now R70-12).",
+      "R69-11 (now R70-13).",
+      "R69-12 (now R70-14).",
+      "R69-13 (now R70-15).",
+      "R69-14 (now R70-16).",
+      "R69-15 (now R70-17).",
+      "R69-16 (now R70-18).",
+      "R69-17 (now R70-19).",
+      "R69-18 (now R70-20).",
+      "R69-19 (now R70-21).",
+      "R69-20 (now R70-22).",
+      "R69-21 (now R70-23).",
+      "R69-22 (now R70-24).",
+      "R69-23 (now R70-25).",
+      "R69-24 (now R70-26).",
+      "R69-25 (now R70-27).",
+      "R69-26 (now R70-28).",
+      "R69-27 (now R70-29).",
+      "R69-28 (now R70-30).",
+      "Older items still open as listed in rounds 61-69."
+    ]
+  },
+  "next_steps": [
+    "R70-02: port Grid/GridUI.cs's domainUpDown1_ValueChanged and accept path on top of grid.rs. Call CreateCorridor, CreateRotary or CreateGrid with the exact C# arguments (StartPosition from CMB_startfrom, PlannedHomeLocation, NUM_Lane_Dist, both lead-ins and overshoots, NUM_spacing, chk_optimize_for_distance), do crossgrid via set_StartPointLatLngAlt plus StartPosition::Point, and consume the S/SM/M/ME/E points directly. Delete survey_ui's lanes()/extend()/interpolation.",
+    "R70-03: port ExtLibs/SimpleGrid/SimpleGridUI.cs and pass its CreateGrid arguments unchanged (lead-in 0, 0; overshoot1/2; startfrom; spacing; planned home). Stop recomputing every frame.",
+    "R70-01: regenerate MANIFEST.md (Grid.cs, clipper.cs, EnumTranslator.cs and LTM.cs are ported). Then continue file by file with APFirmware.cs, MAVState.cs/MAVLinkInterface.cs, GCSViews/FlightPlanner.cs and MainV2.cs.",
+    "R70-05 / R70-30: golden vectors from the C# build for CreateGrid (split lines, minLaneSeparation, negative lead-in/overshoot, spacing, every StartPosition), CreateCorridor, CreateRotary with clockwise_laps 1/2/-1 and match_spiral_perimeter, and ReversePolyTreePaths. Add the Clipper vectors from R69-28.",
+    "R70-04 / R70-06: the async wrappers, StartPointLatLngAlt aliasing, the GetRange message, wrapping lane++; show the double.Parse error in the offset menu and keep the polygon.",
+    "R70-07 / R70-08: Contour_mut, Swap, IsOpen setter, PolyTree::Clear truncation; reset m_Scanbeam/m_ActiveEdges in DisposeAllPolyPts, map ProcessIntersections panics to ClipperException, checked_abs for Math.Abs.",
+    "R70-11, R70-13, R70-16: skip_params/Params_BG gating, the STATUSTEXT subscription per MAVState, the title bar, RALLY_LIMIT_KM and the FENCE_TOTAL download.",
+    "R70-15, R70-17..R70-22: WPOverlay markers and the FlightData map, fftui/Spectrogram, integer parameter saving, setWPParams/Activate, the Commands cells, the RTK inject loop.",
+    "R70-09, R70-10, R70-12, R70-14, R70-23..R70-29: the small fidelity items carried from round 69."
+  ],
+  "verdict": "No definite compile error and no expected test failure. grid.rs type-checks: StartPosition's derived PartialEq/Eq allows the const match patterns, the RwLock static holds a Send + Sync PointLatLngAlt, the Dictionary emulation's iter_mut().find(..) match passes NLL, and the parameter named utmpos shadows nothing in the value namespace. The new tests check out by hand (6 lanes of S/SM/ME/E, (5, 5) intersections, rotary laps tagged S; survey 12 points; offset 119.98/80.02 m and None at -60). grid.rs is a faithful statement-level port of Grid.cs. It keeps the int-vs-double loops, the (int)/(Int64) casts with .NET overflow results, Equals-based Remove and IndexOf, field-wise linelatlng equality, the insertion-ordered Dictionary with first-key retention, the exception texts, ToLLA at Add time, the closestpoint field mutation, and CreateRotary's lane loop with the tree reversed in place. Its gaps are the missing async wrappers, StartPointLatLngAlt aliasing, one GetRange message and shape-only tests. The offset-polygon menu is now the real ClipperOffset flow (R69-02 fixed), and the List-capacity sort depth is in (R69-04 fixed). But the Grid port is reached only through survey.rs, a shim that hard-codes BottomLeft, uses poly[0] as home, uses the overshoot as the lead-in and sets spacing 0. The GridUI port uses it only for lane endpoints and then reorders, extends and places triggers with its own local-plane heuristics. CreateCorridor and CreateRotary have no caller even though Corridor and Spiral checkboxes are on screen. MANIFEST.md is stale for four ported files. Ported lines rise to 33,750 / 479,014 (7.0%), and the cap rises to 1.8. Awarded 1.5; round-file fidelity 6.5; UI/UX 2.6; features 3.5."
+}

@@ -1,6 +1,7 @@
-//! ArduPilot DataFlash `.bin` logs: self-describing via FMT records (port of
-//! `ExtLibs/Utilities/DFLog*.cs`). Each record is `A3 95 <type>` followed by the fields
-//! described by that type's FMT.
+//! The app's view of a DataFlash log: a layer over the ports of
+//! `ExtLibs/Utilities/BinaryLog.cs`, `DFLog.cs` and `DFLogBuffer.cs`
+//! (`extlibs::utilities::{binarylog, dflog, dflogbuffer}`), keeping the formats and records
+//! the log browser, graphs and geotagging read.
 
 use std::collections::BTreeMap;
 
@@ -52,95 +53,62 @@ pub struct Log {
     pub records: Vec<Record>,
 }
 
-fn field_size(c: char) -> usize {
-    match c {
-        'b' | 'B' | 'M' => 1,
-        'h' | 'H' | 'c' | 'C' => 2,
-        'i' | 'I' | 'f' | 'e' | 'E' | 'L' | 'n' => match c {
-            'n' => 4,
-            _ => 4,
-        },
-        'd' | 'q' | 'Q' => 8,
-        'N' => 16,
-        'Z' => 64,
-        'a' => 64,
-        _ => 0,
-    }
-}
-
-fn text(b: &[u8]) -> String {
-    let end = b.iter().position(|&c| c == 0).unwrap_or(b.len());
-    String::from_utf8_lossy(&b[..end]).trim().to_string()
-}
-
-fn decode(fmt: &Format, data: &[u8]) -> Vec<Value> {
-    let mut out = Vec::with_capacity(fmt.format.len());
-    let mut o = 0usize;
-    for c in fmt.format.chars() {
-        let n = field_size(c);
-        if o + n > data.len() {
-            break;
+/// A decoded `object` as the app's value: numbers keep their kind; strings that hold a
+/// number (text logs, a flight mode with no name) become that number.
+fn to_value(o: &crate::extlibs::utilities::binarylog::LogObject) -> Value {
+    use crate::extlibs::utilities::binarylog::LogObject as O;
+    match o {
+        O::SByte(v) => Value::Int(*v as i64),
+        O::Byte(v) => Value::Int(*v as i64),
+        O::Int16(v) => Value::Int(*v as i64),
+        O::UInt16(v) => Value::Int(*v as i64),
+        O::Int32(v) => Value::Int(*v as i64),
+        O::UInt32(v) => Value::Int(*v as i64),
+        O::Int64(v) => Value::Int(*v),
+        O::UInt64(v) => Value::Int(*v as i64),
+        O::Single(v) => Value::Float(*v as f64),
+        O::Double(v) => Value::Float(*v),
+        O::String(s) => {
+            let t = s.trim();
+            if let Ok(i) = t.parse::<i64>() {
+                Value::Int(i)
+            } else if let Some(f) = crate::dotnet::double_try_parse_culture(t, &crate::dotnet::INVARIANT_CULTURE).filter(|_| !t.is_empty()) {
+                Value::Float(f)
+            } else {
+                Value::Text(t.to_string())
+            }
         }
-        let d = &data[o..o + n];
-        let v = match c {
-            'b' => Value::Int(d[0] as i8 as i64),
-            'B' | 'M' => Value::Int(d[0] as i64),
-            'h' => Value::Int(i16::from_le_bytes([d[0], d[1]]) as i64),
-            'H' => Value::Int(u16::from_le_bytes([d[0], d[1]]) as i64),
-            'c' => Value::Float(i16::from_le_bytes([d[0], d[1]]) as f64 / 100.0),
-            'C' => Value::Float(u16::from_le_bytes([d[0], d[1]]) as f64 / 100.0),
-            'i' => Value::Int(i32::from_le_bytes(d.try_into().unwrap()) as i64),
-            'I' => Value::Int(u32::from_le_bytes(d.try_into().unwrap()) as i64),
-            'e' => Value::Float(i32::from_le_bytes(d.try_into().unwrap()) as f64 / 100.0),
-            'E' => Value::Float(u32::from_le_bytes(d.try_into().unwrap()) as f64 / 100.0),
-            'L' => Value::Float(i32::from_le_bytes(d.try_into().unwrap()) as f64 / 1e7),
-            'f' => Value::Float(f32::from_le_bytes(d.try_into().unwrap()) as f64),
-            'd' => Value::Float(f64::from_le_bytes(d.try_into().unwrap())),
-            'q' => Value::Int(i64::from_le_bytes(d.try_into().unwrap())),
-            'Q' => Value::Int(u64::from_le_bytes(d.try_into().unwrap()) as i64),
-            'n' | 'N' | 'Z' => Value::Text(text(d)),
-            'a' => Value::Text(format!("{:?}", d.chunks(2).map(|x| i16::from_le_bytes([x[0], x[1]])).collect::<Vec<_>>())),
-            _ => Value::Int(0),
-        };
-        out.push(v);
-        o += n;
+        O::Bytes(b) => Value::Text(crate::extlibs::utilities::binarylog::ascii_get_string(b).trim_matches('\0').to_string()),
+        O::UnionArray(u) => Value::Text(u.to_string()),
+        O::Null => Value::Text(String::new()),
     }
-    out
 }
 
-/// Parse a DataFlash binary log.
+/// Parse a DataFlash log (binary or text) through the port of `DFLogBuffer`: every line
+/// with a known format becomes a record of its fields.
 pub fn parse(data: &[u8]) -> Log {
+    use crate::extlibs::utilities::dflogbuffer::DFLogBuffer;
     let mut log = Log::default();
     // FMT is always type 128 with a fixed layout: BBnNZ (type, length, name, format, columns)
     log.formats.insert(128, Format { id: 128, len: 89, name: "FMT".into(), format: "BBnNZ".into(), columns: ["Type", "Length", "Name", "Format", "Columns"].iter().map(|s| s.to_string()).collect() });
-    let mut i = 0usize;
-    while i + 3 <= data.len() {
-        if data[i] != 0xA3 || data[i + 1] != 0x95 {
-            i += 1;
-            continue;
+    let mut buf = match DFLogBuffer::new(Box::new(std::io::Cursor::new(data.to_vec())), "") {
+        Ok(b) => b,
+        Err(e) => {
+            log::warn!("log parse failed: {e}");
+            return log;
         }
-        let t = data[i + 2];
-        let Some(fmt) = log.formats.get(&t).cloned() else {
-            i += 1;
-            continue;
-        };
-        if fmt.len < 3 || i + fmt.len > data.len() {
-            break;
+    };
+    for (_, lbl) in buf.dflog.logformat.iter() {
+        if let Ok(id) = u8::try_from(lbl.Id) {
+            log.formats.insert(id, Format { id, len: lbl.Length.max(0) as usize, name: lbl.Name.clone(), format: lbl.Format.clone(), columns: lbl.FieldNames.clone() });
         }
-        let body = &data[i + 3..i + fmt.len];
-        let values = decode(&fmt, body);
-        if t == 128 {
-            if let (Some(Value::Int(id)), Some(Value::Int(len)), Some(Value::Text(name)), Some(Value::Text(format)), Some(Value::Text(cols))) =
-                (values.first(), values.get(1), values.get(2), values.get(3), values.get(4))
-            {
-                log.formats.insert(
-                    *id as u8,
-                    Format { id: *id as u8, len: *len as usize, name: name.clone(), format: format.clone(), columns: cols.split(',').map(|s| s.to_string()).collect() },
-                );
-            }
-        }
-        log.records.push(Record { type_id: t, values });
-        i += fmt.len;
+    }
+    let mut it = buf.lines();
+    while let Some(item) = it.next_item(&mut buf) {
+        let Ok(item) = item else { continue };
+        let Some(id) = buf.dflog.logformat.get(&item.msgtype()).and_then(|l| u8::try_from(l.Id).ok()) else { continue };
+        let values = item.raw().iter().skip(1).map(to_value).collect();
+        log.records.push(Record { type_id: id, values });
     }
     log
 }
@@ -238,7 +206,7 @@ impl Log {
             if numeric.is_empty() {
                 continue;
             }
-            let name = format!("{} ", f.name);
+            let name = format!("{}\0", f.name);
             for v in [0i32, rows.len() as i32, numeric.len() as i32, 0, name.len() as i32] {
                 out.extend_from_slice(&v.to_le_bytes());
             }

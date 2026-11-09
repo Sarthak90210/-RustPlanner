@@ -1,0 +1,263 @@
+{
+  "round": 65,
+  "date": "2026-11-08",
+  "reviewed_head": "0eddbe4 + uncommitted",
+  "commands_run": [],
+  "commands_note": "No commands were allowed this round (no shell, cargo, git, python or scripts). Everything below comes from reading files with Read/Grep/Glob. Nothing was compiled, so the judge also acted as the compiler.",
+  "manifest_summary": {
+    "manifest_status": "port/MANIFEST.md is still stale. The five files ported this round (fft.cs, AP_GeodesicGrid.cs, CircularStream.cs, Pelco.cs, VersionDetection.cs) are still listed as todo (MANIFEST.md:2550, 2561, 2594, 2644, 2678), as are WPOverlay.cs, ParamFile.cs, RLE.cs, Spline2.cs and ubx_m8p.cs. wpoverlay.rs is still in mp-core, not at its manifest path.",
+    "new_owned_files_ported": {
+      "ExtLibs/Utilities/AP_GeodesicGrid.cs": 607,
+      "ExtLibs/Utilities/fft.cs": 294,
+      "ExtLibs/Utilities/Pelco.cs": 116,
+      "ExtLibs/Utilities/CircularStream.cs": 98,
+      "ExtLibs/Utilities/VersionDetection.cs": 60
+    },
+    "new_owned_lines_ported": 1175,
+    "owned_files_ported_corrected": 133,
+    "ported_lines_corrected": 27302,
+    "ported_lines_derivation": "26,127 (round 64) + 607 + 294 + 116 + 98 + 60 = 27,302. The per-file counts are MANIFEST.md's. Pelco.cs is counted although pelco.rs does not compile (R65-01), on the condition that the parameter rename is a one-line fix. dfgpslag.cs (148) and TerrainFollow.cs (167) were not ported and are not counted. dotnet/version.rs is support code, not an owned file.",
+    "owned_lines_total_corrected": 479014,
+    "ported_fraction_corrected": 0.057,
+    "conservatism_note": "Still an upper bound: WPOverlay is counted whole although its GMap.NET types are plain data, and this round's five files are counted whole although only FFT2.init/run has a caller (VersionDetection, AP_GeodesicGrid, Pelco, CircularStream, FFT2.rin/FreqTable and datastate are unused).",
+    "wiring": "New wiring this round: (1) tool_windows.rs fft() calls FFT2::init(trailing_zeros(n)) + run. fftui.cs calls fft.rin(data, bins, indB) and fft.FreqTable(N, samplerate), so the Rust graph still uses its own mean removal, a 0.5-0.5cos window, /n scaling, no dB option and its own frequency axis (R65-05). (2) loadwpsonconnect sets View::FlightPlan and calls FlightPlanView::but_read_click() after the event loop. That sets read_confirm (rows exist) or read_pending, and write_prompts_ui runs start_read -> mission_io(read) on the next frame. (3) A read timeout emits LinkEvent::MissionDownloadFailed, which clears awaiting_read in the planner and stops a Resume::Download in Flight Data. Unwired ports: VersionDetection (MainV2.cs:1712/1729, ConfigArducopter.cs:487; app.rs check_newer_firmware compares no version at all, R65-04), AP_GeodesicGrid (CompassCalibrator.cs:140 is not ported), Pelco, CircularStream, FFT2.rin/FreqTable/datastate. Still not wired: setWPParams from Activate, ZoomAndCenterMarkers, WPOverlay markers/polygons/pointlist, fence/rally WPOverlay, the FlightData map, the .fen and rally loaders, the inject loop, Septentrio/Unicore, RLE, MAVLinkInterface/MAVState/CurrentState and every GCSView."
+  },
+  "scores": {
+    "overall": 1.1,
+    "overall_cap": 1.6,
+    "overall_cap_derivation": "ceil1(27,302 / 479,014 * 10) = ceil1(0.570) = 0.6, plus at most +1.0 for the pre-manifest app = 1.6, unchanged. Awarded 0.5 for ported lines + 0.8 for the pre-manifest app = 1.3, minus 0.2 because mp-core no longer compiles: pelco.rs:77 names its parameters after the tuple structs cmd1/cmd2 (E0530), which breaks the whole workspace, every test and the app. 1.1 overall. The five new ports are close line-by-line copies, the timeout no longer wipes the grid, and N2 now rounds like .NET. They do not lift the score past the cap or past a build that fails.",
+    "round_files_fidelity": 5.9,
+    "round_files_fidelity_rationale": "Down from 6.3, mainly for the compile error. Good: fft.rs follows fft.cs statement by statement. It keeps the 1 << (int)logN mask (i32::wrapping_shl), uint BitReverse with shifted-out bits, the int-wrapping and truncating FreqTable with OverflowException on a negative size, the 4/N Hanning, double.Epsilon as f64::from_bits(1) (the smallest subnormal, not machine epsilon), the copy order (re then im) before an IndexOutOfRange, the NullReference on run-before-init, and the same infinite loop for logN >= 32. ap_geodesicgrid.rs matches the tables, the float-widened Matrix3 (from_floats), the balance/zero_count switch, the (float) casts on w[i], is_zero on the widened float, the umbrella % 3 rotation and every branch of _from_neighbor_umbrella and _subtriangle_index. circularstream.rs keeps CanSeek true while Seek/Position/SetLength throw NotImplementedException. VersionDetection keeps the Groups[6][0] index bug (IndexOutOfRange when only the one-letter group matched). The regex crate keeps a repeated group's last participating capture as .NET does, so '4.5.0-rc2' gives group 4 = '0' and group 5 = '2'. version.rs has .NET Framework's two-to-four-part split, Int32 NumberStyles.Integer whitespace and sign handling, FormatException versus OverflowException, the -1 parts and component-wise CompareTo. R64-04's N2 now goes through format_fixed (15 significant digits, then half away from zero). Lost: (a) pelco.rs does not compile (R65-01); (b) Version::new does not validate build/revision and merges the 2/3/4-argument constructors, and Parse's ArgumentOutOfRange names 'version' where .NET Framework's VersionResult uses 'input'; (c) the cs_enum Display prints a number for combined [Flags] values where .NET prints 'IrisOpen, IrisClose'; (d) CircularStream.Read/Write with a short array panic in circularbuffer.rs instead of throwing IndexOutOfRangeException; (e) FFT2.init(31) aborts on allocation where C# throws OutOfMemoryException, and the comment at fft.rs:230 suggests a uint wrap that cannot happen; (f) the R64-03 fix leaves the read tag stale on three paths and starts loadwpsonconnect before the parameter download (R65-03); (g) setWPParams still ignores multiplierdist and TXT_loiterrad.Enabled and is not called from Activate. No new test covers the R64-03 or R64-04 changes.",
+    "ui_ux": 2.2,
+    "ui_ux_rationale": "Unchanged, and only if R65-01 is fixed, because the app does not build as submitted. With 'Load Waypoints on connect' ticked the app now switches to Flight Plan and asks 'This will clear your existing points, Continue?' when the grid has rows, as MainV2 + BUT_read_Click do. A read timeout keeps the grid. But the failure only adds a 'Timeout getting waypoints' message line, where C#'s ProgressReporterDialogue shows the error. The view switch skips FlightPlanner.Activate. The firmware-update toast appears on every ArduPilot connect because no version is compared. The FFT window's spectra differ numerically from fftui's (no dB, a different window scale, mean removed). Markers, ZoomAndCenterMarkers, modal message boxes and the GCSViews are still missing.",
+    "features": 3.1,
+    "features_rationale": "Unchanged at 3.1, again only once R65-01 is fixed. Newly correct: loadwpsonconnect loads the vehicle's mission into the planner again; a read timeout no longer clears the planner's list; WP radius text rounds like N2 at decimal midpoints; the FFT butterfly is Mission Planner's. Still wrong or newly exposed: the connect-time rally ReadMission can silently replace the planner's in-flight read, and the tag then stays stale; the 'new firmware' check never compares versions, so it nags on every connect; Geo-Fence/Rally context Downloads still fill lists C# discards; integer parameters of 1e7 or more still lose digits on save; FFT output is not fftui's; setWPParams ignores the distance unit. VersionDetection, AP_GeodesicGrid, Pelco and CircularStream add no user-visible feature."
+  },
+  "compile_check": {
+    "summary": "Checked every new and changed file against its definitions. fft.rs: dotnet::{index_out_of_range, Exception} exist (mod.rs:1517, 814); Exception::{NullReference, Overflow} exist; usize::try_from(i32) and i32::wrapping_mul/wrapping_shl and u32::wrapping_shl/wrapping_shr are fine; &mut Vec<f64> coerces to &mut [f64] in run; Option<usize>::is_some_and on a Copy value; m_X is &mut Vec<FFTElement> from as_mut()? and only borrowed immutably inside the closure; private FFTElement in a private field of pub FFT2 is allowed; derives are satisfied. The tests' &mut [0.0] coerces to &mut [f64]. ap_geodesicgrid.rs: Matrix3::from_floats is pub (matrix3.rs:37); Matrix3 is Copy, and Mul<Vector3> for Matrix3 (matrix3.rs:268) takes both by value, so inv[i] * *v moves copies out of the OnceLock array; Neg exists for Vector3T<T> (vector3.rs:481); Vector3 = Vector3T<f64> is Copy, so the test's -v after section(v, ..) is fine and Vector3::new resolves through the alias; OnceLock<[Matrix3; 10]> and OnceLock<[neighbor_umbrella; 3]> are Sync; the match arms '3 => return 0' and '0 => w.z = -w.z' type-check; the idx parameter shadows fn idx, which is allowed for functions. circularstream.rs: CircularBuffer<u8> satisfies Clone + Default + PartialEq and derives Debug/Clone; Stream: Send is satisfied; can_seek/position/length/read/write/flush are all trait items (mod.rs:1212-1237); Stream::read(&mut s, &mut b) coerces [u8; 4]. versiondetection.rs: regex and log are mp-core dependencies (Cargo.toml:12, 17); crate::dotnet::version is declared (mod.rs:20); Exception::Other exists (mod.rs:851); Version implements Display; the g closure returns &'h str tied to the haystack. version.rs: manual Ord with derived PartialEq/Eq compiles. link.rs: the new variant is constructed once (1871); every match over LinkEvent in the workspace (app.rs:523, flight_plan.rs:287, compass.rs:110) has a '_' arm, and all other uses (tests/*.rs, flight_data.rs, config.rs, setup.rs, mount.rs, vehicle_tuning.rs, demo.rs, forms.rs, firmware_ui.rs) are if-let or matches!. flight_plan.rs: the new fields are initialised in Default (249-250) and there is no other struct literal; the guard compares Option<u8> with Some(*mission_type). app.rs:657-660: link borrows only self.link, so assigning self.settings.view and calling self.flight_plan.but_read_click() after the loop is a disjoint borrow, and View is defined in app.rs:19. flight_data.rs:317: if-let with a literal field pattern through &LinkEvent is fine. tool_windows.rs: usize::trailing_zeros returns u32, and Exception implements Display (mod.rs:901). One definite error, in pelco.rs.",
+    "likely_errors": [
+      {
+        "file": "crates/mp-core/src/extlibs/utilities/pelco.rs",
+        "line": 77,
+        "error": "E0530: function parameters cannot shadow tuple structs. cs_enum! expands `cmd1` and `cmd2` to tuple structs (`pub struct cmd1(pub u8)`, dotnet/mod.rs:242), so their constructors are in the value namespace of this module, and the parameter patterns `cmd1: cmd1, cmd2: cmd2` in GenerateCommand are rejected (two errors). mp-core then fails to build, which takes mp-app and every test with it.",
+        "fix": "Rename the bindings, e.g. `pub fn GenerateCommand(&self, cameraaddr: u8, command1: cmd1, command2: cmd2, data1: u8, data2: u8)`, and use `command1.0` / `command2.0` in the body. Add a comment that the C# parameter names cmd1/cmd2 cannot be kept in Rust."
+      }
+    ],
+    "low_confidence_risks": [
+      "crates/mp-core/src/dotnet/mod.rs:573 (carried over): LCIDToLocaleName(langid as u32, Some(&mut buf), 0) assumes windows 0.62 folds lpName/cchName into Option<&mut [u16]>. If the binding takes (u32, PWSTR, i32, u32), write: LCIDToLocaleName(langid as u32, windows::core::PWSTR(buf.as_mut_ptr()), buf.len() as i32, 0).",
+      "crates/mp-core/src/extlibs/utilities/versiondetection.rs:79 (test, runtime): the '4.5.0-rc2' -> '4.5.0.2' assertion relies on the regex crate keeping group 4's capture from an earlier iteration of the outer '*' when a later iteration takes the '-rc' branch. regex-automata's engines do keep untouched slots, which matches .NET, but no other test in the repo pins this down.",
+      "crates/mp-core/src/extlibs/utilities/ap_geodesicgrid.rs:403 (test, runtime): 'seen.len() == 80' depends on 2000 spiral points reaching every one of the 80 sections. That is very likely (about 25 per section), but it is not proven.",
+      "crates/mp-app/src/views/flight_plan.rs:172 (carried runtime risk): a NaN anywhere in a Locationwp or the radii makes WpOverlayKey unequal to itself, so CreateOverlay and Spline2 run again every frame."
+    ]
+  },
+  "findings": [
+    {
+      "id": "R65-01",
+      "severity": "P0",
+      "file": "crates/mp-core/src/extlibs/utilities/pelco.rs",
+      "line": 77,
+      "cs_reference": "ExtLibs/Utilities/Pelco.cs:67-74",
+      "summary": "Definite compile error (E0530, twice): GenerateCommand's parameters `cmd1: cmd1, cmd2: cmd2` shadow the tuple structs that cs_enum! generates. mp-core does not build, so the app and every test in the workspace are broken as submitted. Apart from that the port is faithful: the checksum adds 0xFF and truncates to a byte, CheckSum skips the sync byte, Take(negative) yields nothing, and Last() on an empty array throws 'Sequence contains no elements' after cscount is computed. Minor: a combined [Flags] value prints as a number through cs_enum's Display, where .NET prints 'IrisOpen, IrisClose'.",
+      "required_fix": "Rename the two parameters (command1/command2) and use .0 on them. Give cs_enum a [Flags] variant whose Display joins the member names with ', ' as Enum.ToString does for FlagsAttribute enums."
+    },
+    {
+      "id": "R65-02",
+      "severity": "P0",
+      "file": "crates/mp-app/src/mp/ (missing), crates/mp-app/src/extlibs/ (missing)",
+      "line": 0,
+      "cs_reference": "reference/MissionPlanner/{MainV2.cs,Program.cs,GCSViews/*,Controls/*,ExtLibs/Maps/*,ExtLibs/GMap.NET.Drawing/*,...}",
+      "summary": "Carried over from R64-01. Five small ExtLibs/Utilities files (1,175 lines) were ported this round, but no Mission Planner project file is: MainV2, the GCSViews, Controls/fftui.cs, CompassCalibrator.cs and the MAVLink interface layer are still todo. About 94.3% of owned C# lines remain. MANIFEST.md still lists this round's five files and WPOverlay/ParamFile/RLE/Spline2/ubx_m8p as todo.",
+      "required_fix": "Port GCSViews/FlightPlanner.cs and ConfigRawParams.cs file by file (R64-01's list), then Controls/fftui.cs on top of FFT2.rin/FreqTable and CompassCalibrator.cs on top of AP_GeodesicGrid, so this round's ports gain their real callers. Regenerate MANIFEST.md and move wpoverlay.rs to its manifest path."
+    },
+    {
+      "id": "R65-03",
+      "severity": "P2",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 548,
+      "cs_reference": "MainV2.cs:1758-1780 (loadwpsonconnect after the parameter download, gated by showui and comPort.BaseStream.IsOpen; then the RALLY_TOTAL fetch); GCSViews/FlightPlanner.cs:606-638 (BUT_read_Click), 3992-4047 (getWPs inside a ProgressReporterDialogue), 322 (Activate), 809-833 and 900-913 (fence/rally downloads discarded); ExtLibs/ArduPilot/mav_mission.cs:14-60",
+      "summary": "R64-03 is partly fixed. A read timeout now emits MissionDownloadFailed, so the grid is kept, and Disconnected clears the tag. loadwpsonconnect again switches to Flight Plan, asks the confirm when rows exist, and reads into the planner. Remaining divergences: (1) the read starts on LinkEvent::Connected, before the parameter download, where C# runs it after getParamList. When ParamsLoaded later sends ReadMission{2} for RALLY_TOTAL > 0 (app.rs:619), link.rs:641 replaces the in-flight type-0 MissionOp without emitting anything. The planner then never gets its mission, awaiting_read stays Some(0), and the next type-0 download from Flight Data's Resume Mission is applied to the planner (the R63-03 bug). (2) A vehicle change (link.rs:804) and the pending-altitude refusal (link.rs:605) emit OperationError, not MissionDownloadFailed, so the tag also goes stale there. (3) The view switch is a plain assignment: MenuFlightPlanner_Click -> ShowScreen -> FlightPlanner.Activate (setWPParams etc.) is not run. (4) The setting is compared with == \"True\"; Settings.GetBoolean uses bool.TryParse, which ignores case and surrounding white space. (5) A failure adds only a 'Timeout getting waypoints' message line; C# shows the exception in the progress dialog. Flight Data's resume failure is silent. (6) The Geo-Fence/Rally context Downloads (menu.rs:434, 462 -> transfer -> mission_io) still load lists that C# discards. (7) No test was added.",
+      "required_fix": "Carry a request id on LinkCommand::ReadMission and LinkEvent::MissionDownloaded/MissionDownloadFailed, and have the link fail (not silently replace) a running MissionOp when a new one starts, as MAVLinkInterface's giveComport lock makes C# wait or throw. Emit MissionDownloadFailed for every aborted download. Run loadwpsonconnect after ParamsLoaded (or after the cache load) and before the rally fetch, through a View activation hook that also runs setWPParams. Parse the setting with bool.TryParse semantics. Make the context fence/rally Downloads discard their result. Add tests for: timeout keeps the grid; rally fetch during a planner read; loadwpsonconnect fills the grid; a stale tag after a vehicle change."
+    },
+    {
+      "id": "R65-04",
+      "severity": "P2",
+      "file": "crates/mp-app/src/app.rs",
+      "line": 1481,
+      "cs_reference": "MainV2.cs:1697-1734 (VersionString.Split(' '), APFirmware.GetReleaseNewest(OFFICIAL), VersionDetection.GetVersion, ver2 > ver1, title NewFirmware + '-' + VehicleType + ' ' + ver2, GetMetaDataVersioned); GCSViews/ConfigurationView/ConfigArducopter.cs:487; ExtLibs/Utilities/VersionDetection.cs",
+      "summary": "VersionDetection and System.Version are ported but have no caller. check_newer_firmware compares no version at all: it returns 'New firmware available' for every ArduCopter/Plane/Rover/Sub/Tracker connection with a non-empty version string unless the show-again box was cleared. The title 'New Firmware-<veh>' and the text drop ' ' + ver2. The check runs on the UI thread at Connected instead of a Task.Run after the parameters. ParameterMetaDataRepositoryAPMpdef.GetMetaDataVersioned(GetVersion(...)) and ConfigArducopter's '>= new Version(4, 7)' branch are missing. GetVersion's exceptions are not caught and logged as in C#.",
+      "required_fix": "Port the MainV2 block: split VersionString, take APFirmware.GetReleaseNewest(OFFICIAL), match on fields1[0].ToLower().Contains(VehicleType.ToLower()), compare VersionDetection::GetVersion against MavFirmwareVersion, show the message only when ver2 > ver1, using C#'s title and text with ver2, check the first hit only, and catch and log every exception. Use GetVersion in the param metadata and ConfigArducopter paths."
+    },
+    {
+      "id": "R65-05",
+      "severity": "P2",
+      "file": "crates/mp-app/src/tool_windows.rs",
+      "line": 133,
+      "cs_reference": "Controls/fftui.cs:23-70, 172-302, 359-519, 604-719, 791-919 (fft.rin(buffer, (uint)bins, indB), fft.FreqTable(N, samplerate), FFT2.datastate); ExtLibs/Utilities/Spectrogram.cs:119-244",
+      "summary": "Only FFT2.init + run is wired. fftui calls rin, which applies the (4/N)*0.5*(1-cos) window and returns |X| or 20/ln10*ln(|X| + double.Epsilon) when indB, and FreqTable, whose bin frequencies are int-truncated (i*samplerate/N). spectra() subtracts the block mean, uses a 0.5-0.5cos window, divides by n, has no dB option and builds its own frequency axis, so every plotted value differs from Mission Planner. datastate is unused and Spectrogram.cs is not ported. fft() also passes trailing_zeros(n), which is only right for a power of two, and only logs a run error.",
+      "required_fix": "Port Controls/fftui.cs (its four handlers, the datastate accumulation and the indB checkbox) and Spectrogram.cs, and call FFT2::rin and FreqTable exactly as they do."
+    },
+    {
+      "id": "R65-06",
+      "severity": "P2",
+      "file": "crates/mp-core/src/paramfile.rs",
+      "line": 36,
+      "cs_reference": "ExtLibs/Mavlink/MAVLinkParam.cs:219-224, 109-133; GCSViews/ConfigurationView/ConfigRawParams.cs:237-252, 594, 661; ExtLibs/Utilities/ParamFile.cs:85-108; Log/MavlinkLog.cs:1149-1172",
+      "summary": "Carried over from R64-02 unchanged. Every non-REAL32 parameter is still saved as float G7 (INT32 33426954 -> 33426950); a bad cell empties the file instead of being skipped with InvalidNumberEntered; partial output is lost on an exception; the displayed cells are format_value; Extract Params uses SaveParamFile; there are no golden tests.",
+      "required_fix": "As R64-02."
+    },
+    {
+      "id": "R65-07",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1699,
+      "cs_reference": "GCSViews/FlightPlanner.cs:6706-6764 (setWPParams), 322 (Activate), 5644, 5689-5691, 991, 1864 (ZoomAndCenterMarkers), 1805-1875, 4359-4420",
+      "summary": "R64-04 is partly fixed. N2 now goes through format_fixed (15 significant digits, then half away from zero), so WPNAV_RADIUS = 100.5 gives 1.01 as in C#. Grouping and the current culture do not change the parsed value. Still open: the value is not multiplied by CurrentState.multiplierdist before formatting, so feet are wrong; TXT_loiterrad's text is double.ToString() (G15 of the widened float) and Enabled = false when neither LOITER_RADIUS nor WP_LOITER_RAD exists, and neither is modelled; setWPParams is still an inline block, not a function called from Activate; R62-04 items 3-8 (ZoomAndCenterMarkers, lbl_wpfile on a JSON failure, .shp/.kml filters, .fen and rally loaders, modal message boxes) are unchanged. No test.",
+      "required_fix": "Make setWPParams a function (format v * multiplierdist with N2 in the current culture, store the text, keep the loiter box's Enabled state), call it from Activate and processToScreen, add midpoint, last-wins and loiter-fallback tests, then the remaining R62-04 items."
+    },
+    {
+      "id": "R65-08",
+      "severity": "P1",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1321,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1408-1580; GCSViews/FlightData.cs:3956-4046",
+      "summary": "Carried over from R64-07 unchanged: only routes come from WPOverlay. Markers, polygons, pointlist, the overlay.Routes distance sum, the fence/rally overlays and the FlightData map are missing.",
+      "required_fix": "As R62-06."
+    },
+    {
+      "id": "R65-09",
+      "severity": "P2",
+      "file": "crates/mp-core/src/mission.rs",
+      "line": 227,
+      "cs_reference": "GCSViews/FlightPlanner.cs:5613-5635, 1138-1145, 6141-6181",
+      "summary": "Carried over from R64-05 unchanged: one numeric model for every Commands row, so processToScreen rows and setfromMap rows save different text from C#; the fallback home line keys off (0,0).",
+      "required_fix": "As R62-03."
+    },
+    {
+      "id": "R65-10",
+      "severity": "P2",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1727,
+      "cs_reference": "GCSViews/FlightPlanner.cs:1385-1400, 1413-1425, 5659",
+      "summary": "Carried over from R64-06 unchanged: 'home unset' is still lat == 0 && lng == 0 (now flight_plan.rs:1727), unit multipliers are 1.0, defaults and Invalid_home_location are missing, and a non-Format exception caches empty routes.",
+      "required_fix": "As R62-05."
+    },
+    {
+      "id": "R65-11",
+      "severity": "P2",
+      "file": "crates/mp-core/src/rtk.rs",
+      "line": 42,
+      "cs_reference": "GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:757-834, 908-925; ExtLibs/Utilities/ubx_m8p.cs:440-472",
+      "summary": "Carried over from R64-14 unchanged.",
+      "required_fix": "As R61-10."
+    },
+    {
+      "id": "R65-12",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/version.rs",
+      "line": 18,
+      "cs_reference": "System.Version (.NET Framework 4.7.2: Version(int,int), Version(int,int,int), Version(int,int,int,int), Parse/VersionResult.Init(\"input\", true)); ExtLibs/Utilities/CircularBuffer.cs Get/Put; ExtLibs/Utilities/fft.cs:84-89",
+      "summary": "Small fidelity gaps in this round's support code. Version::new takes all four parts, checks only major/minor, and lets build/revision be any value; C# has three constructors, and the 3- and 4-argument ones throw ArgumentOutOfRangeException('build'/'revision'). Parse's ArgumentOutOfRange carries 'Parameter name: version', but .NET Framework's Version.Parse names 'input'. Int32.Parse's acceptance of trailing '\\0' is not modelled. CircularStream.read_range/write_range panic (via circularbuffer.rs indexing) where C# throws IndexOutOfRangeException after a partial copy. FFT2.init(31) aborts on a 2^31-element allocation where C# throws OutOfMemoryException. The fft.rs:230 comment implies a uint wrap that cannot occur (start + spacing <= 2^32 - 1).",
+      "required_fix": "Split Version::new into new2/new3/new4 with C#'s checks and parameter names; use 'input' in Parse; make CircularBuffer's indexed copies return IndexOutOfRange; use try_reserve in FFT2::init and map failure to an OutOfMemory exception; fix the comment."
+    },
+    {
+      "id": "R65-13",
+      "severity": "P3",
+      "file": "crates/mp-app/src/swarm.rs",
+      "line": 159,
+      "cs_reference": "Swarm/Formation.cs:321-324; Swarm/FormationControl.cs:273-293",
+      "summary": "Carried over from R64-08 unchanged.",
+      "required_fix": "As R63-08."
+    },
+    {
+      "id": "R65-14",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan/menu.rs",
+      "line": 815,
+      "cs_reference": "GCSViews/FlightPlanner.cs:3272-3299, 1096-1223, 1038-1063",
+      "summary": "Carried over from R64-09 unchanged (Enter UTM Coord errors, zone timing, undo order, new_wp is not setfromMap).",
+      "required_fix": "As R63-09."
+    },
+    {
+      "id": "R65-15",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 1887,
+      "cs_reference": "ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapRoute.cs:131-148",
+      "summary": "Carried over from R64-10 unchanged.",
+      "required_fix": "As R62-09."
+    },
+    {
+      "id": "R65-16",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/maps/wpoverlay.rs",
+      "line": 87,
+      "cs_reference": "ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapPolygon.cs; WPOverlay.cs:30, 46-48, 403-457",
+      "summary": "Carried over from R64-11 unchanged.",
+      "required_fix": "As R62-10."
+    },
+    {
+      "id": "R65-17",
+      "severity": "P3",
+      "file": "crates/mp-core/src/coords.rs",
+      "line": 36,
+      "cs_reference": "GCSViews/FlightPlanner.cs:2731-2763; ExtLibs/Controls/Coords.cs",
+      "summary": "Carried over from R64-12 unchanged.",
+      "required_fix": "As R62-11."
+    },
+    {
+      "id": "R65-18",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/io.rs",
+      "line": 22,
+      "cs_reference": "System.Console.Out; ExtLibs/ArduPilot/Linux.cs",
+      "summary": "Carried over from R64-13 unchanged.",
+      "required_fix": "As R62-12."
+    },
+    {
+      "id": "R65-19",
+      "severity": "P3",
+      "file": "crates/mp-app/src/views/flight_plan.rs",
+      "line": 2188,
+      "cs_reference": "No C# tests; behaviour is the spec",
+      "summary": "Carried over from R64-15. The new ports have small unit tests (FFT peak/round-trip/FreqTable truncation, 80-section coverage and the opposite-triangle rule, CircularStream order and NotImplemented, Pelco checksum bytes, VersionDetection strings, Version parse/compare). The R64-03 and R64-04 fixes have none: no timeout-keeps-grid test, no loadwpsonconnect test, no stale-tag test, no N2 midpoint test. No golden outputs from the reference build exist for any of the five new files (e.g. rin of a fixed vector, section() of fixed vectors). The round-62/63/64 list is still open.",
+      "required_fix": "Add the R65-03/R65-07 tests and golden vectors recorded from the C# build for FFT2.rin/FreqTable, AP_GeodesicGrid.section, VersionDetection.GetVersion and Version.Parse error cases, plus the earlier list."
+    }
+  ],
+  "round_64_status": {
+    "fixed": [],
+    "partly_fixed": [
+      "R64-03: a read timeout emits MissionDownloadFailed and keeps the grid; Disconnected clears the tag; loadwpsonconnect switches to Flight Plan, asks the confirm and reads into the planner again. The read starts before the parameter download, the connect-time rally ReadMission can silently replace it and leave the tag stale, the vehicle-change and pending-altitude paths still leave it stale, Activate is not run, the fence/rally context Downloads still fill lists C# discards, and there is no test (R65-03).",
+      "R64-04: setWPParams' N2 now rounds as .NET does (format_fixed, 15 digits, away from zero). multiplierdist, the loiter text and Enabled state, the Activate call and R62-04 items 3-8 are still open (R65-07)."
+    ],
+    "still_open": [
+      "R64-01 (now R65-02).",
+      "R64-02 (now R65-06).",
+      "R64-05 (now R65-09).",
+      "R64-06 (now R65-10).",
+      "R64-07 (now R65-08).",
+      "R64-08 (now R65-13).",
+      "R64-09 (now R65-14).",
+      "R64-10 (now R65-15).",
+      "R64-11 (now R65-16).",
+      "R64-12 (now R65-17).",
+      "R64-13 (now R65-18).",
+      "R64-14 (now R65-11).",
+      "R64-15 (now R65-19).",
+      "Older items still open as listed in rounds 61-64 (R60-03, R60-05, R60-06/07, R60-08/09, R60-11, R59-03/04/05 items 2-4, R59-07..15, R58-06 items 2-9, R58-09, R58-14, R58-15, R58-18, R57-04/05/06/07/09/11/13/14/15/16/17)."
+    ]
+  },
+  "next_steps": [
+    "R65-01: rename GenerateCommand's cmd1/cmd2 parameters so mp-core builds again. Nothing else counts until the workspace compiles.",
+    "R65-03: put a request id on ReadMission/MissionDownloaded/MissionDownloadFailed, fail rather than replace a running MissionOp, emit MissionDownloadFailed on every aborted download, run loadwpsonconnect after the parameters and before the rally fetch through a FlightPlanner Activate hook, and make the fence/rally context Downloads discard their result. Add the four tests.",
+    "R65-04: port MainV2's newer-firmware block on top of VersionDetection::GetVersion and APFirmware.GetReleaseNewest (show only when ver2 > ver1, C#'s title/text with ver2), and use GetVersion for GetMetaDataVersioned and ConfigArducopter's 4.7 check.",
+    "R65-05: port Controls/fftui.cs and Spectrogram.cs so the FFT windows call FFT2::rin (with indB) and FreqTable instead of tool_windows' own spectra.",
+    "R65-06: pass ptype to paramfile::save and format integers with double G15; skip bad rows; add golden tests including INT32 33426954.",
+    "R65-07: make setWPParams a function with multiplierdist, the loiter text/Enabled state and an Activate call; then ZoomAndCenterMarkers, lbl_wpfile, filters, .fen/rally loaders and modal message boxes.",
+    "R65-09/R65-10: model the Commands cells and TXT_home boxes as C# text so savewaypoints, uploads, processToScreen and writeKML read the same strings.",
+    "R65-08: render WPOverlay markers/polygons, use pointlist and overlay.Routes for the distance labels, draw fence/rally via WPOverlay, wire FlightData's map.",
+    "R65-12: split Version's constructors with C#'s checks, use 'input' in Parse, and make CircularBuffer/FFT2 throw instead of panicking or aborting.",
+    "R65-19: tests for R65-03/R65-07 and golden vectors from the reference build for this round's five files.",
+    "Then port GCSViews/FlightPlanner.cs, ConfigRawParams.cs, CompassCalibrator.cs (the AP_GeodesicGrid caller), Swarm/*.cs, MAVLinkInterface/MAVState/CurrentState and MainV2 file by file. Regenerate port/MANIFEST.md (mark this round's five files ported) and move wpoverlay.rs to its manifest path."
+  ],
+  "verdict": "Five small ExtLibs/Utilities files (1,175 lines) were ported, and four of them are close statement-by-statement copies: FFT2 with its uint shifts, int FreqTable and double.Epsilon; AP_GeodesicGrid with the float-widened tables and float casts; CircularStream with CanSeek true and NotImplemented members; VersionDetection with its Groups[6] bug and a .NET Framework-style Version.Parse. The fifth, Pelco, breaks the build: GenerateCommand's parameters cmd1/cmd2 shadow the cs_enum tuple structs (E0530), so mp-core, the app and every test fail to compile. R64-03 and R64-04 are partly fixed. A read timeout no longer wipes the grid, loadwpsonconnect reaches the planner again, and N2 rounds like .NET. But the planner's read can still be silently replaced by the connect-time rally fetch, which leaves a stale tag, and setWPParams still ignores the distance unit and Activate. The new ports are mostly unwired. VersionDetection has no caller while the newer-firmware toast fires on every connect without comparing versions. The FFT window uses only the butterfly, not rin/FreqTable. Ported lines rise to 27,302 / 479,014 (5.7%); the cap stays 1.6. Awarded 1.1 (down 0.2 for the build break); round-file fidelity 5.9; UI/UX 2.2; features 3.1."
+}

@@ -90,44 +90,58 @@ pub(super) fn spline_circle(lat: f64, lng: f64, radius: i32, minalt: i32, maxalt
     out
 }
 
-/// ClipperOffset (jtMiter, closed polygon) in metres around the first vertex: positive grows.
-pub(super) fn offset_polygon(poly: &[(f64, f64)], d: f64) -> Vec<(f64, f64)> {
-    if poly.len() < 3 {
-        return poly.to_vec();
+/// offsetPolygonToolStripMenuItem_Click after the prompt: the polygon in UTM (the first
+/// point's zone) times 1000 through ClipperOffset (jtMiter, etClosedPolygon) into a PolyTree
+/// by `(Int64)(meters * 1000.0)`, then every child contour back through utmpos.ToLLA. None
+/// when the polygon is empty or the offset leaves nothing (the C# returns and keeps the
+/// drawn polygon).
+pub(super) fn offset_polygon(poly: &[(f64, f64)], intmeter: f64) -> Option<Vec<(f64, f64)>> {
+    use mp_core::extlibs::utilities::clipper::{ClipperOffset, EndType, IntPoint, JoinType, PolyTree};
+    use mp_core::extlibs::utilities::utmpos::utmpos;
+    use mp_core::extlibs::utilities::PointLatLngAlt;
+    if poly.is_empty() {
+        return None;
     }
-    let (lat0, lng0) = poly[0];
-    let k = R * lat0.to_radians().cos();
-    let mut pts: Vec<(f64, f64)> = poly.iter().map(|&(a, b)| ((b - lng0).to_radians() * k, (a - lat0).to_radians() * R)).collect();
-    if pts.first() == pts.last() {
-        pts.pop();
-    }
-    // counter-clockwise so the outward normal of (dx, dy) is (dy, -dx)
-    let area: f64 = (0..pts.len()).map(|i| { let (a, b) = (pts[i], pts[(i + 1) % pts.len()]); a.0 * b.1 - b.0 * a.1 }).sum();
-    if area < 0.0 {
-        pts.reverse();
-    }
-    let n = pts.len();
-    let normal = |i: usize| {
-        let (a, b) = (pts[i], pts[(i + 1) % n]);
-        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
-        let len = (dx * dx + dy * dy).sqrt().max(1e-9);
-        (dy / len, -dx / len)
-    };
-    let mut out = Vec::new();
-    for i in 0..n {
-        let (n1, n2) = (normal((i + n - 1) % n), normal(i));
-        let p = pts[i];
-        let cos = (n1.0 * n2.0 + n1.1 * n2.1).clamp(-1.0, 1.0);
-        // miter limit 2 (Clipper's default): square the corner off beyond it
-        if 1.0 + cos < 2.0 / 4.0 {
-            out.push((p.0 + n1.0 * d, p.1 + n1.1 * d));
-            out.push((p.0 + n2.0 * d, p.1 + n2.1 * d));
-        } else {
-            let q = d / (1.0 + cos);
-            out.push((p.0 + (n1.0 + n2.0) * q, p.1 + (n1.1 + n2.1) * q));
+    let list: Vec<PointLatLngAlt> = poly.iter().map(|&(lat, lng)| PointLatLngAlt::new(lat, lng)).collect();
+
+    // utm zone distance calcs will be done in
+    let utmzone = list[0].get_utm_zone();
+
+    // utm position list
+    let r = (|| -> Result<Option<Vec<(f64, f64)>>, mp_core::dotnet::Exception> {
+        let mut utmpositions = utmpos::to_list(&PointLatLngAlt::to_utm_list(utmzone, &list)?, utmzone)?;
+
+        // close the loop if its not already
+        let (first, last) = (&utmpositions[0], &utmpositions[utmpositions.len() - 1]);
+        if (first.x, first.y, first.zone) != (last.x, last.y, last.zone) {
+            let f = utmpos::copy_of(&utmpositions[0]);
+            utmpositions.push(f); // make a full loop
         }
-    }
-    out.into_iter().map(|(x, y)| (lat0 + (y / R).to_degrees(), lng0 + (x / k).to_degrees())).collect()
+
+        let mut clipper_offset = ClipperOffset::new(2.0, 0.25);
+        let path: Vec<IntPoint> = utmpositions.iter().map(|a| IntPoint::from_f64(a.x * 1000.0, a.y * 1000.0)).collect();
+        clipper_offset.AddPath(&path, JoinType::jtMiter, EndType::etClosedPolygon);
+
+        let mut tree = PolyTree::new();
+        clipper_offset.Execute_tree(&mut tree, mp_core::dotnet::cast_i64(intmeter * 1000.0) as f64)?;
+
+        if tree.ChildCount(PolyTree::ROOT) == 0 {
+            return Ok(None);
+        }
+
+        let mut ans = Vec::new();
+        for &tree_child in tree.Childs(PolyTree::ROOT) {
+            for a in tree.Contour(tree_child) {
+                let p = utmpos::new(a.X as f64 / 1000.0, a.Y as f64 / 1000.0, utmzone).to_lla()?;
+                ans.push((p.Lat, p.Lng));
+            }
+        }
+        Ok(Some(ans))
+    })();
+    r.unwrap_or_else(|e| {
+        log::error!("{e}");
+        None
+    })
 }
 
 pub(super) enum MenuPrompt {
@@ -145,11 +159,6 @@ pub(super) enum MenuPrompt {
 
 fn offset_m(lat: f64, lng: f64, north: f64, east: f64) -> (f64, f64) {
     (lat + (north / R).to_degrees(), lng + (east / (R * lat.to_radians().cos())).to_degrees())
-}
-
-/// UTM (WGS84) to latitude / longitude, as `utmpos.ToLLA` with a signed zone.
-pub(super) fn utm_to_latlng(zone: i32, south: bool, easting: f64, northing: f64) -> (f64, f64) {
-    mp_core::coords::utm_signed_to_geo(if south { -zone.abs() } else { zone.abs() }, easting, northing)
 }
 
 /// 5x7 glyphs for the "Text" auto-WP generator (rows top to bottom, 5 bits each).
@@ -513,6 +522,25 @@ impl FlightPlanView {
                 }
                 ui.close();
             }
+            // SimpleGridPlugin.Loaded: "SimpleGrid" appended to autoWPToolStripMenuItem
+            if ui.button(crate::i18n::t(crate::extlibs::simplegrid::GridPlugin::menu_text())).clicked() {
+                let mut polygon = std::mem::take(&mut self.polygon);
+                let mut config = std::mem::take(&mut app.settings.planner);
+                let mut host = crate::extlibs::simplegrid::PluginHost {
+                    FPDrawnPolygon: &mut polygon,
+                    PlannedHomeLocation: self.planned_home_location(),
+                    config: &mut config,
+                    FDMapType: app.settings.fd_map.provider,
+                };
+                let click = crate::extlibs::simplegrid::GridPlugin.but_Click(&mut host);
+                self.polygon = polygon;
+                app.settings.planner = config;
+                match click {
+                    crate::extlibs::simplegrid::ButClick::Show(g) => self.simple_grid = Some(g),
+                    crate::extlibs::simplegrid::ButClick::Error(e, caption) => app.toasts.message(e, caption),
+                }
+                ui.close();
+            }
         });
         ui.menu_button(crate::i18n::t("Map Tool"), |ui| {
             if ui.button(crate::i18n::t("Measure Distance")).clicked() {
@@ -563,26 +591,21 @@ impl FlightPlanView {
         });
         ui.menu_button(crate::i18n::t("File Load/Save"), |ui| {
             if ui.button(crate::i18n::t("Load WP File")).clicked() {
-                if let Some((name, text)) = platform::open_text("Open Waypoint File", "Waypoints", &["waypoints", "txt"]) {
-                    self.load_text(&name, &text, app.toasts);
+                if let Some((name, text)) = platform::open_text("Open Waypoint File", "All Supported Types", &["txt", "waypoints", "plan"]) {
+                    self.load_text(&name, &text, app);
                 }
                 ui.close();
             }
             if ui.button(crate::i18n::t("Load and Append")).clicked() {
-                if let Some((_, text)) = platform::open_text("Open Waypoint File", "Waypoints", &["waypoints", "txt"]) {
-                    match mission::read_waypoint_file(&text) {
-                        Ok(list) if list.len() > 1 => self.items.extend_from_slice(&list[1..]),
-                        Ok(_) => app.toasts.error("Invalid Waypoint file"),
-                        Err(e) => app.toasts.error(e.to_string()),
-                    }
+                // loadAndAppendToolStripMenuItem_Click: "Ardupilot Mission|*.waypoints;*.txt"
+                if let Some((_, text)) = platform::open_text("Open Waypoint File", "Ardupilot Mission", &["waypoints", "txt"]) {
+                    self.read_qgc110wpfile(&text, true, app);
                 }
                 ui.close();
             }
             if ui.button(crate::i18n::t("Save WP File")).clicked() {
-                let text = mission::write_waypoint_file(&self.home, &self.items);
-                if let Some(Err(e)) = platform::save_text("Save Waypoint File", "mission.waypoints", "Waypoints", &["waypoints"], &text) {
-                    app.toasts.error(e);
-                }
+                // saveWPFileToolStripMenuItem_Click -> SaveFile_Click -> savewaypoints
+                self.savewaypoints(app);
                 ui.close();
             }
             if ui.button(crate::i18n::t("Load KML File")).clicked() {
@@ -691,7 +714,8 @@ impl FlightPlanView {
 
     fn load_list(&mut self, mt: usize, app: &mut AppCtx) {
         if let Some((_, text)) = platform::open_text("Load from File", "Waypoints", &["waypoints", "txt", "fen"]) {
-            match mission::read_waypoint_file(&text) {
+            let read = mission::read_waypoint_file(&text, &mut |m| app.toasts.error(m));
+            match read {
                 Ok(list) => *self.list_for(mt) = list,
                 Err(_) => {
                     // legacy fence file: "lat lng" lines, first is the return point
@@ -822,9 +846,23 @@ impl FlightPlanView {
             ChainTool::Utm => {
                 self.utm_zone = v[0].clone();
                 // the zone digits; zone.ToLower().Contains("N") is never true, so south
-                let digits = v[0].to_lowercase().replace(['s', 'n'], " ");
-                let (Ok(z), Ok(e), Ok(n)) = (digits.trim().parse::<i32>(), v[1].trim().parse::<f64>(), v[2].trim().parse::<f64>()) else { return };
-                let (a, b) = utm_to_latlng(z, true, e, n);
+                let digits = v[0].to_lowercase().replace('s', " ").to_lowercase().replace('n', " ");
+                // int.Parse / double.Parse in the current culture, then GeoUtility's
+                // new UTM(zone, e, n, Hemisphere.South) -> Geographic; an exception leaves the
+                // handler (shown here) before the row is added
+                let r = (|| -> Result<(f64, f64), mp_core::dotnet::Exception> {
+                    let z = mp_core::dotnet::int_parse(&digits)?;
+                    let e = mp_core::dotnet::double_parse(&v[1])?;
+                    let n = mp_core::dotnet::double_parse(&v[2])?;
+                    mp_core::coords::utm_hemisphere_to_geo(z, e, n, true)
+                })();
+                let (a, b) = match r {
+                    Ok(p) => p,
+                    Err(e) => {
+                        app.toasts.error(e.message().to_string());
+                        return;
+                    }
+                };
                 self.update_undo_buffer();
                 let wp = self.new_wp(app, mavcmd::WAYPOINT, a, b);
                 self.items.push(wp);
@@ -850,8 +888,23 @@ impl FlightPlanView {
                 }
             }
             ChainTool::OffsetPolygon => {
-                let d = if v[0] != "0" { v[0].trim().parse::<f64>().unwrap_or(0.0) } else { 0.0 };
-                self.polygon = offset_polygon(&self.polygon, d);
+                // double.Parse(meter) unless the text is "0"; a bad number throws out of the
+                // handler and the polygon stays as drawn
+                let d = if v[0] != "0" {
+                    match mp_core::dotnet::double_parse(&v[0]) {
+                        Ok(d) => d,
+                        Err(e) => {
+                            log::error!("{e}");
+                            return;
+                        }
+                    }
+                } else {
+                    0.0
+                };
+                // redrawPolygonSurvey(ans), unless the offset left nothing
+                if let Some(p) = offset_polygon(&self.polygon, d) {
+                    self.polygon = p;
+                }
             }
         }
     }
@@ -1135,12 +1188,15 @@ mod tool_tests {
     fn offset_polygon_moves_each_edge_by_the_distance() {
         // a 100 m square grown by 10 m becomes 120 m wide
         let sq = [(0.0, 0.0), (0.0, 0.000898315), (0.000904369, 0.000898315), (0.000904369, 0.0)];
-        let out = offset_polygon(&sq, 10.0);
+        let out = offset_polygon(&sq, 10.0).unwrap();
         let w = (out.iter().map(|p| p.1).fold(f64::MIN, f64::max) - out.iter().map(|p| p.1).fold(f64::MAX, f64::min)).to_radians() * R;
         assert!((w - 120.0).abs() < 0.5, "{w}");
-        let inner = offset_polygon(&sq, -10.0);
+        let inner = offset_polygon(&sq, -10.0).unwrap();
         let w = (inner.iter().map(|p| p.1).fold(f64::MIN, f64::max) - inner.iter().map(|p| p.1).fold(f64::MAX, f64::min)).to_radians() * R;
         assert!((w - 80.0).abs() < 0.5, "{w}");
+        // shrunk to nothing: the drawn polygon stays
+        assert!(offset_polygon(&sq, -60.0).is_none());
+        assert!(offset_polygon(&[], 10.0).is_none());
     }
 
     #[test]

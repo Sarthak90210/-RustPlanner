@@ -72,7 +72,10 @@ fn coord_cells(lat: f64, lng: f64) -> [String; 4] {
     }
     let (zone, east, north) = mp_core::coords::to_utm_signed(lat, lng);
     let mgrs = mp_core::coords::geo_to_mgrs(lat, lng).unwrap_or_default();
-    [zone.to_string(), format!("{east:.3}"), format!("{north:.3}"), mgrs]
+    // temp2[0].ToString("0.000") in the current culture; a ProjNet exception leaves the cells
+    // blank here (the C# catch keeps whatever they held)
+    let fmt = |v: f64| if v.is_nan() { String::new() } else { mp_core::dotnet::format_fixed(v, 1, 3, mp_core::dotnet::current_culture()) };
+    [zone.to_string(), fmt(east), fmt(north), mgrs]
 }
 
 /// Commands_CellEndEdit: convertFromUTM / convertFromMGRS. Unparsable input is ignored.
@@ -81,13 +84,14 @@ fn coords_from_cells(col: usize, cells: &[String; 4]) -> Option<(f64, f64)> {
         let (lat, lng) = mp_core::coords::mgrs_to_geo(&cells[3])?;
         return (lat != 0.0 && lng != 0.0).then_some((lat, lng));
     }
-    let zone: i32 = cells[0].trim().parse().ok()?;
-    let east: f64 = cells[1].trim().parse().ok()?;
-    let north: f64 = cells[2].trim().parse().ok()?;
+    // int.Parse / double.Parse in the current culture; an exception leaves Lat/Lon unchanged
+    let zone: i32 = mp_core::dotnet::int_parse(&cells[0]).ok()?;
+    let east: f64 = mp_core::dotnet::double_parse(&cells[1]).ok()?;
+    let north: f64 = mp_core::dotnet::double_parse(&cells[2]).ok()?;
     if east == 0.0 && north == 0.0 {
         return None;
     }
-    Some(mp_core::coords::utm_signed_to_geo(zone, east, north))
+    mp_core::coords::utm_signed_to_geo(zone, east, north)
 }
 
 pub struct FlightPlanView {
@@ -129,7 +133,8 @@ pub struct FlightPlanView {
     stash: [Vec<Locationwp>; 3],
     polygon: Vec<(f64, f64)>,
     drawing_polygon: bool,
-    survey_dialog: Option<SurveyParams>,
+    /// ExtLibs/SimpleGrid's GridUI form (Auto WP > SimpleGrid)
+    simple_grid: Option<Box<crate::extlibs::simplegrid::GridUI>>,
     grid_ui: Option<Box<super::survey_ui::GridUi>>,
     circle_dialog: Option<(f64, f64, String, String)>,
     /// Fence Circle Around Home: radius prompt
@@ -154,20 +159,28 @@ pub struct FlightPlanView {
     last_center: Option<(f64, f64)>,
     /// currentMarker: the last pointer position over the map (SetMouseDisplay)
     last_pointer: Option<(f64, f64)>,
+    /// wpOverlay's routes as writeKML last built them, with the inputs they were built from
+    /// (writeKML runs when the list changes, not on every repaint)
+    wp_overlay_cache: Option<(WpOverlayKey, Vec<mp_core::extlibs::maps::wpoverlay::GMapRoute>)>,
+    /// processToScreen's "Reset Home to loaded coords" YesNo box: the loaded home row
+    reset_home_prompt: Option<Locationwp>,
+    /// a downloaded list (mission type, items; a mission has home first) waiting for
+    /// WPtoScreen's processToScreen
+    pending_download: Option<(usize, Vec<Locationwp>)>,
+    /// the mission type of a read the planner started (BUT_read_Click -> getWPs)
+    awaiting_read: Option<u8>,
+    /// a BUT_read_Click from outside the panel, run on the next frame
+    read_pending: bool,
 }
 
-#[derive(Clone, Copy)]
-struct SurveyParams {
-    alt: f32,
-    spacing: f32,
-    angle: f32,
-    overshoot: f32,
-}
-
-impl Default for SurveyParams {
-    fn default() -> Self {
-        Self { alt: 100.0, spacing: 50.0, angle: 0.0, overshoot: 0.0 }
-    }
+/// What writeKML's `wpOverlay.CreateOverlay` depends on.
+#[derive(Clone, PartialEq)]
+struct WpOverlayKey {
+    home: Locationwp,
+    items: Vec<Locationwp>,
+    wp_radius: f32,
+    loiter_radius: f32,
+    alt_frame: u8,
 }
 
 impl Default for FlightPlanView {
@@ -201,7 +214,7 @@ impl Default for FlightPlanView {
             stash: Default::default(),
             polygon: Vec::new(),
             drawing_polygon: false,
-            survey_dialog: None,
+            simple_grid: None,
             grid_ui: None,
             fence_circle: None,
             menu_prompt: None,
@@ -217,6 +230,11 @@ impl Default for FlightPlanView {
             coord_edit: None,
             last_center: None,
             last_pointer: None,
+            wp_overlay_cache: None,
+            reset_home_prompt: None,
+            pending_download: None,
+            awaiting_read: None,
+            read_pending: false,
         }
     }
 }
@@ -254,24 +272,24 @@ impl FlightPlanView {
 
     pub fn on_event(&mut self, e: &LinkEvent, toasts: &mut Toasts) {
         match e {
-            LinkEvent::MissionDownloaded { mission_type: mt @ (1 | 2), items } => {
-                *self.list_for(*mt as usize) = items.clone();
-                toasts.info(format!("Got {} items", items.len()));
+            // getWPs -> WPtoScreen -> processToScreen for every mission type, an empty list
+            // included (it clears the grid); run on the next frame with the app context
+            LinkEvent::MissionDownloaded { mission_type: mt @ (0 | 1 | 2), items } if self.awaiting_read == Some(*mt) => {
+                self.awaiting_read = None;
+                self.pending_download = Some((*mt as usize, items.clone()));
+            }
+            // getWPs threw: the progress dialog shows the error and the grid is kept
+            LinkEvent::MissionDownloadFailed { mission_type } if self.awaiting_read == Some(*mission_type) => {
+                self.awaiting_read = None;
+            }
+            LinkEvent::Disconnected(_) => {
+                self.awaiting_read = None;
             }
             LinkEvent::MissionUploaded { mission_type: 1 | 2, result } => {
                 match result {
                     Ok(()) => self.post_upload = Some(std::time::Instant::now()),
                     Err(e) => toasts.error(format!("Write failed: {e}")),
                 }
-            }
-            LinkEvent::MissionDownloaded { mission_type: 0, items } => {
-                if items.is_empty() {
-                    toasts.error("No waypoints received");
-                    return;
-                }
-                self.home = items[0];
-                *self.list_for(0) = items[1..].to_vec();
-                self.selected = None;
             }
             LinkEvent::MissionUploaded { mission_type: 0, result } => match result {
                 Ok(()) => {
@@ -362,6 +380,38 @@ impl FlightPlanView {
 
     /// The prompts of BUT_read_Click and the write checks.
     fn write_prompts_ui(&mut self, ctx: &egui::Context, app: &mut AppCtx) {
+        if std::mem::take(&mut self.read_pending) {
+            self.start_read(app);
+        }
+        if let Some((mt, cmds)) = self.pending_download.take() {
+            self.process_to_screen_type(&cmds, false, mt, app);
+        }
+        if let Some(cellhome) = self.reset_home_prompt {
+            let mut answer = None;
+            egui::Modal::new(egui::Id::new("fp_reset_home")).show(ctx, |ui| {
+                ui.set_width(300.0);
+                ui.label(egui::RichText::new(crate::i18n::t("Reset Home Coords")).strong());
+                theme::label(ui, "Reset Home to loaded coords");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                    if theme::button(ui, "No").clicked() {
+                        answer = Some(false);
+                    }
+                    if theme::button(ui, "Yes").clicked() {
+                        answer = Some(true);
+                    }
+                });
+            });
+            if let Some(yes) = answer {
+                self.reset_home_prompt = None;
+                if yes {
+                    // TXT_homelat/lng = double.Parse(cell).ToString(); TXT_homealt = ToString("0.00")
+                    self.home.lat = cellhome.lat;
+                    self.home.lng = cellhome.lng;
+                    let alt = mp_core::dotnet::format_fixed(cellhome.alt as f64, 1, 2, mp_core::dotnet::current_culture());
+                    self.home.alt = mp_core::dotnet::double_parse(&alt).map(|v| v as f32).unwrap_or(cellhome.alt);
+                }
+            }
+        }
         if self.read_confirm {
             let mut answer = None;
             egui::Modal::new(egui::Id::new("fp_read_confirm")).show(ctx, |ui| {
@@ -458,6 +508,21 @@ impl FlightPlanView {
         }
     }
 
+    /// True while a BUT_read_Click is still asking, queued, or waiting for its download.
+    pub fn read_busy(&self) -> bool {
+        self.read_pending || self.read_confirm || self.awaiting_read.is_some() || self.pending_download.is_some()
+    }
+
+    /// BUT_read_Click from outside the panel (MainV2's "loadwpsonconnect"): the confirm when
+    /// the grid has rows, else the read, run on the panel's next frame with the app context.
+    pub fn but_read_click(&mut self) {
+        if self.items.is_empty() {
+            self.read_pending = true;
+        } else {
+            self.read_confirm = true;
+        }
+    }
+
     fn start_read(&mut self, app: &mut AppCtx) {
         match app.link.filter(|_| app.connected()) {
             None => app.toasts.message("Please connect first!", "Error"),
@@ -537,8 +602,8 @@ impl FlightPlanView {
         }
         if key(egui::Modifiers::COMMAND, egui::Key::O) {
             if platform::HAS_NATIVE_DIALOGS {
-                if let Some((name, text)) = platform::open_text("Open Waypoint File", "Waypoints", &["waypoints", "txt"]) {
-                    self.load_text(&name, &text, app.toasts);
+                if let Some((name, text)) = platform::open_text("Open Waypoint File", "All Supported Types", &["txt", "waypoints", "plan"]) {
+                    self.load_text(&name, &text, app);
                 }
             } else {
                 self.browser_open = true;
@@ -551,7 +616,7 @@ impl FlightPlanView {
 
     /// savewaypoints: Mission (.waypoints/.txt) or Mission JSON (.mission), remembering the
     /// directory in "WPFileDirectory".
-    fn savewaypoints(&mut self, app: &mut AppCtx) {
+    pub(super) fn savewaypoints(&mut self, app: &mut AppCtx) {
         let dir = app.settings.planner.get("WPFileDirectory").cloned();
         let name = std::path::Path::new(&self.wpfilename).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
         let Some(path) = platform::save_path("Save As", &name, &[("Mission", &["waypoints", "txt"]), ("Mission JSON", &["mission"])], dir.as_deref()) else { return };
@@ -583,6 +648,87 @@ impl FlightPlanView {
         app.link.filter(|_| app.connected()).map(|l| l.shared.read().cs.firmware).or(self.firmware).unwrap_or_default()
     }
 
+    /// MAV.cs.PlannedHomeLocation: the planner's home row.
+    fn planned_home_location(&self) -> mp_core::extlibs::utilities::PointLatLngAlt {
+        mp_core::extlibs::utilities::PointLatLngAlt::new_alt(self.home.lat, self.home.lng, self.home.alt as f64)
+    }
+
+    /// FlightPlanner.AddCommand (PluginHost.AddWPtoList): `Commands.Rows.Add()` then
+    /// FillCommand with p = [p1, p2, p3, p4, x (lng), y (lat), z (alt)]. Returns the row.
+    pub(crate) fn add_wp_to_list(&mut self, app: &mut AppCtx, cmd: u16, p: [f64; 7]) -> usize {
+        let [p1, p2, p3, p4, x, y, z] = p;
+        let mut row = Locationwp { id: cmd, frame: app.settings.alt_frame, ..Default::default() };
+        // switch wp to spline if spline checked
+        if self.spline && cmd == mavcmd::WAYPOINT {
+            row.id = mavcmd::SPLINE_WAYPOINT;
+        }
+        if cmd == mavcmd::WAYPOINT {
+            // add delay if supplied
+            row.p1 = p1 as f32;
+            self.set_from_map(app, &mut row, y, x, mp_core::dotnet::cast_i32(z), mp_core::dotnet::math_round(p1, 1));
+        } else if cmd == mavcmd::LOITER_UNLIM {
+            self.set_from_map(app, &mut row, y, x, mp_core::dotnet::cast_i32(z), -1.0);
+        } else {
+            row.p1 = p1 as f32;
+            row.p2 = p2 as f32;
+            row.p3 = p3 as f32;
+            row.p4 = p4 as f32;
+            row.lat = y;
+            row.lng = x;
+            row.alt = z as f32;
+        }
+        self.items.push(row);
+        self.items.len() - 1
+    }
+
+    /// FlightPlanner.setfromMap for a new row (Lat/Long/Alt/Delay headers): Lat and Long go
+    /// through their "0.0000000" cell text; Alt is the passed value, else TXT_DefaultAlt,
+    /// and with Verify Height the SRTM-derived height for the alt mode.
+    fn set_from_map(&self, app: &mut AppCtx, row: &mut Locationwp, lat: f64, lng: f64, alt: i32, p1: f64) {
+        use mp_core::dotnet::{current_culture, double_parse, format_fixed};
+        let cell = |v: f64| double_parse(&format_fixed(v, 1, 7, current_culture())).unwrap_or(v);
+        row.lat = cell(lat);
+        row.lng = cell(lng);
+        if alt != -1 && alt != -2 {
+            // TXT_DefaultAlt must be an int; a 0 asks for one with "100" offered
+            let mut default_alt = app.settings.default_alt;
+            if default_alt.fract() != 0.0 || !default_alt.is_finite() {
+                app.toasts.error("Your default alt is not valid");
+                return;
+            }
+            if default_alt == 0.0 {
+                default_alt = 100.0;
+                app.settings.default_alt = default_alt;
+            }
+            let ans = default_alt.trunc();
+            let mut value = default_alt;
+            if alt != 0 {
+                // use passed in value
+                value = alt as f32;
+            }
+            if ans == 0.0 {
+                value = if self.fw(app) == Firmware::ArduCopter2 { 15.0 } else { 50.0 };
+            }
+            if self.verify_height {
+                let multalt = crate::units::alt(1.0) as f64;
+                let srtm = |a: f64, b: f64| crate::srtm::altitude(a, b).unwrap_or(0.0);
+                let def = default_alt as i32 as f64;
+                value = match AltMode::from_frame(app.settings.alt_frame) {
+                    // is absolute but no verify
+                    AltMode::Absolute => (srtm(lat, lng) * multalt + def) as f32,
+                    AltMode::Terrain => def as f32,
+                    // relative and verify
+                    _ => ((srtm(lat, lng) as i32) as f64 * multalt + def - (srtm(self.home.lat, self.home.lng) as i32) as f64 * multalt) as f32,
+                };
+            }
+            row.alt = value;
+        }
+        // Add more for other params: the Delay column
+        if p1 != -1.0 {
+            row.p1 = p1 as f32;
+        }
+    }
+
     fn new_wp(&self, app: &AppCtx, id: u16, lat: f64, lng: f64) -> Locationwp {
         let mut alt = app.settings.default_alt;
         // Verify Height: keep the default height above the ground under this WP (relative alt)
@@ -597,6 +743,11 @@ impl FlightPlanView {
     /// Read / Write a mission list: packed over MAVFtp when "MAVFTP" is ticked (falling back
     /// to the mission protocol if that fails), else the MAVLink mission protocol.
     pub(super) fn mission_io(&mut self, l: &mp_core::link::Link, mission_type: u8, read: bool, items: Vec<Locationwp>) {
+        if read {
+            // getWPs hands its own download to WPtoScreen; other readers (Flight Data's resume,
+            // the rally fetch on connect) never touch the planner grid
+            self.awaiting_read = Some(mission_type);
+        }
         if !self.mavftp {
             l.send(if read { LinkCommand::ReadMission { mission_type } } else { LinkCommand::WriteMission { mission_type, items } });
             return;
@@ -809,8 +960,8 @@ impl FlightPlanView {
         let py = 197.0;
         if put_button(ui, r(px + 3.0, py + 3.0, 115.0, 23.0), "Load File") {
             if platform::HAS_NATIVE_DIALOGS {
-                if let Some((name, text)) = platform::open_text("Open Waypoint File", "Waypoints", &["waypoints", "txt"]) {
-                    self.load_text(&name, &text, app.toasts);
+                if let Some((name, text)) = platform::open_text("Open Waypoint File", "All Supported Types", &["txt", "waypoints", "plan"]) {
+                    self.load_text(&name, &text, app);
                 }
             } else {
                 self.browser_open = true;
@@ -903,14 +1054,22 @@ impl FlightPlanView {
         p.text(o + Vec2::new(151.0, 4.0), egui::Align2::LEFT_TOP, crate::i18n::t("Default Alt"), f.clone(), white);
         unit_box(ui, r(154.0, 20.0, 40.0, 20.0), &mut app.settings.default_alt, crate::units::alt(1.0), 10000.0);
         ui.put(r(213.0, 7.0, 79.0, 21.0), |ui: &mut egui::Ui| {
-            let cur = AltMode::from_frame(app.settings.alt_frame);
+            // CMB_altmode.DataSource = EnumTranslator.EnumToList<altmode>() (Key/Value); a
+            // saved value outside the list falls back to index 0 (SelectedIndexChanged)
+            let list = altmode_list();
+            if !list.iter().any(|(k, _)| *k == app.settings.alt_frame as i32) {
+                if let Some((k, _)) = list.first() {
+                    app.settings.alt_frame = *k as u8;
+                }
+            }
+            let cur = app.settings.alt_frame as i32;
             egui::ComboBox::from_id_salt("CMB_altmode")
                 .width(71.0)
-                .selected_text(cur.label())
+                .selected_text(list.iter().find(|(k, _)| *k == cur).map(|(_, v)| v.as_str()).unwrap_or(""))
                 .show_ui(ui, |ui| {
-                    for m in AltMode::ALL {
-                        if ui.selectable_label(cur == m, m.label()).clicked() {
-                            app.settings.alt_frame = m as u8;
+                    for (k, v) in &list {
+                        if ui.selectable_label(cur == *k, v.as_str()).clicked() {
+                            app.settings.alt_frame = *k as u8;
                         }
                     }
                 })
@@ -1132,14 +1291,16 @@ impl FlightPlanView {
                 select = Some(i);
             }
             ui.put(cells[9].shrink(1.0), |ui: &mut egui::Ui| {
-                let cur = AltMode::from_frame(w.frame);
+                // Frame.DataSource = EnumTranslator.EnumToList<altmode>()
+                let list = altmode_list();
+                let cur = w.frame as i32;
                 egui::ComboBox::from_id_salt(("frame", i))
                     .width(cells[9].width() - 6.0)
-                    .selected_text(cur.label())
+                    .selected_text(list.iter().find(|(k, _)| *k == cur).map(|(_, v)| v.as_str()).unwrap_or(""))
                     .show_ui(ui, |ui| {
-                        for m in AltMode::ALL {
-                            if ui.selectable_label(cur == m, m.label()).clicked() {
-                                w.frame = m as u8;
+                        for (k, v) in &list {
+                            if ui.selectable_label(cur == *k, v.as_str()).clicked() {
+                                w.frame = *k as u8;
                             }
                         }
                     })
@@ -1207,6 +1368,38 @@ impl FlightPlanView {
         let poly = self.polygon.clone();
         let measure = self.measure;
 
+        // FlightPlanner.RegenerateWPRoute: WPOverlay.CreateOverlay(home, commands, wpradius,
+        // loiterradius, multiplieralt) builds the yellow route, the dashed home leg and the
+        // Spline2 curves through SPLINE_WAYPOINT runs
+        let key = WpOverlayKey {
+            home,
+            items: items.clone(),
+            wp_radius,
+            loiter_radius: app.settings.loiter_radius,
+            alt_frame: app.settings.alt_frame,
+        };
+        if !matches!(&self.wp_overlay_cache, Some((k, _)) if *k == key) {
+            // writeKML: home stays PointLatLngAlt.Zero while the home boxes are empty
+            let mut h = if home.lat == 0.0 && home.lng == 0.0 {
+                mp_core::extlibs::utilities::PointLatLngAlt::zero()
+            } else {
+                mp_core::extlibs::utilities::PointLatLngAlt {
+                    Tag2: mission::AltMode::from_frame(app.settings.alt_frame).label().to_string(),
+                    ..mp_core::extlibs::utilities::PointLatLngAlt::new_tagged(home.lat, home.lng, home.alt as f64, "H")
+                }
+            };
+            let mut overlay = mp_core::extlibs::maps::WPOverlay::new();
+            let list: Vec<_> = items.iter().map(mission::to_port).collect();
+            let routes = match overlay.CreateOverlay(&mut h, &list, wp_radius as f64, app.settings.loiter_radius as f64, 1.0, None, &mut crate::srtm::altitude) {
+                Ok(()) => overlay.overlay.routes,
+                Err(e) => {
+                    log::error!("{e}");
+                    vec![]
+                }
+            };
+            self.wp_overlay_cache = Some((key, routes));
+        }
+        let wp_routes = self.wp_overlay_cache.as_ref().map(|(_, r)| r.clone()).unwrap_or_default();
         let kml = self.kml_overlay.clone();
         let pois = app.settings.pois.clone();
         let tracker = app.settings.tracker_home;
@@ -1234,9 +1427,9 @@ impl FlightPlanView {
                     screen.push((i, view.to_screen(w.lat, w.lng)));
                 }
             }
-            let route: Vec<Pos2> = screen.iter().map(|(_, p)| *p).collect();
-            if route.len() > 1 {
-                painter.add(egui::Shape::line(route, Stroke::new(4.0, Color32::YELLOW)));
+            for r in &wp_routes {
+                let pts: Vec<Pos2> = r.points.iter().map(|p| view.to_screen(p.lat(), p.lng())).collect();
+                draw_gmap_route(painter, resp.rect.min, &pts, &r.stroke);
             }
             let mpp = view.metres_per_pixel() as f32;
             if wp_radius > 0.0 && mpp > 0.0 {
@@ -1477,18 +1670,159 @@ impl FlightPlanView {
         total
     }
 
-    fn load_text(&mut self, name: &str, text: &str, toasts: &mut Toasts) {
-        match mission::read_waypoint_file(text) {
-            Ok(list) if !list.is_empty() => {
-                self.home = list[0];
-                self.items = list[1..].to_vec();
-                self.selected = None;
-                self.wpfile = name.to_string();
-                self.wpfilename = name.to_string();
+    /// BUT_loadwpfile_Click after the dialog: a first line starting with '{' is a .plan
+    /// (MissionFile.ReadFile + ConvertToLocationwps), anything else goes through
+    /// readQGC110wpfile. Both end in processToScreen; lbl_wpfile shows "Loaded <name>".
+    fn load_text(&mut self, name: &str, text: &str, app: &mut AppCtx) {
+        let first = text.strip_prefix('\u{feff}').unwrap_or(text).lines().next().unwrap_or("");
+        if first.starts_with('{') {
+            match mission::read_mission_json(text) {
+                Ok(cmds) => self.process_to_screen(&cmds, false, app),
+                // the exception reaches BUT_loadwpfile_Click's caller unhandled; shown here
+                Err(e) => app.toasts.error(e),
             }
-            Ok(_) => toasts.error("Invalid Waypoint file"),
-            Err(e) => toasts.error(e.to_string()),
+        } else {
+            self.wpfilename = name.to_string();
+            self.read_qgc110wpfile(text, false, app);
         }
+        self.wpfile = format!("Loaded {}", std::path::Path::new(name).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default());
+    }
+
+    /// readQGC110wpfile(file, append): WaypointFile.ReadWaypointFile, the home row dropped for
+    /// fence and rally lists, then processToScreen. An exception shows "Can't open file! ".
+    pub(super) fn read_qgc110wpfile(&mut self, text: &str, append: bool, app: &mut AppCtx) {
+        let read = mission::read_waypoint_file(text, &mut |m| app.toasts.error(m));
+        let mut cmds = match read {
+            Ok(cmds) => cmds,
+            // ReadWaypointFile shows "Invalid Waypoint file" and returns an empty list
+            Err(e) => {
+                app.toasts.error(e.to_string());
+                Vec::new()
+            }
+        };
+        if self.mission_type == 1 || self.mission_type == 2 {
+            if cmds.is_empty() {
+                // List.RemoveAt(0) on an empty list
+                app.toasts.error("Can't open file! System.ArgumentOutOfRangeException: Index was out of range. Must be non-negative and less than the size of the collection.\r\nParameter name: index");
+                return;
+            }
+            cmds.remove(0);
+        }
+        self.process_to_screen(&cmds, append, app);
+    }
+
+    /// processToScreen(cmds, append): the grid is cleared unless appending; rows stop at the
+    /// first id 0 or 255 after home; appending skips the list's home. Nav rows set Spline2's
+    /// rates from WPNAV_ACCEL/WP_ACC and WPNAV_SPEED/WP_SPD and (not home) the alt mode. For a
+    /// mission, row 0 is home: a different, non-zero lat asks "Reset Home to loaded coords",
+    /// then the row is removed.
+    pub(super) fn process_to_screen(&mut self, cmds: &[Locationwp], append: bool, app: &mut AppCtx) {
+        self.process_to_screen_type(cmds, append, self.mission_type, app);
+    }
+
+    /// processToScreen into the list of mission type `mt` (the grid shows `cmb_missiontype`'s
+    /// list; a download for another type lands in that type's stash).
+    fn process_to_screen_type(&mut self, cmds: &[Locationwp], append: bool, mt: usize, app: &mut AppCtx) {
+        use mp_core::extlibs::utilities::spline2::Spline2;
+        let mut rows: Vec<Locationwp> = if append { self.list_for(mt).clone() } else { Vec::new() };
+        self.selected = None;
+
+        if cmds.is_empty() {
+            *self.list_for(mt) = rows;
+            return;
+        }
+
+        let params: std::collections::BTreeMap<String, f32> = app
+            .link
+            .map(|l| l.shared.read().params.iter().map(|(k, p)| (k.clone(), p.value)).collect())
+            .unwrap_or_default();
+
+        let mut i = rows.len() as i64 - 1;
+        let mut cmdidx: i64 = -1;
+        for temp in cmds {
+            i += 1;
+            cmdidx += 1;
+            if temp.id == 0 && i != 0 {
+                break; // 0 and not home
+            }
+            if temp.id == 255 && i != 0 {
+                break; // bad record - never loaded any WP's - but have started the board up.
+            }
+            if cmdidx == 0 && append {
+                // we dont want to add home again.
+                i -= 1;
+                continue;
+            }
+
+            if temp.id == mavcmd::WAYPOINT || temp.id == mavcmd::SPLINE_WAYPOINT || temp.id == mavcmd::TAKEOFF || temp.id == 179 {
+                // cm/s - ac, m/s in 4.7+
+                Spline2::set_wp_accel_cms(match (params.get("WPNAV_ACCEL"), params.get("WP_ACC")) {
+                    (Some(v), _) => *v,
+                    (None, Some(v)) => *v * 100.0,
+                    _ => 100.0,
+                });
+                Spline2::set_wp_speed_cms(match (params.get("WPNAV_SPEED"), params.get("WP_SPD")) {
+                    (Some(v), _) => *v,
+                    (None, Some(v)) => *v * 100.0,
+                    _ => 600.0,
+                });
+                // not home: CMB_altmode.SelectedValue = frame; a value outside the list leaves
+                // no selection, and SelectedIndexChanged then picks index 0 (Relative)
+                if i != 0 {
+                    let list = altmode_list();
+                    app.settings.alt_frame = if list.iter().any(|(k, _)| *k == temp.frame as i32) {
+                        temp.frame
+                    } else {
+                        list.first().map(|(k, _)| *k as u8).unwrap_or(temp.frame)
+                    };
+                }
+            }
+
+            // the grid row holds the values, not the item's seq
+            let row = Locationwp { seq: 0, ..*temp };
+            rows.push(row);
+        }
+
+        // setWPParams: TXT_WPRad ("{0:N2}") from WP_RADIUS, then WPNAV_RADIUS / 100, then
+        // WP_RADIUS_M (the last present wins); TXT_loiterrad from LOITER_RADIUS else WP_LOITER_RAD
+        {
+            // "{0:N2}": .NET rounds the 15-significant-digit text half away from zero
+            let n2 = |v: f64| {
+                let t = mp_core::dotnet::format_fixed(v, 1, 2, &mp_core::dotnet::INVARIANT_CULTURE);
+                t.parse::<f64>().unwrap_or(v)
+            };
+            let mut wprad = None;
+            if let Some(v) = params.get("WP_RADIUS") {
+                wprad = Some(n2(*v as f64));
+            }
+            if let Some(v) = params.get("WPNAV_RADIUS") {
+                wprad = Some(n2(*v as f64 / 100.0));
+            }
+            if let Some(v) = params.get("WP_RADIUS_M") {
+                wprad = Some(n2(*v as f64));
+            }
+            if let Some(r) = wprad {
+                app.settings.wp_radius = r as f32;
+            }
+            if let Some(v) = params.get("LOITER_RADIUS").or_else(|| params.get("WP_LOITER_RAD")) {
+                app.settings.loiter_radius = *v;
+            }
+        }
+
+        if !append && mt == 0 {
+            if let Some(cellhome) = rows.first().copied() {
+                // cellhome.Value.ToString() != TXT_homelat.Text && != "0"
+                let cell = mp_core::dotnet::double_to_string(cellhome.lat);
+                let homelat = if self.home.lat == 0.0 && self.home.lng == 0.0 { String::new() } else { mp_core::dotnet::double_to_string(self.home.lat) };
+                if cell != homelat && cell != "0" {
+                    self.reset_home_prompt = Some(cellhome);
+                }
+                // remove home row
+                rows.remove(0);
+            }
+        }
+
+        *self.list_for(mt) = rows;
     }
 
     /// The list for a mission type (the active one lives in `items`).
@@ -1543,48 +1877,36 @@ impl FlightPlanView {
                 }
             }
         }
-        let mut close_survey = false;
-        let mut accept_survey = None;
-        if let Some(sp) = self.survey_dialog.as_mut() {
-            egui::Window::new(crate::i18n::t("SimpleGrid")).collapsible(false).resizable(false).show(ctx, |ui| {
-                egui::Grid::new("survey").num_columns(2).show(ui, |ui| {
-                    theme::label(ui, "Altitude (m)");
-                    ui.add(egui::DragValue::new(&mut sp.alt).range(1.0..=10000.0));
-                    ui.end_row();
-                    theme::label(ui, "Distance between lines (m)");
-                    ui.add(egui::DragValue::new(&mut sp.spacing).range(1.0..=5000.0));
-                    ui.end_row();
-                    theme::label(ui, "Angle (deg)");
-                    ui.add(egui::DragValue::new(&mut sp.angle).range(0.0..=360.0));
-                    ui.end_row();
-                    theme::label(ui, "Overshoot (m)");
-                    ui.add(egui::DragValue::new(&mut sp.overshoot).range(0.0..=500.0));
-                    ui.end_row();
-                });
-                let wps = mp_core::survey::grid(&self.polygon, sp.spacing as f64, sp.angle as f64, sp.overshoot as f64);
-                let area = mp_core::survey::area(&self.polygon);
-                theme::label(ui, format!("Area: {area:.0} m2   Waypoints: {}", wps.len()));
-                ui.horizontal(|ui| {
-                    if theme::button(ui, "Accept").clicked() {
-                        accept_survey = Some((wps, sp.alt));
+        // SimpleGrid's GridUI (ShowDialog): Accept adds its rows through PluginHost.AddWPtoList
+        // to whichever list the grid shows, then the form closes
+        if let Some(mut g) = self.simple_grid.take() {
+            let mut polygon = std::mem::take(&mut self.polygon);
+            let mut config = std::mem::take(&mut app.settings.planner);
+            let mut host = crate::extlibs::simplegrid::PluginHost {
+                FPDrawnPolygon: &mut polygon,
+                PlannedHomeLocation: self.planned_home_location(),
+                config: &mut config,
+                FDMapType: app.settings.fd_map.provider,
+            };
+            let r = g.show(ctx, app, &mut host);
+            self.polygon = polygon;
+            app.settings.planner = config;
+            match r {
+                crate::extlibs::simplegrid::GridResult::Open => self.simple_grid = Some(g),
+                crate::extlibs::simplegrid::GridResult::Cancel => {}
+                crate::extlibs::simplegrid::GridResult::Accept(calls) => {
+                    for (cmd, p) in calls {
+                        self.add_wp_to_list(app, cmd, p);
                     }
-                    if theme::button(ui, "Cancel").clicked() {
-                        close_survey = true;
-                    }
-                });
-            });
-        }
-        if let Some((wps, alt)) = accept_survey {
-            self.switch_type(0);
-            for (lat, lng) in wps {
-                let mut wp = self.new_wp(app, mavcmd::WAYPOINT, lat, lng);
-                wp.alt = alt;
-                self.items.push(wp);
+                    // writeKML follows from the list change; then savesettings, then Close
+                    g.savesettings(&mut crate::extlibs::simplegrid::PluginHost {
+                        FPDrawnPolygon: &mut self.polygon,
+                        PlannedHomeLocation: mp_core::extlibs::utilities::PointLatLngAlt::zero(),
+                        config: &mut app.settings.planner,
+                        FDMapType: app.settings.fd_map.provider,
+                    });
+                }
             }
-            close_survey = true;
-        }
-        if close_survey {
-            self.survey_dialog = None;
         }
 
         // FENCE_CIRCLE_INCLUSION centred on home with the entered radius
@@ -1652,7 +1974,7 @@ impl FlightPlanView {
         let mut open = true;
         let mut load = None;
         egui::Window::new(crate::i18n::t("Open Waypoint File")).open(&mut open).collapsible(false).show(ctx, |ui| {
-            let files = platform::list_files(&["waypoints", "txt"]);
+            let files = platform::list_files(&["txt", "waypoints", "plan"]);
             if files.is_empty() {
                 ui.label(crate::i18n::t("No .waypoints files saved yet."));
             }
@@ -1665,7 +1987,7 @@ impl FlightPlanView {
         });
         if let Some((name, path)) = load {
             if let Ok(text) = std::fs::read_to_string(path) {
-                self.load_text(&name, &text, app.toasts);
+                self.load_text(&name, &text, app);
             }
             self.browser_open = false;
         }
@@ -1684,6 +2006,65 @@ fn system_button(ui: &mut egui::Ui, text: &str, size: Vec2) -> egui::Response {
     p.rect_stroke(r, 0.0, Stroke::new(1.0, Color32::from_rgb(0xad, 0xad, 0xad)), StrokeKind::Inside);
     p.text(r.center(), egui::Align2::CENTER_CENTER, text, fonts::ui_id(fonts::UI_SIZE), Color32::BLACK);
     resp
+}
+
+/// `EnumTranslator.EnumToList<altmode>()`: (frame, name) in declaration order.
+fn altmode_list() -> Vec<(i32, String)> {
+    mp_core::extlibs::utilities::enumtranslator::EnumTranslator::EnumToList::<AltMode>().unwrap_or_default()
+}
+
+/// GMapRoute.UpdateGraphicsPath + OnRender (ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/
+/// GMapRoute.cs): a local point beyond ±99000 px turns the pen solid; DashStyle.Custom draws
+/// solid with a 15 px arrow head at the middle of every segment longer than 20 px. A short
+/// segment is skipped without moving `last`, and a `last` at the control's (0,0) counts as
+/// PointF.Empty, as in the C#.
+fn draw_gmap_route(painter: &egui::Painter, origin: Pos2, pts: &[Pos2], pen: &mp_core::extlibs::maps::wpoverlay::Pen) {
+    use mp_core::extlibs::maps::wpoverlay::DashStyle;
+    let mut dash = pen.dash_style;
+    if pts.iter().any(|p| (p.x - origin.x).abs() > 99000.0 || (p.y - origin.y).abs() > 99000.0) {
+        dash = DashStyle::Solid;
+    }
+    let c = &pen.color;
+    let stroke = Stroke::new(pen.width, Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), c.a()));
+    if dash == DashStyle::Dash {
+        // GDI+ DashStyle.Dash: 3 widths on, 1 off
+        painter.extend(egui::Shape::dashed_line(pts, stroke, 3.0 * pen.width, pen.width));
+    } else {
+        painter.add(egui::Shape::line(pts.to_vec(), stroke));
+    }
+    if dash != DashStyle::Custom || pts.is_empty() {
+        return;
+    }
+    let deg2rad = std::f64::consts::PI / 180.0;
+    let mut last = Vec2::ZERO;
+    for p in pts {
+        let item = *p - origin;
+        if last == Vec2::ZERO {
+            last = item;
+            continue;
+        }
+        let polx: f32 = item.x - last.x;
+        let poly: f32 = item.y - last.y;
+        let r = ((polx as f64).powi(2) + (poly as f64).powi(2)).sqrt();
+        if r <= 20.0 {
+            continue;
+        }
+        let angle = (poly as f64).atan2(polx as f64);
+        if angle.is_nan() {
+            continue;
+        }
+        let midxstart = last.x + polx / 2.0;
+        let midystart = last.y + poly / 2.0;
+        let leftangle = angle + 210.0 * deg2rad;
+        let rightangle = angle - 210.0 * deg2rad;
+        let length = 15.0f32;
+        let start = origin + Vec2::new(midxstart, midystart);
+        for a in [leftangle, rightangle] {
+            let end = origin + Vec2::new(midxstart + length * a.cos() as f32, midystart + length * a.sin() as f32);
+            painter.line_segment([start, end], stroke);
+        }
+        last = item;
+    }
 }
 
 /// Fence items: polygon vertex runs (p1 = vertex count), circles (p1 = radius), return point.
@@ -2165,8 +2546,11 @@ mod coord_tests {
         assert!(h.label(&format!("{origin}\n0.00m")).is_some(), "UTM mouse display: {:?}", h.labels);
         let (zone, east, north) = mp_core::coords::to_utm_signed(-35.363261, 149.165230);
         assert_eq!(zone, -55);
-        h.edit_cell("Easting", &format!("{:.3}", east + 1000.0));
-        let (lat, lng) = mp_core::coords::utm_signed_to_geo(zone, east + 1000.0, north);
+        let cell = |v: f64| mp_core::dotnet::format_fixed(v, 1, 3, mp_core::dotnet::current_culture());
+        h.edit_cell("Easting", &cell(east + 1000.0));
+        // convertFromUTM reads both cells back as typed: the expected point uses the same texts
+        let back = |s: String| mp_core::dotnet::double_parse(&s).unwrap();
+        let (lat, lng) = mp_core::coords::utm_signed_to_geo(zone, back(cell(east + 1000.0)), back(cell(north))).unwrap();
         let w = h.view.items[0];
         assert!((w.lat - lat).abs() < 1e-9 && (w.lng - lng).abs() < 1e-9, "{} {}", w.lat, w.lng);
         assert!(w.lng > 149.17);

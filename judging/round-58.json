@@ -1,0 +1,248 @@
+{
+  "round": 58,
+  "date": "2026-11-08",
+  "reviewed_head": "0eddbe4 + uncommitted",
+  "commands_run": [],
+  "commands_note": "No commands were allowed this round (no shell, cargo, git, python or scripts). Everything below comes from reading files with Read/Grep/Glob. Nothing was compiled, so the judge also acted as the compiler.",
+  "manifest_summary": {
+    "manifest_status": "port/MANIFEST.md is still stale: it reports 21 ported owned files (3,952 lines) and still lists ExtLibs/GeoUtility, ExtLibs/ProjNet and ExtLibs/GMap.NET.Core rows as 'vendored | utm / proj4rs', although scripts/port_manifest.py no longer has them in VENDORED. All counts below are derived by hand from the '//! Port of' headers and the per-file C# line counts in MANIFEST.md.",
+    "headers_found": "124 '//! Port of' headers in crates/mp-core/src: the 99 counted in round 57 (5 of them pre-manifest reimplementations: state.rs, paramfile.rs, param_meta.rs, geo.rs, link.rs) plus 25 new ones in this batch.",
+    "new_owned_files_ported": {
+      "ExtLibs/Utilities": "20 files, 4,374 C# lines: Vector3 547, Matrix3 299, Quaternion 419, Utils 701, utmpos 145, LineOffset 51, LocationProjection 19, SingleLocation 102, VehicleLocation 11, Vario 80, fitCurve 148, ListExtension 30, CollectionExtensions 47, ParameterMetaDataConstants 39, ParamFile 110, nmea 124, Half/Half 888, Half/HalfHelper 223, CustomMessageBox 104, MissionFile 287.",
+      "ExtLibs/ArduPilot": "5 files, 353 C# lines: Fence 153, FenceCircle 20, FencePolygon 17, FenceReturn 7, PolygonTools 156."
+    },
+    "new_owned_lines_ported": 4727,
+    "reclassified_libraries": "scripts/port_manifest.py now treats GeoUtility, ProjNet and GMap.NET.Core as owned. Their full C# size from MANIFEST.md: GeoUtility 8,006 lines, of which AssemblyInfo.cs (65) and Properties/Resources.Designer.cs (503) become 'n/a' under classify(), leaving 7,438; ProjNet 10,219 (46 files); GMap.NET.Core 26,805 (143 files, including Resources/Strings.Designer.cs, which classify() keeps as todo). Owned denominator grows by 44,462.",
+    "reclassified_ports_now_owned": "The 26 round-57 ports in those libraries were 6,546 lines. GeoUtility Resources.Designer.cs (503) is now 'n/a', so 25 files and 6,043 lines move into the owned ported count: GeoUtility 3,181, ProjNet 2,600, GMap.NET.Core 262.",
+    "owned_files_ported_corrected": 117,
+    "ported_lines_corrected": 20730,
+    "ported_lines_derivation": "Round 57 owned base 9,960 + 6,043 reclassified GeoUtility/ProjNet/GMap ports + 4,727 new owned lines = 20,730.",
+    "owned_lines_total_corrected": 479014,
+    "owned_lines_total_derivation": "Round 57 corrected owned total 434,552 + 44,462 newly owned GeoUtility/ProjNet/GMap.NET.Core lines = 479,014.",
+    "ported_fraction_corrected": 0.0433,
+    "conservatism_note": "Upper bounds. Files are counted whole even where members are admitted unported (Fence.DownloadFence/UploadFence, most of Half's IConvertible and format-string members, the alglib path of Utils.inverse, plus the round-57 partial files). About 6,000 of the 10,770-line increase is accounting (a library reclassification), not new porting.",
+    "wiring": "Still none of the ported code is used. Grep for 'extlibs::' or 'dotnet::' outside crates/mp-core/src/{extlibs,dotnet} finds only crates/mp-core/build.rs. The batch adds new duplicates of live pre-manifest code: mission.rs (Locationwp, WaypointFile, its own .plan RootObject), paramfile.rs (ParamFile), gimbal.rs (its own Quaternion), mp-app/src/swarm.rs (a re-derivation of Quaternion.from_euler312), coords.rs and mp-app/src/views/flight_plan/menu.rs (utmpos.ToLLA)."
+  },
+  "scores": {
+    "overall": 1.0,
+    "overall_cap": 1.5,
+    "overall_cap_derivation": "ceil1(20,730 / 479,014 * 10) = ceil1(0.433) = 0.5, plus at most +1.0 for the pre-manifest app = 1.5. Awarded: 0.3 for ported lines (discounted because nothing is wired, nothing has been compiled, half of the gain is reclassification, and several files are partial) + 0.7 for the pre-manifest app = 1.0.",
+    "round_files_fidelity": 6.5,
+    "round_files_fidelity_rationale": "Most of the numeric code is a careful transliteration: Vector3.rotate re-reads fields step by step exactly as the C# does in every case (including the ROLL_90/270_YAW_* double assignments), Matrix3.from_euler312 keeps Utils.cosf/sinf single precision before widening, inverse3x3/4x4, FLIGHTtoBCBF and fitCurve.PerpendicularDistance stay in f32 where the C# does, HalfHelper's 0x0400 >> (18 + e) correctly uses the 5-bit masked count (e - 14 for e in 15..24), nmea framing including the never-reset step 2 matches, and the introsort partition, heap and insertion steps make the same comparisons as .NET Framework ArraySortHelper<T> for a consistent comparer. Points are lost for: the introsort panicking where .NET throws or reads default(T) slack; Rust != and <= on Half giving the opposite of the C# operators; cast_u64(NaN); Newtonsoft reader and writer gaps; buffered StreamWriter losing C#'s partial output; culture-sensitive EndsWith/StartsWith done ordinally; Enum.Parse exception mismatch; wrong Console.Beep messages; class reference semantics collapsed into Copy values with invented PartialEq; cs_enum naming the wrong member for duplicate values; unported members counted against the files (Fence download/upload, Half IConvertible/format/Parse(style) overloads, alglib); and tests without C#-produced vectors.",
+    "ui_ux": 2.0,
+    "features": 2.5,
+    "features_rationale": "Unchanged from rounds 56 and 57: the new code is not wired into anything, so the running app behaves exactly as before."
+  },
+  "compile_check": {
+    "summary": "Read in full: utilities/{vector3,matrix3,quaternion,utils,utmpos,lineoffset,locationprojection,singlelocation,vehiclelocation,vario,fitcurve,listextension,collectionextensions,parametermetadataconstants,paramfile,nmea,custommessagebox,missionfile,mod}.rs, utilities/half/{half,halfhelper}.rs, ardupilot/{fence,fencecircle,fencepolygon,fencereturn,polygontools}.rs, dotnet/{io,json,collections,drawing}.rs, the new parts of dotnet/mod.rs and net.rs, the changed part of locationwp.rs, mp-core/Cargo.toml and the VENDORED table in scripts/port_manifest.py. No definite compile error was found. Checked specifically: associated-const patterns on the cs_enum newtype Rotation (derives PartialEq+Eq, so structural match is allowed); single deferred assignment of 'let tmp: T' in every rotate arm; the non-overlapping inherent impls on Vector3T<f64>/<f32> (ZERO/ONE) and the generic impl; 'impl<T> Mul<Vector3T<T>> for f64' under the orphan rules; serde derive on the generic Vector3T; MathTransform imported for TransverseMercator::transform in utmpos.rs and &[f64;2] -> &[f64] coercion; CsEnum in scope for MAV_CMD::parse/get_name in missionfile.rs; non-const-path field access MAV_CMD::X.0 inside cs_enum MEMBERS consts (the generated struct has a pub field); functional-update struct literals of Locationwp from ardupilot/fence.rs and missionfile.rs (seq is pub(crate), same crate, so FRU is allowed); TryFrom<&Item> for Locationwp against the blanket TryFrom impl (both types local, no overlap); calling Arc<dyn Fn> through autoderef in custommessagebox.rs; const RwLock::new with a fn item coerced to the BeepAction fn pointer; '[char; N]' split patterns; '#![allow]' after '//!' lines; edition 2021 so the 'extern \"system\"' block in vario.rs needs no 'unsafe'; Win32_Globalization covers GetUserDefaultUILanguage and LCIDToLocaleName.",
+    "likely_errors": [],
+    "low_confidence_risks": [
+      "crates/mp-core/src/dotnet/mod.rs:539: LCIDToLocaleName(langid as u32, Some(&mut buf), 0) assumes windows 0.62 folds lpName/cchName into Option<&mut [u16]>. If the binding instead takes (u32, PWSTR, i32, u32), this line fails to compile. Check the generated signature in the windows crate's Win32/Globalization module before the next build."
+    ],
+    "round_57_compile_items": "Both fixed: crates/mp-core/Cargo.toml:41 now enables Win32_Foundation, and dotnet/net.rs:64-72 adds cfg(not(any(windows, unix))) fallbacks for available_tcp/available_udp."
+  },
+  "findings": [
+    {
+      "id": "R58-01",
+      "severity": "P0",
+      "file": "crates/mp-app/src/mp/ (missing), crates/mp-app/src/extlibs/ (missing)",
+      "line": 0,
+      "cs_reference": "reference/MissionPlanner/{MainV2.cs,Program.cs,GCSViews/*,Controls/*,Log/*,...}",
+      "summary": "Carried over from R57-01. No Mission Planner project file and no UI ExtLib has been ported. About 95.7% of owned C# lines are still todo, and the whole UI is still the pre-manifest egui reimplementation. This round again added only non-UI ExtLibs.",
+      "required_fix": "Start the mp-app mirror (MainV2.cs and its Designer, then GCSViews) once the comms/state core is wired."
+    },
+    {
+      "id": "R58-02",
+      "severity": "P1",
+      "file": "crates/mp-core/src/lib.rs",
+      "line": 6,
+      "cs_reference": "ExtLibs/Utilities/{locationwp,MissionFile,ParamFile,Quaternion,Matrix3,utmpos}.cs; GCSViews/FlightPlanner.cs; GCSViews/ConfigurationView/ConfigRawParams.cs",
+      "summary": "Carried over from R57-02 and getting worse. The batch is unwired (only build.rs references extlibs/dotnet), and it adds further duplicates of live code: crates/mp-core/src/mission.rs:1 (Locationwp, WaypointFile and a second RootObject at :277) next to utilities/{locationwp,missionfile}.rs; crates/mp-core/src/paramfile.rs:15 next to utilities/paramfile.rs; crates/mp-core/src/gimbal.rs:72 (its own Quaternion([f64;4])) and crates/mp-app/src/swarm.rs:250 (a re-derivation of Quaternion.from_euler312) next to utilities/{quaternion,matrix3}.rs; crates/mp-core/src/coords.rs:155 and crates/mp-app/src/views/flight_plan/menu.rs:150 (utmpos.ToLLA) next to utilities/utmpos.rs. Two implementations of each C# file now coexist, and the app runs the non-file-mirrored one.",
+      "required_fix": "Move every caller of mission.rs, paramfile.rs, gimbal.rs::Quaternion, coords.rs and the swarm.rs/menu.rs helpers onto the extlibs ports, delete the old code, and add a test that fails when a pre-manifest module duplicates a C# file whose port exists."
+    },
+    {
+      "id": "R58-03",
+      "severity": "P2",
+      "file": "crates/mp-core/src/dotnet/collections.rs",
+      "line": 194,
+      "cs_reference": ".NET Framework 4.7.2 ArraySortHelper<T>.Sort/PickPivotAndPartition (keys is the List's _items array, length = capacity); IntrospectiveSortUtilities.ThrowOrIgnoreBadComparer (Arg_BogusIComparer); ExtLibs/Utilities/ListExtension.cs:12-18 (catch {})",
+      "summary": "introspective_sort indexes the Rust slice directly. With an inconsistent comparer, .NET's 'while (comparer.Compare(keys[++left], pivot) < 0)' runs past hi into the List's capacity slack (default(T) entries) and then past the array end, where the IndexOutOfRangeException becomes ArgumentException ('Unable to sort because the IComparer.Compare() method returns inconsistent results. ... IComparer: ...'); '--right' can likewise reach index -1. In Rust, keys[left as usize] or keys[-1 as usize] panics and takes the thread down, where C# callers such as SortENABLE swallow the exception. backing_len is used only for the depth limit, so the slack elements are never visible to the comparer. A comparer's own IndexOutOfRangeException is reported as InvalidOperation ('Failed to compare two elements in the array.'), but .NET routes it to the bad-comparer ArgumentException. The insertion sort swaps where .NET shifts with a saved t; the comparisons and the result are the same for a pure comparer.",
+      "required_fix": "Pass the backing length and a default-element factory (or Option<T> slots) so reads in capacity..len see default(T); check every index against the backing length and return Exception::Argument with the Arg_BogusIComparer text instead of panicking; map a comparer IndexOutOfRange error to the same ArgumentException."
+    },
+    {
+      "id": "R58-04",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/half/half.rs",
+      "line": 343,
+      "cs_reference": "ExtLibs/Utilities/Half/Half.cs:195-230 (operator ==, !=, <=, >=)",
+      "summary": "The Rust operators contradict the C# ones. PartialEq::ne is the default !eq, so Half::NAN != Half::NAN is true in Rust; C#'s operator != compares bits and gives false (the test at :407 asserts the C#-opposite result). PartialOrd uses f32::partial_cmp, so +0 <= -0 is true in Rust; C#'s <= is (bits equal) || (<), which is false. Any ported caller that writes a != b, a <= b or a >= b on Half silently diverges, and PartialEq/PartialOrd are mutually inconsistent.",
+      "required_fix": "Override ne to return half1.value != half2.value, implement le/ge/lt/gt in PartialOrd through op_less_than_or_equal etc., and fix the test to assert !(Half::NAN != Half::NAN)."
+    },
+    {
+      "id": "R58-05",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/mod.rs",
+      "line": 749,
+      "cs_reference": ".NET Framework x64 JIT helper JIT_Dbl2ULng (conv.u8 from double): if (val < 2^63) (INT64)val else (INT64)(val - 2^63) + 0x8000000000000000",
+      "summary": "cast_u64 tests 'x >= TWO63', but the JIT helper tests 'val < two63'. For NaN the helper takes the else branch: cvttsd2si(NaN - 2^63) = 0x8000000000000000, plus 0x8000000000000000 = 0. Rust returns cast_i64(NaN) as u64 = 0x8000000000000000. Half.to_u64 and every future (ulong)double cast inherit this.",
+      "required_fix": "Use 'if !(x < TWO63)' so NaN goes through the subtract-and-add branch, and add a NaN case to the tests."
+    },
+    {
+      "id": "R58-06",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/json.rs",
+      "line": 230,
+      "cs_reference": "Newtonsoft.Json JsonTextReader.ReadAsString/ReadAsBoolean/ReadAsInt32, JsonSerializerInternalReader (list population), JsonPosition.FormatMessage; ExtLibs/Utilities/MissionFile.cs:93",
+      "summary": "The reader diverges from JsonConvert.DeserializeObject<RootObject>. (1) A string property given true/false reads as 'True'/'False'; JsonTextReader.ReadAsString returns JsonConvert.True/False, i.e. 'true'/'false'. (2) A string property given a number gets serde's re-rendered number ('1e2' becomes '100.0', '1.10' becomes '1.1'); Newtonsoft keeps the raw token text. (3) bool properties reject 0/1 and 'true'/'false' strings, which ReadAsBoolean accepts. (4) list_of rejects null elements in List<Item>, List<Circle>, List<Polygon> and List<List<double>>; Newtonsoft adds null to reference-type lists (missionfile.rs:177). (5) An empty string for an int property reports value '\"\"' instead of {null}. (6) Every message lacks ', line N, position M.'. (7) serde_json is strict: comments, trailing commas, single quotes and NaN/Infinity tokens that Newtonsoft accepts are errors. (8) The case-insensitive fallback walks serde's sorted BTreeMap, not document order, so with two case variants Rust picks the alphabetically first and Newtonsoft the last in the document. (9) serde_json without the float_roundtrip feature is not guaranteed to round correctly, so lat/lng can differ in the last bit from double.Parse.",
+      "required_fix": "Return the raw number token and lower-case true/false for string targets; accept the ReadAsBoolean forms; let reference-type list elements be null (Option<T> per element); report {null} for empty strings; append line/position; enable serde_json's float_roundtrip and preserve_order features, or write a small Newtonsoft-compatible tokenizer that also accepts its lenient syntax."
+    },
+    {
+      "id": "R58-07",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/json.rs",
+      "line": 40,
+      "cs_reference": "Newtonsoft.Json JavaScriptUtils.WriteEscapedJavaScriptString (default StringEscapeHandling)",
+      "summary": "json_str uses serde_json's escaping, which leaves U+0085, U+2028 and U+2029 raw. Newtonsoft escapes them as \\u0085, \\u2028 and \\u2029, so MissionFile.WriteFile output differs for any string containing them (CameraName, type, complexItemType, groundStation). The rest of the writer (2-space indent, ': ', NEW_LINE, [] and {} for empties, null kept, 'R' doubles with a forced '.0', quoted NaN/Infinity, '0' for -0.0) matches.",
+      "required_fix": "Write strings with Newtonsoft's escape table: short escapes for \\b \\t \\n \\f \\r \\\" \\\\, lower-case \\u00XX for other controls, plus \\u0085, \\u2028 and \\u2029."
+    },
+    {
+      "id": "R58-08",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/io.rs",
+      "line": 99,
+      "cs_reference": "System.IO.StreamWriter (1 KB char buffer, flushed on Dispose by 'using'); ExtLibs/Utilities/ParamFile.cs:87-107; __Error.WinIOError (Path.GetFullPath in messages); StreamReader.DetectEncoding",
+      "summary": "StreamWriter keeps the whole text in memory and writes only in close(). In SaveParamFile a later double_parse failure returns through '?', drops the writer, and leaves the truncated empty file. C#'s 'using' disposes the writer on the exception and flushes every line already written. file_error builds 'Could not find file ...' and 'Access to the path ... is denied.' from the path as given; .NET uses the full path. decode_detect does not recognise the UTF-32 BE BOM (00 00 FE FF) that StreamReader detects.",
+      "required_fix": "Write through a BufWriter on the opened File and flush in Drop, so partial output survives an error. Use std::path::absolute(path) in the messages, and add UTF-32 BE detection."
+    },
+    {
+      "id": "R58-09",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/listextension.rs",
+      "line": 35,
+      "cs_reference": "ExtLibs/Utilities/ListExtension.cs:24-27 (string.EndsWith(string) = CurrentCulture IsSuffix); ParamFile.cs:27 and MissionFile.cs:36 (StartsWith(\"#\") = CurrentCulture IsPrefix); string.CompareTo (CompareInfo.Compare)",
+      "summary": "String.EndsWith(string) and StartsWith(string) are culture-sensitive in .NET Framework, so ignorable code points (U+00AD, U+200B, U+FEFF and the like) do not stop a match: 'FENCE_ENABLE\\u00AD' ends with 'ENABLE' in C# and not in Rust, and a line starting with an ignorable character before '#' is a comment only in C#. The ordering then goes through culture_compare (dotnet/mod.rs:203), a hand-made approximation of NLS word sort (no ignored hyphen/apostrophe, no expansions, no culture tailoring), which SortENABLE and SaveParamFile's SortedList both depend on.",
+      "required_fix": "Add culture-aware starts_with/ends_with helpers that skip zero-weight characters, and replace culture_compare with CompareStringEx/LCMapStringEx on Windows (or an ICU/UCA table that matches NLS) behind one API."
+    },
+    {
+      "id": "R58-10",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/missionfile.rs",
+      "line": 38,
+      "cs_reference": ".NET Framework Enum.TryParseEnum (Convert.ChangeType in a try; catch (FormatException) falls through to the name lookup); ExtLibs/Utilities/MissionFile.cs:57",
+      "summary": "parse_mav_cmd returns FormatException for a numeric-looking value that is not an integer ('1.5', '1e3', '12abc'). Enum.Parse catches that FormatException and goes on to the name lookup, which throws ArgumentException(\"Requested value '1.5' was not found.\"). A digit string beyond i64 gives FormatException in Rust and OverflowException ('Value was either too large or too small for a UInt16.') in C#. ReadWaypointFile catches both, so it behaves the same, but the helper does not match Enum.Parse.",
+      "required_fix": "On a numeric FormatException fall through to the name lookup; parse digits with UInt16 semantics (overflow for any out-of-range length)."
+    },
+    {
+      "id": "R58-11",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/mod.rs",
+      "line": 251,
+      "cs_reference": ".NET Framework Enum.GetName/ToString (values sorted, then Array.BinarySearch); ExtLibs/Utilities/CustomMessageBox.cs:82-102",
+      "summary": "cs_enum's get_name, and the Display/Debug built on it, return the first declared member for a duplicated value. .NET binary-searches the sorted value array, so MessageBoxIcon value 48 is 'Warning' in C# but prints 'Exclamation' through MessageBoxIcon::Warning.to_string() and get_name(). custommessagebox.rs:56 patches this with a hand-written cs_name, but the generic path is still wrong for this and every other cs_enum with aliases.",
+      "required_fix": "Make get_name sort MEMBERS stably by value and binary-search exactly as Array.BinarySearch does (lo + ((hi - lo) >> 1)), and drop the per-enum cs_name patch."
+    },
+    {
+      "id": "R58-12",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/vario.rs",
+      "line": 28,
+      "cs_reference": ".NET Framework Console.Beep(int, int): ArgumentOutOfRange_BeepFrequency, ArgumentOutOfRange_NeedPosNum",
+      "summary": "The messages are invented. .NET Framework throws ArgumentOutOfRangeException(\"frequency\", frequency, \"Console.Beep's frequency must be between 37 and 32767.\") and ArgumentOutOfRangeException(\"duration\", duration, \"Positive number required.\"). Beep is also an fn pointer, so a C#-style capturing lambda assigned to Vario.Beep cannot be expressed.",
+      "required_fix": "Use the resource texts above with the 'Parameter name:' and 'Actual value was' suffixes, and store Beep as Arc<dyn Fn(i32, i32) -> Result<(), Exception> + Send + Sync>."
+    },
+    {
+      "id": "R58-13",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/matrix3.rs",
+      "line": 8,
+      "cs_reference": "ExtLibs/Utilities/{Vector3,Matrix3,Quaternion,SingleLocation,VehicleLocation}.cs, ArduPilot/{PolygonTools,FenceCircle,FencePolygon,FenceReturn}.cs (all classes)",
+      "summary": "C# class semantics are collapsed into Copy values with invented equality. new Matrix3(a, b, c) stores the caller's Vector3 references, so from_euler or a[v2] = x mutates the caller's vectors; Vector3.Zero/One are shared mutable static instances; == on these classes is reference equality. Rust derives Copy and PartialEq (Matrix3, Quaternion, SingleLocation, VehicleLocation, PolygonTools::Point, the Fence types), so value equality exists that C# does not have, and aliasing effects disappear. Vector3T::object_to_string returns 'MissionPlanner.Utilities.Vector3`1[System.Double]', but almost every instance is a Vector3 subclass object whose GetType() is 'MissionPlanner.Utilities.Vector3' (likewise Vector3f). VehicleLocation's Clone() (MemberwiseClone) keeps the VehicleLocation type; Rust's clone_object goes through Deref and returns a SingleLocation. Matrix3 and Quaternion also lack the object.ToString type name that their 'new ToString' hides.",
+      "required_fix": "Model these classes as Arc<RwLock<..>> handles (or document each aliasing site and port it explicitly), remove the invented PartialEq derives, keep the subclass identity (Vector3 vs Vector3<double>) for the type-name string, and give VehicleLocation its own clone_object."
+    },
+    {
+      "id": "R58-14",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/utils.rs",
+      "line": 297,
+      "cs_reference": "ExtLibs/Utilities/Utils.cs:402-433 (alglib.rmatrixinverse); ExtLibs/alglibnet (matinv.rmatrixinverse, rmatrixluinverse rcond check, ap.assert(n>0))",
+      "summary": "The alglib path is replaced by a hand-written LU solve. alglib asserts n>0 (dim 0 throws an alglibexception), estimates the condition number and zero-fills when rcond falls below its threshold, and uses blocked LU/inverse kernels. Rust returns Ok(true) for dim 0 with empty input, zero-fills only on an exactly zero or non-finite pivot, and rounds differently. port_manifest.py says alglibnet maps to 'nalgebra (only the solvers Mission Planner calls are ported, in utilities/)', but nalgebra is not a dependency and no alglib file is ported.",
+      "required_fix": "Port alglib's rmatrixinverse path (rmatrixlu, rmatrixluinverse, rcond estimate) file by file, or reclassify alglibnet and document the replacement's exact differences; correct the VENDORED text either way."
+    },
+    {
+      "id": "R58-15",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/ardupilot/fence.rs",
+      "line": 3,
+      "cs_reference": "ExtLibs/ArduPilot/Fence.cs:16-22,101-106; Half.cs:86,113-135,142,239-353,425-474,685-711,799-814,818-885; Vector3.cs:57-75,92-97; utmpos.cs:20-21,73; Vario.cs:29",
+      "summary": "Members are missing inside 'ported' files (counted against fidelity even where headers admit them): Fence.DownloadFence/UploadFence; Half's ToString(format[, provider]), Parse(string, NumberStyles[, provider]), CompareTo(object) with its ArgumentException('Object must be of type Half.'), Equals(object), unary +, static Add/Subtract/Multiply/Divide, the byte/short/char/sbyte/ushort/decimal conversions, and every IConvertible member except ToBoolean, ToChar and ToInt32 (ToByte, ToInt16, ToInt64, ToSByte, ToUInt16/32/64, ToDouble, ToSingle, ToDecimal, ToString, ToType, ToDateTime); Vector3's X/Y/Z properties and the Vector3(Vector3<double>) copy constructor; utmpos's static ctfac/wgs84 and ToLLA through CreateFromCoordinateSystems + MathTransform.Inverse() (R57-07); utmpos.Tag is limited to String/i32/f64 where C# takes any object.",
+      "required_fix": "Port the missing members (DownloadFence/UploadFence together with mav_mission and MAVLinkInterface), and widen utmpos.Tag to the same object model Locationwp.Tag uses."
+    },
+    {
+      "id": "R58-16",
+      "severity": "P3",
+      "file": "crates/mp-core/src/dotnet/mod.rs",
+      "line": 548,
+      "cs_reference": "Mono CultureInfo.CurrentUICulture (mono/metadata/locales.c get_posix_locale: LC_ALL, then LANG); .NET Framework CultureInfo.UserDefaultUICulture",
+      "summary": "R57-03 is fixed on Windows (GetUserDefaultUILanguage + LCIDToLocaleName). On Unix the new os_ui_language_name reads LANGUAGE first and then LC_MESSAGES, as gettext does. Mono reads neither: CurrentUICulture comes from LC_ALL, then LANG, the same as CurrentCulture. os_locale_name (line 502) also reads LC_NUMERIC, which Mono ignores. With LANGUAGE=de and LANG=en_US.UTF-8, Rust picks German messages and Mono English.",
+      "required_fix": "On non-Windows, read LC_ALL then LANG for both cultures, as Mono does."
+    },
+    {
+      "id": "R58-17",
+      "severity": "P3",
+      "file": "crates/mp-core/src/extlibs/utilities/half/halfhelper.rs",
+      "line": 206,
+      "cs_reference": "No C# tests exist for these files; behaviour is the spec",
+      "summary": "The tests do not prove fidelity. No vector was produced by running the C#. Matrix3/Quaternion round trips use 1e-12 tolerances, utmpos 1e-7/1e-5, the Utils.inverse dim-2 test 1e-6. The introsort test checks only that the output is sorted, which any sort passes; it never checks the order .NET produces for equal keys or the comparison sequence, which is why ArraySortHelper was ported. The Half test asserts a C#-contradicting != result (R58-04). There is no test of the HalfHelper tables against the C# arrays, of JSON output against Newtonsoft bytes, or of SaveParamFile/WaypointFile against files Mission Planner wrote.",
+      "required_fix": "Generate golden data from the reference build: all 65,536 HalfushortToSingle results and a float sweep through SingleToHalf; List.Sort permutations with tie-heavy keys and logged comparison sequences; MissionFile.WriteFile bytes for a sample RootObject; Utils.inverse for singular and near-singular inputs; and assert exact equality."
+    },
+    {
+      "id": "R58-18",
+      "severity": "P3",
+      "file": "port/MANIFEST.md",
+      "line": 5,
+      "cs_reference": "scripts/port_manifest.py:57-99,127-156",
+      "summary": "MANIFEST.md was not regenerated after VENDORED changed: it still shows 21 ported files and lists the GeoUtility/ProjNet/GMap.NET.Core rows as vendored, and none of the 25 new ports appear as ported. Under the new classify(), ExtLibs/GeoUtility/Properties/Resources.Designer.cs (ported as resources_designer.rs) becomes 'n/a assembly metadata', although it carries real lookup code.",
+      "required_fix": "Regenerate the manifest when commands are allowed, and exempt Resources.Designer files that contain ported code from the 'n/a' rule (or count them explicitly)."
+    }
+  ],
+  "round_57_status": {
+    "fixed": [
+      "R57-10: KnownColor Gray is 78 and Green is 79 (dotnet/drawing.rs:18-19, :50-52). The requested per-member test was not added.",
+      "Round-57 compile item 1: mp-core enables Win32_Foundation (Cargo.toml:41).",
+      "Round-57 compile item 2: net.rs has cfg(not(any(windows, unix))) fallbacks (net.rs:64-72)."
+    ],
+    "partly_fixed": [
+      "R57-03: Windows now uses GetUserDefaultUILanguage + LCIDToLocaleName; the Unix path reads LANGUAGE/LC_MESSAGES instead of Mono's LC_ALL/LANG (R58-16).",
+      "R57-08: the Locationwp <-> MissionFile.Item conversions are ported (missionfile.rs:595-637). PointLatLngAlt.Transform, the shared Zero instance, Ord/PartialOrd and ctfac/wgs84 are still missing.",
+      "R57-23: VENDORED no longer lists GeoUtility/ProjNet/GMap.NET.Core, but MANIFEST.md is not regenerated (R58-18).",
+      "R57-12: Vector3 gained object_to_string, but utm.rs/mgrs.rs/geographic.rs are unchanged and the new files add more invented PartialEq derives (R58-13)."
+    ],
+    "still_open": [
+      "R57-01 (now R58-01), R57-02 (now R58-02).",
+      "R57-04: CurrentCulture is still the hard-coded table (dotnet/mod.rs:514-527); NaN/Infinity symbols still fixed strings (format_general :587-592, float_parse_culture :761-765).",
+      "R57-05: commstcpserial.rs:300-301 still slices readto[o..o + l] unchecked.",
+      "R57-06, R57-07: GeoUtility and ProjNet are unchanged slices.",
+      "R57-09: Exception is still a flat enum; this round added DivideByZero/DirectoryNotFound/Arithmetic variants but no hierarchy or InnerException.",
+      "R57-11: format_fixed still uses unwrap_or_default (dotnet/mod.rs:328); math_round still has no 1e16 guard or digits check (:666-672).",
+      "R57-13, R57-14: int_parse still trims with char::is_whitespace (dotnet/mod.rs:1397).",
+      "R57-15: Locationwp.Tag equality is still Arc::ptr_eq (locationwp.rs:72).",
+      "R57-16: EnumEntry::attributes still emits hasLocation before Description (mavlinkparse.rs:63-66).",
+      "R57-17: ServiceLocator still uses a non-reentrant Mutex (no ReentrantMutex anywhere).",
+      "R57-18, R57-19, R57-21, R57-22: not re-read this round; no evidence of change.",
+      "R57-20: mapprojection.rs:411-412 calc_utm_zone still uses 'as i64'; dotnet::cast_i64 now exists and is the one-line fix."
+    ]
+  },
+  "next_priorities": [
+    "R58-02/R57-02: wire the ports. Replace mission.rs with extlibs::utilities::{locationwp, missionfile}, paramfile.rs with utilities::paramfile, gimbal.rs's Quaternion and swarm.rs's from_euler312 with utilities::{quaternion, matrix3}, and coords.rs/menu.rs utmpos code with utilities::utmpos; delete the old modules.",
+    "R58-03: make introspective_sort panic-free and model the List capacity slack and the bad-comparer ArgumentException.",
+    "R58-04 and R58-05: one-line fixes (Half ne/le/ge, cast_u64 NaN branch) plus tests.",
+    "R58-06/R58-07: bring dotnet/json.rs to Newtonsoft parity (raw number text, lower-case true/false, null list elements, escape table, line/position, float_roundtrip + preserve_order).",
+    "R58-08: stream StreamWriter output and flush on Drop.",
+    "R57-04/R57-05/R57-20 remain cheap to fix: live NLS data, bounds checks in every transport, calc_utm_zone through cast_i64.",
+    "ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs, MAVState.cs, MAVList.cs and mav_mission (unblocks Fence.DownloadFence/UploadFence), then CurrentState.cs to replace state.rs.",
+    "Golden vectors from the reference build for Half, List.Sort, MissionFile JSON, Utils.inverse and the GeoUtility/ProjNet math (R58-17, R57-22).",
+    "Regenerate port/MANIFEST.md once commands are allowed (R58-18).",
+    "MainV2.cs + MainV2.Designer.cs, then GCSViews/FlightPlanner.cs (the consumer of MissionFile, Fence and LineOffset) and FlightData.cs."
+  ],
+  "verdict": "This round adds 25 file-mirrored ports: 20 Utilities files (vector/matrix/quaternion math, Utils, utmpos, Half, nmea, ParamFile, MissionFile and small helpers) and 5 ArduPilot fence/polygon files, plus .NET shims for StreamReader/StreamWriter, Newtonsoft JSON, ArraySortHelper introsort, PointF and casts. The numeric transliterations are good: the Vector3 rotation order, single-precision trig in from_euler312, f32 arithmetic in inverse3x3/4x4, FLIGHTtoBCBF and PerpendicularDistance, and the HalfHelper shift masking all match the C#. No definite compile error was found, and both round-57 compile items are fixed. Fidelity is lost at the edges: the introsort panics where .NET throws, Half's Rust operators contradict the C# ones, cast_u64(NaN) is wrong, the JSON reader and writer differ from Newtonsoft in several observable ways, the buffered StreamWriter loses C#'s partial output, culture-sensitive string matching is done ordinally, reference-type semantics are collapsed into Copy values, and several members are unported. Nothing is wired: the app still runs mission.rs, paramfile.rs, gimbal.rs and coords.rs, which now duplicate these ports. Owned progress is about 4.3% (20,730 / 479,014 lines, half of the gain from reclassifying GeoUtility/ProjNet/GMap.NET.Core as owned), giving a cap of 1.5; awarded 1.0. Round-file fidelity is 6.5/10."
+}
